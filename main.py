@@ -1371,7 +1371,7 @@ class ImportTargetWindow(tk.Toplevel):
 class PadSVGGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Stohrer Sax Pad SVG Generator v2.1")
+        self.root.title("Stohrer Sax Shop Companion")
         self.root.geometry("640x720")
         self.default_bg = "#FFFDD0"
         self.root.configure(bg=self.default_bg)
