@@ -57,7 +57,7 @@ DEFAULT_SETTINGS = {
     "resonance_clicks": 0, 
     "compatibility_mode": False,
     
-    # NEW SETTINGS FOR v2.1
+    # NEW SETTINGS FOR v2.1 (now v1.0 of Companion)
     "darts_enabled": True,    
     "dart_threshold": 18.0,   
     "dart_overwrap": 0.5,     
@@ -1371,7 +1371,7 @@ class ImportTargetWindow(tk.Toplevel):
 class PadSVGGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Stohrer Sax Shop Companion")
+        self.root.title("Stohrer Sax Shop Companion v1.0")
         self.root.geometry("640x720")
         self.default_bg = "#FFFDD0"
         self.root.configure(bg=self.default_bg)
