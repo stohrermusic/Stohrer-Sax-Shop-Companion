@@ -1637,12 +1637,11 @@ class PadSVGGeneratorApp:
         tk.Label(specs_frame, text="Dia / Desc", font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=2, padx=5, pady=(0,5))
 
         # We will store all the Entry variables in a dictionary for easy saving/loading
-        # Keys will be: 'hinge_tiny_th', 'hinge_tiny_dia', etc.
         self.screw_vars = {}
 
-        # Define the rows. Structure: (Label Text, Key_Prefix, Field2_Type)
-        # Field2_Type: "Dia" or "Desc" (just for mental mapping, code treats them as text)
+        # Define the rows. Structure: (Label Text, Key_Prefix)
         rows = [
+            ("Neck Receiver Screw", "neck_screw"), # <--- NEW ITEM ADDED HERE
             ("Hinge Rod Tiny",   "hinge_tiny"),
             ("Hinge Rod Small",  "hinge_small"),
             ("Hinge Rod Medium", "hinge_med"),
