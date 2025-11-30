@@ -5,7 +5,7 @@ import json
 import random
 import math
 import svgwrite
-import re # Added for serial number parsing
+import re 
 
 # --- Import Serial Data ---
 try:
@@ -117,6 +117,7 @@ DEFAULT_SETTINGS = {
 PAD_PRESET_FILE = "pad_presets.json"
 KEY_PRESET_FILE = "key_height_library.json"
 SETTINGS_FILE = "app_settings.json"
+SCREW_SPECS_FILE = "screw_specs.json"
 
 # --- Constants & Themes ---
 RESONANCE_MESSAGES = [
@@ -182,7 +183,7 @@ def load_presets(file_path, preset_type_name="Preset"):
         else:
             return {"My Presets": {}}
     
-    return data if data else {"My Presets": {}}
+    return data if data else {}
 
 def save_presets(presets, file_path):
     try:
@@ -1497,6 +1498,11 @@ class PadSVGGeneratorApp:
         self.serial_tab = ttk.Frame(self.notebook, style='App.TFrame')
         self.notebook.add(self.serial_tab, text='Serial Lookup')
         self.create_serial_lookup_tab(self.serial_tab)
+
+        # --- Create Tab 4: Screw Specs ---
+        self.screw_tab = ttk.Frame(self.notebook, style='App.TFrame')
+        self.notebook.add(self.screw_tab, text='Screw Specs')
+        self.create_screw_specs_tab(self.screw_tab)
         
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
@@ -1557,6 +1563,141 @@ class PadSVGGeneratorApp:
             
         year = lookup_serial_year(maker, serial)
         self.serial_result_label.config(text=year)
+
+    def create_screw_specs_tab(self, parent):
+        # --- Data Loading ---
+        self.screw_data = load_presets(SCREW_SPECS_FILE, preset_type_name="Screw Specs")
+        # Ensure we have a dictionary structure
+        if not self.screw_data: self.screw_data = {}
+
+        # --- Main Layout ---
+        main_frame = tk.Frame(parent, bg=self.root.cget('bg'), padx=20, pady=20)
+        main_frame.pack(expand=True, fill='both')
+
+        title_label = tk.Label(main_frame, text="Screw & Rod Specifications", font=("Helvetica", 16, "bold"), bg=self.root.cget('bg'))
+        title_label.pack(pady=(0, 20))
+
+        # --- Controls Frame ---
+        controls_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
+        controls_frame.pack(fill='x', pady=10)
+        controls_frame.columnconfigure(1, weight=1)
+
+        # Maker Dropdown
+        tk.Label(controls_frame, text="Manufacturer:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=10)
+        
+        self.screw_maker_var = tk.StringVar()
+        self.screw_maker_dropdown = ttk.Combobox(controls_frame, textvariable=self.screw_maker_var, state="normal", width=25, font=("Helvetica", 12))
+        self.screw_maker_dropdown.grid(row=0, column=1, sticky='w', padx=10, pady=10)
+        self.screw_maker_dropdown.bind("<<ComboboxSelected>>", self.on_screw_maker_change)
+
+        # Model Dropdown
+        tk.Label(controls_frame, text="Model:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=10)
+        
+        self.screw_model_var = tk.StringVar()
+        self.screw_model_dropdown = ttk.Combobox(controls_frame, textvariable=self.screw_model_var, state="normal", width=25, font=("Helvetica", 12))
+        self.screw_model_dropdown.grid(row=1, column=1, sticky='w', padx=10, pady=10)
+        self.screw_model_dropdown.bind("<<ComboboxSelected>>", self.on_screw_model_change)
+
+        # --- Specs Frame ---
+        specs_frame = tk.LabelFrame(main_frame, text="OEM Specifications", bg=self.root.cget('bg'), font=("Helvetica", 10, "bold"), padx=10, pady=10)
+        specs_frame.pack(fill='x', pady=10)
+        specs_frame.columnconfigure(1, weight=1)
+
+        # Thread Spec
+        tk.Label(specs_frame, text="Screw Thread:", font=("Helvetica", 11), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=5, pady=5)
+        self.screw_thread_var = tk.StringVar()
+        tk.Entry(specs_frame, textvariable=self.screw_thread_var, font=("Helvetica", 11)).grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+
+        # Rod Spec
+        tk.Label(specs_frame, text="Rod Diameter:", font=("Helvetica", 11), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=5, pady=5)
+        self.screw_rod_var = tk.StringVar()
+        tk.Entry(specs_frame, textvariable=self.screw_rod_var, font=("Helvetica", 11)).grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+
+        # Notes
+        tk.Label(specs_frame, text="Notes:", font=("Helvetica", 11), bg=self.root.cget('bg')).grid(row=2, column=0, sticky='ne', padx=5, pady=5)
+        self.screw_notes_text = tk.Text(specs_frame, height=5, font=("Helvetica", 10))
+        self.screw_notes_text.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
+
+        # --- Buttons ---
+        btn_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
+        btn_frame.pack(pady=20)
+        
+        tk.Button(btn_frame, text="Save / Update Spec", command=self.save_screw_spec, font=("Helvetica", 11, "bold")).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="Delete Model", command=self.delete_screw_spec, font=("Helvetica", 11), fg="red").pack(side="right", padx=10)
+
+        # Initialize Dropdowns
+        self.update_screw_maker_list()
+
+    def update_screw_maker_list(self):
+        makers = sorted(list(self.screw_data.keys()))
+        self.screw_maker_dropdown['values'] = makers
+        
+    def on_screw_maker_change(self, event=None):
+        maker = self.screw_maker_var.get()
+        if maker in self.screw_data:
+            models = sorted(list(self.screw_data[maker].keys()))
+            self.screw_model_dropdown['values'] = models
+            self.screw_model_dropdown.set("")
+            # Clear fields
+            self.screw_thread_var.set("")
+            self.screw_rod_var.set("")
+            self.screw_notes_text.delete("1.0", tk.END)
+    
+    def on_screw_model_change(self, event=None):
+        maker = self.screw_maker_var.get()
+        model = self.screw_model_var.get()
+        
+        if maker in self.screw_data and model in self.screw_data[maker]:
+            data = self.screw_data[maker][model]
+            self.screw_thread_var.set(data.get("thread", ""))
+            self.screw_rod_var.set(data.get("rod_diameter", ""))
+            self.screw_notes_text.delete("1.0", tk.END)
+            self.screw_notes_text.insert("1.0", data.get("notes", ""))
+
+    def save_screw_spec(self):
+        maker = self.screw_maker_var.get().strip()
+        model = self.screw_model_var.get().strip()
+        
+        if not maker or not model:
+            messagebox.showwarning("Missing Info", "Please enter both a Manufacturer and a Model.")
+            return
+            
+        if maker not in self.screw_data:
+            self.screw_data[maker] = {}
+            
+        self.screw_data[maker][model] = {
+            "thread": self.screw_thread_var.get(),
+            "rod_diameter": self.screw_rod_var.get(),
+            "notes": self.screw_notes_text.get("1.0", tk.END).strip()
+        }
+        
+        if save_presets(self.screw_data, SCREW_SPECS_FILE):
+            messagebox.showinfo("Saved", f"Specs for {maker} {model} saved.")
+            self.update_screw_maker_list()
+            # Reselect to keep context
+            self.screw_maker_var.set(maker)
+            # Trigger update to refresh model list if it was new
+            self.on_screw_maker_change() 
+            self.screw_model_var.set(model)
+
+    def delete_screw_spec(self):
+        maker = self.screw_maker_var.get()
+        model = self.screw_model_var.get()
+        
+        if maker in self.screw_data and model in self.screw_data[maker]:
+            if messagebox.askyesno("Confirm Delete", f"Delete specs for {maker} {model}?"):
+                del self.screw_data[maker][model]
+                # If maker is empty, delete maker? Optional, but keeps it clean
+                if not self.screw_data[maker]:
+                    del self.screw_data[maker]
+                
+                save_presets(self.screw_data, SCREW_SPECS_FILE)
+                self.update_screw_maker_list()
+                self.screw_maker_var.set("")
+                self.screw_model_var.set("")
+                self.screw_thread_var.set("")
+                self.screw_rod_var.set("")
+                self.screw_notes_text.delete("1.0", tk.END)
 
     def create_pad_generator_tab(self, parent):
         tk.Label(parent, text="Enter pad sizes (e.g. 42.0x3):", bg=self.root.cget('bg')).pack(pady=5)
