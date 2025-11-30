@@ -332,6 +332,20 @@ def can_all_pads_fit(pads, material, width_mm, height_mm, settings):
             y += 1
     
     return len(placed) == len(discs)
+def get_unique_name(name, existing_keys):
+    """
+    Returns 'name' if it doesn't exist in existing_keys.
+    Otherwise returns 'name (2)', 'name (3)', etc.
+    """
+    if name not in existing_keys:
+        return name
+    
+    i = 2
+    new_name = f"{name} ({i})"
+    while new_name in existing_keys:
+        i += 1
+        new_name = f"{name} ({i})"
+    return new_name
 
 def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings):
     spacing_mm = 1.0
