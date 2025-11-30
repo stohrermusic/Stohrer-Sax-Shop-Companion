@@ -1395,6 +1395,12 @@ class PadSVGGeneratorApp:
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
         
+        # --- NEW: Screw Specs Init ---
+        # Ensure file exists
+        if not os.path.exists(SCREW_SPECS_FILE):
+            save_presets({}, SCREW_SPECS_FILE)
+        self.screw_data = load_presets(SCREW_SPECS_FILE, preset_type_name="Screw Specs")
+        
         self.create_menus()
         self.create_widgets() 
         
