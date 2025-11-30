@@ -1605,57 +1605,91 @@ class PadSVGGeneratorApp:
         main_frame.pack(expand=True, fill='both')
 
         title_label = tk.Label(main_frame, text="Screw & Rod Specifications", font=("Helvetica", 16, "bold"), bg=self.root.cget('bg'))
-        title_label.pack(pady=(0, 20))
+        title_label.pack(pady=(0, 15))
 
         # --- Controls Frame ---
         controls_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
-        controls_frame.pack(fill='x', pady=10)
+        controls_frame.pack(fill='x', pady=5)
         controls_frame.columnconfigure(1, weight=1)
 
         # Maker Dropdown
-        tk.Label(controls_frame, text="Manufacturer:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(controls_frame, text="Manufacturer:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=5)
         
         self.screw_maker_var = tk.StringVar()
         self.screw_maker_dropdown = ttk.Combobox(controls_frame, textvariable=self.screw_maker_var, state="normal", width=25, font=("Helvetica", 12))
-        self.screw_maker_dropdown.grid(row=0, column=1, sticky='w', padx=10, pady=10)
+        self.screw_maker_dropdown.grid(row=0, column=1, sticky='w', padx=10, pady=5)
         self.screw_maker_dropdown.bind("<<ComboboxSelected>>", self.on_screw_maker_change)
 
         # Model Dropdown
-        tk.Label(controls_frame, text="Model:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(controls_frame, text="Model:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=5)
         
         self.screw_model_var = tk.StringVar()
         self.screw_model_dropdown = ttk.Combobox(controls_frame, textvariable=self.screw_model_var, state="normal", width=25, font=("Helvetica", 12))
-        self.screw_model_dropdown.grid(row=1, column=1, sticky='w', padx=10, pady=10)
+        self.screw_model_dropdown.grid(row=1, column=1, sticky='w', padx=10, pady=5)
         self.screw_model_dropdown.bind("<<ComboboxSelected>>", self.on_screw_model_change)
 
-        # --- Specs Frame ---
+        # --- Specs Frame (New Grid Layout) ---
         specs_frame = tk.LabelFrame(main_frame, text="OEM Specifications", bg=self.root.cget('bg'), font=("Helvetica", 10, "bold"), padx=10, pady=10)
-        specs_frame.pack(fill='x', pady=10)
-        specs_frame.columnconfigure(1, weight=1)
+        specs_frame.pack(fill='both', expand=True, pady=10)
+        
+        # Headers
+        tk.Label(specs_frame, text="Threads / Pitch", font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=1, padx=5, pady=(0,5))
+        tk.Label(specs_frame, text="Dia / Desc", font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=2, padx=5, pady=(0,5))
 
-        # Thread Spec
-        tk.Label(specs_frame, text="Screw Thread:", font=("Helvetica", 11), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=5, pady=5)
-        self.screw_thread_var = tk.StringVar()
-        tk.Entry(specs_frame, textvariable=self.screw_thread_var, font=("Helvetica", 11)).grid(row=0, column=1, sticky='ew', padx=5, pady=5)
+        # We will store all the Entry variables in a dictionary for easy saving/loading
+        # Keys will be: 'hinge_tiny_th', 'hinge_tiny_dia', etc.
+        self.screw_vars = {}
 
-        # Rod Spec
-        tk.Label(specs_frame, text="Rod Diameter:", font=("Helvetica", 11), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=5, pady=5)
-        self.screw_rod_var = tk.StringVar()
-        tk.Entry(specs_frame, textvariable=self.screw_rod_var, font=("Helvetica", 11)).grid(row=1, column=1, sticky='ew', padx=5, pady=5)
+        # Define the rows. Structure: (Label Text, Key_Prefix, Field2_Type)
+        # Field2_Type: "Dia" or "Desc" (just for mental mapping, code treats them as text)
+        rows = [
+            ("Hinge Rod Tiny",   "hinge_tiny"),
+            ("Hinge Rod Small",  "hinge_small"),
+            ("Hinge Rod Medium", "hinge_med"),
+            ("Hinge Rod Large",  "hinge_lrg"),
+            ("Pivot Screw Small","pivot_small"),
+            ("Pivot Screw Large","pivot_lrg"),
+        ]
 
-        # Notes
-        tk.Label(specs_frame, text="Notes:", font=("Helvetica", 11), bg=self.root.cget('bg')).grid(row=2, column=0, sticky='ne', padx=5, pady=5)
-        self.screw_notes_text = tk.Text(specs_frame, height=5, font=("Helvetica", 10))
-        self.screw_notes_text.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
+        row_idx = 1
+        for label_text, prefix in rows:
+            # Label
+            tk.Label(specs_frame, text=f"{label_text}:", font=("Helvetica", 10), bg=self.root.cget('bg')).grid(row=row_idx, column=0, sticky='e', padx=5, pady=2)
+            
+            # Thread Entry
+            th_var = tk.StringVar()
+            self.screw_vars[f"{prefix}_th"] = th_var
+            tk.Entry(specs_frame, textvariable=th_var, width=15).grid(row=row_idx, column=1, padx=5, pady=2)
+            
+            # Dia/Desc Entry
+            dia_var = tk.StringVar()
+            self.screw_vars[f"{prefix}_dia"] = dia_var
+            tk.Entry(specs_frame, textvariable=dia_var, width=25).grid(row=row_idx, column=2, padx=5, pady=2)
+            
+            row_idx += 1
+
+        # Misc Fields (Full width)
+        misc_rows = [("Misc 1", "misc1"), ("Misc 2", "misc2")]
+        for label_text, key in misc_rows:
+            tk.Label(specs_frame, text=f"{label_text}:", font=("Helvetica", 10), bg=self.root.cget('bg')).grid(row=row_idx, column=0, sticky='e', padx=5, pady=2)
+            m_var = tk.StringVar()
+            self.screw_vars[key] = m_var
+            tk.Entry(specs_frame, textvariable=m_var).grid(row=row_idx, column=1, columnspan=2, sticky='ew', padx=5, pady=2)
+            row_idx += 1
+
+        # Notes (Text Area)
+        tk.Label(specs_frame, text="Notes:", font=("Helvetica", 10), bg=self.root.cget('bg')).grid(row=row_idx, column=0, sticky='ne', padx=5, pady=5)
+        self.screw_notes_text = tk.Text(specs_frame, height=4, font=("Helvetica", 10), width=40)
+        self.screw_notes_text.grid(row=row_idx, column=1, columnspan=2, sticky='ew', padx=5, pady=5)
+        
+        # Configure grid resizing
+        specs_frame.columnconfigure(2, weight=1)
 
         # --- Buttons ---
         btn_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
-        btn_frame.pack(pady=20)
+        btn_frame.pack(pady=10)
         
-        # Save Button
         tk.Button(btn_frame, text="Save / Update Spec", command=self.save_screw_spec, font=("Helvetica", 11, "bold")).pack(side="left", padx=10)
-        
-        # Delete Button
         tk.Button(btn_frame, text="Delete Spec", command=self.delete_screw_spec, font=("Helvetica", 11), fg="red").pack(side="right", padx=10)
 
         # Initialize Dropdowns
@@ -1674,22 +1708,21 @@ class PadSVGGeneratorApp:
             self.screw_maker_var.set("")
             self.screw_model_dropdown['values'] = []
             self.screw_model_var.set("")
-            self.screw_thread_var.set("")
-            self.screw_rod_var.set("")
+            
+            # Clear all entry fields
+            for var in self.screw_vars.values():
+                var.set("")
             self.screw_notes_text.delete("1.0", tk.END)
             return
 
         if maker in self.screw_data:
             models = sorted(list(self.screw_data[maker].keys()))
-            # Add placeholder to model list too
             self.screw_model_dropdown['values'] = ["(add new)"] + models
-            # Default to "(add new)" so it's obvious they can add one, 
-            # or leave blank if you prefer. Let's set it to indicate action:
             self.screw_model_dropdown.set("(add new)")
             
             # Clear data fields until a valid model is picked
-            self.screw_thread_var.set("")
-            self.screw_rod_var.set("")
+            for var in self.screw_vars.values():
+                var.set("")
             self.screw_notes_text.delete("1.0", tk.END)
     
     def on_screw_model_change(self, event=None):
@@ -1699,15 +1732,18 @@ class PadSVGGeneratorApp:
         # Handle the placeholder
         if model == "(add new)":
             self.screw_model_var.set("")
-            self.screw_thread_var.set("")
-            self.screw_rod_var.set("")
+            for var in self.screw_vars.values():
+                var.set("")
             self.screw_notes_text.delete("1.0", tk.END)
             return
 
         if maker in self.screw_data and model in self.screw_data[maker]:
             data = self.screw_data[maker][model]
-            self.screw_thread_var.set(data.get("thread", ""))
-            self.screw_rod_var.set(data.get("rod_diameter", ""))
+            
+            # Load each variable from the data dictionary
+            for key, var in self.screw_vars.items():
+                var.set(data.get(key, ""))
+                
             self.screw_notes_text.delete("1.0", tk.END)
             self.screw_notes_text.insert("1.0", data.get("notes", ""))
 
@@ -1715,7 +1751,6 @@ class PadSVGGeneratorApp:
         maker = self.screw_maker_var.get().strip()
         model = self.screw_model_var.get().strip()
         
-        # Safety check to prevent saving the placeholder text
         if maker == "(add new)" or model == "(add new)":
             messagebox.showwarning("Invalid Name", "Please type a real name for the Manufacturer and Model.")
             return
@@ -1727,12 +1762,14 @@ class PadSVGGeneratorApp:
         if maker not in self.screw_data:
             self.screw_data[maker] = {}
 
-        # Manual Save = Intentional Overwrite/Update
-        self.screw_data[maker][model] = {
-            "thread": self.screw_thread_var.get(),
-            "rod_diameter": self.screw_rod_var.get(),
-            "notes": self.screw_notes_text.get("1.0", tk.END).strip()
-        }
+        # Build the data dictionary dynamically from our variable map
+        spec_data = {}
+        for key, var in self.screw_vars.items():
+            spec_data[key] = var.get()
+            
+        spec_data["notes"] = self.screw_notes_text.get("1.0", tk.END).strip()
+
+        self.screw_data[maker][model] = spec_data
         
         if save_presets(self.screw_data, SCREW_SPECS_FILE):
             messagebox.showinfo("Saved", f"Specs for {maker} {model} saved.")
@@ -1740,7 +1777,6 @@ class PadSVGGeneratorApp:
             self.screw_maker_var.set(maker)
             self.on_screw_maker_change()
             self.screw_model_var.set(model)
-            # Re-load the data visually
             self.on_screw_model_change()
 
     def delete_screw_spec(self):
