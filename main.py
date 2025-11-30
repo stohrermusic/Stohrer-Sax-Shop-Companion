@@ -181,7 +181,7 @@ def load_presets(file_path, preset_type_name="Preset"):
             messagebox.showinfo("Library Updated", f"Your existing {preset_type_name} sets have been moved into a new library called 'My Presets'.")
             return new_data
         else:
-            return {"My Presets": {}}
+            return {}
     
     return data if data else {}
 
@@ -332,20 +332,6 @@ def can_all_pads_fit(pads, material, width_mm, height_mm, settings):
             y += 1
     
     return len(placed) == len(discs)
-def get_unique_name(name, existing_keys):
-    """
-    Returns 'name' if it doesn't exist in existing_keys.
-    Otherwise returns 'name (2)', 'name (3)', etc.
-    """
-    if name not in existing_keys:
-        return name
-    
-    i = 2
-    new_name = f"{name} ({i})"
-    while new_name in existing_keys:
-        i += 1
-        new_name = f"{name} ({i})"
-    return new_name
 
 def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings):
     spacing_mm = 1.0
@@ -528,6 +514,21 @@ def lookup_serial_year(maker, serial_str):
     else:
         return "Too old / Unknown"
 
+# --- Helper for Unique Names ---
+def get_unique_name(name, existing_keys):
+    """
+    Returns 'name' if it doesn't exist in existing_keys.
+    Otherwise returns 'name (2)', 'name (3)', etc.
+    """
+    if name not in existing_keys:
+        return name
+    
+    i = 2
+    new_name = f"{name} ({i})"
+    while new_name in existing_keys:
+        i += 1
+        new_name = f"{name} ({i})"
+    return new_name
 
 # ==========================================
 # SECTION 3: GUI DIALOGS
@@ -1396,7 +1397,6 @@ class PadSVGGeneratorApp:
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
         
         # --- NEW: Screw Specs Init ---
-        # Ensure file exists
         if not os.path.exists(SCREW_SPECS_FILE):
             save_presets({}, SCREW_SPECS_FILE)
         self.screw_data = load_presets(SCREW_SPECS_FILE, preset_type_name="Screw Specs")
@@ -1493,13 +1493,26 @@ class PadSVGGeneratorApp:
         self.key_menu.add_cascade(label="Options", menu=key_options_menu)
         key_options_menu.add_command(label="Layout Options...", command=self.open_key_layout_window)
 
+        # --- NEW: Screw Specs Menu ---
+        self.screw_menu = tk.Menu(self.root)
+        
+        screw_file_menu = tk.Menu(self.screw_menu, tearoff=0)
+        self.screw_menu.add_cascade(label="File", menu=screw_file_menu)
+        screw_file_menu.add_command(label="Import Screw Specs...", command=self.on_import_screw_specs)
+        screw_file_menu.add_command(label="Export Screw Specs...", command=self.on_export_screw_specs)
+        screw_file_menu.add_separator()
+        screw_file_menu.add_command(label="Exit", command=self.on_exit)
+
     def on_tab_changed(self, event):
         current_tab = self.notebook.index(self.notebook.select())
         if current_tab == 0:
             self.root.config(menu=self.pad_menu)
         elif current_tab == 1:
             self.root.config(menu=self.key_menu)
-        # Tab 2 is Serial Lookup, no special menu yet
+        elif current_tab == 2:
+            self.root.config(menu=tk.Menu(self.root)) # Empty menu for serials
+        elif current_tab == 3:
+            self.root.config(menu=self.screw_menu)
 
     def create_widgets(self):
         self.notebook = ttk.Notebook(self.root)
@@ -1585,10 +1598,7 @@ class PadSVGGeneratorApp:
         self.serial_result_label.config(text=year)
 
     def create_screw_specs_tab(self, parent):
-        # --- Data Loading ---
-        self.screw_data = load_presets(SCREW_SPECS_FILE, preset_type_name="Screw Specs")
-        # Ensure we have a dictionary structure
-        if not self.screw_data: self.screw_data = {}
+        # Note: self.screw_data is already loaded in __init__
 
         # --- Main Layout ---
         main_frame = tk.Frame(parent, bg=self.root.cget('bg'), padx=20, pady=20)
@@ -1642,8 +1652,11 @@ class PadSVGGeneratorApp:
         btn_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
         btn_frame.pack(pady=20)
         
+        # Save Button
         tk.Button(btn_frame, text="Save / Update Spec", command=self.save_screw_spec, font=("Helvetica", 11, "bold")).pack(side="left", padx=10)
-        tk.Button(btn_frame, text="Delete Model", command=self.delete_screw_spec, font=("Helvetica", 11), fg="red").pack(side="right", padx=10)
+        
+        # Delete Button
+        tk.Button(btn_frame, text="Delete Spec", command=self.delete_screw_spec, font=("Helvetica", 11), fg="red").pack(side="right", padx=10)
 
         # Initialize Dropdowns
         self.update_screw_maker_list()
@@ -1658,7 +1671,6 @@ class PadSVGGeneratorApp:
             models = sorted(list(self.screw_data[maker].keys()))
             self.screw_model_dropdown['values'] = models
             self.screw_model_dropdown.set("")
-            # Clear fields
             self.screw_thread_var.set("")
             self.screw_rod_var.set("")
             self.screw_notes_text.delete("1.0", tk.END)
@@ -1666,7 +1678,6 @@ class PadSVGGeneratorApp:
     def on_screw_model_change(self, event=None):
         maker = self.screw_maker_var.get()
         model = self.screw_model_var.get()
-        
         if maker in self.screw_data and model in self.screw_data[maker]:
             data = self.screw_data[maker][model]
             self.screw_thread_var.set(data.get("thread", ""))
@@ -1684,7 +1695,8 @@ class PadSVGGeneratorApp:
             
         if maker not in self.screw_data:
             self.screw_data[maker] = {}
-            
+
+        # Manual Save = Intentional Overwrite/Update
         self.screw_data[maker][model] = {
             "thread": self.screw_thread_var.get(),
             "rod_diameter": self.screw_rod_var.get(),
@@ -1694,10 +1706,8 @@ class PadSVGGeneratorApp:
         if save_presets(self.screw_data, SCREW_SPECS_FILE):
             messagebox.showinfo("Saved", f"Specs for {maker} {model} saved.")
             self.update_screw_maker_list()
-            # Reselect to keep context
             self.screw_maker_var.set(maker)
-            # Trigger update to refresh model list if it was new
-            self.on_screw_maker_change() 
+            self.on_screw_maker_change()
             self.screw_model_var.set(model)
 
     def delete_screw_spec(self):
@@ -1707,7 +1717,6 @@ class PadSVGGeneratorApp:
         if maker in self.screw_data and model in self.screw_data[maker]:
             if messagebox.askyesno("Confirm Delete", f"Delete specs for {maker} {model}?"):
                 del self.screw_data[maker][model]
-                # If maker is empty, delete maker? Optional, but keeps it clean
                 if not self.screw_data[maker]:
                     del self.screw_data[maker]
                 
@@ -1718,6 +1727,89 @@ class PadSVGGeneratorApp:
                 self.screw_thread_var.set("")
                 self.screw_rod_var.set("")
                 self.screw_notes_text.delete("1.0", tk.END)
+
+    # --- Screw Spec Import/Export Handlers ---
+    def on_export_screw_specs(self):
+        ExportPresetsWindow(self.root, self.screw_data, "Screw Specs", "screw_specs_export.json", False)
+
+    def on_import_screw_specs(self):
+        filepath = filedialog.askopenfilename(
+            title="Import Screw Specs",
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+            initialdir=self.settings.get("last_output_dir", "")
+        )
+        if not filepath:
+            return
+            
+        try:
+            with open(filepath, 'r') as f:
+                imported_data = json.load(f)
+            
+            if not isinstance(imported_data, dict):
+                raise TypeError("Invalid JSON structure")
+
+            flat_options = {}
+            for maker, models in imported_data.items():
+                if isinstance(models, dict):
+                    for model, data in models.items():
+                        flat_options[f"{maker}::{model}"] = data
+            
+            if not flat_options:
+                messagebox.showinfo("Import", "No specs found in file.")
+                return
+
+            top = tk.Toplevel(self.root)
+            top.title("Import Screw Specs")
+            top.geometry("400x500")
+            top.transient(self.root)
+            top.grab_set()
+            
+            vars_dict = {}
+            
+            tk.Label(top, text="Select specs to import:", pady=10).pack()
+            
+            canvas = tk.Canvas(top)
+            scrollbar = tk.Scrollbar(top, orient="vertical", command=canvas.yview)
+            scroll_frame = tk.Frame(canvas)
+            
+            scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            canvas.pack(side="left", fill="both", expand=True, padx=10)
+            scrollbar.pack(side="right", fill="y")
+            
+            for key in sorted(flat_options.keys()):
+                maker, model = key.split("::", 1)
+                var = tk.BooleanVar(value=True)
+                vars_dict[key] = var
+                tk.Checkbutton(scroll_frame, text=f"[{maker}] {model}", variable=var).pack(anchor='w')
+                
+            def do_import():
+                count = 0
+                for key, var in vars_dict.items():
+                    if var.get():
+                        maker, model = key.split("::", 1)
+                        spec_data = flat_options[key]
+                        
+                        if maker not in self.screw_data:
+                            self.screw_data[maker] = {}
+                        
+                        # Use get_unique_name to prevent overwrite
+                        final_model_name = get_unique_name(model, self.screw_data[maker])
+                        
+                        self.screw_data[maker][final_model_name] = spec_data
+                        count += 1
+                
+                save_presets(self.screw_data, SCREW_SPECS_FILE)
+                self.update_screw_maker_list() 
+                messagebox.showinfo("Success", f"Imported {count} specs.")
+                top.destroy()
+                
+            tk.Button(top, text="Import Selected", command=do_import, font=("Helvetica", 10, "bold")).pack(pady=10)
+            
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Failed to import:\n{e}")
 
     def create_pad_generator_tab(self, parent):
         tk.Label(parent, text="Enter pad sizes (e.g. 42.0x3):", bg=self.root.cget('bg')).pack(pady=5)
