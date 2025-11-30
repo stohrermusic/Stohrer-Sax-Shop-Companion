@@ -1663,14 +1663,31 @@ class PadSVGGeneratorApp:
 
     def update_screw_maker_list(self):
         makers = sorted(list(self.screw_data.keys()))
-        self.screw_maker_dropdown['values'] = makers
+        # Add the "(add new)" option at the very top
+        self.screw_maker_dropdown['values'] = ["(add new)"] + makers
         
     def on_screw_maker_change(self, event=None):
         maker = self.screw_maker_var.get()
+        
+        # If user selects the placeholder, clear the field for typing
+        if maker == "(add new)":
+            self.screw_maker_var.set("")
+            self.screw_model_dropdown['values'] = []
+            self.screw_model_var.set("")
+            self.screw_thread_var.set("")
+            self.screw_rod_var.set("")
+            self.screw_notes_text.delete("1.0", tk.END)
+            return
+
         if maker in self.screw_data:
             models = sorted(list(self.screw_data[maker].keys()))
-            self.screw_model_dropdown['values'] = models
-            self.screw_model_dropdown.set("")
+            # Add placeholder to model list too
+            self.screw_model_dropdown['values'] = ["(add new)"] + models
+            # Default to "(add new)" so it's obvious they can add one, 
+            # or leave blank if you prefer. Let's set it to indicate action:
+            self.screw_model_dropdown.set("(add new)")
+            
+            # Clear data fields until a valid model is picked
             self.screw_thread_var.set("")
             self.screw_rod_var.set("")
             self.screw_notes_text.delete("1.0", tk.END)
@@ -1678,6 +1695,15 @@ class PadSVGGeneratorApp:
     def on_screw_model_change(self, event=None):
         maker = self.screw_maker_var.get()
         model = self.screw_model_var.get()
+        
+        # Handle the placeholder
+        if model == "(add new)":
+            self.screw_model_var.set("")
+            self.screw_thread_var.set("")
+            self.screw_rod_var.set("")
+            self.screw_notes_text.delete("1.0", tk.END)
+            return
+
         if maker in self.screw_data and model in self.screw_data[maker]:
             data = self.screw_data[maker][model]
             self.screw_thread_var.set(data.get("thread", ""))
@@ -1688,6 +1714,11 @@ class PadSVGGeneratorApp:
     def save_screw_spec(self):
         maker = self.screw_maker_var.get().strip()
         model = self.screw_model_var.get().strip()
+        
+        # Safety check to prevent saving the placeholder text
+        if maker == "(add new)" or model == "(add new)":
+            messagebox.showwarning("Invalid Name", "Please type a real name for the Manufacturer and Model.")
+            return
         
         if not maker or not model:
             messagebox.showwarning("Missing Info", "Please enter both a Manufacturer and a Model.")
@@ -1709,6 +1740,8 @@ class PadSVGGeneratorApp:
             self.screw_maker_var.set(maker)
             self.on_screw_maker_change()
             self.screw_model_var.set(model)
+            # Re-load the data visually
+            self.on_screw_model_change()
 
     def delete_screw_spec(self):
         maker = self.screw_maker_var.get()
