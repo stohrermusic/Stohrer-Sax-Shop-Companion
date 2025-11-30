@@ -1292,8 +1292,8 @@ class ImportPresetsWindow(tk.Toplevel):
                 added_count += 1
         
         if added_count > 0:
-            # Use the imported save_presets function from config
-            if self.parent_app.save_presets(self.save_data, self.file_path):
+            # --- FIX IS HERE: Changed self.parent_app.save_presets to just save_presets ---
+            if save_presets(self.save_data, self.file_path):
                 # Special refresh for key height library
                 if self.preset_type_name == "Key Height Set":
                     self.parent_app.update_key_library_dropdown()
