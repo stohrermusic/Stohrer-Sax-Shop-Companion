@@ -13,7 +13,7 @@
 
 ### Data & Configuration (JSON)
 * **`app_settings.json`**: Persists user preferences (last directory, UI theme, sizing rules).
-    > **Crucial Note:** "Star/Dart" settings are stored in a nested dictionary `dart_settings`.
+    * **Note:** "Star/Dart" settings (e.g., `darts_enabled`, `dart_threshold`) are stored at the **root level** of this JSON object, alongside standard settings.
 * **`pad_presets.json`**: Stores measurements for pads.
     * *Structure:* `{"Library Name": {"Instrument Model": "Size\nSize\n..."}}`
 * **`key_height_library.json`**: Stores key height measurements.
@@ -62,7 +62,7 @@ There is a secondary tool called the **"Standalone Pad SVG Generator"** used by 
 ---
 
 ## Known Constraints & Gotchas
-1.  **Nested Settings:** When editing `OptionsWindow`, remember that Dart settings are stored in `self.settings["dart_settings"]["key"]`, while standard settings are often at the root `self.settings["key"]`. Mixing these up causes the UI to reset values.
+1.  **Settings Hierarchy:** Unlike early designs, Dart/Star settings are **NOT nested**. When editing `OptionsWindow` or `load_settings()`, access them directly via `self.settings["dart_threshold"]`, `self.settings["dart_shape_factor"]`, etc.
 2.  **Pad Strings:** Pad lists are stored as multiline strings (`"Size x Qty"` or just `"Size"`). The parser is robust but expects standard formatting.
 3.  **Imports:** Keep imports standard (`json`, `os`, `math`, `tkinter`). Only external dependency should be `svgwrite` (and `pandas` if doing bulk CSV conversions).
 
