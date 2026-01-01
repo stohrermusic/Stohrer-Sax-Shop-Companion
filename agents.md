@@ -5,17 +5,20 @@
 
 ---
 
-## Codebase Structure
+## Codebase Structure (Refactored v2.0)
 
-### Core Files
-* **`main.py`**: The application entry point. Contains the main class `PadSVGGeneratorApp`, all UI tab construction (`create_pad_generator_tab`, `create_key_library_tab`, etc.), and the core math logic for SVG generation.
-* **`serials.py`**: Contains the `SERIAL_DATA` dictionary. This is a massive lookup table for manufacturer serial number ranges and years.
+### Python Source Files
+* **`main.py`**: The application entry point (Controller). It initializes the `PadSVGGeneratorApp`, builds the UI, and inherits extra features from `library_features.py`.
+* **`config.py`**: The "spine" of the app. Contains constants (`DEFAULT_SETTINGS`, `LIGHTBURN_COLORS`), file paths, and IO functions (`load_settings`, `save_presets`).
+* **`svg_engine.py`**: Pure logic and math. Contains `calculate_star_path`, nesting algorithms, and the `svgwrite` generation code. No UI dependencies.
+* **`ui_dialogs.py`**: Contains all popup windows (`OptionsWindow`, `ImportPresetsWindow`, `ResonanceWindow`, etc.) to keep the main controller clean.
+* **`library_features.py`**: Contains the `LibraryFeaturesMixin` class. This holds the logic for Key Heights, Serial Numbers, and Screw Specs.
+* **`serials.py`**: Contains the `SERIAL_DATA` dictionary. A massive lookup table for manufacturer serial number ranges.
 
 ### Data & Configuration (JSON)
-* **`app_settings.json`**: Persists user preferences (last directory, UI theme, sizing rules).
-    * **Note:** "Star/Dart" settings (e.g., `darts_enabled`, `dart_threshold`) are stored at the **root level** of this JSON object, alongside standard settings.
+* **`app_settings.json`**: Persists user preferences.
+    * **Note:** "Star/Dart" settings (e.g., `darts_enabled`) are stored at the **root level**, not nested.
 * **`pad_presets.json`**: Stores measurements for pads.
-    * *Structure:* `{"Library Name": {"Instrument Model": "Size\nSize\n..."}}`
 * **`key_height_library.json`**: Stores key height measurements.
 * **`screw_specs.json`**: Stores thread pitch/rod diameter data.
 
@@ -24,19 +27,16 @@
 ## Key Features & Logic
 
 ### 1. Pad SVG Generator (The "Factory")
-This is the most complex logic in the app. It generates `.svg` files using `svgwrite`.
-
-* **Star/Dart Pattern:** Generates "geared" or "flower" shapes for small leather pads to facilitate wrapping.
-* **Key Functions:**
-    * `calculate_star_path(cx, cy, outer_r, inner_r, num_points, shape_factor)`: Generates the path data. The `shape_factor` allows morphing between Sine and Square waves.
-    * `leather_back_wrap()`: Calculates diameter expansion based on pad size.
-    * `get_disc_diameter()`: Handles logic for Felt vs Card vs Leather (Standard) vs Leather (Dart).
-* **Nesting Logic:** `can_all_pads_fit()` uses a greedy algorithm to ensure pads fit on the specified sheet dimensions before generation.
+* **Location:** Logic in `svg_engine.py`; UI in `main.py`.
+* **Star/Dart Pattern:** Generates "geared" shapes for leather pads.
+    * **Math:** `calculate_star_path` uses a cosine wave modified by a `shape_factor` (0.0=Sine to 1.0=Square).
+    * **Sizing:** `get_disc_diameter` and `leather_back_wrap` handle material expansions.
+* **Nesting:** `can_all_pads_fit` uses a greedy algorithm to place circles on the sheet.
 
 ### 2. Databases (Key Heights, Serials, Screws)
-* **Structure:** These tabs rely on a "Library" system. Data is loaded into nested dictionaries.
-* **Serials:** The lookup logic (`lookup_serial_year`) iterates through ranges in `SERIAL_DATA` to find the start year.
-* **Import/Export:** All databases support importing/exporting JSON snippets to share data between users.
+* **Location:** Logic in `library_features.py` (Mixin).
+* **Architecture:** The main app inherits from `LibraryFeaturesMixin`. This adds the tabs for Key Heights, Serials, and Screws.
+* **Serials:** `lookup_serial_year` iterates through `SERIAL_DATA` ranges.
 
 ---
 
@@ -45,26 +45,30 @@ This is the most complex logic in the app. It generates `.svg` files using `svgw
 ### The "Subtraction Method" (Standalone Generation)
 There is a secondary tool called the **"Standalone Pad SVG Generator"** used by colleagues.
 
-* **To update the Standalone Tool:** Do not try to merge code into the old script.
-* **Workflow:**
-    1.  Take the current `main.py` from Sax Shop Companion.
-    2.  Delete the `create_key_library_tab`, `create_serial_lookup_tab`, and `create_screw_specs_tab` methods and their associated classes.
-    3.  Keep the `PadSVGGeneratorApp` and `OptionsWindow`.
-* **Reasoning:** This ensures full interoperability of settings and presets between the full Companion and the Standalone tool.
+* **Goal:** A lightweight EXE containing *only* the Pad Generator (Tab 1), with no databases.
+* **Old Method:** Deleting code lines from a monolithic file.
+* **New Method (Modular):**
+    1.  Create a script (e.g., `main_standalone.py`).
+    2.  Import `PadSVGGeneratorApp` logic *without* inheriting from `LibraryFeaturesMixin`.
+    3.  Only call `create_pad_generator_tab`.
+    4.  Do *not* import `serials.py` or `library_features.py`.
+* **Reasoning:** The modular structure allows building the standalone tool purely by excluding imports.
 
 ---
 
 ## UI & Theming
 * **Framework:** Standard `tkinter`.
-* **Theme:** The app features a "Resonance" Easter egg. Clicking the "Resonance" button repeatedly changes the global background color (`COOL_BLUE`, `COOL_GREEN`) and window alpha transparency.
-* **Widgets:** Use `ttk` for Notebooks and Comboboxes, standard `tk` for basic frames/labels to allow easier background color manipulation.
+* **Theme:** The "Resonance" Easter egg is managed in `main.py` and `ui_dialogs.py`. It changes global background colors (`COOL_BLUE`, `COOL_GREEN`) and window alpha.
+* **Widgets:** Use `ttk` for Notebooks and Comboboxes; standard `tk` for frames/labels to support background color changes.
 
 ---
 
 ## Known Constraints & Gotchas
-1.  **Settings Hierarchy:** Unlike early designs, Dart/Star settings are **NOT nested**. When editing `OptionsWindow` or `load_settings()`, access them directly via `self.settings["dart_threshold"]`, `self.settings["dart_shape_factor"]`, etc.
-2.  **Pad Strings:** Pad lists are stored as multiline strings (`"Size x Qty"` or just `"Size"`). The parser is robust but expects standard formatting.
-3.  **Imports:** Keep imports standard (`json`, `os`, `math`, `tkinter`). Only external dependency should be `svgwrite` (and `pandas` if doing bulk CSV conversions).
+1.  **Settings Hierarchy:** Dart/Star settings are at the **root** of `app_settings.json`. Access via `self.settings["dart_threshold"]`.
+2.  **Imports:** `svg_engine.py` must remain "pure" (no tkinter imports) to ensure easy testing.
+3.  **Pad Strings:** Pad lists are multiline strings. The parser in `main.py` expects `"Size x Qty"` or just `"Size"`.
 
 ## Building Executables
-The project uses **PyInstaller** via GitHub Actions to automatically build `.exe` files on commit. Ensure `svgwrite` is included in the requirements/spec file.
+The project uses **PyInstaller** via GitHub Actions.
+* **Dependency Discovery:** PyInstaller automatically finds `config.py`, `svg_engine.py`, etc., by following imports from `main.py`.
+* **External Libs:** Ensure `svgwrite` is installed in the build environment.
