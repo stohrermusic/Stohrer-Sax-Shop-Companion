@@ -658,8 +658,24 @@ class LibraryFeaturesMixin:
                 raise TypeError("Invalid JSON structure")
 
             flat_options = {}
-            for maker, models in imported_data.items():
-                if isinstance(models, dict):
+            for k, v in imported_data.items():
+                # DETECT FLAT EXPORT: Check if key looks like "[Maker] Model"
+                if k.startswith("[") and "] " in k:
+                    # It is a flat export, use the key as-is (but strip brackets for display later if needed)
+                    # We store it directly because it's already unique
+                    # We normalize it to our internal separator for consistency
+                    try:
+                        maker_part, model_part = k.split("] ", 1)
+                        maker = maker_part[1:] # remove leading [
+                        flat_options[f"{maker}::{model_part}"] = v
+                    except ValueError:
+                        # Fallback if split fails
+                        flat_options[k] = v
+                
+                # DETECT NESTED LIBRARY: Standard nested format
+                elif isinstance(v, dict):
+                    maker = k
+                    models = v
                     for model, data in models.items():
                         flat_options[f"{maker}::{model}"] = data
             
@@ -673,10 +689,11 @@ class LibraryFeaturesMixin:
             top.transient(self.root)
             top.grab_set()
             
-            vars_dict = {}
+            # 1. Create Bottom Frame for Button (Pack FIRST so it sticks to bottom)
+            btn_frame = tk.Frame(top)
+            btn_frame.pack(side="bottom", fill="x", pady=10)
             
-            tk.Label(top, text="Select specs to import:", pady=10).pack()
-            
+            # 2. Setup Scrollable Area in remaining space
             canvas = tk.Canvas(top)
             scrollbar = tk.Scrollbar(top, orient="vertical", command=canvas.yview)
             scroll_frame = tk.Frame(canvas)
@@ -685,20 +702,35 @@ class LibraryFeaturesMixin:
             canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
             canvas.configure(yscrollcommand=scrollbar.set)
             
+            tk.Label(top, text="Select specs to import:", pady=10).pack(side="top")
+            
             canvas.pack(side="left", fill="both", expand=True, padx=10)
             scrollbar.pack(side="right", fill="y")
             
+            vars_dict = {}
+            
             for key in sorted(flat_options.keys()):
-                maker, model = key.split("::", 1)
+                if "::" in key:
+                    maker, model = key.split("::", 1)
+                    display_text = f"[{maker}] {model}"
+                else:
+                    display_text = key
+                    
                 var = tk.BooleanVar(value=True)
                 vars_dict[key] = var
-                tk.Checkbutton(scroll_frame, text=f"[{maker}] {model}", variable=var).pack(anchor='w')
+                tk.Checkbutton(scroll_frame, text=display_text, variable=var).pack(anchor='w')
                 
             def do_import():
                 count = 0
                 for key, var in vars_dict.items():
                     if var.get():
-                        maker, model = key.split("::", 1)
+                        if "::" in key:
+                            maker, model = key.split("::", 1)
+                        else:
+                            # Fallback logic if key format is weird
+                            maker = "Imported"
+                            model = key
+                            
                         spec_data = flat_options[key]
                         
                         if maker not in self.screw_data:
@@ -714,8 +746,9 @@ class LibraryFeaturesMixin:
                 self.update_screw_maker_list() 
                 messagebox.showinfo("Success", f"Imported {count} specs.")
                 top.destroy()
-                
-            tk.Button(top, text="Import Selected", command=do_import, font=("Helvetica", 10, "bold")).pack(pady=10)
+            
+            # Pack button into the bottom frame
+            tk.Button(btn_frame, text="Import Selected", command=do_import, font=("Helvetica", 10, "bold")).pack()
             
         except Exception as e:
             messagebox.showerror("Import Error", f"Failed to import:\n{e}")
