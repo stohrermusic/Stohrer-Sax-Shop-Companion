@@ -438,13 +438,12 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
         """
         Fill from longest edge inward.
         Prioritizes positions closest to the longest edge, with snug packing.
-        Uses coarser grid (2mm) for performance.
         """
         best_pos = None
         best_score = float('inf')
 
-        # Use coarser grid for longest-edge (2mm) - much faster, still accurate enough
-        edge_step = 2
+        # Use 1mm grid for accuracy (early-exit optimization keeps it fast)
+        edge_step = 1
 
         y = min_y + spacing_mm
         while y + r <= max_y:
