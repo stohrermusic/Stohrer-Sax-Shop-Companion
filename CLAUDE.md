@@ -44,7 +44,7 @@ python build.py --dmg
 ## CI/CD (GitHub Actions)
 
 The `.github/workflows/build.yml` workflow automatically builds for all three platforms:
-- Triggers on push to `main` or `beta`, on release creation, or manually
+- Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually
 - Builds Windows .exe, macOS .app (zipped), and Linux binary in parallel
 - Uploads artifacts to the workflow run
 - Auto-attaches binaries to GitHub Releases
@@ -61,6 +61,8 @@ The app stores settings and presets in platform-appropriate locations:
 
 **Backward compatibility**: On first run, existing config files in the old location (current working directory) are automatically migrated to the new location.
 
+**Manual import**: Users can also manually import settings from a previous installation via File → "Import Settings from Folder..." which copies config files from a selected directory.
+
 ## Architecture
 
 ### Module Structure
@@ -70,9 +72,9 @@ main.py                 → Entry point, PadSVGGeneratorApp class, tab creation
     ↓ inherits
 library_features.py     → LibraryFeaturesMixin (Key Heights, Serial Lookup, Screw Specs tabs)
     ↓ uses
-config.py              → Settings I/O, constants, platform config paths, migration logic
-svg_engine.py          → Pure math/SVG logic (no tkinter dependency)
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export)
+config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
+svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
+ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 build.py               → Cross-platform PyInstaller build script
 ```
@@ -97,7 +99,9 @@ build.py               → Cross-platform PyInstaller build script
 - Leather: pad_size + 2*(felt_thickness + wrap) with star bonus for small pads
 - Exact: pad_size unchanged
 
-**Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`.
+**Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`. Supports both rectangular sheets and custom polygon shapes.
+
+**Polygon Shape Tool** (gamma branch): Users can draw custom polygon shapes on a 15x15 grid for irregular leather skins. The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
 
 ### Preset/Library System
 
