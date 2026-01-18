@@ -117,12 +117,19 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     Discs that couldn't be placed are omitted from the result.
 
     If polygon is provided (list of (x,y) tuples in mm), uses polygon nesting instead of rectangle.
+
+    Supports 'max' quantity: fixed-qty pads are placed first, then max pads fill remaining space.
     """
     if polygon:
         return _nest_discs_polygon(pads, material, settings, polygon, spacing_mm)
 
+    # Separate fixed and max pads
+    fixed_pads = [p for p in pads if p['qty'] != 'max']
+    max_pads = [p for p in pads if p['qty'] == 'max']
+
+    # Build disc list from fixed pads
     discs = []
-    for pad in pads:
+    for pad in fixed_pads:
         pad_size, qty = pad['size'], pad['qty']
         diameter = get_disc_diameter(pad_size, material, settings)
         for _ in range(qty):
@@ -130,7 +137,10 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
 
     discs.sort(key=lambda x: -x[1])  # Largest first
     placed = []
+    fixed_total = len(discs)
+    fixed_placed = 0
 
+    # Place fixed pads
     for pad_size, dia in discs:
         r = dia / 2
         placed_successfully = False
@@ -143,11 +153,36 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
                 if not is_collision:
                     placed.append((pad_size, cx, cy, r))
                     placed_successfully = True
+                    fixed_placed += 1
                     break
                 x += 1
             y += 1
 
-    return placed, len(discs)
+    # Fill remaining space with max pad (if any)
+    if max_pads:
+        max_pad = max_pads[0]
+        max_size = max_pad['size']
+        max_dia = get_disc_diameter(max_size, material, settings)
+        max_r = max_dia / 2
+
+        while True:
+            placed_successfully = False
+            y = spacing_mm
+            while y + max_dia + spacing_mm <= height_mm and not placed_successfully:
+                x = spacing_mm
+                while x + max_dia + spacing_mm <= width_mm:
+                    cx, cy = x + max_r, y + max_r
+                    is_collision = any((cx - px)**2 + (cy - py)**2 < (max_r + pr + spacing_mm)**2 for _, px, py, pr in placed)
+                    if not is_collision:
+                        placed.append((max_size, cx, cy, max_r))
+                        placed_successfully = True
+                        break
+                    x += 1
+                y += 1
+            if not placed_successfully:
+                break  # No more room for max pads
+
+    return placed, fixed_placed, fixed_total
 
 
 # ==========================================
@@ -220,11 +255,20 @@ def _circle_fits_in_polygon(cx, cy, radius, polygon, spacing_mm=1.0):
 
 def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     """
-    Greedy circle-packing algorithm for polygon boundaries.
+    Center-out circle-packing algorithm for polygon boundaries.
+    Places discs largest-first, preferring positions closest to polygon centroid.
+    This naturally pushes smaller discs to edges/corners as the center fills up.
+
+    Supports 'max' quantity: fixed-qty pads are placed first, then max pads fill remaining space.
+
     Returns list of placed discs as (pad_size, cx, cy, r).
     """
+    # Separate fixed and max pads
+    fixed_pads = [p for p in pads if p['qty'] != 'max']
+    max_pads = [p for p in pads if p['qty'] == 'max']
+
     discs = []
-    for pad in pads:
+    for pad in fixed_pads:
         pad_size, qty = pad['size'], pad['qty']
         diameter = get_disc_diameter(pad_size, material, settings)
         for _ in range(qty):
@@ -232,6 +276,8 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
     discs.sort(key=lambda x: -x[1])  # Largest first
     placed = []
+    fixed_total = len(discs)
+    fixed_placed = 0
 
     # Get bounding box of polygon for search limits
     min_x = min(p[0] for p in polygon)
@@ -239,41 +285,76 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     min_y = min(p[1] for p in polygon)
     max_y = max(p[1] for p in polygon)
 
-    for pad_size, dia in discs:
-        r = dia / 2
-        placed_successfully = False
+    # Calculate polygon centroid
+    n = len(polygon)
+    centroid_x = sum(p[0] for p in polygon) / n
+    centroid_y = sum(p[1] for p in polygon) / n
 
-        # Scan from bottom-left of bounding box
+    # Use 1mm grid steps for accuracy (worth the extra time for scrap efficiency)
+    step = 1
+
+    def find_best_position(r, placed_discs):
+        """Find position closest to centroid that fits."""
+        best_pos = None
+        best_dist_sq = float('inf')
+
         y = min_y + spacing_mm
-        while y + r <= max_y and not placed_successfully:
+        while y + r <= max_y:
             x = min_x + spacing_mm
             while x + r <= max_x:
                 cx, cy = x + r, y + r
 
-                # Check if circle fits in polygon
-                if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
-                    # Check collision with already placed discs
-                    is_collision = any(
-                        (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
-                        for _, px, py, pr in placed
-                    )
-                    if not is_collision:
-                        placed.append((pad_size, cx, cy, r))
-                        placed_successfully = True
-                        break
-                x += 1
-            y += 1
+                # Quick distance check - skip if already farther than best
+                dist_sq = (cx - centroid_x) ** 2 + (cy - centroid_y) ** 2
+                if dist_sq < best_dist_sq:
+                    # Check if circle fits in polygon
+                    if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
+                        # Check collision with already placed discs
+                        is_collision = any(
+                            (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
+                            for _, px, py, pr in placed_discs
+                        )
+                        if not is_collision:
+                            best_dist_sq = dist_sq
+                            best_pos = (cx, cy)
+                x += step
+            y += step
 
-    return placed, len(discs)
+        return best_pos
+
+    # Place fixed pads
+    for pad_size, dia in discs:
+        r = dia / 2
+        best_pos = find_best_position(r, placed)
+        if best_pos:
+            placed.append((pad_size, best_pos[0], best_pos[1], r))
+            fixed_placed += 1
+
+    # Fill remaining space with max pad (if any)
+    if max_pads:
+        max_pad = max_pads[0]
+        max_size = max_pad['size']
+        max_dia = get_disc_diameter(max_size, material, settings)
+        max_r = max_dia / 2
+
+        while True:
+            best_pos = find_best_position(max_r, placed)
+            if best_pos:
+                placed.append((max_size, best_pos[0], best_pos[1], max_r))
+            else:
+                break  # No more room for max pads
+
+    return placed, fixed_placed, fixed_total
 
 
 def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None):
-    placed, total = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
-    return len(placed) == total
+    placed, fixed_placed, fixed_total = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
+    # Check if all fixed-quantity pads fit (max pads are flexible by definition)
+    return fixed_placed == fixed_total
 
 
 def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
-    placed, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
+    placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
 
     compatibility_mode = settings.get("compatibility_mode", False)
 

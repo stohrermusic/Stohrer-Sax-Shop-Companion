@@ -377,6 +377,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 messagebox.showerror("Error", "No valid pad sizes entered.")
                 return
 
+            # Validate max pads - only one allowed
+            max_pads = [p for p in pads if p['qty'] == 'max']
+            if len(max_pads) > 1:
+                messagebox.showerror("Error", "Only one pad size can use 'max' quantity at a time.")
+                return
+
             if self.settings.get("engraving_on", True):
                 oversized_engravings = check_for_oversized_engravings(pads, self.material_vars, self.settings)
                 if oversized_engravings and self.settings.get("show_engraving_warning", True):
@@ -439,11 +445,27 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             messagebox.showerror("An Error Occurred", f"Something went wrong during generation:\n\n{e}")
 
     def parse_pad_list(self, pad_input):
+        """
+        Parse pad input. Supports:
+        - Regular: "18.0 x 5" (size x quantity)
+        - Max fill: "18.0 x max" (fill remaining space with this size)
+        Only one pad size can use "max" at a time.
+        """
         pad_list = []
         for line in pad_input.strip().splitlines():
+            line = line.strip().lower()
+            if not line:
+                continue
             try:
-                size, qty = map(float, line.strip().lower().split('x'))
-                pad_list.append({'size': size, 'qty': int(qty)})
+                parts = line.split('x')
+                if len(parts) != 2:
+                    continue
+                size = float(parts[0].strip())
+                qty_str = parts[1].strip()
+                if qty_str == 'max':
+                    pad_list.append({'size': size, 'qty': 'max'})
+                else:
+                    pad_list.append({'size': size, 'qty': int(float(qty_str))})
             except ValueError:
                 continue
         return pad_list
