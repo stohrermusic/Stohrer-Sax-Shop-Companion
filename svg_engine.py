@@ -253,11 +253,33 @@ def _circle_fits_in_polygon(cx, cy, radius, polygon, spacing_mm=1.0):
     return True
 
 
+def _distance_to_nearest_edge(cx, cy, polygon):
+    """Calculate minimum distance from point (cx, cy) to any polygon edge."""
+    min_dist = float('inf')
+    n = len(polygon)
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+        dist = _distance_point_to_segment(cx, cy, x1, y1, x2, y2)
+        min_dist = min(min_dist, dist)
+    return min_dist
+
+
+def _distance_to_nearest_vertex(cx, cy, polygon):
+    """Calculate minimum distance from point (cx, cy) to any polygon vertex (corner)."""
+    min_dist = float('inf')
+    for vx, vy in polygon:
+        dist = math.sqrt((cx - vx) ** 2 + (cy - vy) ** 2)
+        min_dist = min(min_dist, dist)
+    return min_dist
+
+
 def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     """
-    Center-out circle-packing algorithm for polygon boundaries.
-    Places discs largest-first, preferring positions closest to polygon centroid.
-    This naturally pushes smaller discs to edges/corners as the center fills up.
+    Smart circle-packing algorithm for polygon boundaries.
+
+    - Large discs: prefer positions closest to centroid (center-out)
+    - Small discs: prefer edges, corners, and snug fits against other discs
 
     Supports 'max' quantity: fixed-qty pads are placed first, then max pads fill remaining space.
 
@@ -290,13 +312,31 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     centroid_x = sum(p[0] for p in polygon) / n
     centroid_y = sum(p[1] for p in polygon) / n
 
+    # Size threshold - small pads use edge-seeking behavior
+    size_threshold = settings.get("dart_threshold", 18.0)
+
     # Use 1mm grid steps for accuracy (worth the extra time for scrap efficiency)
     step = 1
 
-    def find_best_position(r, placed_discs):
-        """Find position closest to centroid that fits."""
+    def calc_snugness(cx, cy, r, placed_discs):
+        """
+        Calculate how snugly a disc fits - lower = more snug (better).
+        Measures gap to nearest placed disc (0 = touching at spacing distance).
+        """
+        if not placed_discs:
+            return 0  # No penalty if no discs placed yet
+
+        min_gap = float('inf')
+        for _, px, py, pr in placed_discs:
+            dist = math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
+            gap = dist - (r + pr + spacing_mm)  # Gap beyond minimum required
+            min_gap = min(min_gap, gap)
+        return min_gap
+
+    def find_best_position_large(r, placed_discs):
+        """Find position closest to centroid (for large discs)."""
         best_pos = None
-        best_dist_sq = float('inf')
+        best_score = float('inf')
 
         y = min_y + spacing_mm
         while y + r <= max_y:
@@ -304,19 +344,66 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
             while x + r <= max_x:
                 cx, cy = x + r, y + r
 
-                # Quick distance check - skip if already farther than best
-                dist_sq = (cx - centroid_x) ** 2 + (cy - centroid_y) ** 2
-                if dist_sq < best_dist_sq:
-                    # Check if circle fits in polygon
+                # Score = distance to centroid (lower = better)
+                score = math.sqrt((cx - centroid_x) ** 2 + (cy - centroid_y) ** 2)
+
+                if score < best_score:
                     if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
-                        # Check collision with already placed discs
                         is_collision = any(
                             (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
                             for _, px, py, pr in placed_discs
                         )
                         if not is_collision:
-                            best_dist_sq = dist_sq
+                            best_score = score
                             best_pos = (cx, cy)
+                x += step
+            y += step
+
+        return best_pos
+
+    def find_best_position_small(r, placed_discs):
+        """Find position near edges/corners with snug fit (for small discs)."""
+        best_pos = None
+        best_score = float('inf')
+
+        y = min_y + spacing_mm
+        while y + r <= max_y:
+            x = min_x + spacing_mm
+            while x + r <= max_x:
+                cx, cy = x + r, y + r
+
+                # Check validity first (fast rejection)
+                if not _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
+                    x += step
+                    continue
+
+                is_collision = any(
+                    (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
+                    for _, px, py, pr in placed_discs
+                )
+                if is_collision:
+                    x += step
+                    continue
+
+                # Calculate score for small disc (lower = better)
+                # 1. Distance to nearest edge (prefer close to edges)
+                edge_dist = _distance_to_nearest_edge(cx, cy, polygon)
+                edge_gap = edge_dist - r - spacing_mm  # Gap beyond disc radius
+
+                # 2. Distance to nearest corner/vertex (prefer corners)
+                vertex_dist = _distance_to_nearest_vertex(cx, cy, polygon)
+
+                # 3. Snugness with other discs (prefer tight packing)
+                snugness = calc_snugness(cx, cy, r, placed_discs)
+
+                # Combined score: weight edge proximity and corners heavily
+                # Lower score = better position
+                score = edge_gap * 1.0 + vertex_dist * 0.3 + snugness * 0.5
+
+                if score < best_score:
+                    best_score = score
+                    best_pos = (cx, cy)
+
                 x += step
             y += step
 
@@ -325,7 +412,11 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     # Place fixed pads
     for pad_size, dia in discs:
         r = dia / 2
-        best_pos = find_best_position(r, placed)
+        if pad_size >= size_threshold:
+            best_pos = find_best_position_large(r, placed)
+        else:
+            best_pos = find_best_position_small(r, placed)
+
         if best_pos:
             placed.append((pad_size, best_pos[0], best_pos[1], r))
             fixed_placed += 1
@@ -337,8 +428,11 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
         max_dia = get_disc_diameter(max_size, material, settings)
         max_r = max_dia / 2
 
+        # Choose strategy based on max pad size
+        find_fn = find_best_position_large if max_size >= size_threshold else find_best_position_small
+
         while True:
-            best_pos = find_best_position(max_r, placed)
+            best_pos = find_fn(max_r, placed)
             if best_pos:
                 placed.append((max_size, best_pos[0], best_pos[1], max_r))
             else:
