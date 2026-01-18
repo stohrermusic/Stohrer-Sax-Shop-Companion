@@ -43,16 +43,16 @@ def lookup_serial_year(maker, serial_str):
     data = SERIAL_DATA[maker]
     # Data is list of tuples: (Start_Serial, Year)
     # We want to find the largest Start_Serial <= serial_num
-    
+
     found_year = None
-    
-    # Iterate to find the range (Since lists are small, linear scan is fine)
+    best_start = -1
+
+    # Find the largest start_serial that doesn't exceed serial_num
     for start_serial, year in data:
-        if serial_num >= start_serial:
+        if start_serial <= serial_num and start_serial > best_start:
+            best_start = start_serial
             found_year = year
-        else:
-            break # We passed the range
-            
+
     if found_year:
         return str(found_year)
     else:
@@ -246,7 +246,10 @@ class LibraryFeaturesMixin:
         if not all([make, model, size]):
             messagebox.showwarning("Missing Info", "Please fill in at least Make, Model, and Size before saving.")
             return
-            
+
+        if active_library not in self.key_presets:
+            self.key_presets[active_library] = {}
+
         data = {
             "make": make,
             "model": model,

@@ -111,46 +111,21 @@ def check_for_oversized_engravings(pads, material_vars, settings):
             oversized[material] = oversized_sizes
     return oversized
 
-def can_all_pads_fit(pads, material, width_mm, height_mm, settings):
-    spacing_mm = 1.0
+def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0):
+    """
+    Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
+    Discs that couldn't be placed are omitted from the result.
+    """
     discs = []
-    
     for pad in pads:
         pad_size, qty = pad['size'], pad['qty']
         diameter = get_disc_diameter(pad_size, material, settings)
-        for _ in range(qty): discs.append((pad_size, diameter))
+        for _ in range(qty):
+            discs.append((pad_size, diameter))
 
-    discs.sort(key=lambda x: -x[1])
+    discs.sort(key=lambda x: -x[1])  # Largest first
     placed = []
-    for _, dia in discs:
-        r = dia / 2
-        placed_successfully = False
-        y = spacing_mm
-        while y + dia + spacing_mm <= height_mm and not placed_successfully:
-            x = spacing_mm
-            while x + dia + spacing_mm <= width_mm:
-                cx, cy = x + r, y + r
-                is_collision = any((cx - px)**2 + (cy - py)**2 < (r + pr + spacing_mm)**2 for _, px, py, pr in placed)
-                if not is_collision:
-                    placed.append((None, cx, cy, r))
-                    placed_successfully = True
-                    break
-                x += 1
-            y += 1
-    
-    return len(placed) == len(discs)
 
-def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings):
-    spacing_mm = 1.0
-    discs = []
-
-    for pad in pads:
-        pad_size, qty = pad['size'], pad['qty']
-        diameter = get_disc_diameter(pad_size, material, settings)
-        for _ in range(qty): discs.append((pad_size, diameter))
-
-    discs.sort(key=lambda x: -x[1])
-    placed = []
     for pad_size, dia in discs:
         r = dia / 2
         placed_successfully = False
@@ -159,7 +134,6 @@ def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset,
             x = spacing_mm
             while x + dia + spacing_mm <= width_mm:
                 cx, cy = x + r, y + r
-                # Check collision using standard circle r
                 is_collision = any((cx - px)**2 + (cy - py)**2 < (r + pr + spacing_mm)**2 for _, px, py, pr in placed)
                 if not is_collision:
                     placed.append((pad_size, cx, cy, r))
@@ -168,13 +142,25 @@ def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset,
                 x += 1
             y += 1
 
+    return placed, len(discs)
+
+
+def can_all_pads_fit(pads, material, width_mm, height_mm, settings):
+    placed, total = _nest_discs(pads, material, width_mm, height_mm, settings)
+    return len(placed) == total
+
+
+def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings):
+    placed, _ = _nest_discs(pads, material, width_mm, height_mm, settings)
+
     compatibility_mode = settings.get("compatibility_mode", False)
-    
+
+    # Both modes use viewBox to ensure path coordinates (which can't have units) work correctly
     if compatibility_mode:
         dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}")
         stroke_w = 0.1
     else:
-        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), profile='tiny')
+        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}", profile='tiny')
         stroke_w = '0.1mm'
 
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])

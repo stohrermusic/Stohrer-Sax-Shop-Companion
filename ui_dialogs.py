@@ -2,12 +2,38 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import random
 import json
-import os
+import sys
 
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, RESONANCE_MESSAGES,
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets
 )
+
+# ==========================================
+# CROSS-PLATFORM SCROLL HELPER
+# ==========================================
+
+def bind_mousewheel(widget, canvas):
+    """Bind mousewheel scrolling to a canvas, cross-platform."""
+    def _on_mousewheel(event):
+        if sys.platform == 'darwin':
+            # macOS: delta is usually 1 or -1
+            canvas.yview_scroll(int(-1 * event.delta), "units")
+        else:
+            # Windows: delta is usually 120 or -120
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _on_mousewheel_linux(event):
+        if event.num == 4:
+            canvas.yview_scroll(-1, "units")
+        elif event.num == 5:
+            canvas.yview_scroll(1, "units")
+
+    if sys.platform == 'linux':
+        widget.bind('<Button-4>', _on_mousewheel_linux)
+        widget.bind('<Button-5>', _on_mousewheel_linux)
+    else:
+        widget.bind('<MouseWheel>', _on_mousewheel)
 
 # ==========================================
 # HELPER UTILS
@@ -103,8 +129,8 @@ class OptionsWindow:
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
-        
-        self.top.bind('<MouseWheel>', self._on_mousewheel)
+
+        bind_mousewheel(self.top, self.canvas)
 
         # --- Sizing variables ---
         self.unit_var = tk.StringVar(value=self.settings["units"])
@@ -135,9 +161,6 @@ class OptionsWindow:
 
         self.create_option_widgets()
     
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-
     def create_option_widgets(self):
         main_frame = self.scrollable_frame
         
@@ -417,8 +440,8 @@ class KeyLayoutWindow:
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
-        
-        self.top.bind('<MouseWheel>', self._on_mousewheel)
+
+        bind_mousewheel(self.top, self.canvas)
 
         self.key_layout_vars = {}
         # Get a copy to modify
@@ -447,9 +470,6 @@ class KeyLayoutWindow:
             var = tk.BooleanVar(value=self.key_layout_settings.get(setting_key, True)) 
             self.key_layout_vars[setting_key] = var
             tk.Checkbutton(keys_frame, text=f"Show '{key_name}' field", variable=var, bg="#F0EAD6").pack(anchor='w')
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def save_options(self):
         for key, var in self.key_layout_vars.items():
@@ -612,13 +632,10 @@ class ExportPresetsWindow(tk.Toplevel):
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
-        self.bind('<MouseWheel>', self._on_mousewheel)
+        bind_mousewheel(self, self.canvas)
 
         export_button = tk.Button(self, text="Export Selected", command=self.export_selected, font=("Helvetica", 10, "bold"))
         export_button.pack(pady=10)
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def select_all(self):
         for var in self.vars.values():
@@ -736,13 +753,10 @@ class ImportPresetsWindow(tk.Toplevel):
 
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
-        self.bind('<MouseWheel>', self._on_mousewheel)
+        bind_mousewheel(self, self.canvas)
 
         import_button = tk.Button(self, text="Import Selected", command=self.import_selected, font=("Helvetica", 10, "bold"))
         import_button.pack(pady=10)
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def select_all(self):
         for var in self.vars.values():

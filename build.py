@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""
+Build script for Stohrer Sax Shop Companion.
+Creates standalone executables for Windows, macOS, and Linux using PyInstaller.
+
+Usage:
+    python build.py              # Build for current platform
+    python build.py --clean      # Clean build artifacts first
+    python build.py --dmg        # (macOS only) Also create a .dmg disk image
+"""
+
+import subprocess
+import sys
+import os
+import shutil
+import argparse
+
+APP_NAME = "StohrerSaxShopCompanion"
+MAIN_SCRIPT = "main.py"
+DMG_NAME = f"{APP_NAME}.dmg"
+
+
+def get_platform_name():
+    """Return a human-readable platform name."""
+    if sys.platform == 'win32':
+        return 'Windows'
+    elif sys.platform == 'darwin':
+        return 'macOS'
+    else:
+        return 'Linux'
+
+
+def clean_build_artifacts():
+    """Remove build and dist directories."""
+    dirs_to_clean = ['build', 'dist', '__pycache__']
+    for dir_name in dirs_to_clean:
+        if os.path.exists(dir_name):
+            print(f"Removing {dir_name}/...")
+            shutil.rmtree(dir_name)
+
+    # Remove .spec file if it exists
+    spec_file = f"{APP_NAME}.spec"
+    if os.path.exists(spec_file):
+        print(f"Removing {spec_file}...")
+        os.remove(spec_file)
+
+    # Remove .dmg if it exists
+    if os.path.exists(DMG_NAME):
+        print(f"Removing {DMG_NAME}...")
+        os.remove(DMG_NAME)
+
+
+def create_dmg():
+    """Create a .dmg disk image for macOS distribution."""
+    if sys.platform != 'darwin':
+        print("Error: .dmg creation is only available on macOS")
+        return False
+
+    app_path = f"dist/{APP_NAME}.app"
+    if not os.path.exists(app_path):
+        print(f"Error: {app_path} not found. Run build first.")
+        return False
+
+    print(f"Creating {DMG_NAME}...")
+
+    # Remove existing .dmg if present
+    if os.path.exists(DMG_NAME):
+        os.remove(DMG_NAME)
+
+    cmd = [
+        'hdiutil', 'create',
+        '-volname', APP_NAME,
+        '-srcfolder', app_path,
+        '-ov',
+        '-format', 'UDZO',
+        DMG_NAME
+    ]
+
+    print(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd)
+
+    if result.returncode == 0:
+        print(f"\n.dmg created successfully: {DMG_NAME}")
+        return True
+    else:
+        print(f"\n.dmg creation failed with exit code {result.returncode}")
+        return False
+
+
+def build():
+    """Build the application for the current platform."""
+    platform = get_platform_name()
+    print(f"Building {APP_NAME} for {platform}...")
+
+    # Base PyInstaller command
+    cmd = [
+        sys.executable, '-m', 'PyInstaller',
+        '--name', APP_NAME,
+        '--onefile',          # Single executable
+        '--windowed',         # No console window (GUI app)
+        '--noconfirm',        # Overwrite without asking
+    ]
+
+    # Platform-specific options
+    if sys.platform == 'darwin':
+        # macOS: Create .app bundle
+        cmd.extend([
+            '--osx-bundle-identifier', 'com.stohrer.saxshopcompanion',
+        ])
+    elif sys.platform == 'win32':
+        # Windows: Add icon if available
+        icon_path = 'icon.ico'
+        if os.path.exists(icon_path):
+            cmd.extend(['--icon', icon_path])
+
+    # Add the main script
+    cmd.append(MAIN_SCRIPT)
+
+    print(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd)
+
+    if result.returncode == 0:
+        print(f"\nBuild successful!")
+        print(f"Output location: dist/")
+
+        if sys.platform == 'win32':
+            print(f"  Executable: dist/{APP_NAME}.exe")
+        elif sys.platform == 'darwin':
+            print(f"  App Bundle: dist/{APP_NAME}.app")
+            print(f"  Executable: dist/{APP_NAME}")
+        else:
+            print(f"  Executable: dist/{APP_NAME}")
+    else:
+        print(f"\nBuild failed with exit code {result.returncode}")
+        sys.exit(result.returncode)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=f'Build {APP_NAME}')
+    parser.add_argument('--clean', action='store_true', help='Clean build artifacts before building')
+    parser.add_argument('--clean-only', action='store_true', help='Only clean, do not build')
+    parser.add_argument('--dmg', action='store_true', help='(macOS only) Create .dmg disk image after building')
+    args = parser.parse_args()
+
+    if args.clean or args.clean_only:
+        clean_build_artifacts()
+
+    if not args.clean_only:
+        build()
+
+        # Create .dmg if requested (macOS only)
+        if args.dmg:
+            create_dmg()
+
+
+if __name__ == '__main__':
+    main()

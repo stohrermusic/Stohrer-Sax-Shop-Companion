@@ -1,15 +1,86 @@
 import os
+import sys
 import json
+import shutil
 from tkinter import messagebox
+
+# ==========================================
+# PLATFORM-SPECIFIC CONFIG DIRECTORY
+# ==========================================
+
+APP_NAME = "StohrerSaxShopCompanion"
+
+def get_config_dir():
+    """
+    Returns the platform-appropriate config directory.
+    - Windows: %APPDATA%/StohrerSaxShopCompanion/
+    - macOS: ~/Library/Application Support/StohrerSaxShopCompanion/
+    - Linux: ~/.config/StohrerSaxShopCompanion/ (respects XDG_CONFIG_HOME)
+    """
+    if sys.platform == 'win32':
+        base = os.environ.get('APPDATA', os.path.expanduser('~'))
+        config_dir = os.path.join(base, APP_NAME)
+    elif sys.platform == 'darwin':
+        config_dir = os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', APP_NAME)
+    else:  # Linux and other Unix-like
+        base = os.environ.get('XDG_CONFIG_HOME', os.path.join(os.path.expanduser('~'), '.config'))
+        config_dir = os.path.join(base, APP_NAME)
+
+    return config_dir
+
+
+def ensure_config_dir():
+    """Create the config directory if it doesn't exist."""
+    config_dir = get_config_dir()
+    if not os.path.exists(config_dir):
+        os.makedirs(config_dir, exist_ok=True)
+    return config_dir
+
+
+def migrate_legacy_files():
+    """
+    Migrate config files from old location (CWD) to new platform-specific location.
+    This preserves backward compatibility for existing users.
+    """
+    config_dir = ensure_config_dir()
+    legacy_files = [
+        "pad_presets.json",
+        "key_height_library.json",
+        "app_settings.json",
+        "screw_specs.json"
+    ]
+
+    migrated = []
+    for filename in legacy_files:
+        legacy_path = os.path.join(os.getcwd(), filename)
+        new_path = os.path.join(config_dir, filename)
+
+        # Only migrate if legacy file exists and new file doesn't
+        if os.path.exists(legacy_path) and not os.path.exists(new_path):
+            try:
+                shutil.copy2(legacy_path, new_path)
+                migrated.append(filename)
+            except Exception as e:
+                print(f"Warning: Could not migrate {filename}: {e}")
+
+    if migrated:
+        print(f"Migrated config files to {config_dir}: {', '.join(migrated)}")
+
+    return migrated
+
+
+# Run migration on module load
+_migrated_files = migrate_legacy_files()
 
 # ==========================================
 # CONSTANTS & FILE PATHS
 # ==========================================
 
-PAD_PRESET_FILE = "pad_presets.json"
-KEY_PRESET_FILE = "key_height_library.json"
-SETTINGS_FILE = "app_settings.json"
-SCREW_SPECS_FILE = "screw_specs.json"
+_CONFIG_DIR = get_config_dir()
+PAD_PRESET_FILE = os.path.join(_CONFIG_DIR, "pad_presets.json")
+KEY_PRESET_FILE = os.path.join(_CONFIG_DIR, "key_height_library.json")
+SETTINGS_FILE = os.path.join(_CONFIG_DIR, "app_settings.json")
+SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"
