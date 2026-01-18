@@ -7,7 +7,8 @@ import json
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE,
-    DEFAULT_SETTINGS
+    DEFAULT_SETTINGS,
+    find_config_files_in_directory, import_config_files
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings
 from ui_dialogs import (
@@ -108,6 +109,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.pad_menu.add_cascade(label="File", menu=pad_file_menu)
         pad_file_menu.add_command(label="Import Pad Presets...", command=self.on_import_pad_presets)
         pad_file_menu.add_command(label="Export Pad Presets...", command=self.on_export_pad_presets)
+        pad_file_menu.add_separator()
+        pad_file_menu.add_command(label="Import Settings from Folder...", command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Exit", command=self.on_exit)
 
@@ -489,6 +492,53 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
     def on_export_pad_presets(self):
         ExportPresetsWindow(self.root, self.pad_presets, "Pad Presets", "pad_preset_export.json", False)
 
+    def on_import_settings_folder(self):
+        """Import all config files from a user-selected folder."""
+        folder = filedialog.askdirectory(
+            title="Select Folder with Settings",
+            initialdir=self.settings.get("last_output_dir", "")
+        )
+        if not folder:
+            return
+
+        found_files = find_config_files_in_directory(folder)
+        if not found_files:
+            messagebox.showinfo("No Settings Found",
+                "No config files found in the selected folder.\n\n"
+                "Looking for: app_settings.json, pad_presets.json, key_height_library.json, screw_specs.json")
+            return
+
+        file_list = "\n".join(f"  • {f}" for f in found_files)
+        msg = (f"The following files will be imported and will REPLACE your current settings:\n\n"
+               f"{file_list}\n\n"
+               f"Are you sure you want to continue?")
+
+        if not messagebox.askyesno("Confirm Import", msg):
+            return
+
+        try:
+            import_config_files(folder, found_files)
+
+            # Reload all data from the newly imported files
+            self.settings = load_settings()
+            self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
+            self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
+            self.screw_data = load_presets(SCREW_SPECS_FILE, preset_type_name="Screw Specs")
+
+            # Refresh UI dropdowns
+            self.update_pad_library_dropdown()
+            self.update_key_library_dropdown()
+            self.update_screw_maker_list()
+
+            # Update UI elements that depend on settings
+            self.update_ui_from_settings()
+            self.apply_resonance_theme()
+
+            messagebox.showinfo("Import Complete",
+                f"Successfully imported {len(found_files)} file(s).\n\n"
+                f"Imported: {', '.join(found_files)}")
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Could not import settings:\n{e}")
 
     # --- Misc Windows ---
     def open_options_window(self):

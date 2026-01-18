@@ -72,6 +72,31 @@ def migrate_legacy_files():
 # Run migration on module load
 _migrated_files = migrate_legacy_files()
 
+
+def find_config_files_in_directory(directory):
+    """Returns list of config filenames found in the specified directory."""
+    config_files = [
+        "app_settings.json",
+        "pad_presets.json",
+        "key_height_library.json",
+        "screw_specs.json"
+    ]
+    found = []
+    for filename in config_files:
+        if os.path.exists(os.path.join(directory, filename)):
+            found.append(filename)
+    return found
+
+
+def import_config_files(source_dir, filenames):
+    """Copy specified config files from source_dir to the app's config directory."""
+    config_dir = ensure_config_dir()
+    for filename in filenames:
+        src = os.path.join(source_dir, filename)
+        dst = os.path.join(config_dir, filename)
+        shutil.copy2(src, dst)
+
+
 # ==========================================
 # CONSTANTS & FILE PATHS
 # ==========================================
