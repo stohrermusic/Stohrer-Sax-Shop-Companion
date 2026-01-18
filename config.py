@@ -169,7 +169,10 @@ DEFAULT_SETTINGS = {
     
     "dart_engraving_on": True,
     "dart_engraving_loc": {"mode": "from_outside", "value": 2.5},
-    
+
+    # MAX FILL SETTINGS
+    "max_fill_style": "center_out",  # "center_out" or "longest_edge"
+
     "key_layout": {
         "show_serial": False,
         "large_notes": False,

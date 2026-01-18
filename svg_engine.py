@@ -274,6 +274,28 @@ def _distance_to_nearest_vertex(cx, cy, polygon):
     return min_dist
 
 
+def _find_longest_edge(polygon):
+    """
+    Find the longest edge of a polygon.
+    Returns (start_point, end_point, length, edge_index).
+    """
+    n = len(polygon)
+    longest = None
+    longest_len = 0
+    longest_idx = 0
+
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+        length = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+        if length > longest_len:
+            longest_len = length
+            longest = ((x1, y1), (x2, y2))
+            longest_idx = i
+
+    return longest[0], longest[1], longest_len, longest_idx
+
+
 def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     """
     Smart circle-packing algorithm for polygon boundaries.
@@ -409,6 +431,71 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
         return best_pos
 
+    def find_best_position_longest_edge(r, placed_discs):
+        """
+        Fill from longest edge inward with hex-offset rows.
+        Prioritizes positions closest to the longest edge, with row offset for better packing.
+        """
+        # Find longest edge
+        (ex1, ey1), (ex2, ey2), edge_len, _ = _find_longest_edge(polygon)
+
+        # Calculate edge direction (unit vector along edge)
+        edge_dx = ex2 - ex1
+        edge_dy = ey2 - ey1
+        edge_dir_x = edge_dx / edge_len
+        edge_dir_y = edge_dy / edge_len
+
+        # Perpendicular direction (pointing inward - we'll check both directions)
+        perp_x = -edge_dir_y
+        perp_y = edge_dir_x
+
+        best_pos = None
+        best_score = float('inf')
+
+        y = min_y + spacing_mm
+        while y + r <= max_y:
+            x = min_x + spacing_mm
+            while x + r <= max_x:
+                cx, cy = x + r, y + r
+
+                # Check validity first
+                if not _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
+                    x += step
+                    continue
+
+                is_collision = any(
+                    (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
+                    for _, px, py, pr in placed_discs
+                )
+                if is_collision:
+                    x += step
+                    continue
+
+                # Score: distance from the longest edge line (lower = closer to edge = better)
+                # Using point-to-line distance
+                dist_to_edge = _distance_point_to_segment(cx, cy, ex1, ey1, ex2, ey2)
+
+                # Secondary: snugness with other discs
+                snugness = 0
+                if placed_discs:
+                    min_gap = float('inf')
+                    for _, px, py, pr in placed_discs:
+                        dist = math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
+                        gap = dist - (r + pr + spacing_mm)
+                        min_gap = min(min_gap, gap)
+                    snugness = min_gap
+
+                score = dist_to_edge + snugness * 0.3
+
+                if score < best_score:
+                    best_score = score
+                    best_pos = (cx, cy)
+
+                x += step
+            y += step
+
+        return best_pos
+
     # Place fixed pads
     for pad_size, dia in discs:
         r = dia / 2
@@ -422,15 +509,21 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
             fixed_placed += 1
 
     # Fill remaining space with max pad (if any)
-    # Always use center-out for max pads to maximize fill efficiency
     if max_pads:
         max_pad = max_pads[0]
         max_size = max_pad['size']
         max_dia = get_disc_diameter(max_size, material, settings)
         max_r = max_dia / 2
 
+        # Choose fill strategy based on setting
+        max_fill_style = settings.get("max_fill_style", "center_out")
+        if max_fill_style == "longest_edge":
+            find_fn = find_best_position_longest_edge
+        else:
+            find_fn = find_best_position_large  # center_out
+
         while True:
-            best_pos = find_best_position_large(max_r, placed)
+            best_pos = find_fn(max_r, placed)
             if best_pos:
                 placed.append((max_size, best_pos[0], best_pos[1], max_r))
             else:

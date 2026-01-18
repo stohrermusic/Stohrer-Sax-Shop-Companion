@@ -151,6 +151,7 @@ class OptionsWindow:
         
         self.engraving_on_var = tk.BooleanVar(value=self.settings["engraving_on"])
         self.compatibility_mode_var = tk.BooleanVar(value=self.settings.get("compatibility_mode", False))
+        self.max_fill_style_var = tk.StringVar(value=self.settings.get("max_fill_style", "center_out"))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
         
@@ -274,6 +275,14 @@ class OptionsWindow:
         export_frame.pack(fill="x", pady=5)
         tk.Checkbutton(export_frame, text="Enable Inkscape/Compatibility Mode (unitless SVG)", variable=self.compatibility_mode_var, bg="#F0EAD6").pack(anchor='w')
 
+        # Max Fill Style
+        max_fill_frame = tk.LabelFrame(main_frame, text="Max Fill Style (Polygon Shapes)", bg="#F0EAD6", padx=5, pady=5)
+        max_fill_frame.pack(fill="x", pady=5)
+        tk.Radiobutton(max_fill_frame, text="Center Out (fill from center outward)",
+                       variable=self.max_fill_style_var, value="center_out", bg="#F0EAD6").pack(anchor='w')
+        tk.Radiobutton(max_fill_frame, text="Longest Edge (fill from longest edge inward)",
+                       variable=self.max_fill_style_var, value="longest_edge", bg="#F0EAD6").pack(anchor='w')
+
 
     def save_options(self):
         # Sizing
@@ -311,7 +320,10 @@ class OptionsWindow:
             
         # Export
         self.settings["compatibility_mode"] = self.compatibility_mode_var.get()
-        
+
+        # Max Fill
+        self.settings["max_fill_style"] = self.max_fill_style_var.get()
+
         self.save_callback()
         self.update_callback()
         self.top.destroy()
@@ -351,6 +363,9 @@ class OptionsWindow:
 
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
+
+            # Max Fill
+            self.max_fill_style_var.set(DEFAULT_SETTINGS.get("max_fill_style", "center_out"))
 
 class LayerColorWindow:
     def __init__(self, parent, settings, save_callback):
