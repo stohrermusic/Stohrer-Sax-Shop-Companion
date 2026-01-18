@@ -428,13 +428,34 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
             self.settings["last_output_dir"] = save_dir
 
-            files_generated = False
-            for material, var in self.material_vars.items():
-                if var.get():
-                    filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                    generate_svg(pads, material, width_mm, height_mm, filename, hole_dia, self.settings, polygon=self.custom_polygon)
-                    files_generated = True
-            
+            # Show working indicator for potentially slow generation
+            working_popup = tk.Toplevel(self.root)
+            working_popup.title("Working")
+            working_popup.geometry("250x80")
+            working_popup.configure(bg="#F0EAD6")
+            working_popup.transient(self.root)
+            working_popup.resizable(False, False)
+
+            # Center on parent
+            working_popup.update_idletasks()
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 125
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 40
+            working_popup.geometry(f"+{x}+{y}")
+
+            tk.Label(working_popup, text="Generating SVGs...", bg="#F0EAD6",
+                     font=("Helvetica", 12)).pack(expand=True)
+            working_popup.update()
+
+            try:
+                files_generated = False
+                for material, var in self.material_vars.items():
+                    if var.get():
+                        filename = os.path.join(save_dir, f"{base}_{material}.svg")
+                        generate_svg(pads, material, width_mm, height_mm, filename, hole_dia, self.settings, polygon=self.custom_polygon)
+                        files_generated = True
+            finally:
+                working_popup.destroy()
+
             if files_generated:
                 save_settings(self.settings)
                 messagebox.showinfo("Done", "SVGs generated successfully.")
