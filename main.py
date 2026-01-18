@@ -317,7 +317,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             "• Click on any point to remove it\n"
             "• Use 'Clear' to start over\n"
             "• Click 'Submit' when your shape is complete\n\n"
-            "This is useful for irregular leather skins and scrap pieces."
+            "This is useful for irregular leather skins and scrap pieces.\n\n"
+            "Note: Generation can take 5-10x longer for complex shapes."
         )
         messagebox.showinfo("Draw Custom Shape", msg)
 
