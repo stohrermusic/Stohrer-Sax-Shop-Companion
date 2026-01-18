@@ -431,26 +431,20 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
         return best_pos
 
+    # Cache longest edge for the entire nesting operation
+    (longest_ex1, longest_ey1), (longest_ex2, longest_ey2), _, _ = _find_longest_edge(polygon)
+
     def find_best_position_longest_edge(r, placed_discs):
         """
-        Fill from longest edge inward with hex-offset rows.
-        Prioritizes positions closest to the longest edge, with row offset for better packing.
+        Fill from longest edge inward.
+        Prioritizes positions closest to the longest edge, with snug packing.
+        Uses coarser grid (2mm) for performance.
         """
-        # Find longest edge
-        (ex1, ey1), (ex2, ey2), edge_len, _ = _find_longest_edge(polygon)
-
-        # Calculate edge direction (unit vector along edge)
-        edge_dx = ex2 - ex1
-        edge_dy = ey2 - ey1
-        edge_dir_x = edge_dx / edge_len
-        edge_dir_y = edge_dy / edge_len
-
-        # Perpendicular direction (pointing inward - we'll check both directions)
-        perp_x = -edge_dir_y
-        perp_y = edge_dir_x
-
         best_pos = None
         best_score = float('inf')
+
+        # Use coarser grid for longest-edge (2mm) - much faster, still accurate enough
+        edge_step = 2
 
         y = min_y + spacing_mm
         while y + r <= max_y:
@@ -458,9 +452,15 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
             while x + r <= max_x:
                 cx, cy = x + r, y + r
 
-                # Check validity first
+                # Quick score check - skip if can't possibly be better
+                dist_to_edge = _distance_point_to_segment(cx, cy, longest_ex1, longest_ey1, longest_ex2, longest_ey2)
+                if dist_to_edge >= best_score:
+                    x += edge_step
+                    continue
+
+                # Check validity
                 if not _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
-                    x += step
+                    x += edge_step
                     continue
 
                 is_collision = any(
@@ -468,14 +468,10 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
                     for _, px, py, pr in placed_discs
                 )
                 if is_collision:
-                    x += step
+                    x += edge_step
                     continue
 
-                # Score: distance from the longest edge line (lower = closer to edge = better)
-                # Using point-to-line distance
-                dist_to_edge = _distance_point_to_segment(cx, cy, ex1, ey1, ex2, ey2)
-
-                # Secondary: snugness with other discs
+                # Full score with snugness
                 snugness = 0
                 if placed_discs:
                     min_gap = float('inf')
@@ -491,8 +487,8 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
                     best_score = score
                     best_pos = (cx, cy)
 
-                x += step
-            y += step
+                x += edge_step
+            y += edge_step
 
         return best_pos
 
