@@ -41,6 +41,14 @@ python build.py --dmg
 #   Linux:   dist/StohrerSaxShopCompanion
 ```
 
+## CI/CD (GitHub Actions)
+
+The `.github/workflows/build.yml` workflow automatically builds for all three platforms:
+- Triggers on push to `main` or `beta`, on release creation, or manually
+- Builds Windows .exe, macOS .app (zipped), and Linux binary in parallel
+- Uploads artifacts to the workflow run
+- Auto-attaches binaries to GitHub Releases
+
 ## Config File Locations
 
 The app stores settings and presets in platform-appropriate locations:
