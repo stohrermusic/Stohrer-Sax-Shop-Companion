@@ -173,6 +173,9 @@ DEFAULT_SETTINGS = {
     # MAX FILL SETTINGS
     "max_fill_style": "center_out",  # "center_out" or "longest_edge"
 
+    # TUTORIAL FLAGS
+    "seen_polygon_tutorial": False,
+
     "key_layout": {
         "show_serial": False,
         "large_notes": False,
