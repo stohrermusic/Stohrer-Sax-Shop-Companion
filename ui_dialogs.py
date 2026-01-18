@@ -898,7 +898,7 @@ class PolygonDrawWindow(tk.Toplevel):
         self.result = None  # Will hold the final polygon or None if cancelled
 
         self.title("Draw Custom Shape")
-        self.geometry("520x580")
+        self.geometry("520x620")
         self.configure(bg="#F0EAD6")
         self.transient(parent)
         self.grab_set()
