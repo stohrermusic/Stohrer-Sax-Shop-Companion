@@ -422,17 +422,15 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
             fixed_placed += 1
 
     # Fill remaining space with max pad (if any)
+    # Always use center-out for max pads to maximize fill efficiency
     if max_pads:
         max_pad = max_pads[0]
         max_size = max_pad['size']
         max_dia = get_disc_diameter(max_size, material, settings)
         max_r = max_dia / 2
 
-        # Choose strategy based on max pad size
-        find_fn = find_best_position_large if max_size >= size_threshold else find_best_position_small
-
         while True:
-            best_pos = find_fn(max_r, placed)
+            best_pos = find_best_position_large(max_r, placed)
             if best_pos:
                 placed.append((max_size, best_pos[0], best_pos[1], max_r))
             else:
