@@ -877,3 +877,238 @@ class ImportTargetWindow(tk.Toplevel):
 
     def get_target_library(self):
         return self.target_library
+
+
+class PolygonDrawWindow(tk.Toplevel):
+    """
+    A dialog for drawing a polygon shape on a grid.
+    Used for defining irregular leather skin shapes.
+    """
+    MAX_POINTS = 8
+    GRID_SIZE = 15  # Max 15x15 units
+    CANVAS_PX = 450  # Canvas size in pixels
+    POINT_RADIUS = 6  # Radius of drawn points in pixels
+    CLOSE_THRESHOLD = 15  # Pixels - how close to first point to auto-close
+
+    def __init__(self, parent, unit="in"):
+        super().__init__(parent)
+        self.unit = unit
+        self.points = []  # List of (x, y) in grid units
+        self.polygon_closed = False
+        self.result = None  # Will hold the final polygon or None if cancelled
+
+        self.title("Draw Custom Shape")
+        self.geometry("520x580")
+        self.configure(bg="#F0EAD6")
+        self.transient(parent)
+        self.grab_set()
+
+        # Calculate pixels per grid unit
+        self.px_per_unit = self.CANVAS_PX / self.GRID_SIZE
+
+        self._create_widgets()
+        self._draw_grid()
+
+        self.protocol("WM_DELETE_WINDOW", self.on_cancel)
+        self.wait_window(self)
+
+    def _create_widgets(self):
+        # Instructions
+        unit_label = "inches" if self.unit == "in" else "cm"
+        instr_text = f"Click grid points to draw shape (max {self.MAX_POINTS} points).\nClick near first point to close. Click a point to remove it."
+        tk.Label(self, text=instr_text, bg="#F0EAD6", justify="center").pack(pady=(10, 5))
+
+        # Grid info
+        tk.Label(self, text=f"Grid: {self.GRID_SIZE}x{self.GRID_SIZE} {unit_label} (1 square = 1 {self.unit})",
+                 bg="#F0EAD6", font=("Helvetica", 9)).pack(pady=(0, 5))
+
+        # Canvas frame
+        canvas_frame = tk.Frame(self, bg="#F0EAD6")
+        canvas_frame.pack(padx=10, pady=5)
+
+        self.canvas = tk.Canvas(canvas_frame, width=self.CANVAS_PX, height=self.CANVAS_PX,
+                                 bg="white", highlightthickness=1, highlightbackground="gray")
+        self.canvas.pack()
+        self.canvas.bind("<Button-1>", self.on_canvas_click)
+
+        # Status label
+        self.status_var = tk.StringVar(value="Click to add points...")
+        tk.Label(self, textvariable=self.status_var, bg="#F0EAD6", font=("Helvetica", 10)).pack(pady=5)
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg="#F0EAD6")
+        btn_frame.pack(pady=10)
+
+        tk.Button(btn_frame, text="Clear", command=self.on_clear, width=10).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Submit", command=self.on_submit, width=10,
+                  font=("Helvetica", 10, "bold")).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Cancel", command=self.on_cancel, width=10).pack(side="left", padx=5)
+
+    def _draw_grid(self):
+        """Draw the grid lines on the canvas."""
+        self.canvas.delete("grid")
+
+        # Draw grid lines
+        for i in range(self.GRID_SIZE + 1):
+            px = i * self.px_per_unit
+            # Vertical lines
+            self.canvas.create_line(px, 0, px, self.CANVAS_PX, fill="#CCCCCC", tags="grid")
+            # Horizontal lines
+            self.canvas.create_line(0, px, self.CANVAS_PX, px, fill="#CCCCCC", tags="grid")
+
+        # Draw axis labels (every 5 units)
+        for i in range(0, self.GRID_SIZE + 1, 5):
+            px = i * self.px_per_unit
+            # X-axis labels (bottom)
+            self.canvas.create_text(px, self.CANVAS_PX - 5, text=str(i),
+                                     font=("Helvetica", 8), anchor="s", tags="grid")
+            # Y-axis labels (left) - invert Y so 0 is at bottom
+            self.canvas.create_text(5, self.CANVAS_PX - px, text=str(i),
+                                     font=("Helvetica", 8), anchor="w", tags="grid")
+
+    def _grid_to_canvas(self, gx, gy):
+        """Convert grid coordinates to canvas pixels. Y is inverted (0 at bottom)."""
+        cx = gx * self.px_per_unit
+        cy = self.CANVAS_PX - (gy * self.px_per_unit)
+        return cx, cy
+
+    def _canvas_to_grid(self, cx, cy):
+        """Convert canvas pixels to grid coordinates, snapped to nearest grid point."""
+        gx = round(cx / self.px_per_unit)
+        gy = round((self.CANVAS_PX - cy) / self.px_per_unit)
+        # Clamp to grid bounds
+        gx = max(0, min(self.GRID_SIZE, gx))
+        gy = max(0, min(self.GRID_SIZE, gy))
+        return gx, gy
+
+    def _redraw_polygon(self):
+        """Redraw all points and lines."""
+        self.canvas.delete("polygon")
+
+        if not self.points:
+            return
+
+        # Draw lines between points
+        if len(self.points) > 1:
+            canvas_points = [self._grid_to_canvas(p[0], p[1]) for p in self.points]
+            for i in range(len(canvas_points) - 1):
+                x1, y1 = canvas_points[i]
+                x2, y2 = canvas_points[i + 1]
+                self.canvas.create_line(x1, y1, x2, y2, fill="blue", width=2, tags="polygon")
+
+            # If closed, draw line from last to first
+            if self.polygon_closed:
+                x1, y1 = canvas_points[-1]
+                x2, y2 = canvas_points[0]
+                self.canvas.create_line(x1, y1, x2, y2, fill="blue", width=2, tags="polygon")
+
+        # Draw points
+        for i, (gx, gy) in enumerate(self.points):
+            cx, cy = self._grid_to_canvas(gx, gy)
+            color = "green" if i == 0 else "red"
+            self.canvas.create_oval(
+                cx - self.POINT_RADIUS, cy - self.POINT_RADIUS,
+                cx + self.POINT_RADIUS, cy + self.POINT_RADIUS,
+                fill=color, outline="black", tags="polygon"
+            )
+
+    def _update_status(self):
+        """Update the status label."""
+        if self.polygon_closed:
+            self.status_var.set(f"Shape closed ({len(self.points)} points). Click Submit or adjust points.")
+        elif len(self.points) >= self.MAX_POINTS:
+            self.status_var.set(f"Max points reached ({self.MAX_POINTS}). Click near first point to close.")
+        else:
+            remaining = self.MAX_POINTS - len(self.points)
+            self.status_var.set(f"{len(self.points)} points. {remaining} remaining. Click near first point to close.")
+
+    def on_canvas_click(self, event):
+        """Handle click on canvas."""
+        if self.polygon_closed:
+            # If already closed, check if clicking on a point to remove it
+            clicked_idx = self._get_clicked_point_index(event.x, event.y)
+            if clicked_idx is not None:
+                self.points.pop(clicked_idx)
+                self.polygon_closed = False
+                self._redraw_polygon()
+                self._update_status()
+            return
+
+        # Check if clicking on an existing point (to remove it)
+        clicked_idx = self._get_clicked_point_index(event.x, event.y)
+        if clicked_idx is not None:
+            self.points.pop(clicked_idx)
+            self._redraw_polygon()
+            self._update_status()
+            return
+
+        # Get grid coordinates
+        gx, gy = self._canvas_to_grid(event.x, event.y)
+
+        # Check if this would close the polygon (clicking near first point)
+        if len(self.points) >= 3:
+            first_cx, first_cy = self._grid_to_canvas(self.points[0][0], self.points[0][1])
+            dist = ((event.x - first_cx) ** 2 + (event.y - first_cy) ** 2) ** 0.5
+            if dist < self.CLOSE_THRESHOLD:
+                self.polygon_closed = True
+                self._redraw_polygon()
+                self._update_status()
+                return
+
+        # Check if we can add more points
+        if len(self.points) >= self.MAX_POINTS:
+            return
+
+        # Check if point already exists at this location
+        if (gx, gy) in self.points:
+            return
+
+        # Add the point
+        self.points.append((gx, gy))
+        self._redraw_polygon()
+        self._update_status()
+
+    def _get_clicked_point_index(self, cx, cy):
+        """Return index of point near click, or None."""
+        for i, (gx, gy) in enumerate(self.points):
+            pcx, pcy = self._grid_to_canvas(gx, gy)
+            dist = ((cx - pcx) ** 2 + (cy - pcy) ** 2) ** 0.5
+            if dist <= self.POINT_RADIUS + 4:  # Small tolerance
+                return i
+        return None
+
+    def on_clear(self):
+        """Clear all points."""
+        self.points = []
+        self.polygon_closed = False
+        self._redraw_polygon()
+        self._update_status()
+
+    def on_submit(self):
+        """Submit the polygon."""
+        if len(self.points) < 3:
+            from tkinter import messagebox
+            messagebox.showwarning("Not Enough Points",
+                                   "Please draw at least 3 points to create a shape.",
+                                   parent=self)
+            return
+
+        if not self.polygon_closed:
+            from tkinter import messagebox
+            messagebox.showwarning("Shape Not Closed",
+                                   "Please close the shape by clicking near the first point.",
+                                   parent=self)
+            return
+
+        # Return points as list of (x, y) tuples in grid units
+        self.result = list(self.points)
+        self.destroy()
+
+    def on_cancel(self):
+        """Cancel and close."""
+        self.result = None
+        self.destroy()
+
+    def get_polygon(self):
+        """Return the polygon points or None if cancelled."""
+        return self.result

@@ -12,9 +12,10 @@ from config import (
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings
 from ui_dialogs import (
-    OptionsWindow, LayerColorWindow, KeyLayoutWindow, 
+    OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
-    ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow
+    ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow,
+    PolygonDrawWindow
 )
 from library_features import LibraryFeaturesMixin
 
@@ -33,6 +34,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.settings = load_settings()
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
+        self.custom_polygon = None  # For custom shape nesting
         
         # --- Screw Specs Init ---
         if not os.path.exists(SCREW_SPECS_FILE):
@@ -262,6 +264,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.height_entry.insert(0, self.settings["sheet_height"])
         self.height_entry.grid(row=1, column=1, sticky='w')
 
+        # Custom shape controls
+        shape_btn_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
+        shape_btn_frame.grid(row=2, column=0, columnspan=2, pady=(8, 0))
+
+        tk.Button(shape_btn_frame, text="Draw Custom Shape...", command=self.on_draw_custom_shape).pack(side="left")
+        self.shape_status_var = tk.StringVar(value="")
+        self.shape_status_label = tk.Label(shape_btn_frame, textvariable=self.shape_status_var,
+                                           bg=self.root.cget('bg'), fg="gray", font=("Helvetica", 9))
+        self.shape_status_label.pack(side="left", padx=5)
+
+        self.unload_shape_btn = tk.Button(shape_btn_frame, text="Unload", command=self.on_unload_custom_shape)
+        # Initially hidden, shown when shape is loaded
+        self._update_shape_status()
+
         tk.Label(parent, text="Output filename base (no extension):", bg=self.root.cget('bg')).pack(pady=5)
         self.filename_entry = tk.Entry(parent)
         self.filename_entry.insert(0, "my_pad_job")
@@ -274,6 +290,67 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             self.custom_hole_entry.config(state='normal')
         else:
             self.custom_hole_entry.config(state='disabled')
+
+    def _update_shape_status(self):
+        """Update the custom shape status indicator."""
+        if self.custom_polygon:
+            self.shape_status_var.set(f"Drawn shape loaded ({len(self.custom_polygon)} pts)")
+            self.shape_status_label.config(fg="green")
+            self.unload_shape_btn.pack(side="left", padx=2)
+        else:
+            self.shape_status_var.set("Using rectangle dimensions")
+            self.shape_status_label.config(fg="gray")
+            self.unload_shape_btn.pack_forget()
+
+    def _show_draw_shape_tutorial(self):
+        """Show first-time tutorial for the polygon drawing tool."""
+        unit = self.settings.get("units", "in")
+        if unit == "mm":
+            unit = "cm"
+        unit_label = "inches" if unit == "in" else "centimeters"
+
+        msg = (
+            "Draw Custom Shape - How to Use\n\n"
+            f"• The grid is 15×15 {unit_label} (1 square = 1 {unit})\n"
+            "• Click on grid intersections to add points (max 8)\n"
+            "• Click near the first (green) point to close the shape\n"
+            "• Click on any point to remove it\n"
+            "• Use 'Clear' to start over\n"
+            "• Click 'Submit' when your shape is complete\n\n"
+            "This is useful for irregular leather skins and scrap pieces."
+        )
+        messagebox.showinfo("Draw Custom Shape", msg)
+
+    def on_draw_custom_shape(self):
+        """Open the polygon drawing window."""
+        # Show tutorial on first use
+        if not self.settings.get("seen_polygon_tutorial", False):
+            self._show_draw_shape_tutorial()
+            self.settings["seen_polygon_tutorial"] = True
+            save_settings(self.settings)
+
+        unit = self.settings.get("units", "in")
+        # Convert mm to appropriate display unit
+        if unit == "mm":
+            unit = "cm"  # Use cm for the grid when mm is selected
+
+        dialog = PolygonDrawWindow(self.root, unit=unit)
+        polygon = dialog.get_polygon()
+
+        if polygon:
+            # Convert to mm for internal use
+            if unit == "in":
+                # polygon is in inches, convert to mm
+                self.custom_polygon = [(x * 25.4, y * 25.4) for (x, y) in polygon]
+            else:
+                # polygon is in cm, convert to mm
+                self.custom_polygon = [(x * 10, y * 10) for (x, y) in polygon]
+            self._update_shape_status()
+
+    def on_unload_custom_shape(self):
+        """Unload the custom shape and return to rectangle mode."""
+        self.custom_polygon = None
+        self._update_shape_status()
 
     def get_hole_dia(self):
         hole_option = self.hole_var.get()
@@ -331,21 +408,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 return
             
             for material, var in self.material_vars.items():
-                if var.get() and not can_all_pads_fit(pads, material, width_mm, height_mm, self.settings):
+                if var.get() and not can_all_pads_fit(pads, material, width_mm, height_mm, self.settings, polygon=self.custom_polygon):
                     messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified sheet size.")
                     return
 
             save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
             if not save_dir:
                 return
-            
-            self.settings["last_output_dir"] = save_dir 
+
+            self.settings["last_output_dir"] = save_dir
 
             files_generated = False
             for material, var in self.material_vars.items():
                 if var.get():
                     filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                    generate_svg(pads, material, width_mm, height_mm, filename, hole_dia, self.settings)
+                    generate_svg(pads, material, width_mm, height_mm, filename, hole_dia, self.settings, polygon=self.custom_polygon)
                     files_generated = True
             
             if files_generated:

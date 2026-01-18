@@ -2,7 +2,7 @@ name: Build Releases
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main, beta, gamma]
   release:
     types: [created]
   workflow_dispatch:

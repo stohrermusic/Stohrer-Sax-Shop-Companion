@@ -111,11 +111,16 @@ def check_for_oversized_engravings(pads, material_vars, settings):
             oversized[material] = oversized_sizes
     return oversized
 
-def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0):
+def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
     Discs that couldn't be placed are omitted from the result.
+
+    If polygon is provided (list of (x,y) tuples in mm), uses polygon nesting instead of rectangle.
     """
+    if polygon:
+        return _nest_discs_polygon(pads, material, settings, polygon, spacing_mm)
+
     discs = []
     for pad in pads:
         pad_size, qty = pad['size'], pad['qty']
@@ -145,13 +150,130 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0):
     return placed, len(discs)
 
 
-def can_all_pads_fit(pads, material, width_mm, height_mm, settings):
-    placed, total = _nest_discs(pads, material, width_mm, height_mm, settings)
+# ==========================================
+# POLYGON NESTING HELPERS
+# ==========================================
+
+def _point_in_polygon(x, y, polygon):
+    """
+    Ray casting algorithm to check if point (x,y) is inside polygon.
+    Polygon is a list of (x, y) tuples.
+    """
+    n = len(polygon)
+    inside = False
+
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+
+    return inside
+
+
+def _distance_point_to_segment(px, py, x1, y1, x2, y2):
+    """
+    Calculate the minimum distance from point (px, py) to line segment (x1,y1)-(x2,y2).
+    """
+    dx = x2 - x1
+    dy = y2 - y1
+    length_sq = dx * dx + dy * dy
+
+    if length_sq == 0:
+        # Segment is a point
+        return math.sqrt((px - x1) ** 2 + (py - y1) ** 2)
+
+    # Parameter t for projection onto segment
+    t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / length_sq))
+
+    # Closest point on segment
+    closest_x = x1 + t * dx
+    closest_y = y1 + t * dy
+
+    return math.sqrt((px - closest_x) ** 2 + (py - closest_y) ** 2)
+
+
+def _circle_fits_in_polygon(cx, cy, radius, polygon, spacing_mm=1.0):
+    """
+    Check if a circle with center (cx, cy) and given radius fits inside the polygon.
+    The circle must be at least spacing_mm away from all edges.
+    """
+    # First check if center is inside
+    if not _point_in_polygon(cx, cy, polygon):
+        return False
+
+    # Check distance to each edge
+    n = len(polygon)
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+
+        dist = _distance_point_to_segment(cx, cy, x1, y1, x2, y2)
+        if dist < radius + spacing_mm:
+            return False
+
+    return True
+
+
+def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
+    """
+    Greedy circle-packing algorithm for polygon boundaries.
+    Returns list of placed discs as (pad_size, cx, cy, r).
+    """
+    discs = []
+    for pad in pads:
+        pad_size, qty = pad['size'], pad['qty']
+        diameter = get_disc_diameter(pad_size, material, settings)
+        for _ in range(qty):
+            discs.append((pad_size, diameter))
+
+    discs.sort(key=lambda x: -x[1])  # Largest first
+    placed = []
+
+    # Get bounding box of polygon for search limits
+    min_x = min(p[0] for p in polygon)
+    max_x = max(p[0] for p in polygon)
+    min_y = min(p[1] for p in polygon)
+    max_y = max(p[1] for p in polygon)
+
+    for pad_size, dia in discs:
+        r = dia / 2
+        placed_successfully = False
+
+        # Scan from bottom-left of bounding box
+        y = min_y + spacing_mm
+        while y + r <= max_y and not placed_successfully:
+            x = min_x + spacing_mm
+            while x + r <= max_x:
+                cx, cy = x + r, y + r
+
+                # Check if circle fits in polygon
+                if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
+                    # Check collision with already placed discs
+                    is_collision = any(
+                        (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
+                        for _, px, py, pr in placed
+                    )
+                    if not is_collision:
+                        placed.append((pad_size, cx, cy, r))
+                        placed_successfully = True
+                        break
+                x += 1
+            y += 1
+
+    return placed, len(discs)
+
+
+def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None):
+    placed, total = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
     return len(placed) == total
 
 
-def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings):
-    placed, _ = _nest_discs(pads, material, width_mm, height_mm, settings)
+def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
+    placed, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
 
     compatibility_mode = settings.get("compatibility_mode", False)
 
