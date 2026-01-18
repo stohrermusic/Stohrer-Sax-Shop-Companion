@@ -457,7 +457,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             if not line:
                 continue
             try:
-                parts = line.split('x')
+                parts = line.split('x', 1)  # Split only on first 'x' (so 'max' doesn't get split)
                 if len(parts) != 2:
                     continue
                 size = float(parts[0].strip())
