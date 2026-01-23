@@ -28,7 +28,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
     def __init__(self, root):
         self.root = root
         self.root.title("Stohrer Sax Shop Companion")
-        self.root.geometry("640x800")
+        self.root.geometry("640x720")
         self.default_bg = "#FFFDD0"
         self.root.configure(bg=self.default_bg)
 
@@ -62,8 +62,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.settings["card_use_paper_size"] = self.card_paper_var.get()
         dropdown_val = self.card_paper_dropdown.get().lower()
         self.settings["card_paper_size"] = "a4" if dropdown_val.startswith("a4") else "letter"
-        # Save G-code output setting
-        self.settings["gcode_output_enabled"] = self.gcode_output_var.get()
 
         save_settings(self.settings)
         self.root.destroy()
@@ -232,22 +230,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
         tk.Label(parent, text="Select materials:", bg=self.root.cget('bg')).pack(pady=5)
         self.material_vars = {
-            'felt': tk.BooleanVar(value=True), 
-            'card': tk.BooleanVar(value=True), 
+            'felt': tk.BooleanVar(value=True),
+            'card': tk.BooleanVar(value=True),
             'leather': tk.BooleanVar(value=True),
             'exact_size': tk.BooleanVar(value=False)
         }
-        for m in self.material_vars:
-            tk.Checkbutton(parent, text=m.replace('_', ' ').capitalize(), variable=self.material_vars[m], bg=self.root.cget('bg')).pack(anchor='w', padx=20)
-
-        # G-code output option
-        self.gcode_output_var = tk.BooleanVar(value=self.settings.get("gcode_output_enabled", False))
-        gcode_frame = tk.Frame(parent, bg=self.root.cget('bg'))
-        gcode_frame.pack(anchor='w', padx=20, pady=(5, 0))
-        tk.Checkbutton(gcode_frame, text="Also output G-code", variable=self.gcode_output_var,
-                       bg=self.root.cget('bg')).pack(side="left")
-        tk.Button(gcode_frame, text="Settings...", command=self.open_gcode_settings_window,
-                  font=("Helvetica", 8)).pack(side="left", padx=5)
+        # Two-column layout for materials
+        materials_frame = tk.Frame(parent, bg=self.root.cget('bg'))
+        materials_frame.pack(anchor='w', padx=20)
+        material_list = list(self.material_vars.items())
+        for i, (m, var) in enumerate(material_list):
+            row, col = i // 2, i % 2
+            tk.Checkbutton(materials_frame, text=m.replace('_', ' ').capitalize(),
+                          variable=var, bg=self.root.cget('bg')).grid(row=row, column=col, sticky='w', padx=(0, 20))
 
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         options_frame.pack(pady=10, fill='x', padx=10)
@@ -323,9 +318,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         tk.Label(parent, text="Output filename base (no extension):", bg=self.root.cget('bg')).pack(pady=5)
         self.filename_entry = tk.Entry(parent)
         self.filename_entry.insert(0, "my_pad_job")
-        self.filename_entry.pack(padx=10) 
+        self.filename_entry.pack(padx=10)
 
-        tk.Button(parent, text="Generate SVGs", command=self.on_generate, font=('Helvetica', 10, 'bold')).pack(pady=15)
+        # Two generate buttons side by side
+        generate_frame = tk.Frame(parent, bg=self.root.cget('bg'))
+        generate_frame.pack(pady=15)
+        tk.Button(generate_frame, text="Generate SVG", command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
+        tk.Button(generate_frame, text="Generate G-code", command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
 
     def toggle_custom_hole_entry(self):
         if self.hole_var.get() == "Custom":
@@ -428,69 +427,82 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 return None
         return 0
 
-    def on_generate(self):
+    def _prepare_generation(self):
+        """Common validation and setup for SVG/G-code generation. Returns None on error, or a dict with generation params."""
+        hole_dia = self.get_hole_dia()
+        if hole_dia is None:
+            return None
+
+        pads = self.parse_pad_list(self.pad_entry.get("1.0", tk.END))
+        if not pads:
+            messagebox.showerror("Error", "No valid pad sizes entered.")
+            return None
+
+        max_pads = [p for p in pads if p['qty'] == 'max']
+        if len(max_pads) > 1:
+            messagebox.showerror("Error", "Only one pad size can use 'max' quantity at a time.")
+            return None
+
+        if self.settings.get("engraving_on", True):
+            oversized_engravings = check_for_oversized_engravings(pads, self.material_vars, self.settings)
+            if oversized_engravings and self.settings.get("show_engraving_warning", True):
+                message = "Warning: The current font size is too large for some pads and the engraving will be skipped:\n\n"
+                for mat, sizes in oversized_engravings.items():
+                    message += f"- {mat.replace('_', ' ').capitalize()}: {', '.join(map(str, sorted(sizes)))}\n"
+                message += "\nDo you want to proceed?"
+                dialog = ConfirmationDialog(self.root, "Engraving Size Warning", message)
+                if not dialog.result:
+                    return None
+                if dialog.dont_show_again.get():
+                    self.settings["show_engraving_warning"] = False
+
+        width_val = float(self.width_entry.get())
+        height_val = float(self.height_entry.get())
+
+        if self.settings['units'] == 'in':
+            width_mm, height_mm = width_val * 25.4, height_val * 25.4
+        elif self.settings['units'] == 'cm':
+            width_mm, height_mm = width_val * 10, height_val * 10
+        elif self.settings['units'] == 'mm':
+            width_mm, height_mm = width_val, height_val
+        else:
+            messagebox.showerror("Error", f"Unknown unit '{self.settings['units']}' in settings.")
+            return None
+
+        base = self.filename_entry.get().strip()
+        if not base:
+            messagebox.showerror("Error", "Please enter a base filename.")
+            return None
+
+        card_paper_dims = self._get_card_paper_dimensions_mm()
+
+        return {
+            'pads': pads, 'hole_dia': hole_dia, 'base': base,
+            'width_mm': width_mm, 'height_mm': height_mm,
+            'card_paper_dims': card_paper_dims
+        }
+
+    def _get_material_dimensions(self, material, width_mm, height_mm, card_paper_dims):
+        """Get dimensions and polygon for a material, handling card paper size option."""
+        if material == "card" and card_paper_dims:
+            return card_paper_dims[0], card_paper_dims[1], None
+        return width_mm, height_mm, self.custom_polygon
+
+    def on_generate_svg(self):
+        """Generate SVG files."""
         try:
-            hole_dia = self.get_hole_dia()
-            if hole_dia is None: return
-
-            pads = self.parse_pad_list(self.pad_entry.get("1.0", tk.END))
-            if not pads:
-                messagebox.showerror("Error", "No valid pad sizes entered.")
+            params = self._prepare_generation()
+            if not params:
                 return
 
-            # Validate max pads - only one allowed
-            max_pads = [p for p in pads if p['qty'] == 'max']
-            if len(max_pads) > 1:
-                messagebox.showerror("Error", "Only one pad size can use 'max' quantity at a time.")
-                return
+            pads, hole_dia, base = params['pads'], params['hole_dia'], params['base']
+            width_mm, height_mm = params['width_mm'], params['height_mm']
+            card_paper_dims = params['card_paper_dims']
 
-            if self.settings.get("engraving_on", True):
-                oversized_engravings = check_for_oversized_engravings(pads, self.material_vars, self.settings)
-                if oversized_engravings and self.settings.get("show_engraving_warning", True):
-                    message = "Warning: The current font size is too large for some pads and the engraving will be skipped:\n\n"
-                    for mat, sizes in oversized_engravings.items():
-                        message += f"- {mat.replace('_', ' ').capitalize()}: {', '.join(map(str, sorted(sizes)))}\n"
-                    message += "\nDo you want to proceed?"
-
-                    dialog = ConfirmationDialog(self.root, "Engraving Size Warning", message)
-                    if not dialog.result:
-                        return
-                    if dialog.dont_show_again.get():
-                        self.settings["show_engraving_warning"] = False
-
-            width_val = float(self.width_entry.get())
-            height_val = float(self.height_entry.get())
-            
-            if self.settings['units'] == 'in':
-                width_mm, height_mm = width_val * 25.4, height_val * 25.4
-            elif self.settings['units'] == 'cm':
-                width_mm, height_mm = width_val * 10, height_val * 10
-            elif self.settings['units'] == 'mm':
-                width_mm, height_mm = width_val, height_val
-            else:
-                messagebox.showerror("Error", f"Unknown unit '{self.settings['units']}' in settings.")
-                return
-
-
-            base = self.filename_entry.get().strip()
-            if not base:
-                messagebox.showerror("Error", "Please enter a base filename.")
-                return
-            
-            # Get card paper dimensions if option is enabled
-            card_paper_dims = self._get_card_paper_dimensions_mm()
-
+            # Validate all materials fit
             for material, var in self.material_vars.items():
                 if var.get():
-                    # Use paper dimensions for card if option is enabled
-                    if material == "card" and card_paper_dims:
-                        mat_w, mat_h = card_paper_dims
-                        # Card uses rectangle (no custom polygon) when using paper size
-                        mat_polygon = None
-                    else:
-                        mat_w, mat_h = width_mm, height_mm
-                        mat_polygon = self.custom_polygon
-
+                    mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
                     if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
                         size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
                         messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
@@ -499,67 +511,84 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
             if not save_dir:
                 return
-
             self.settings["last_output_dir"] = save_dir
 
-            # Show working indicator for potentially slow generation
-            working_popup = tk.Toplevel(self.root)
-            working_popup.title("Working")
-            working_popup.geometry("250x80")
-            working_popup.configure(bg="#F0EAD6")
-            working_popup.transient(self.root)
-            working_popup.resizable(False, False)
-
-            # Center on parent
-            working_popup.update_idletasks()
-            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 125
-            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 40
-            working_popup.geometry(f"+{x}+{y}")
-
-            gcode_enabled = self.gcode_output_var.get()
-            working_text = "Generating SVGs and G-code..." if gcode_enabled else "Generating SVGs..."
-            tk.Label(working_popup, text=working_text, bg="#F0EAD6",
-                     font=("Helvetica", 12)).pack(expand=True)
-            working_popup.update()
-
-            try:
-                files_generated = False
-                gcode_generated = False
-                for material, var in self.material_vars.items():
-                    if var.get():
-                        # Use paper dimensions for card if option is enabled
-                        if material == "card" and card_paper_dims:
-                            mat_w, mat_h = card_paper_dims
-                            mat_polygon = None  # Card uses rectangle when using paper size
-                        else:
-                            mat_w, mat_h = width_mm, height_mm
-                            mat_polygon = self.custom_polygon
-
-                        # Generate SVG
-                        filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                        generate_svg(pads, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
-                        files_generated = True
-
-                        # Generate G-code if enabled (skip exact_size, not supported)
-                        if gcode_enabled and material != "exact_size":
-                            gcode_filename = os.path.join(save_dir, f"{base}_{material}.gcode")
-                            generate_gcode(pads, material, mat_w, mat_h, gcode_filename, hole_dia, self.settings, polygon=mat_polygon)
-                            gcode_generated = True
-            finally:
-                working_popup.destroy()
+            files_generated = False
+            for material, var in self.material_vars.items():
+                if var.get():
+                    mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+                    filename = os.path.join(save_dir, f"{base}_{material}.svg")
+                    generate_svg(pads, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                    files_generated = True
 
             if files_generated:
                 save_settings(self.settings)
-                if gcode_generated:
-                    messagebox.showinfo("Done", "SVGs and G-code files generated successfully.")
-                else:
-                    messagebox.showinfo("Done", "SVGs generated successfully.")
+                messagebox.showinfo("Done", "SVG files generated successfully.")
             else:
                 messagebox.showwarning("No Materials Selected", "Please select at least one material.")
 
         except Exception as e:
             print(f"An error occurred during SVG generation: {e}")
             messagebox.showerror("An Error Occurred", f"Something went wrong during generation:\n\n{e}")
+
+    def on_generate_gcode(self):
+        """Generate G-code files."""
+        try:
+            params = self._prepare_generation()
+            if not params:
+                return
+
+            pads, hole_dia, base = params['pads'], params['hole_dia'], params['base']
+            width_mm, height_mm = params['width_mm'], params['height_mm']
+            card_paper_dims = params['card_paper_dims']
+
+            # Check if any supported materials selected (not exact_size)
+            supported_materials = [m for m, var in self.material_vars.items() if var.get() and m != "exact_size"]
+            if not supported_materials:
+                messagebox.showwarning("No Materials Selected", "Please select at least one material (G-code not supported for Exact Size).")
+                return
+
+            # Validate all materials fit
+            for material in supported_materials:
+                mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                    size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
+                    messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
+                    return
+
+            save_dir = filedialog.askdirectory(title="Select Folder to Save G-code", initialdir=self.settings.get("last_output_dir", ""))
+            if not save_dir:
+                return
+            self.settings["last_output_dir"] = save_dir
+
+            # Show working indicator
+            working_popup = tk.Toplevel(self.root)
+            working_popup.title("Working")
+            working_popup.geometry("250x80")
+            working_popup.configure(bg="#F0EAD6")
+            working_popup.transient(self.root)
+            working_popup.resizable(False, False)
+            working_popup.update_idletasks()
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 125
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 40
+            working_popup.geometry(f"+{x}+{y}")
+            tk.Label(working_popup, text="Generating G-code...", bg="#F0EAD6", font=("Helvetica", 12)).pack(expand=True)
+            working_popup.update()
+
+            try:
+                for material in supported_materials:
+                    mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+                    filename = os.path.join(save_dir, f"{base}_{material}.gcode")
+                    generate_gcode(pads, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+            finally:
+                working_popup.destroy()
+
+            save_settings(self.settings)
+            messagebox.showinfo("Done", "G-code files generated successfully.")
+
+        except Exception as e:
+            print(f"An error occurred during G-code generation: {e}")
+            messagebox.showerror("An Error Occurred", f"Something went wrong during G-code generation:\n\n{e}")
 
     def parse_pad_list(self, pad_input):
         """
