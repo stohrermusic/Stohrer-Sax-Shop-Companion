@@ -1178,6 +1178,10 @@ class GcodeSettingsWindow:
         tk.Label(header_frame, text="Order: Engraving → Center Hole → Outer Cut",
                  bg="#F0EAD6", font=("Helvetica", 9, "italic")).pack(anchor="w", pady=(5, 0))
 
+        tk.Label(header_frame, text="Note: Power uses Grbl's S0-S1000 scale. If power seems wrong, check that "
+                 "your machine's $30 setting is 1000 (run \"$30=1000\" in your console).",
+                 bg="#F0EAD6", font=("Helvetica", 8), fg="#666666", wraplength=500, justify="left").pack(anchor="w", pady=(5, 0))
+
         # Main content with scrollable frame
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(fill="both", expand=True, padx=10)
