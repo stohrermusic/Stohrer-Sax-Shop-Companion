@@ -173,6 +173,47 @@ DEFAULT_SETTINGS = {
     # MAX FILL SETTINGS
     "max_fill_style": "center_out",  # "center_out" or "longest_edge"
 
+    # CARD PAPER SIZE SETTINGS
+    "card_use_paper_size": False,  # When True, card uses standard paper size instead of sheet dimensions
+    "card_paper_size": "letter",   # "letter" (8.5x11 in) or "a4" (210x297 mm)
+
+    # G-CODE OUTPUT SETTINGS
+    "gcode_output_enabled": False,  # When True, generate G-code files alongside SVGs
+    "gcode_settings": {
+        "felt": {
+            "engraving_speed": 1200,   # mm/min
+            "engraving_power": 8,      # percent
+            "hole_speed": 300,         # mm/min
+            "hole_power": 35,          # percent
+            "cut_speed": 400,          # mm/min
+            "cut_power": 45,           # percent
+        },
+        "card": {
+            "engraving_speed": 1500,
+            "engraving_power": 10,
+            "hole_speed": 400,
+            "hole_power": 22.5,
+            "cut_speed": 900,
+            "cut_power": 32.5,
+        },
+        "leather": {
+            "engraving_speed": 2500,
+            "engraving_power": 5,
+            "hole_speed": 300,
+            "hole_power": 30,
+            "cut_speed": 800,
+            "cut_power": 60,
+        },
+        "leather_topgrain": {
+            "engraving_speed": 2500,
+            "engraving_power": 5,
+            "hole_speed": 300,
+            "hole_power": 30,
+            "cut_speed": 800,
+            "cut_power": 60,
+        },
+    },
+
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
 

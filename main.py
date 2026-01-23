@@ -11,11 +11,12 @@ from config import (
     find_config_files_in_directory, import_config_files
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings
+from gcode_engine import generate_gcode
 from ui_dialogs import (
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow,
-    PolygonDrawWindow
+    PolygonDrawWindow, GcodeSettingsWindow
 )
 from library_features import LibraryFeaturesMixin
 
@@ -57,7 +58,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.settings["hole_option"] = self.hole_var.get()
         if self.hole_var.get() == "Custom":
             self.settings["custom_hole_size"] = self.custom_hole_entry.get()
-        
+        # Save card paper size settings
+        self.settings["card_use_paper_size"] = self.card_paper_var.get()
+        dropdown_val = self.card_paper_dropdown.get().lower()
+        self.settings["card_paper_size"] = "a4" if dropdown_val.startswith("a4") else "letter"
+        # Save G-code output setting
+        self.settings["gcode_output_enabled"] = self.gcode_output_var.get()
+
         save_settings(self.settings)
         self.root.destroy()
 
@@ -120,6 +127,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.pad_menu.add_cascade(label="Options", menu=pad_options_menu)
         pad_options_menu.add_command(label="Sizing Rules...", command=self.open_options_window)
         pad_options_menu.add_command(label="Layer Colors...", command=self.open_color_window)
+        pad_options_menu.add_separator()
+        pad_options_menu.add_command(label="G-code Settings...", command=self.open_gcode_settings_window)
 
         # --- Key Height Library Menu ---
         self.key_menu = tk.Menu(self.root)
@@ -231,6 +240,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         for m in self.material_vars:
             tk.Checkbutton(parent, text=m.replace('_', ' ').capitalize(), variable=self.material_vars[m], bg=self.root.cget('bg')).pack(anchor='w', padx=20)
 
+        # G-code output option
+        self.gcode_output_var = tk.BooleanVar(value=self.settings.get("gcode_output_enabled", False))
+        gcode_frame = tk.Frame(parent, bg=self.root.cget('bg'))
+        gcode_frame.pack(anchor='w', padx=20, pady=(5, 0))
+        tk.Checkbutton(gcode_frame, text="Also output G-code", variable=self.gcode_output_var,
+                       bg=self.root.cget('bg')).pack(side="left")
+        tk.Button(gcode_frame, text="Settings...", command=self.open_gcode_settings_window,
+                  font=("Helvetica", 8)).pack(side="left", padx=5)
+
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         options_frame.pack(pady=10, fill='x', padx=10)
 
@@ -264,9 +282,33 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.height_entry.insert(0, self.settings["sheet_height"])
         self.height_entry.grid(row=1, column=1, sticky='w')
 
+        # Card paper size option
+        card_paper_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
+        card_paper_frame.grid(row=2, column=0, columnspan=2, sticky='w', pady=(8, 0))
+
+        self.card_paper_var = tk.BooleanVar(value=self.settings.get("card_use_paper_size", False))
+        self.card_paper_checkbox = tk.Checkbutton(
+            card_paper_frame, text="Fit card to paper:", variable=self.card_paper_var,
+            bg=self.root.cget('bg'), command=self._toggle_card_paper_dropdown
+        )
+        self.card_paper_checkbox.pack(side="left")
+
+        self.card_paper_size_var = tk.StringVar(value=self.settings.get("card_paper_size", "letter"))
+        self.card_paper_dropdown = ttk.Combobox(
+            card_paper_frame, textvariable=self.card_paper_size_var, state="readonly", width=18,
+            values=["letter (8.5×11 in)", "a4 (210×297 mm)"]
+        )
+        # Set display value based on stored setting
+        if self.card_paper_size_var.get() == "a4":
+            self.card_paper_dropdown.set("a4 (210×297 mm)")
+        else:
+            self.card_paper_dropdown.set("letter (8.5×11 in)")
+        self.card_paper_dropdown.pack(side="left", padx=(5, 0))
+        self._toggle_card_paper_dropdown()
+
         # Custom shape controls
         shape_btn_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
-        shape_btn_frame.grid(row=2, column=0, columnspan=2, pady=(8, 0))
+        shape_btn_frame.grid(row=3, column=0, columnspan=2, pady=(8, 0))
 
         tk.Button(shape_btn_frame, text="Draw Custom Shape...", command=self.on_draw_custom_shape).pack(side="left")
         self.shape_status_var = tk.StringVar(value="")
@@ -290,6 +332,24 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             self.custom_hole_entry.config(state='normal')
         else:
             self.custom_hole_entry.config(state='disabled')
+
+    def _toggle_card_paper_dropdown(self):
+        """Enable/disable the card paper size dropdown based on checkbox state."""
+        if self.card_paper_var.get():
+            self.card_paper_dropdown.config(state="readonly")
+        else:
+            self.card_paper_dropdown.config(state="disabled")
+
+    def _get_card_paper_dimensions_mm(self):
+        """Return (width_mm, height_mm) for the selected paper size, or None if not using paper size."""
+        if not self.card_paper_var.get():
+            return None
+        # Parse the dropdown value to determine paper size
+        dropdown_val = self.card_paper_dropdown.get().lower()
+        if dropdown_val.startswith("a4"):
+            return (210.0, 297.0)  # A4 in mm
+        else:
+            return (8.5 * 25.4, 11.0 * 25.4)  # Letter: 215.9 x 279.4 mm
 
     def _update_shape_status(self):
         """Update the custom shape status indicator."""
@@ -417,10 +477,24 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 messagebox.showerror("Error", "Please enter a base filename.")
                 return
             
+            # Get card paper dimensions if option is enabled
+            card_paper_dims = self._get_card_paper_dimensions_mm()
+
             for material, var in self.material_vars.items():
-                if var.get() and not can_all_pads_fit(pads, material, width_mm, height_mm, self.settings, polygon=self.custom_polygon):
-                    messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified sheet size.")
-                    return
+                if var.get():
+                    # Use paper dimensions for card if option is enabled
+                    if material == "card" and card_paper_dims:
+                        mat_w, mat_h = card_paper_dims
+                        # Card uses rectangle (no custom polygon) when using paper size
+                        mat_polygon = None
+                    else:
+                        mat_w, mat_h = width_mm, height_mm
+                        mat_polygon = self.custom_polygon
+
+                    if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                        size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
+                        messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
+                        return
 
             save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
             if not save_dir:
@@ -442,23 +516,44 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 40
             working_popup.geometry(f"+{x}+{y}")
 
-            tk.Label(working_popup, text="Generating SVGs...", bg="#F0EAD6",
+            gcode_enabled = self.gcode_output_var.get()
+            working_text = "Generating SVGs and G-code..." if gcode_enabled else "Generating SVGs..."
+            tk.Label(working_popup, text=working_text, bg="#F0EAD6",
                      font=("Helvetica", 12)).pack(expand=True)
             working_popup.update()
 
             try:
                 files_generated = False
+                gcode_generated = False
                 for material, var in self.material_vars.items():
                     if var.get():
+                        # Use paper dimensions for card if option is enabled
+                        if material == "card" and card_paper_dims:
+                            mat_w, mat_h = card_paper_dims
+                            mat_polygon = None  # Card uses rectangle when using paper size
+                        else:
+                            mat_w, mat_h = width_mm, height_mm
+                            mat_polygon = self.custom_polygon
+
+                        # Generate SVG
                         filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                        generate_svg(pads, material, width_mm, height_mm, filename, hole_dia, self.settings, polygon=self.custom_polygon)
+                        generate_svg(pads, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
                         files_generated = True
+
+                        # Generate G-code if enabled (skip exact_size, not supported)
+                        if gcode_enabled and material != "exact_size":
+                            gcode_filename = os.path.join(save_dir, f"{base}_{material}.gcode")
+                            generate_gcode(pads, material, mat_w, mat_h, gcode_filename, hole_dia, self.settings, polygon=mat_polygon)
+                            gcode_generated = True
             finally:
                 working_popup.destroy()
 
             if files_generated:
                 save_settings(self.settings)
-                messagebox.showinfo("Done", "SVGs generated successfully.")
+                if gcode_generated:
+                    messagebox.showinfo("Done", "SVGs and G-code files generated successfully.")
+                else:
+                    messagebox.showinfo("Done", "SVGs generated successfully.")
             else:
                 messagebox.showwarning("No Materials Selected", "Please select at least one material.")
 
@@ -673,7 +768,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
     def open_color_window(self):
         LayerColorWindow(self.root, self.settings, lambda: save_settings(self.settings))
-        
+
+    def open_gcode_settings_window(self):
+        GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s))
+
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
 

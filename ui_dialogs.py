@@ -1127,3 +1127,163 @@ class PolygonDrawWindow(tk.Toplevel):
     def get_polygon(self):
         """Return the polygon points or None if cancelled."""
         return self.result
+
+
+# ==========================================
+# G-CODE SETTINGS DIALOG
+# ==========================================
+
+class GcodeSettingsWindow:
+    """Dialog for configuring G-code laser settings per material."""
+
+    MATERIALS = [
+        ("felt", "Felt"),
+        ("card", "Card"),
+        ("leather", "Leather"),
+    ]
+
+    OPERATIONS = [
+        ("engraving", "Engraving"),
+        ("hole", "Center Hole"),
+        ("cut", "Outer Cut"),
+    ]
+
+    def __init__(self, parent, settings, save_callback):
+        self.settings = settings
+        self.save_callback = save_callback
+
+        self.top = tk.Toplevel(parent)
+        self.top.title("G-code Laser Settings")
+        self.top.geometry("550x500")
+        self.top.configure(bg="#F0EAD6")
+        self.top.transient(parent)
+        self.top.grab_set()
+
+        # Get current gcode settings or defaults
+        self.gcode_settings = settings.get("gcode_settings", {})
+
+        # Create variable storage
+        self.vars = {}  # vars[material][operation]['speed'|'power']
+
+        self._create_widgets()
+
+    def _create_widgets(self):
+        # Header
+        header_frame = tk.Frame(self.top, bg="#F0EAD6")
+        header_frame.pack(fill="x", padx=10, pady=10)
+
+        tk.Label(header_frame, text="Configure laser speed and power for each material and operation.",
+                 bg="#F0EAD6", wraplength=500, justify="left").pack(anchor="w")
+
+        tk.Label(header_frame, text="Order: Engraving → Center Hole → Outer Cut",
+                 bg="#F0EAD6", font=("Helvetica", 9, "italic")).pack(anchor="w", pady=(5, 0))
+
+        # Main content with scrollable frame
+        main_canvas_frame = tk.Frame(self.top)
+        main_canvas_frame.pack(fill="both", expand=True, padx=10)
+
+        canvas = tk.Canvas(main_canvas_frame, bg="#F0EAD6", highlightthickness=0)
+        scrollbar = tk.Scrollbar(main_canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#F0EAD6")
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        bind_mousewheel(self.top, canvas)
+
+        # Create material sections
+        for mat_key, mat_label in self.MATERIALS:
+            self._create_material_section(scrollable_frame, mat_key, mat_label)
+
+        # Buttons
+        button_frame = tk.Frame(self.top, bg="#F0EAD6")
+        button_frame.pack(fill="x", padx=10, pady=10)
+
+        tk.Button(button_frame, text="Save", command=self._on_save).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Reset to Defaults", command=self._reset_defaults).pack(side="right", padx=5)
+
+    def _create_material_section(self, parent, mat_key, mat_label):
+        """Create a settings section for one material."""
+        frame = tk.LabelFrame(parent, text=mat_label, bg="#F0EAD6", padx=10, pady=10)
+        frame.pack(fill="x", pady=5, padx=5)
+
+        self.vars[mat_key] = {}
+
+        # Get current settings for this material
+        mat_settings = self.gcode_settings.get(mat_key, {})
+
+        # Header row
+        tk.Label(frame, text="Operation", bg="#F0EAD6", font=("Helvetica", 9, "bold")).grid(row=0, column=0, sticky="w", padx=5)
+        tk.Label(frame, text="Speed (mm/min)", bg="#F0EAD6", font=("Helvetica", 9, "bold")).grid(row=0, column=1, padx=5)
+        tk.Label(frame, text="Power (%)", bg="#F0EAD6", font=("Helvetica", 9, "bold")).grid(row=0, column=2, padx=5)
+
+        for i, (op_key, op_label) in enumerate(self.OPERATIONS, start=1):
+            self.vars[mat_key][op_key] = {}
+
+            # Get defaults from DEFAULT_SETTINGS
+            default_speed = self._get_default(mat_key, f"{op_key}_speed")
+            default_power = self._get_default(mat_key, f"{op_key}_power")
+
+            # Current values
+            current_speed = mat_settings.get(f"{op_key}_speed", default_speed)
+            current_power = mat_settings.get(f"{op_key}_power", default_power)
+
+            speed_var = tk.DoubleVar(value=current_speed)
+            power_var = tk.DoubleVar(value=current_power)
+
+            self.vars[mat_key][op_key]['speed'] = speed_var
+            self.vars[mat_key][op_key]['power'] = power_var
+
+            tk.Label(frame, text=op_label, bg="#F0EAD6").grid(row=i, column=0, sticky="w", padx=5, pady=2)
+            tk.Entry(frame, textvariable=speed_var, width=10).grid(row=i, column=1, padx=5, pady=2)
+            tk.Entry(frame, textvariable=power_var, width=10).grid(row=i, column=2, padx=5, pady=2)
+
+    def _get_default(self, material, setting_key):
+        """Get default value from DEFAULT_SETTINGS."""
+        defaults = DEFAULT_SETTINGS.get("gcode_settings", {}).get(material, {})
+        return defaults.get(setting_key, 100)  # Fallback to 100 if not found
+
+    def _on_save(self):
+        """Save settings and close."""
+        # Build gcode_settings dict from variables
+        new_gcode_settings = {}
+
+        for mat_key, _ in self.MATERIALS:
+            new_gcode_settings[mat_key] = {}
+            for op_key, _ in self.OPERATIONS:
+                try:
+                    speed = self.vars[mat_key][op_key]['speed'].get()
+                    power = self.vars[mat_key][op_key]['power'].get()
+                    new_gcode_settings[mat_key][f"{op_key}_speed"] = speed
+                    new_gcode_settings[mat_key][f"{op_key}_power"] = power
+                except tk.TclError:
+                    messagebox.showerror("Invalid Input",
+                                         f"Invalid value for {mat_key} {op_key}. Please enter valid numbers.",
+                                         parent=self.top)
+                    return
+
+        # Also copy leather settings to leather_topgrain
+        new_gcode_settings["leather_topgrain"] = dict(new_gcode_settings["leather"])
+
+        # Update settings
+        self.settings["gcode_settings"] = new_gcode_settings
+        self.save_callback(self.settings)
+
+        self.top.destroy()
+
+    def _reset_defaults(self):
+        """Reset all values to defaults."""
+        default_gcode = DEFAULT_SETTINGS.get("gcode_settings", {})
+
+        for mat_key, _ in self.MATERIALS:
+            mat_defaults = default_gcode.get(mat_key, {})
+            for op_key, _ in self.OPERATIONS:
+                default_speed = mat_defaults.get(f"{op_key}_speed", 100)
+                default_power = mat_defaults.get(f"{op_key}_power", 10)
+                self.vars[mat_key][op_key]['speed'].set(default_speed)
+                self.vars[mat_key][op_key]['power'].set(default_power)
