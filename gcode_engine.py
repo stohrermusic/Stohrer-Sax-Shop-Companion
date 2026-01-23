@@ -428,22 +428,50 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
         all_x.extend([cx - radius, cx + radius])
         all_y.extend([cy - radius, cy + radius])
 
-        # Engraving (pad size label) - positioned in upper area of disc
-        # Use same positioning logic as SVG
-        engraving_loc = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
-        mode = engraving_loc.get("mode", "centered")
-        val = engraving_loc.get("value", 0)
+        # Determine if this is a star/dart pad
+        is_dart_pad = use_stars and pad_size < dart_threshold
 
-        if mode == "from_outside":
-            label_y = cy - radius + val + font_size / 2
-        elif mode == "from_inside":
-            label_y = cy + val
-        else:  # centered
-            label_y = cy
+        # Engraving - use same logic as svg_engine.py
+        should_engrave = False
+        engraving_settings = None
 
-        text = str(int(pad_size)) if pad_size == int(pad_size) else f"{pad_size:.1f}"
-        text_strokes = get_text_strokes(text, font_size, cx, label_y)
-        engraving_strokes.extend(text_strokes)
+        if is_dart_pad:
+            # Use star-specific engraving settings
+            if settings.get("dart_engraving_on", True):
+                engraving_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
+                should_engrave = True
+        else:
+            # Use standard engraving settings
+            if settings.get("engraving_on", True):
+                engraving_settings = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
+                should_engrave = True
+
+        # Safety check: don't engrave if text would be too large
+        if should_engrave and font_size >= radius * 0.8:
+            should_engrave = False
+
+        if should_engrave:
+            mode = engraving_settings.get('mode', 'centered')
+            value = engraving_settings.get('value', 0)
+
+            # Calculate engraving Y position (matching svg_engine.py exactly)
+            if mode == 'from_outside':
+                engraving_y = cy - (radius - value)
+            elif mode == 'from_inside':
+                hole_r = hole_dia / 2 if hole_dia > 0 else 0
+                engraving_y = cy - (hole_r + value)
+            else:  # centered
+                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+                offset_from_center = (radius + hole_r) / 2
+                engraving_y = cy - offset_from_center
+
+            # Vertical adjustment for text baseline (same as SVG)
+            vertical_adjust = font_size * 0.35
+            label_y = engraving_y + vertical_adjust
+
+            text = f"{pad_size:.1f}".rstrip('0').rstrip('.')
+            text_strokes = get_text_strokes(text, font_size, cx, label_y)
+            engraving_strokes.extend(text_strokes)
 
         # Center hole (respect min_hole_size setting)
         min_hole_size = settings.get("min_hole_size", 16.5)
