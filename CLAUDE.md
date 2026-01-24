@@ -74,7 +74,8 @@ library_features.py     → LibraryFeaturesMixin (Key Heights, Serial Lookup, Sc
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow)
+gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
+ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 build.py               → Cross-platform PyInstaller build script
 ```
@@ -83,7 +84,7 @@ build.py               → Cross-platform PyInstaller build script
 
 **Mixin Inheritance**: `PadSVGGeneratorApp` inherits from `LibraryFeaturesMixin` to gain database tab functionality without polluting the main module.
 
-**Pure Logic Separation**: `svg_engine.py` contains no tkinter code, making it testable independently. All SVG generation math (star paths, nesting algorithm, sizing calculations) lives here.
+**Pure Logic Separation**: `svg_engine.py` and `gcode_engine.py` contain no tkinter code, making them testable independently. All SVG/G-code generation math (star paths, nesting algorithm, sizing calculations) lives here.
 
 **Tab-Specific Menus**: The app swaps menu bars when tabs change (`on_tab_changed` in main.py).
 
@@ -91,7 +92,7 @@ build.py               → Cross-platform PyInstaller build script
 
 ### Data Flow
 
-**Pad Generation**: User input → `parse_pad_list()` → `can_all_pads_fit()` check → `generate_svg()` → SVG files
+**Pad Generation**: User input → `parse_pad_list()` → `can_all_pads_fit()` check → `generate_svg()` or `generate_gcode()` → output files
 
 **Sizing Calculations**: `get_disc_diameter()` in svg_engine.py applies material-specific offsets:
 - Felt: pad_size - felt_offset
@@ -101,7 +102,7 @@ build.py               → Cross-platform PyInstaller build script
 
 **Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`. Supports both rectangular sheets and custom polygon shapes.
 
-**Polygon Shape Tool** (gamma branch): Users can draw custom polygon shapes on a 15x15 grid for irregular leather skins. The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
+**Polygon Shape Tool**: Users can draw custom polygon shapes for irregular leather skins. Grid size adapts to unit setting: 15x15 inches (1" squares) or 40x40 cm (1cm squares). The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
 
 ### Preset/Library System
 
