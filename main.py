@@ -400,10 +400,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         if polygon:
             # Convert to mm for internal use
             # Flip Y axis: drawing uses Y=0 at bottom, SVG uses Y=0 at top
-            # Grid coordinates are always 0-15 representing inches (physical size is always 15x15 inches)
-            grid_size = 15
-            # Always convert as inches to mm (grid always represents 15 inches regardless of display unit)
-            self.custom_polygon = [(x * 25.4, (grid_size - y) * 25.4) for (x, y) in polygon]
+            # Grid size depends on unit: 15x15 inches or 40x40 cm
+            if unit == "in":
+                grid_size = 15  # 15x15 inches
+                # Convert inches to mm
+                self.custom_polygon = [(x * 25.4, (grid_size - y) * 25.4) for (x, y) in polygon]
+            else:
+                grid_size = 40  # 40x40 cm
+                # Convert cm to mm
+                self.custom_polygon = [(x * 10, (grid_size - y) * 10) for (x, y) in polygon]
             self._update_shape_status()
 
     def on_unload_custom_shape(self):
