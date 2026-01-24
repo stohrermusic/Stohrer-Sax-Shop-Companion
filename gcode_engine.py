@@ -407,6 +407,10 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
     cut_speed = mat_settings.get("cut_speed", 900)
     cut_power = mat_settings.get("cut_power", 35)
 
+    # Kerf compensation (applied to cuts, not engraving) - per material
+    kerf_width = mat_settings.get("kerf_width", 0.0)
+    kerf_offset = kerf_width / 2  # Half kerf applied to each side
+
     # Font size for engraving (use engraving_font_size from settings)
     engraving_font_sizes = settings.get("engraving_font_size", {})
     font_size = engraving_font_sizes.get(material, 3.0)
@@ -474,12 +478,16 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
             engraving_strokes.extend(text_strokes)
 
         # Center hole (respect min_hole_size setting)
+        # Kerf compensation: shrink hole radius so final hole is correct size
         min_hole_size = settings.get("min_hole_size", 16.5)
         if hole_dia > 0 and pad_size >= min_hole_size:
-            hole_points = linearize_circle(cx, cy, hole_dia / 2, segments=36)
-            hole_strokes.append(hole_points)
+            hole_radius = (hole_dia / 2) - kerf_offset
+            if hole_radius > 0:
+                hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
+                hole_strokes.append(hole_points)
 
         # Outer cut - circle or star pattern
+        # Kerf compensation: expand outer cuts so final size is correct
         if use_stars and pad_size < dart_threshold:
             # Generate star path using same logic as svg_engine
             felt_thick = get_felt_thickness_mm(settings)
@@ -494,6 +502,10 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 
             if inner_r >= outer_r:
                 inner_r = outer_r - 0.2
+
+            # Apply kerf compensation - shift entire star outward
+            outer_r += kerf_offset
+            inner_r += kerf_offset
 
             # Calculate number of points
             circumference = 2 * math.pi * inner_r
@@ -510,7 +522,8 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
             star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
             cut_strokes.append(star_points)
         else:
-            cut_points = linearize_circle(cx, cy, radius, segments=72)
+            cut_radius = radius + kerf_offset
+            cut_points = linearize_circle(cx, cy, cut_radius, segments=72)
             cut_strokes.append(cut_points)
 
     # Generate G-code

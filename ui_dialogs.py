@@ -1247,6 +1247,20 @@ class GcodeSettingsWindow:
             tk.Entry(frame, textvariable=speed_var, width=10).grid(row=i, column=1, padx=5, pady=2)
             tk.Entry(frame, textvariable=power_var, width=10).grid(row=i, column=2, padx=5, pady=2)
 
+        # Kerf width row (after operations)
+        kerf_row = len(self.OPERATIONS) + 1
+        tk.Label(frame, text="Kerf width:", bg="#F0EAD6").grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
+
+        default_kerf = self._get_default(mat_key, "kerf_width")
+        current_kerf = mat_settings.get("kerf_width", default_kerf)
+        kerf_var = tk.DoubleVar(value=current_kerf if current_kerf else 0.0)
+        self.vars[mat_key]['kerf_width'] = kerf_var
+
+        kerf_entry = tk.Spinbox(frame, textvariable=kerf_var, from_=0.0, to=1.0,
+                                increment=0.05, width=8, format="%.2f")
+        kerf_entry.grid(row=kerf_row, column=1, sticky="w", padx=5, pady=(8, 2))
+        tk.Label(frame, text="mm", bg="#F0EAD6").grid(row=kerf_row, column=2, sticky="w", padx=5, pady=(8, 2))
+
     def _get_default(self, material, setting_key):
         """Get default value from DEFAULT_SETTINGS."""
         defaults = DEFAULT_SETTINGS.get("gcode_settings", {}).get(material, {})
@@ -1271,6 +1285,15 @@ class GcodeSettingsWindow:
                                          parent=self.top)
                     return
 
+            # Save kerf width per material
+            try:
+                new_gcode_settings[mat_key]["kerf_width"] = self.vars[mat_key]['kerf_width'].get()
+            except tk.TclError:
+                messagebox.showerror("Invalid Input",
+                                     f"Invalid kerf width for {mat_key}. Please enter a valid number.",
+                                     parent=self.top)
+                return
+
         # Also copy leather settings to leather_topgrain
         new_gcode_settings["leather_topgrain"] = dict(new_gcode_settings["leather"])
 
@@ -1291,3 +1314,7 @@ class GcodeSettingsWindow:
                 default_power = mat_defaults.get(f"{op_key}_power", 10)
                 self.vars[mat_key][op_key]['speed'].set(default_speed)
                 self.vars[mat_key][op_key]['power'].set(default_power)
+
+            # Reset kerf width per material
+            default_kerf = mat_defaults.get("kerf_width", 0.0)
+            self.vars[mat_key]['kerf_width'].set(default_kerf)
