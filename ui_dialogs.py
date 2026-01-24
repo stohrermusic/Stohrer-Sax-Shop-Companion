@@ -900,7 +900,8 @@ class PolygonDrawWindow(tk.Toplevel):
     Used for defining irregular leather skin shapes.
     """
     MAX_POINTS = 8
-    GRID_SIZE = 15  # Max 15x15 units
+    GRID_SIZE_INCHES = 15  # Physical size is always 15x15 inches
+    GRID_DIVISIONS = 15  # Number of grid divisions (always 15 for snapping)
     CANVAS_PX = 450  # Canvas size in pixels
     POINT_RADIUS = 6  # Radius of drawn points in pixels
     CLOSE_THRESHOLD = 15  # Pixels - how close to first point to auto-close
@@ -908,9 +909,15 @@ class PolygonDrawWindow(tk.Toplevel):
     def __init__(self, parent, unit="in"):
         super().__init__(parent)
         self.unit = unit
-        self.points = []  # List of (x, y) in grid units
+        self.points = []  # List of (x, y) in grid units (always 0-15, representing inches)
         self.polygon_closed = False
         self.result = None  # Will hold the final polygon or None if cancelled
+
+        # Calculate display size for the current unit (physical size is always 15 inches)
+        if self.unit == "in":
+            self.grid_size_display = self.GRID_SIZE_INCHES  # 15 inches
+        else:
+            self.grid_size_display = round(self.GRID_SIZE_INCHES * 2.54)  # ~38 cm
 
         self.title("Draw Custom Shape")
         self.geometry("520x620")
@@ -918,8 +925,8 @@ class PolygonDrawWindow(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-        # Calculate pixels per grid unit
-        self.px_per_unit = self.CANVAS_PX / self.GRID_SIZE
+        # Calculate pixels per grid division (for snapping and drawing)
+        self.px_per_unit = self.CANVAS_PX / self.GRID_DIVISIONS
 
         self._create_widgets()
         self._draw_grid()
@@ -933,8 +940,8 @@ class PolygonDrawWindow(tk.Toplevel):
         instr_text = f"Click grid points to draw shape (max {self.MAX_POINTS} points).\nClick near first point to close. Click a point to remove it."
         tk.Label(self, text=instr_text, bg="#F0EAD6", justify="center").pack(pady=(10, 5))
 
-        # Grid info
-        tk.Label(self, text=f"Grid: {self.GRID_SIZE}x{self.GRID_SIZE} {unit_label} (1 square = 1 {self.unit})",
+        # Grid info - physical size is always 15 inches, display in current unit
+        tk.Label(self, text=f"Grid: {self.grid_size_display}x{self.grid_size_display} {unit_label}",
                  bg="#F0EAD6", font=("Helvetica", 9)).pack(pady=(0, 5))
 
         # Canvas frame
@@ -964,21 +971,24 @@ class PolygonDrawWindow(tk.Toplevel):
         self.canvas.delete("grid")
 
         # Draw grid lines
-        for i in range(self.GRID_SIZE + 1):
+        for i in range(self.GRID_DIVISIONS + 1):
             px = i * self.px_per_unit
             # Vertical lines
             self.canvas.create_line(px, 0, px, self.CANVAS_PX, fill="#CCCCCC", tags="grid")
             # Horizontal lines
             self.canvas.create_line(0, px, self.CANVAS_PX, px, fill="#CCCCCC", tags="grid")
 
-        # Draw axis labels (every 5 units)
-        for i in range(0, self.GRID_SIZE + 1, 5):
+        # Draw axis labels (every 5 divisions)
+        # Labels show values in the current display unit
+        for i in range(0, self.GRID_DIVISIONS + 1, 5):
             px = i * self.px_per_unit
+            # Convert grid division to display unit value
+            display_val = round(i * self.grid_size_display / self.GRID_DIVISIONS)
             # X-axis labels (bottom)
-            self.canvas.create_text(px, self.CANVAS_PX - 5, text=str(i),
+            self.canvas.create_text(px, self.CANVAS_PX - 5, text=str(display_val),
                                      font=("Helvetica", 8), anchor="s", tags="grid")
             # Y-axis labels (left) - invert Y so 0 is at bottom
-            self.canvas.create_text(5, self.CANVAS_PX - px, text=str(i),
+            self.canvas.create_text(5, self.CANVAS_PX - px, text=str(display_val),
                                      font=("Helvetica", 8), anchor="w", tags="grid")
 
     def _grid_to_canvas(self, gx, gy):
@@ -992,8 +1002,8 @@ class PolygonDrawWindow(tk.Toplevel):
         gx = round(cx / self.px_per_unit)
         gy = round((self.CANVAS_PX - cy) / self.px_per_unit)
         # Clamp to grid bounds
-        gx = max(0, min(self.GRID_SIZE, gx))
-        gy = max(0, min(self.GRID_SIZE, gy))
+        gx = max(0, min(self.GRID_DIVISIONS, gx))
+        gy = max(0, min(self.GRID_DIVISIONS, gy))
         return gx, gy
 
     def _redraw_polygon(self):
