@@ -218,6 +218,9 @@ DEFAULT_SETTINGS = {
         },
     },
 
+    # SD CARD SETTINGS
+    "sd_card_path": "",  # Last used SD card path for "Send to SD Card" feature
+
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
 

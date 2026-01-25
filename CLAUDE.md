@@ -104,6 +104,13 @@ build.py               → Cross-platform PyInstaller build script
 
 **Polygon Shape Tool**: Users can draw custom polygon shapes for irregular leather skins. Grid size adapts to unit setting: 15x15 inches (1" squares) or 40x40 cm (1cm squares). The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
 
+**Send to SD Card** (beta): File → Send G-code to SD Card... provides a streamlined workflow for laser cutters that use SD cards (like the Creality Falcon2 Pro). The feature:
+- Opens a folder picker to select the SD card (remembers last used location)
+- Shows existing G-code files and confirms before erasing
+- Opens a file picker to select the .gcode file to send
+- Copies the file and safely ejects the SD card (Windows only)
+- User can then physically remove the card and use the laser's built-in controls
+
 ### Preset/Library System
 
 All presets use a nested dictionary structure: `{library_name: {preset_name: data}}`. Flat legacy formats are auto-migrated on load (see `load_presets()` in config.py).

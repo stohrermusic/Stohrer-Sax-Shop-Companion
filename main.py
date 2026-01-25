@@ -2,6 +2,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import os
 import json
+import shutil
+import sys
+import glob
+import subprocess
 
 # --- Local Imports ---
 from config import (
@@ -119,6 +123,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Import Settings from Folder...", command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
+        pad_file_menu.add_command(label="Send G-code to SD Card...", command=self.on_send_to_sd_card)
+        pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Exit", command=self.on_exit)
 
         pad_options_menu = tk.Menu(self.pad_menu, tearoff=0)
@@ -144,13 +150,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
         # --- Screw Specs Menu ---
         self.screw_menu = tk.Menu(self.root)
-        
+
         screw_file_menu = tk.Menu(self.screw_menu, tearoff=0)
         self.screw_menu.add_cascade(label="File", menu=screw_file_menu)
         screw_file_menu.add_command(label="Import Screw Specs...", command=self.on_import_screw_specs)
         screw_file_menu.add_command(label="Export Screw Specs...", command=self.on_export_screw_specs)
         screw_file_menu.add_separator()
         screw_file_menu.add_command(label="Exit", command=self.on_exit)
+
 
     def on_tab_changed(self, event):
         current_tab = self.notebook.index(self.notebook.select())
@@ -159,7 +166,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         elif current_tab == 1:
             self.root.config(menu=self.key_menu)
         elif current_tab == 2:
-            self.root.config(menu=tk.Menu(self.root)) # Empty menu for serials
+            self.root.config(menu=tk.Menu(self.root))  # Empty menu for serials
         elif current_tab == 3:
             self.root.config(menu=self.screw_menu)
 
@@ -185,7 +192,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.screw_tab = ttk.Frame(self.notebook, style='App.TFrame')
         self.notebook.add(self.screw_tab, text='Screw Specs')
         self.create_screw_specs_tab(self.screw_tab)
-        
+
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
         
@@ -804,6 +811,106 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
+
+    def on_send_to_sd_card(self):
+        """Send a G-code file to the SD card, clearing old files and ejecting."""
+        # Step 1: Ask user to select SD card folder (remembers last used)
+        last_sd = self.settings.get("sd_card_path", "")
+
+        sd_folder = filedialog.askdirectory(
+            title="Select Destination (SD Card)",
+            initialdir=last_sd if last_sd and os.path.exists(last_sd) else None
+        )
+        if not sd_folder:
+            return
+
+        # Remember this SD card location
+        self.settings["sd_card_path"] = sd_folder
+        save_settings(self.settings)
+
+        # Step 2: Confirm erasing existing files
+        existing_files = glob.glob(os.path.join(sd_folder, "*.gcode"))
+        existing_files += glob.glob(os.path.join(sd_folder, "*.nc"))
+        existing_files += glob.glob(os.path.join(sd_folder, "*.ngc"))
+
+        if existing_files:
+            file_list = "\n".join(f"  • {os.path.basename(f)}" for f in existing_files)
+            if not messagebox.askyesno(
+                "Erase and Send",
+                f"These files will be erased from the SD card:\n\n{file_list}\n\n"
+                "Erase and send new file?"
+            ):
+                return
+        else:
+            if not messagebox.askyesno(
+                "Send to SD Card",
+                "Send a G-code file to this SD card?"
+            ):
+                return
+
+        # Step 3: Ask user to select G-code file (remembers last output dir)
+        filepath = filedialog.askopenfilename(
+            title="Select G-code File to Send",
+            filetypes=[("G-code files", "*.gcode *.nc *.ngc"), ("All files", "*.*")],
+            initialdir=self.settings.get("last_output_dir", "")
+        )
+        if not filepath:
+            return
+
+        try:
+            # Clear existing G-code files
+            for old_file in existing_files:
+                os.remove(old_file)
+
+            # Copy the selected file to SD card
+            filename = os.path.basename(filepath)
+            dest_path = os.path.join(sd_folder, filename)
+            shutil.copy2(filepath, dest_path)
+
+            # Safely eject the SD card (Windows only)
+            drive_letter = os.path.splitdrive(sd_folder)[0]
+            eject_success = self._eject_drive(drive_letter) if drive_letter else False
+
+            if eject_success:
+                messagebox.showinfo(
+                    "Ready!",
+                    f"'{filename}' copied to SD card.\n\n"
+                    f"SD card safely ejected - you can remove it now!"
+                )
+            else:
+                messagebox.showinfo(
+                    "File Copied",
+                    f"'{filename}' copied to SD card.\n\n"
+                    f"Please safely eject the SD card before removing."
+                )
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to send file to SD card:\n\n{e}")
+
+    def _eject_drive(self, drive_letter):
+        """Safely eject a drive on Windows. Returns True on success."""
+        if sys.platform != 'win32':
+            return False
+
+        try:
+            # Use PowerShell to eject the drive
+            ps_script = f'''
+$driveEject = New-Object -comObject Shell.Application
+$driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
+'''
+            subprocess.run(
+                ["powershell", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            # Give it a moment to complete
+            import time
+            time.sleep(1)
+            # Check if drive is still accessible (if not, eject worked)
+            return not os.path.exists(drive_letter + "\\")
+        except Exception:
+            return False
 
     def update_ui_from_settings(self):
         self.unit_label.config(text=f"Width ({self.settings['units']}):")
