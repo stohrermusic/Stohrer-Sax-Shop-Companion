@@ -620,7 +620,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         # Footer with scrap count
         self.scrap_window_footer = tk.Label(self.scrap_remaining_window, text="", bg=theme_bg,
                                             font=("Helvetica", 9))
-        self.scrap_window_footer.pack(pady=(0, 10))
+        self.scrap_window_footer.pack(pady=(0, 5))
+
+        # Close button
+        tk.Button(self.scrap_remaining_window, text="Close",
+                  command=self._close_remaining_pads_window).pack(pady=(0, 10))
 
         # Handle window close
         self.scrap_remaining_window.protocol("WM_DELETE_WINDOW", self._on_remaining_window_close)
