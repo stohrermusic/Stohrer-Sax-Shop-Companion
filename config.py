@@ -185,36 +185,36 @@ DEFAULT_SETTINGS = {
             "engraving_power": 8,      # percent
             "hole_speed": 300,         # mm/min
             "hole_power": 35,          # percent
-            "cut_speed": 400,          # mm/min
-            "cut_power": 45,           # percent
-            "kerf_width": 0.0,         # mm (0 = no compensation)
+            "cut_speed": 600,          # mm/min
+            "cut_power": 60,           # percent
+            "kerf_width": 0.5,         # mm (0 = no compensation)
         },
         "card": {
             "engraving_speed": 1500,
             "engraving_power": 10,
             "hole_speed": 400,
             "hole_power": 22.5,
-            "cut_speed": 900,
-            "cut_power": 32.5,
-            "kerf_width": 0.0,
+            "cut_speed": 1500,
+            "cut_power": 50,
+            "kerf_width": 0.2,
         },
         "leather": {
-            "engraving_speed": 2500,
+            "engraving_speed": 2200,
             "engraving_power": 5,
             "hole_speed": 300,
             "hole_power": 30,
-            "cut_speed": 800,
-            "cut_power": 60,
-            "kerf_width": 0.0,
+            "cut_speed": 1200,
+            "cut_power": 75,
+            "kerf_width": 0.3,
         },
         "leather_topgrain": {
-            "engraving_speed": 2500,
+            "engraving_speed": 2200,
             "engraving_power": 5,
             "hole_speed": 300,
             "hole_power": 30,
-            "cut_speed": 800,
-            "cut_power": 60,
-            "kerf_width": 0.0,
+            "cut_speed": 1200,
+            "cut_power": 75,
+            "kerf_width": 0.3,
         },
     },
 
