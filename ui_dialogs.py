@@ -1245,7 +1245,7 @@ class GcodeSettingsWindow:
             current_speed = mat_settings.get(f"{op_key}_speed", default_speed)
             current_power = mat_settings.get(f"{op_key}_power", default_power)
 
-            speed_var = tk.DoubleVar(value=current_speed)
+            speed_var = tk.IntVar(value=int(current_speed))
             power_var = tk.DoubleVar(value=current_power)
 
             self.vars[mat_key][op_key]['speed'] = speed_var
