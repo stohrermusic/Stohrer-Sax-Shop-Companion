@@ -1324,6 +1324,23 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
     def on_send_to_sd_card(self):
         """Send a G-code file to the SD card, clearing old files and ejecting."""
+        # Show first-time tutorial
+        if not self.settings.get("seen_sdcard_tutorial", False):
+            messagebox.showinfo(
+                "Send to SD Card",
+                "This feature copies a G-code file to your SD card for use with "
+                "laser cutters that read from SD cards (like the Creality Falcon).\n\n"
+                "How it works:\n"
+                "1. Select your SD card folder\n"
+                "2. Existing G-code files will be erased (after confirmation)\n"
+                "3. Select the .gcode file you want to send\n"
+                "4. The file is copied to the SD card\n\n"
+                "On Windows, the SD card is automatically ejected when done, "
+                "so you can safely remove it immediately."
+            )
+            self.settings["seen_sdcard_tutorial"] = True
+            save_settings(self.settings)
+
         # Step 1: Ask user to select SD card folder (remembers last used)
         last_sd = self.settings.get("sd_card_path", "")
 
