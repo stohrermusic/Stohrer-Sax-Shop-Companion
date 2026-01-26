@@ -634,6 +634,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
     def _update_remaining_pads_window(self):
         """Update the contents of the remaining pads window with two columns."""
         if self.scrap_remaining_window is None:
+            # Reopen window if session is active but window was closed
+            if self.scrap_session.get('active', False):
+                self._open_remaining_pads_window()
             return
         try:
             remaining_pads = self.scrap_session.get('remaining_pads', [])
