@@ -715,8 +715,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             cb.config(state='normal')
 
     def _on_remaining_window_close(self):
-        """Handle user closing the remaining pads window."""
-        self.scrap_remaining_window = None
+        """Handle user closing the remaining pads window via X button."""
+        self._close_remaining_pads_window()
 
     def get_hole_dia(self):
         hole_option = self.hole_var.get()
