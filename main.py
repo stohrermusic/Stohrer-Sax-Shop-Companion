@@ -14,8 +14,8 @@ from config import (
     DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files
 )
-from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings
-from gcode_engine import generate_gcode
+from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed
+from gcode_engine import generate_gcode, generate_gcode_from_placed
 from ui_dialogs import (
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
@@ -40,7 +40,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
         self.custom_polygon = None  # For custom shape nesting
-        
+
+        # --- Scrap Mode Session State ---
+        self.scrap_session = {
+            'active': False,
+            'original_pads': [],       # Original pads for progress tracking
+            'remaining_pads': [],      # [{'size': 18.0, 'qty': 3}, ...]
+            'scrap_count': 0,          # Files generated in this session
+            'material': None,          # Single material locked for session
+            'save_dir': '',            # Output directory
+            'hole_dia': 0,             # Locked hole diameter
+        }
+        self.scrap_remaining_window = None  # Popup showing progress
+
         # --- Screw Specs Init ---
         if not os.path.exists(SCREW_SPECS_FILE):
             save_presets({}, SCREW_SPECS_FILE)
@@ -56,6 +68,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
 
     def on_exit(self):
+        # Warn if scrap session is active with remaining pads
+        if self.scrap_session.get('active', False):
+            remaining = self._count_remaining_pads()
+            if remaining > 0:
+                if not messagebox.askyesno("Scrap Session Active",
+                    f"You have {remaining} pads remaining in your scrap session.\n\n"
+                    "Exit anyway? (Session will be lost)"):
+                    return
+
         # Save settings from pad generator tab
         self.settings["sheet_width"] = self.width_entry.get()
         self.settings["sheet_height"] = self.height_entry.get()
@@ -242,14 +263,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             'leather': tk.BooleanVar(value=True),
             'exact_size': tk.BooleanVar(value=False)
         }
+        self.material_checkboxes = {}  # Store references for enable/disable
         # Two-column layout for materials
         materials_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         materials_frame.pack(anchor='w', padx=20)
         material_list = list(self.material_vars.items())
         for i, (m, var) in enumerate(material_list):
             row, col = i // 2, i % 2
-            tk.Checkbutton(materials_frame, text=m.replace('_', ' ').capitalize(),
-                          variable=var, bg=self.root.cget('bg')).grid(row=row, column=col, sticky='w', padx=(0, 20))
+            cb = tk.Checkbutton(materials_frame, text=m.replace('_', ' ').capitalize(),
+                               variable=var, bg=self.root.cget('bg'))
+            cb.grid(row=row, column=col, sticky='w', padx=(0, 20))
+            self.material_checkboxes[m] = cb
 
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         options_frame.pack(pady=10, fill='x', padx=10)
@@ -283,6 +307,25 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.height_entry = tk.Entry(sheet_frame)
         self.height_entry.insert(0, self.settings["sheet_height"])
         self.height_entry.grid(row=1, column=1, sticky='w')
+
+        # Scrap Mode checkbox and status (right side of sheet frame, centered)
+        scrap_inner_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
+        scrap_inner_frame.grid(row=0, column=2, rowspan=2, sticky='n', padx=(20, 5))
+
+        self.scrap_mode_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(scrap_inner_frame, text="Scrap Mode",
+                       variable=self.scrap_mode_var, bg=self.root.cget('bg'),
+                       command=self._toggle_scrap_mode).pack()
+
+        # Status label (shown when session active)
+        self.scrap_status_var = tk.StringVar(value="")
+        self.scrap_status_label = tk.Label(scrap_inner_frame,
+                                           textvariable=self.scrap_status_var,
+                                           bg=self.root.cget('bg'), font=("Helvetica", 8), fg="blue")
+
+        # Clear button (shown when scrap mode checked)
+        self.clear_scrap_btn = tk.Button(scrap_inner_frame, text="Clear", font=("Helvetica", 8),
+                                         command=self._on_clear_scrap_clicked)
 
         # Card paper size option
         card_paper_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
@@ -423,6 +466,249 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.custom_polygon = None
         self._update_shape_status()
 
+    # --- Scrap Mode Methods ---
+
+    def _toggle_scrap_mode(self):
+        """Called when scrap mode checkbox changes."""
+        if self.scrap_mode_var.get():
+            # Turning on - validate only one material is selected
+            selected = [m for m, v in self.material_vars.items() if v.get()]
+            if len(selected) != 1:
+                messagebox.showwarning("Scrap Mode",
+                    "Please select exactly one material to use Scrap Mode.")
+                self.scrap_mode_var.set(False)
+                return
+        else:
+            # Turning off - warn if session active
+            if self.scrap_session['active']:
+                remaining = self._count_remaining_pads()
+                if remaining > 0:
+                    if not messagebox.askyesno("Clear Session?",
+                        f"You have {remaining} pads remaining.\n"
+                        "Disabling scrap mode will clear the session.\n\nContinue?"):
+                        self.scrap_mode_var.set(True)
+                        return
+                self._clear_scrap_session()
+        self._update_scrap_status_display()
+
+    def _clear_scrap_session(self):
+        """Reset scrap session state."""
+        self.scrap_session = {
+            'active': False,
+            'original_pads': [],
+            'remaining_pads': [],
+            'scrap_count': 0,
+            'material': None,
+            'save_dir': '',
+            'hole_dia': 0,
+        }
+        self._unlock_material_selection()
+        self._close_remaining_pads_window()
+        self._update_scrap_status_display()
+
+    def _update_scrap_status_display(self):
+        """Update the scrap mode status UI."""
+        if self.scrap_mode_var.get():
+            # Show Clear button when scrap mode is checked
+            self.clear_scrap_btn.pack(pady=(2, 0))
+
+            if self.scrap_session['active']:
+                # Show status when session is active
+                remaining = self._count_remaining_pads()
+                if remaining == 0:
+                    self.scrap_status_var.set("Done!")
+                    self.scrap_status_label.config(fg="green")
+                else:
+                    count = self.scrap_session['scrap_count']
+                    self.scrap_status_var.set(f"{remaining} left ({count} scraps)")
+                    self.scrap_status_label.config(fg="blue")
+                self.scrap_status_label.pack()
+            else:
+                # No active session - hide status label
+                self.scrap_status_label.pack_forget()
+        else:
+            # Scrap mode unchecked - hide everything
+            self.scrap_status_label.pack_forget()
+            self.clear_scrap_btn.pack_forget()
+
+    def _on_clear_scrap_clicked(self):
+        """Handle Clear button click - clears session and unchecks scrap mode."""
+        if self.scrap_session['active']:
+            remaining = self._count_remaining_pads()
+            if remaining > 0:
+                if not messagebox.askyesno("Clear Session?",
+                    f"You have {remaining} pads remaining.\n\nClear session?"):
+                    return
+        self._clear_scrap_session()
+        self.scrap_mode_var.set(False)
+        self._update_scrap_status_display()
+
+    def _count_remaining_pads(self):
+        """Count total remaining pads in session."""
+        return sum(p['qty'] for p in self.scrap_session['remaining_pads'])
+
+    def _start_scrap_session(self, pads, material, save_dir, hole_dia):
+        """Initialize a new scrap session."""
+        # Only include fixed-qty pads, not 'max' pads
+        # Store both original and remaining for progress tracking
+        fixed_pads = [{'size': p['size'], 'qty': p['qty']}
+                      for p in pads if p['qty'] != 'max']
+        self.scrap_session = {
+            'active': True,
+            'original_pads': [p.copy() for p in fixed_pads],  # For "done" calculation
+            'remaining_pads': fixed_pads,
+            'scrap_count': 0,
+            'material': material,
+            'save_dir': save_dir,
+            'hole_dia': hole_dia,
+        }
+        self._lock_material_selection(material)
+        self._open_remaining_pads_window()
+
+    def _open_remaining_pads_window(self):
+        """Open or update the floating window showing remaining and done pads."""
+        if self.scrap_remaining_window is not None:
+            try:
+                self.scrap_remaining_window.destroy()
+            except tk.TclError:
+                pass
+
+        self.scrap_remaining_window = tk.Toplevel(self.root)
+        self.scrap_remaining_window.title("Scrap Mode Progress")
+        self.scrap_remaining_window.geometry("320x300")
+        self.scrap_remaining_window.configure(bg=self.default_bg)
+        self.scrap_remaining_window.resizable(True, True)
+
+        # Position to the right of main window
+        self.root.update_idletasks()
+        x = self.root.winfo_x() + self.root.winfo_width() + 10
+        y = self.root.winfo_y()
+        self.scrap_remaining_window.geometry(f"+{x}+{y}")
+
+        # Header with progress
+        header_frame = tk.Frame(self.scrap_remaining_window, bg=self.default_bg)
+        header_frame.pack(fill="x", padx=10, pady=(10, 5))
+        self.scrap_window_header = tk.Label(header_frame, text="", bg=self.default_bg,
+                                            font=("Helvetica", 10, "bold"))
+        self.scrap_window_header.pack(anchor="w")
+
+        # Two-column layout for Remaining and Done
+        columns_frame = tk.Frame(self.scrap_remaining_window, bg=self.default_bg)
+        columns_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # Remaining column
+        remaining_frame = tk.Frame(columns_frame, bg=self.default_bg)
+        remaining_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        tk.Label(remaining_frame, text="Remaining", bg=self.default_bg,
+                 font=("Helvetica", 9, "bold"), fg="blue").pack(anchor="w")
+        self.scrap_remaining_listbox = tk.Listbox(remaining_frame, font=("Courier", 10), height=10, width=12)
+        self.scrap_remaining_listbox.pack(fill="both", expand=True)
+
+        # Done column
+        done_frame = tk.Frame(columns_frame, bg=self.default_bg)
+        done_frame.pack(side="left", fill="both", expand=True, padx=(5, 0))
+        tk.Label(done_frame, text="Done", bg=self.default_bg,
+                 font=("Helvetica", 9, "bold"), fg="green").pack(anchor="w")
+        self.scrap_done_listbox = tk.Listbox(done_frame, font=("Courier", 10), height=10, width=12)
+        self.scrap_done_listbox.pack(fill="both", expand=True)
+
+        # Footer with scrap count
+        self.scrap_window_footer = tk.Label(self.scrap_remaining_window, text="", bg=self.default_bg,
+                                            font=("Helvetica", 9))
+        self.scrap_window_footer.pack(pady=(0, 10))
+
+        # Handle window close
+        self.scrap_remaining_window.protocol("WM_DELETE_WINDOW", self._on_remaining_window_close)
+
+        self._update_remaining_pads_window()
+
+    def _update_remaining_pads_window(self):
+        """Update the contents of the remaining pads window with two columns."""
+        if self.scrap_remaining_window is None:
+            return
+        try:
+            remaining_pads = self.scrap_session.get('remaining_pads', [])
+            original_pads = self.scrap_session.get('original_pads', [])
+            scraps = self.scrap_session.get('scrap_count', 0)
+            material = self.scrap_session.get('material', '')
+
+            # Calculate done pads (original - remaining)
+            remaining_by_size = {p['size']: p['qty'] for p in remaining_pads}
+            done_pads = []
+            for orig in original_pads:
+                size = orig['size']
+                orig_qty = orig['qty']
+                remaining_qty = remaining_by_size.get(size, 0)
+                done_qty = orig_qty - remaining_qty
+                if done_qty > 0:
+                    done_pads.append({'size': size, 'qty': done_qty})
+
+            total_remaining = sum(p['qty'] for p in remaining_pads)
+            total_done = sum(p['qty'] for p in done_pads)
+            total_original = sum(p['qty'] for p in original_pads)
+
+            # Update header
+            if total_remaining == 0:
+                self.scrap_window_header.config(text="All done!", fg="green")
+            else:
+                self.scrap_window_header.config(
+                    text=f"{total_done} / {total_original} pads complete", fg="blue")
+
+            # Update Remaining listbox
+            self.scrap_remaining_listbox.delete(0, tk.END)
+            if remaining_pads:
+                sorted_remaining = sorted(remaining_pads, key=lambda p: -p['size'])
+                for pad in sorted_remaining:
+                    size_str = f"{pad['size']:.1f}".rstrip('0').rstrip('.')
+                    self.scrap_remaining_listbox.insert(tk.END, f" {pad['qty']} x {size_str}")
+            else:
+                self.scrap_remaining_listbox.insert(tk.END, " (none)")
+
+            # Update Done listbox
+            self.scrap_done_listbox.delete(0, tk.END)
+            if done_pads:
+                sorted_done = sorted(done_pads, key=lambda p: -p['size'])
+                for pad in sorted_done:
+                    size_str = f"{pad['size']:.1f}".rstrip('0').rstrip('.')
+                    self.scrap_done_listbox.insert(tk.END, f" {pad['qty']} x {size_str}")
+            else:
+                self.scrap_done_listbox.insert(tk.END, " (none)")
+
+            # Update footer
+            self.scrap_window_footer.config(
+                text=f"{material} | {scraps} scrap(s) used")
+
+        except tk.TclError:
+            # Window was closed
+            self.scrap_remaining_window = None
+
+    def _close_remaining_pads_window(self):
+        """Close the remaining pads window."""
+        if self.scrap_remaining_window is not None:
+            try:
+                self.scrap_remaining_window.destroy()
+            except tk.TclError:
+                pass
+            self.scrap_remaining_window = None
+
+    def _lock_material_selection(self, locked_material):
+        """Disable material checkboxes during scrap session, keeping only the selected one checked."""
+        for mat, cb in self.material_checkboxes.items():
+            if mat == locked_material:
+                self.material_vars[mat].set(True)
+            else:
+                self.material_vars[mat].set(False)
+            cb.config(state='disabled')
+
+    def _unlock_material_selection(self):
+        """Re-enable material checkboxes after scrap session ends."""
+        for cb in self.material_checkboxes.values():
+            cb.config(state='normal')
+
+    def _on_remaining_window_close(self):
+        """Handle user closing the remaining pads window."""
+        self.scrap_remaining_window = None
+
     def get_hole_dia(self):
         hole_option = self.hole_var.get()
         if hole_option == "3.5mm": return 3.5
@@ -498,6 +784,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
     def on_generate_svg(self):
         """Generate SVG files."""
+        # --- Scrap Mode ---
+        if self.scrap_mode_var.get():
+            self._generate_svg_scrap_mode()
+            return
+
+        # --- Standard Mode ---
         try:
             params = self._prepare_generation()
             if not params:
@@ -539,8 +831,112 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             print(f"An error occurred during SVG generation: {e}")
             messagebox.showerror("An Error Occurred", f"Something went wrong during generation:\n\n{e}")
 
+    def _generate_svg_scrap_mode(self):
+        """Handle SVG generation in scrap mode."""
+        try:
+            params = self._prepare_generation()
+            if not params:
+                return
+
+            pads = params['pads']
+            hole_dia = params['hole_dia']
+            base = params['base']
+            width_mm, height_mm = params['width_mm'], params['height_mm']
+            card_paper_dims = params['card_paper_dims']
+
+            # Check material selection - must be exactly one
+            selected_materials = [m for m, v in self.material_vars.items() if v.get()]
+            if len(selected_materials) != 1:
+                messagebox.showerror("Scrap Mode Error",
+                    "Please select exactly one material for scrap mode.")
+                return
+            material = selected_materials[0]
+
+            # Get scrap dimensions (polygon or rectangle)
+            mat_w, mat_h, mat_polygon = self._get_material_dimensions(
+                material, width_mm, height_mm, card_paper_dims)
+
+            # Initialize or validate session
+            if not self.scrap_session['active']:
+                # Starting new session - ask for save directory
+                save_dir = filedialog.askdirectory(
+                    title="Select Folder to Save SVGs",
+                    initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
+                    return
+                self.settings["last_output_dir"] = save_dir
+
+                self._start_scrap_session(pads, material, save_dir, hole_dia)
+            else:
+                # Continuing existing session - validate material matches
+                if self.scrap_session['material'] != material:
+                    messagebox.showerror("Material Mismatch",
+                        f"Current session is for {self.scrap_session['material']}.\n"
+                        f"Clear session to switch materials.")
+                    return
+                # Use remaining pads from session
+                pads = self.scrap_session['remaining_pads']
+                hole_dia = self.scrap_session['hole_dia']
+
+            if not pads:
+                messagebox.showinfo("Session Complete", "All pads have been placed!")
+                return
+
+            # Attempt partial placement
+            placed, remaining, any_placed = try_nest_partial(
+                pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+
+            if not any_placed:
+                min_pad_size = min(p['size'] for p in pads)
+                messagebox.showwarning("No Pads Fit",
+                    f"No pads could be placed on this scrap.\n\n"
+                    f"Smallest remaining pad: {min_pad_size}mm\n"
+                    f"Try a larger scrap piece.")
+                return
+
+            # Generate filename with scrap number
+            self.scrap_session['scrap_count'] += 1
+            scrap_num = self.scrap_session['scrap_count']
+            save_dir = self.scrap_session['save_dir']
+            filename = os.path.join(save_dir, f"{base}_{material}_scrap{scrap_num}.svg")
+
+            # Generate SVG from placed discs
+            generate_svg_from_placed(placed, material, mat_w, mat_h, filename,
+                                     hole_dia, self.settings, polygon=mat_polygon)
+
+            # Update session with remaining pads
+            self.scrap_session['remaining_pads'] = remaining
+            self._update_scrap_status_display()
+            self._update_remaining_pads_window()
+
+            # Report results
+            placed_count = len(placed)
+            remaining_count = self._count_remaining_pads()
+
+            if remaining_count == 0:
+                save_settings(self.settings)
+                messagebox.showinfo("Session Complete!",
+                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                    f"All pads placed! Session complete.\n"
+                    f"Files saved to: {save_dir}")
+            else:
+                messagebox.showinfo("Scrap Generated",
+                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                    f"{remaining_count} pads remaining.\n"
+                    f"Adjust dimensions and click Generate again.")
+
+        except Exception as e:
+            print(f"An error occurred during scrap mode SVG generation: {e}")
+            messagebox.showerror("An Error Occurred", f"Something went wrong:\n\n{e}")
+
     def on_generate_gcode(self):
         """Generate G-code files."""
+        # --- Scrap Mode ---
+        if self.scrap_mode_var.get():
+            self._generate_gcode_scrap_mode()
+            return
+
+        # --- Standard Mode ---
         try:
             params = self._prepare_generation()
             if not params:
@@ -597,6 +993,105 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         except Exception as e:
             print(f"An error occurred during G-code generation: {e}")
             messagebox.showerror("An Error Occurred", f"Something went wrong during G-code generation:\n\n{e}")
+
+    def _generate_gcode_scrap_mode(self):
+        """Handle G-code generation in scrap mode."""
+        try:
+            params = self._prepare_generation()
+            if not params:
+                return
+
+            pads = params['pads']
+            hole_dia = params['hole_dia']
+            base = params['base']
+            width_mm, height_mm = params['width_mm'], params['height_mm']
+            card_paper_dims = params['card_paper_dims']
+
+            # Check material selection - must be exactly one, and not exact_size
+            selected_materials = [m for m, v in self.material_vars.items() if v.get() and m != "exact_size"]
+            if len(selected_materials) != 1:
+                messagebox.showerror("Scrap Mode Error",
+                    "Please select exactly one material for scrap mode.\n"
+                    "(G-code not supported for Exact Size)")
+                return
+            material = selected_materials[0]
+
+            # Get scrap dimensions (polygon or rectangle)
+            mat_w, mat_h, mat_polygon = self._get_material_dimensions(
+                material, width_mm, height_mm, card_paper_dims)
+
+            # Initialize or validate session
+            if not self.scrap_session['active']:
+                # Starting new session - ask for save directory
+                save_dir = filedialog.askdirectory(
+                    title="Select Folder to Save G-code",
+                    initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
+                    return
+                self.settings["last_output_dir"] = save_dir
+
+                self._start_scrap_session(pads, material, save_dir, hole_dia)
+            else:
+                # Continuing existing session - validate material matches
+                if self.scrap_session['material'] != material:
+                    messagebox.showerror("Material Mismatch",
+                        f"Current session is for {self.scrap_session['material']}.\n"
+                        f"Clear session to switch materials.")
+                    return
+                # Use remaining pads from session
+                pads = self.scrap_session['remaining_pads']
+                hole_dia = self.scrap_session['hole_dia']
+
+            if not pads:
+                messagebox.showinfo("Session Complete", "All pads have been placed!")
+                return
+
+            # Attempt partial placement
+            placed, remaining, any_placed = try_nest_partial(
+                pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+
+            if not any_placed:
+                min_pad_size = min(p['size'] for p in pads)
+                messagebox.showwarning("No Pads Fit",
+                    f"No pads could be placed on this scrap.\n\n"
+                    f"Smallest remaining pad: {min_pad_size}mm\n"
+                    f"Try a larger scrap piece.")
+                return
+
+            # Generate filename with scrap number
+            self.scrap_session['scrap_count'] += 1
+            scrap_num = self.scrap_session['scrap_count']
+            save_dir = self.scrap_session['save_dir']
+            filename = os.path.join(save_dir, f"{base}_{material}_scrap{scrap_num}.gcode")
+
+            # Generate G-code from placed discs
+            generate_gcode_from_placed(placed, material, mat_w, mat_h, filename,
+                                       hole_dia, self.settings, polygon=mat_polygon)
+
+            # Update session with remaining pads
+            self.scrap_session['remaining_pads'] = remaining
+            self._update_scrap_status_display()
+            self._update_remaining_pads_window()
+
+            # Report results
+            placed_count = len(placed)
+            remaining_count = self._count_remaining_pads()
+
+            if remaining_count == 0:
+                save_settings(self.settings)
+                messagebox.showinfo("Session Complete!",
+                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                    f"All pads placed! Session complete.\n"
+                    f"Files saved to: {save_dir}")
+            else:
+                messagebox.showinfo("Scrap Generated",
+                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                    f"{remaining_count} pads remaining.\n"
+                    f"Adjust dimensions and click Generate again.")
+
+        except Exception as e:
+            print(f"An error occurred during scrap mode G-code generation: {e}")
+            messagebox.showerror("An Error Occurred", f"Something went wrong:\n\n{e}")
 
     def parse_pad_list(self, pad_input):
         """

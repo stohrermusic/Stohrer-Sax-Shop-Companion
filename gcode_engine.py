@@ -568,3 +568,172 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 def can_generate_gcode(material):
     """Check if G-code generation is supported for a material."""
     return material in ('felt', 'card', 'leather', 'leather_topgrain')
+
+
+def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
+                                hole_dia, settings, polygon=None):
+    """
+    Generate G-code file from pre-computed placed discs.
+
+    This is used by scrap mode where nesting is done separately via try_nest_partial().
+    The function generates G-code for the placed discs without re-running nesting.
+
+    Args:
+        placed: List of (pad_size, cx, cy, radius) tuples from nesting
+        material: Material type ('felt', 'card', 'leather', 'leather_topgrain')
+        sheet_width_mm, sheet_height_mm: Sheet dimensions in mm
+        filename: Output filename
+        hole_dia: Center hole diameter in mm (0 for no hole)
+        settings: App settings dictionary
+        polygon: Optional (unused, for API consistency)
+    """
+    from svg_engine import get_felt_thickness_mm
+
+    if not placed:
+        return
+
+    # Get G-code settings for this material
+    gcode_settings = settings.get("gcode_settings", {})
+    mat_settings = gcode_settings.get(material, gcode_settings.get("felt", {}))
+
+    engraving_speed = mat_settings.get("engraving_speed", 1500)
+    engraving_power = mat_settings.get("engraving_power", 10)
+    hole_speed = mat_settings.get("hole_speed", 400)
+    hole_power = mat_settings.get("hole_power", 25)
+    cut_speed = mat_settings.get("cut_speed", 900)
+    cut_power = mat_settings.get("cut_power", 35)
+
+    # Kerf compensation (applied to cuts, not engraving) - per material
+    kerf_width = mat_settings.get("kerf_width", 0.0)
+    kerf_offset = kerf_width / 2
+
+    # Font size for engraving
+    engraving_font_sizes = settings.get("engraving_font_size", {})
+    font_size = engraving_font_sizes.get(material, 3.0)
+
+    # Collect strokes for each layer
+    engraving_strokes = []
+    hole_strokes = []
+    cut_strokes = []
+
+    # Track bounds
+    all_x = []
+    all_y = []
+
+    # Check if this material uses star patterns
+    use_stars = material in ('leather', 'leather_topgrain') and settings.get("darts_enabled", True)
+    dart_threshold = settings.get("dart_threshold", 18.0)
+
+    for pad_size, cx, cy, radius in placed:
+        all_x.extend([cx - radius, cx + radius])
+        all_y.extend([cy - radius, cy + radius])
+
+        # Determine if this is a star/dart pad
+        is_dart_pad = use_stars and pad_size < dart_threshold
+
+        # Engraving
+        should_engrave = False
+        engraving_settings = None
+
+        if is_dart_pad:
+            if settings.get("dart_engraving_on", True):
+                engraving_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
+                should_engrave = True
+        else:
+            if settings.get("engraving_on", True):
+                engraving_settings = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
+                should_engrave = True
+
+        if should_engrave and font_size >= radius * 0.8:
+            should_engrave = False
+
+        if should_engrave:
+            mode = engraving_settings.get('mode', 'centered')
+            value = engraving_settings.get('value', 0)
+
+            if mode == 'from_outside':
+                engraving_y = cy - (radius - value)
+            elif mode == 'from_inside':
+                hole_r = hole_dia / 2 if hole_dia > 0 else 0
+                engraving_y = cy - (hole_r + value)
+            else:  # centered
+                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+                offset_from_center = (radius + hole_r) / 2
+                engraving_y = cy - offset_from_center
+
+            vertical_adjust = font_size * 0.35
+            label_y = engraving_y + vertical_adjust
+
+            text = f"{pad_size:.1f}".rstrip('0').rstrip('.')
+            text_strokes = get_text_strokes(text, font_size, cx, label_y)
+            engraving_strokes.extend(text_strokes)
+
+        # Center hole
+        min_hole_size = settings.get("min_hole_size", 16.5)
+        if hole_dia > 0 and pad_size >= min_hole_size:
+            hole_radius = (hole_dia / 2) - kerf_offset
+            if hole_radius > 0:
+                hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
+                hole_strokes.append(hole_points)
+
+        # Outer cut - circle or star pattern
+        if use_stars and pad_size < dart_threshold:
+            felt_thick = get_felt_thickness_mm(settings)
+            overwrap = settings.get("dart_overwrap", 0.5)
+
+            felt_r = (pad_size - settings.get("felt_offset", 0.75)) / 2
+            inner_r = felt_r + felt_thick + overwrap
+            outer_r = radius
+
+            if inner_r >= outer_r:
+                inner_r = outer_r - 0.2
+
+            outer_r += kerf_offset
+            inner_r += kerf_offset
+
+            circumference = 2 * math.pi * inner_r
+            freq_mult = settings.get("dart_frequency_multiplier", 1.0)
+            num_points = int((circumference / 3.5) * freq_mult)
+            if num_points < 12:
+                num_points = 12
+            if num_points % 2 != 0:
+                num_points += 1
+
+            shape_factor = settings.get("dart_shape_factor", 0.0)
+            star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
+            cut_strokes.append(star_points)
+        else:
+            cut_radius = radius + kerf_offset
+            cut_points = linearize_circle(cx, cy, cut_radius, segments=72)
+            cut_strokes.append(cut_points)
+
+    # Generate G-code
+    gcode_lines = []
+
+    bounds_min_x = min(all_x) if all_x else 0
+    bounds_min_y = min(all_y) if all_y else 0
+    bounds_max_x = max(all_x) if all_x else sheet_width_mm
+    bounds_max_y = max(all_y) if all_y else sheet_height_mm
+    gcode_lines.extend(generate_gcode_header(bounds_min_x, bounds_min_y, bounds_max_x, bounds_max_y))
+
+    layer_names = {
+        'felt': ('C10', 'C09', 'C00'),
+        'card': ('C15', 'C14', 'C01'),
+        'leather': ('C05', 'C03', 'C02'),
+        'leather_topgrain': ('C05', 'C03', 'C02'),
+    }
+    eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
+
+    if engraving_strokes:
+        gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer))
+
+    if hole_strokes:
+        gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer))
+
+    if cut_strokes:
+        gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, cut_layer))
+
+    gcode_lines.extend(generate_gcode_footer())
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))

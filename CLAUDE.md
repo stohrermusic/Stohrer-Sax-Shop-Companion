@@ -104,7 +104,15 @@ build.py               → Cross-platform PyInstaller build script
 
 **Polygon Shape Tool**: Users can draw custom polygon shapes for irregular leather skins. Grid size adapts to unit setting: 15x15 inches (1" squares) or 40x40 cm (1cm squares). The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
 
-**Send to SD Card** (beta): File → Send G-code to SD Card... provides a streamlined workflow for laser cutters that use SD cards (like the Creality Falcon2 Pro). The feature:
+**Scrap Mode**: Allows users to place pads across multiple irregular scrap pieces instead of requiring one large sheet. Key components:
+- Session state in `self.scrap_session` tracks original pads, remaining pads, scrap count, locked material
+- `try_nest_partial()` and `compute_remaining_pads()` in svg_engine.py handle partial placement
+- `generate_svg_from_placed()` / `generate_gcode_from_placed()` generate output from pre-computed placements
+- Progress popup window (`scrap_remaining_window`) shows two columns: Remaining and Done
+- Materials are locked (disabled) during active session to prevent switching
+- Files named with `_scrap1`, `_scrap2` suffixes
+
+**Send to SD Card**: File → Send G-code to SD Card... provides a streamlined workflow for laser cutters that use SD cards (like the Creality Falcon2 Pro). The feature:
 - Opens a folder picker to select the SD card (remembers last used location)
 - Shows existing G-code files and confirms before erasing
 - Opens a file picker to select the .gcode file to send
