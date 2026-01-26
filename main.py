@@ -91,15 +91,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         save_settings(self.settings)
         self.root.destroy()
 
-    def apply_resonance_theme(self):
+    def _get_theme_color(self):
+        """Get the current theme background color based on resonance clicks."""
         clicks = self.settings.get("resonance_clicks", 0)
-        color = self.default_bg
         if 10 <= clicks < 50:
-            color = "#E0F7FA" # COOL_BLUE
+            return "#E0F7FA"  # COOL_BLUE
         elif 50 <= clicks < 100:
-            color = "#E8F5E9" # COOL_GREEN
+            return "#E8F5E9"  # COOL_GREEN
+        return self.default_bg
 
+    def apply_resonance_theme(self):
+        color = self._get_theme_color()
         self.set_background_color(self.root, color)
+        clicks = self.settings.get("resonance_clicks", 0)
         if clicks < 100:
             self.root.attributes('-alpha', 1.0)
 
@@ -576,7 +580,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.scrap_remaining_window = tk.Toplevel(self.root)
         self.scrap_remaining_window.title("Scrap Mode Progress")
         self.scrap_remaining_window.geometry("320x300")
-        self.scrap_remaining_window.configure(bg=self.default_bg)
+        theme_bg = self._get_theme_color()
+        self.scrap_remaining_window.configure(bg=theme_bg)
         self.scrap_remaining_window.resizable(True, True)
 
         # Position to the right of main window
@@ -586,34 +591,34 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.scrap_remaining_window.geometry(f"+{x}+{y}")
 
         # Header with progress
-        header_frame = tk.Frame(self.scrap_remaining_window, bg=self.default_bg)
+        header_frame = tk.Frame(self.scrap_remaining_window, bg=theme_bg)
         header_frame.pack(fill="x", padx=10, pady=(10, 5))
-        self.scrap_window_header = tk.Label(header_frame, text="", bg=self.default_bg,
+        self.scrap_window_header = tk.Label(header_frame, text="", bg=theme_bg,
                                             font=("Helvetica", 10, "bold"))
         self.scrap_window_header.pack(anchor="w")
 
         # Two-column layout for Remaining and Done
-        columns_frame = tk.Frame(self.scrap_remaining_window, bg=self.default_bg)
+        columns_frame = tk.Frame(self.scrap_remaining_window, bg=theme_bg)
         columns_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         # Remaining column
-        remaining_frame = tk.Frame(columns_frame, bg=self.default_bg)
+        remaining_frame = tk.Frame(columns_frame, bg=theme_bg)
         remaining_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
-        tk.Label(remaining_frame, text="Remaining", bg=self.default_bg,
+        tk.Label(remaining_frame, text="Remaining", bg=theme_bg,
                  font=("Helvetica", 9, "bold"), fg="blue").pack(anchor="w")
         self.scrap_remaining_listbox = tk.Listbox(remaining_frame, font=("Courier", 10), height=10, width=12)
         self.scrap_remaining_listbox.pack(fill="both", expand=True)
 
         # Done column
-        done_frame = tk.Frame(columns_frame, bg=self.default_bg)
+        done_frame = tk.Frame(columns_frame, bg=theme_bg)
         done_frame.pack(side="left", fill="both", expand=True, padx=(5, 0))
-        tk.Label(done_frame, text="Done", bg=self.default_bg,
+        tk.Label(done_frame, text="Done", bg=theme_bg,
                  font=("Helvetica", 9, "bold"), fg="green").pack(anchor="w")
         self.scrap_done_listbox = tk.Listbox(done_frame, font=("Courier", 10), height=10, width=12)
         self.scrap_done_listbox.pack(fill="both", expand=True)
 
         # Footer with scrap count
-        self.scrap_window_footer = tk.Label(self.scrap_remaining_window, text="", bg=self.default_bg,
+        self.scrap_window_footer = tk.Label(self.scrap_remaining_window, text="", bg=theme_bg,
                                             font=("Helvetica", 9))
         self.scrap_window_footer.pack(pady=(0, 10))
 
@@ -969,14 +974,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             working_popup = tk.Toplevel(self.root)
             working_popup.title("Working")
             working_popup.geometry("250x80")
-            working_popup.configure(bg="#F0EAD6")
+            popup_bg = self._get_theme_color()
+            working_popup.configure(bg=popup_bg)
             working_popup.transient(self.root)
             working_popup.resizable(False, False)
             working_popup.update_idletasks()
             x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 125
             y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 40
             working_popup.geometry(f"+{x}+{y}")
-            tk.Label(working_popup, text="Generating G-code...", bg="#F0EAD6", font=("Helvetica", 12)).pack(expand=True)
+            tk.Label(working_popup, text="Generating G-code...", bg=popup_bg, font=("Helvetica", 12)).pack(expand=True)
             working_popup.update()
 
             try:
