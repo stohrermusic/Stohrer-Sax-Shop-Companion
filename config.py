@@ -241,16 +241,16 @@ DEFAULT_SETTINGS = {
     },
 
     "engraving_font_size": {
-        "felt": 2.0,
-        "card": 2.0,
-        "leather": 2.0,
-        "exact_size": 2.0
+        "felt": 3.0,
+        "card": 3.0,
+        "leather": 3.0,
+        "exact_size": 3.0
     },
     "engraving_location": {
-        "felt": {"mode": "centered", "value": 0.0},
-        "card": {"mode": "centered", "value": 0.0},
+        "felt": {"mode": "from_inside", "value": 4.0},
+        "card": {"mode": "from_inside", "value": 4.0},
         "leather": {"mode": "from_outside", "value": 1.0},
-        "exact_size": {"mode": "centered", "value": 0.0}
+        "exact_size": {"mode": "from_inside", "value": 4.0}
     },
     "layer_colors": {
         'felt_outline': '#000000',
