@@ -971,12 +971,18 @@ class PolygonDrawWindow(tk.Toplevel):
         self.canvas.delete("grid")
 
         # Draw grid lines (1 line per unit)
+        # Highlight every 5th line for easier orientation (especially useful for cm grid)
         for i in range(self.grid_size + 1):
             px = i * self.px_per_unit
+            # Use reddish color for every 5th line (0, 5, 10, 15, ...)
+            if i % 5 == 0:
+                line_color = "#CC9999"
+            else:
+                line_color = "#CCCCCC"
             # Vertical lines
-            self.canvas.create_line(px, 0, px, self.CANVAS_PX, fill="#CCCCCC", tags="grid")
+            self.canvas.create_line(px, 0, px, self.CANVAS_PX, fill=line_color, tags="grid")
             # Horizontal lines
-            self.canvas.create_line(0, px, self.CANVAS_PX, px, fill="#CCCCCC", tags="grid")
+            self.canvas.create_line(0, px, self.CANVAS_PX, px, fill=line_color, tags="grid")
 
         # Draw axis labels - every 5 for inches, every 10 for cm (to avoid crowding)
         label_step = 5 if self.unit == "in" else 10
