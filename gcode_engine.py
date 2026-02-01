@@ -396,6 +396,9 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
     if not placed:
         return
 
+    # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom
+    placed = [(pad_size, cx, sheet_height_mm - cy, radius) for (pad_size, cx, cy, radius) in placed]
+
     # Get G-code settings for this material
     gcode_settings = settings.get("gcode_settings", {})
     mat_settings = gcode_settings.get(material, gcode_settings.get("felt", {}))
@@ -591,6 +594,9 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
     if not placed:
         return
+
+    # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom
+    placed = [(pad_size, cx, sheet_height_mm - cy, radius) for (pad_size, cx, cy, radius) in placed]
 
     # Get G-code settings for this material
     gcode_settings = settings.get("gcode_settings", {})
