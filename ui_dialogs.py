@@ -9,6 +9,11 @@ from config import (
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets
 )
 
+# On macOS, use native system colors for dark/light mode support.
+# On Windows/Linux, use our custom cream color for dialogs.
+IS_MACOS = sys.platform == 'darwin'
+DIALOG_BG = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+
 # ==========================================
 # CROSS-PLATFORM SCROLL HELPER
 # ==========================================
@@ -63,20 +68,20 @@ class ConfirmationDialog(tk.Toplevel):
         super().__init__(parent)
         self.title(title)
         self.geometry("450x150")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
 
         self.result = False
         self.dont_show_again = tk.BooleanVar()
 
-        tk.Label(self, text=message, wraplength=430, bg="#F0EAD6", justify="left").pack(padx=10, pady=10)
+        tk.Label(self, text=message, wraplength=430, bg=DIALOG_BG, justify="left").pack(padx=10, pady=10)
         
-        checkbox_frame = tk.Frame(self, bg="#F0EAD6")
+        checkbox_frame = tk.Frame(self, bg=DIALOG_BG)
         checkbox_frame.pack(pady=5)
-        tk.Checkbutton(checkbox_frame, text="Don't show this message again", variable=self.dont_show_again, bg="#F0EAD6").pack()
+        tk.Checkbutton(checkbox_frame, text="Don't show this message again", variable=self.dont_show_again, bg=DIALOG_BG).pack()
         
-        button_frame = tk.Frame(self, bg="#F0EAD6")
+        button_frame = tk.Frame(self, bg=DIALOG_BG)
         button_frame.pack(pady=10)
         tk.Button(button_frame, text="Yes, Proceed", command=self.on_yes).pack(side="left", padx=10)
         tk.Button(button_frame, text="No, Cancel", command=self.on_no).pack(side="left", padx=10)
@@ -102,26 +107,27 @@ class OptionsWindow:
         self.top = tk.Toplevel(parent)
         self.top.title("Sizing Rules")
         self.top.geometry("500x750") 
-        self.top.configure(bg="#F0EAD6")
+        self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
 
         # --- Main Layout Frames ---
-        bottom_button_frame = tk.Frame(self.top, bg="#F0EAD6")
+        bottom_button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         bottom_button_frame.pack(side="bottom", fill="x", pady=10, padx=10)
         
         tk.Button(bottom_button_frame, text="Save", command=self.save_options).pack(side="left", padx=5)
         tk.Button(bottom_button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
         
-        tk.Button(bottom_button_frame, text="Advanced", command=self.app.open_resonance_window).pack(side="right", padx=5)
+        if not IS_MACOS:
+            tk.Button(bottom_button_frame, text="Advanced", command=self.app.open_resonance_window).pack(side="right", padx=5)
         tk.Button(bottom_button_frame, text="Revert to Defaults", command=self.revert_to_defaults).pack(side="right", padx=5)
         
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(side="top", fill="both", expand=True)
 
-        self.canvas = tk.Canvas(main_canvas_frame, bg="#F0EAD6", highlightthickness=0)
+        self.canvas = tk.Canvas(main_canvas_frame, bg=DIALOG_BG, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(main_canvas_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#F0EAD6", padx=10, pady=10)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=DIALOG_BG, padx=10, pady=10)
 
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
@@ -165,123 +171,123 @@ class OptionsWindow:
     def create_option_widgets(self):
         main_frame = self.scrollable_frame
         
-        unit_frame = tk.LabelFrame(main_frame, text="Sheet Units", bg="#F0EAD6", padx=5, pady=5)
+        unit_frame = tk.LabelFrame(main_frame, text="Sheet Units", bg=DIALOG_BG, padx=5, pady=5)
         unit_frame.pack(fill="x", pady=5)
-        tk.Radiobutton(unit_frame, text="Inches (in)", variable=self.unit_var, value="in", bg="#F0EAD6").pack(side="left", padx=5)
-        tk.Radiobutton(unit_frame, text="Centimeters (cm)", variable=self.unit_var, value="cm", bg="#F0EAD6").pack(side="left", padx=5)
-        tk.Radiobutton(unit_frame, text="Millimeters (mm)", variable=self.unit_var, value="mm", bg="#F0EAD6").pack(side="left", padx=5)
+        tk.Radiobutton(unit_frame, text="Inches (in)", variable=self.unit_var, value="in", bg=DIALOG_BG).pack(side="left", padx=5)
+        tk.Radiobutton(unit_frame, text="Centimeters (cm)", variable=self.unit_var, value="cm", bg=DIALOG_BG).pack(side="left", padx=5)
+        tk.Radiobutton(unit_frame, text="Millimeters (mm)", variable=self.unit_var, value="mm", bg=DIALOG_BG).pack(side="left", padx=5)
 
-        rules_frame = tk.LabelFrame(main_frame, text="Sizing Rules (Advanced)", bg="#F0EAD6", padx=5, pady=5)
+        rules_frame = tk.LabelFrame(main_frame, text="Sizing Rules (Advanced)", bg=DIALOG_BG, padx=5, pady=5)
         rules_frame.pack(fill="x", pady=5)
         rules_frame.columnconfigure(1, weight=1)
 
-        tk.Label(rules_frame, text="Felt Diameter Reduction (mm):", bg="#F0EAD6").grid(row=0, column=0, sticky='w', pady=2)
+        tk.Label(rules_frame, text="Felt Diameter Reduction (mm):", bg=DIALOG_BG).grid(row=0, column=0, sticky='w', pady=2)
         tk.Entry(rules_frame, textvariable=self.felt_offset_var, width=10).grid(row=0, column=1, sticky='w', pady=2)
 
-        tk.Label(rules_frame, text="Card Additional Reduction (mm):", bg="#F0EAD6").grid(row=1, column=0, sticky='w', pady=2)
+        tk.Label(rules_frame, text="Card Additional Reduction (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
         tk.Entry(rules_frame, textvariable=self.card_offset_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
 
-        tk.Label(rules_frame, text="Leather Wrap Multiplier (1.00=default):", bg="#F0EAD6").grid(row=2, column=0, sticky='w', pady=2)
+        tk.Label(rules_frame, text="Leather Wrap Multiplier (1.00=default):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
         tk.Entry(rules_frame, textvariable=self.leather_mult_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
 
-        tk.Label(rules_frame, text="Min. Pad Size for Hole (mm):", bg="#F0EAD6").grid(row=3, column=0, sticky='w', pady=2)
+        tk.Label(rules_frame, text="Min. Pad Size for Hole (mm):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
         tk.Entry(rules_frame, textvariable=self.min_hole_size_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
         
-        felt_thickness_frame = tk.Frame(rules_frame, bg="#F0EAD6")
+        felt_thickness_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
         felt_thickness_frame.grid(row=4, column=0, columnspan=2, sticky='w', pady=2)
-        tk.Label(felt_thickness_frame, text="Felt Thickness:", bg="#F0EAD6").pack(side="left")
+        tk.Label(felt_thickness_frame, text="Felt Thickness:", bg=DIALOG_BG).pack(side="left")
         tk.Entry(felt_thickness_frame, textvariable=self.felt_thickness_var, width=10).pack(side="left", padx=5)
-        tk.Radiobutton(felt_thickness_frame, text="in", variable=self.felt_thickness_unit_var, value="in", bg="#F0EAD6").pack(side="left")
-        tk.Radiobutton(felt_thickness_frame, text="mm", variable=self.felt_thickness_unit_var, value="mm", bg="#F0EAD6").pack(side="left")
+        tk.Radiobutton(felt_thickness_frame, text="in", variable=self.felt_thickness_unit_var, value="in", bg=DIALOG_BG).pack(side="left")
+        tk.Radiobutton(felt_thickness_frame, text="mm", variable=self.felt_thickness_unit_var, value="mm", bg=DIALOG_BG).pack(side="left")
 
         # --- DART SETTINGS FRAME ---
-        darts_frame = tk.LabelFrame(main_frame, text="Star / Dart Settings", bg="#F0EAD6", padx=5, pady=5)
+        darts_frame = tk.LabelFrame(main_frame, text="Star / Dart Settings", bg=DIALOG_BG, padx=5, pady=5)
         darts_frame.pack(fill="x", pady=5)
         darts_frame.columnconfigure(1, weight=1)
         
-        tk.Checkbutton(darts_frame, text="Enable Star / Dart Pattern", variable=self.darts_enabled_var, bg="#F0EAD6").grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
+        tk.Checkbutton(darts_frame, text="Enable Star / Dart Pattern", variable=self.darts_enabled_var, bg=DIALOG_BG).grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
         
-        tk.Label(darts_frame, text="Use Star Pattern below (mm):", bg="#F0EAD6").grid(row=1, column=0, sticky='w', pady=2)
+        tk.Label(darts_frame, text="Use Star Pattern below (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
         tk.Entry(darts_frame, textvariable=self.dart_threshold_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
 
-        tk.Label(darts_frame, text="Star Safe Overwrap (Valley) (mm):", bg="#F0EAD6").grid(row=2, column=0, sticky='w', pady=2)
+        tk.Label(darts_frame, text="Star Safe Overwrap (Valley) (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
         tk.Entry(darts_frame, textvariable=self.dart_overwrap_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
 
-        tk.Label(darts_frame, text="Star Wrap Bonus (Adds to Tip) (mm):", bg="#F0EAD6").grid(row=3, column=0, sticky='w', pady=2)
+        tk.Label(darts_frame, text="Star Wrap Bonus (Adds to Tip) (mm):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
         tk.Entry(darts_frame, textvariable=self.dart_wrap_bonus_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
 
-        tk.Label(darts_frame, text="Star Frequency Multiplier (1.0=Default):", bg="#F0EAD6").grid(row=4, column=0, sticky='w', pady=2)
+        tk.Label(darts_frame, text="Star Frequency Multiplier (1.0=Default):", bg=DIALOG_BG).grid(row=4, column=0, sticky='w', pady=2)
         tk.Entry(darts_frame, textvariable=self.dart_frequency_multiplier_var, width=10).grid(row=4, column=1, sticky='w', pady=2)
 
         # Row 5: Shape Slider
-        shape_frame = tk.Frame(darts_frame, bg="#F0EAD6")
+        shape_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
         shape_frame.grid(row=5, column=0, columnspan=2, sticky='ew', pady=5)
         
-        tk.Label(shape_frame, text="Shape:", bg="#F0EAD6").pack(side="left")
-        tk.Label(shape_frame, text="Sine", bg="#F0EAD6", font=("Arial", 8)).pack(side="left", padx=(5, 0))
+        tk.Label(shape_frame, text="Shape:", bg=DIALOG_BG).pack(side="left")
+        tk.Label(shape_frame, text="Sine", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left", padx=(5, 0))
         scale = tk.Scale(shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL, 
                          variable=self.dart_shape_factor_var, showvalue=0, 
-                         bg="#F0EAD6", highlightthickness=0, length=150, resolution=0.01)
+                         bg=DIALOG_BG, highlightthickness=0, length=150, resolution=0.01)
         scale.pack(side="left", fill="x", expand=True, padx=5)
-        tk.Label(shape_frame, text="Square", bg="#F0EAD6", font=("Arial", 8)).pack(side="left")
+        tk.Label(shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left")
 
         # Star Engraving Section (Nested Here)
-        tk.Label(darts_frame, text="-------------------------", bg="#F0EAD6").grid(row=6, column=0, columnspan=2, pady=5)
-        tk.Checkbutton(darts_frame, text="Show Label on Star Pads", variable=self.dart_engraving_on_var, bg="#F0EAD6").grid(row=7, column=0, columnspan=2, sticky='w', pady=2)
+        tk.Label(darts_frame, text="-------------------------", bg=DIALOG_BG).grid(row=6, column=0, columnspan=2, pady=5)
+        tk.Checkbutton(darts_frame, text="Show Label on Star Pads", variable=self.dart_engraving_on_var, bg=DIALOG_BG).grid(row=7, column=0, columnspan=2, sticky='w', pady=2)
         
-        star_loc_frame = tk.Frame(darts_frame, bg="#F0EAD6")
+        star_loc_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
         star_loc_frame.grid(row=8, column=0, columnspan=2, sticky='ew', pady=2)
-        tk.Radiobutton(star_loc_frame, text="outside", variable=self.dart_engraving_mode_var, value="from_outside", bg="#F0EAD6").pack(side="left")
-        tk.Radiobutton(star_loc_frame, text="inside", variable=self.dart_engraving_mode_var, value="from_inside", bg="#F0EAD6").pack(side="left")
-        tk.Radiobutton(star_loc_frame, text="center", variable=self.dart_engraving_mode_var, value="centered", bg="#F0EAD6").pack(side="left")
+        tk.Radiobutton(star_loc_frame, text="outside", variable=self.dart_engraving_mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
+        tk.Radiobutton(star_loc_frame, text="inside", variable=self.dart_engraving_mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
+        tk.Radiobutton(star_loc_frame, text="center", variable=self.dart_engraving_mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
         tk.Entry(star_loc_frame, textvariable=self.dart_engraving_val_var, width=5).pack(side="left", padx=5)
-        tk.Label(star_loc_frame, text="mm", bg="#F0EAD6").pack(side="left")
+        tk.Label(star_loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
 
-        engraving_frame = tk.LabelFrame(main_frame, text="Engraving Settings (Standard Pads)", bg="#F0EAD6", padx=5, pady=5)
+        engraving_frame = tk.LabelFrame(main_frame, text="Engraving Settings (Standard Pads)", bg=DIALOG_BG, padx=5, pady=5)
         engraving_frame.pack(fill="x", pady=5)
         
-        tk.Checkbutton(engraving_frame, text="Show Size Label", variable=self.engraving_on_var, bg="#F0EAD6").pack(anchor='w')
+        tk.Checkbutton(engraving_frame, text="Show Size Label", variable=self.engraving_on_var, bg=DIALOG_BG).pack(anchor='w')
 
-        font_size_frame = tk.LabelFrame(engraving_frame, text="Font Sizes (mm)", bg="#F0EAD6", padx=5, pady=5)
+        font_size_frame = tk.LabelFrame(engraving_frame, text="Font Sizes (mm)", bg=DIALOG_BG, padx=5, pady=5)
         font_size_frame.pack(fill='x', pady=5)
         
         materials = ['felt', 'card', 'leather', 'exact_size']
         for i, material in enumerate(materials):
-            tk.Label(font_size_frame, text=f"{material.replace('_', ' ').capitalize()}:", bg="#F0EAD6").grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            tk.Label(font_size_frame, text=f"{material.replace('_', ' ').capitalize()}:", bg=DIALOG_BG).grid(row=i, column=0, sticky='w', padx=5, pady=2)
             font_size_var = tk.DoubleVar(value=self.settings["engraving_font_size"].get(material, 2.0))
             self.engraving_font_size_vars[material] = font_size_var
             tk.Entry(font_size_frame, textvariable=font_size_var, width=8).grid(row=i, column=1, sticky='w', padx=5, pady=2)
 
-        engraving_loc_frame = tk.LabelFrame(engraving_frame, text="Placement", bg="#F0EAD6", padx=5, pady=5)
+        engraving_loc_frame = tk.LabelFrame(engraving_frame, text="Placement", bg=DIALOG_BG, padx=5, pady=5)
         engraving_loc_frame.pack(fill="x", pady=5)
         
         for material in materials:
-            frame = tk.Frame(engraving_loc_frame, bg="#F0EAD6")
+            frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
             frame.pack(fill='x', pady=2)
-            tk.Label(frame, text=material.replace('_', ' ').capitalize() + ":", bg="#F0EAD6", width=10, anchor='w').pack(side="left")
+            tk.Label(frame, text=material.replace('_', ' ').capitalize() + ":", bg=DIALOG_BG, width=10, anchor='w').pack(side="left")
 
             mode_var = tk.StringVar(value=self.settings["engraving_location"][material]['mode'])
             val_var = tk.DoubleVar(value=self.settings["engraving_location"][material]['value'])
             self.engraving_loc_vars[material] = {'mode': mode_var, 'value': val_var}
 
-            tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg="#F0EAD6").pack(side="left")
-            tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg="#F0EAD6").pack(side="left")
-            tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg="#F0EAD6").pack(side="left")
+            tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
+            tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
+            tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
             
             tk.Entry(frame, textvariable=val_var, width=5).pack(side="left", padx=5)
-            tk.Label(frame, text="mm", bg="#F0EAD6").pack(side="left")
+            tk.Label(frame, text="mm", bg=DIALOG_BG).pack(side="left")
 
-        export_frame = tk.LabelFrame(main_frame, text="Export Settings", bg="#F0EAD6", padx=5, pady=5)
+        export_frame = tk.LabelFrame(main_frame, text="Export Settings", bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
-        tk.Checkbutton(export_frame, text="Enable Inkscape/Compatibility Mode (unitless SVG)", variable=self.compatibility_mode_var, bg="#F0EAD6").pack(anchor='w')
+        tk.Checkbutton(export_frame, text="Enable Inkscape/Compatibility Mode (unitless SVG)", variable=self.compatibility_mode_var, bg=DIALOG_BG).pack(anchor='w')
 
         # Max Fill Style
-        max_fill_frame = tk.LabelFrame(main_frame, text="Max Fill Style (Polygon Shapes)", bg="#F0EAD6", padx=5, pady=5)
+        max_fill_frame = tk.LabelFrame(main_frame, text="Max Fill Style (Polygon Shapes)", bg=DIALOG_BG, padx=5, pady=5)
         max_fill_frame.pack(fill="x", pady=5)
         tk.Radiobutton(max_fill_frame, text="Center Out (fill from center outward)",
-                       variable=self.max_fill_style_var, value="center_out", bg="#F0EAD6").pack(anchor='w')
+                       variable=self.max_fill_style_var, value="center_out", bg=DIALOG_BG).pack(anchor='w')
         tk.Radiobutton(max_fill_frame, text="Longest Edge (fill from longest edge inward)",
-                       variable=self.max_fill_style_var, value="longest_edge", bg="#F0EAD6").pack(anchor='w')
+                       variable=self.max_fill_style_var, value="longest_edge", bg=DIALOG_BG).pack(anchor='w')
 
 
     def save_options(self):
@@ -375,7 +381,7 @@ class LayerColorWindow:
         self.top = tk.Toplevel(parent)
         self.top.title("Layer Color Mapping")
         self.top.geometry("450x420")
-        self.top.configure(bg="#F0EAD6")
+        self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
 
@@ -385,7 +391,7 @@ class LayerColorWindow:
 
         self.color_vars = {}
 
-        main_frame = tk.Frame(self.top, bg="#F0EAD6", padx=10, pady=10)
+        main_frame = tk.Frame(self.top, bg=DIALOG_BG, padx=10, pady=10)
         main_frame.pack(fill="both", expand=True)
         main_frame.columnconfigure(1, weight=1)
 
@@ -398,7 +404,7 @@ class LayerColorWindow:
         
         for i, key in enumerate(layer_map_keys):
             label_text = key.replace('_', ' ').capitalize() + ":"
-            tk.Label(main_frame, text=label_text, bg="#F0EAD6").grid(row=i, column=0, sticky='w', pady=3)
+            tk.Label(main_frame, text=label_text, bg=DIALOG_BG).grid(row=i, column=0, sticky='w', pady=3)
             
             var = tk.StringVar()
             current_hex = self.settings["layer_colors"].get(key, "#000000")
@@ -409,7 +415,7 @@ class LayerColorWindow:
             combo.grid(row=i, column=1, sticky='ew', padx=5)
             self.color_vars[key] = var
 
-        button_frame = tk.Frame(main_frame, bg="#F0EAD6")
+        button_frame = tk.Frame(main_frame, bg=DIALOG_BG)
         button_frame.grid(row=len(layer_map_keys), column=0, columnspan=2, pady=20)
         tk.Button(button_frame, text="Save", command=self.save_colors).pack(side="left", padx=10)
         tk.Button(button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=10)
@@ -430,13 +436,13 @@ class KeyLayoutWindow:
         
         self.top = tk.Toplevel(parent)
         self.top.title("Key Height Layout Options")
-        self.top.configure(bg="#F0EAD6")
+        self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
         self.top.geometry("350x450") 
 
         # --- Main Layout Frames ---
-        bottom_button_frame = tk.Frame(self.top, bg="#F0EAD6")
+        bottom_button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         bottom_button_frame.pack(side="bottom", fill="x", pady=10, padx=10)
         
         tk.Button(bottom_button_frame, text="Save", command=self.save_options).pack(side="left", padx=5)
@@ -445,9 +451,9 @@ class KeyLayoutWindow:
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)
 
-        self.canvas = tk.Canvas(main_canvas_frame, bg="#F0EAD6", highlightthickness=0)
+        self.canvas = tk.Canvas(main_canvas_frame, bg=DIALOG_BG, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(main_canvas_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#F0EAD6", padx=10, pady=10)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=DIALOG_BG, padx=10, pady=10)
 
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
@@ -464,27 +470,27 @@ class KeyLayoutWindow:
         self.key_layout_settings.update(self.settings.get("key_layout", {}))
 
         # --- Create Widgets ---
-        info_frame = tk.LabelFrame(self.scrollable_frame, text="Horn Info Layout", bg="#F0EAD6", padx=5, pady=5)
+        info_frame = tk.LabelFrame(self.scrollable_frame, text="Horn Info Layout", bg=DIALOG_BG, padx=5, pady=5)
         info_frame.pack(fill="x", pady=5)
 
         # Serial Number Checkbox
         var = tk.BooleanVar(value=self.key_layout_settings.get("show_serial", False))
         self.key_layout_vars["show_serial"] = var
-        tk.Checkbutton(info_frame, text="Show 'Serial' field", variable=var, bg="#F0EAD6").pack(anchor='w')
+        tk.Checkbutton(info_frame, text="Show 'Serial' field", variable=var, bg=DIALOG_BG).pack(anchor='w')
 
         # Large Notes Checkbox
         var = tk.BooleanVar(value=self.key_layout_settings.get("large_notes", False))
         self.key_layout_vars["large_notes"] = var
-        tk.Checkbutton(info_frame, text="Use large 'Notes' field", variable=var, bg="#F0EAD6").pack(anchor='w')
+        tk.Checkbutton(info_frame, text="Use large 'Notes' field", variable=var, bg=DIALOG_BG).pack(anchor='w')
 
-        keys_frame = tk.LabelFrame(self.scrollable_frame, text="Visible Key Heights", bg="#F0EAD6", padx=5, pady=5)
+        keys_frame = tk.LabelFrame(self.scrollable_frame, text="Visible Key Heights", bg=DIALOG_BG, padx=5, pady=5)
         keys_frame.pack(fill="x", pady=5, expand=True)
 
         for key_name in ALL_KEY_HEIGHT_FIELDS:
             setting_key = f"show_{key_name.replace(' ', '_')}"
             var = tk.BooleanVar(value=self.key_layout_settings.get(setting_key, True)) 
             self.key_layout_vars[setting_key] = var
-            tk.Checkbutton(keys_frame, text=f"Show '{key_name}' field", variable=var, bg="#F0EAD6").pack(anchor='w')
+            tk.Checkbutton(keys_frame, text=f"Show '{key_name}' field", variable=var, bg=DIALOG_BG).pack(anchor='w')
 
     def save_options(self):
         for key, var in self.key_layout_vars.items():
@@ -506,11 +512,11 @@ class ResonanceWindow(tk.Toplevel):
         
         self.title("Resonance Chamber")
         self.geometry("400x200")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
 
-        main_frame = tk.Frame(self, bg="#F0EAD6")
+        main_frame = tk.Frame(self, bg=DIALOG_BG)
         main_frame.pack(expand=True)
 
         res_button = tk.Button(main_frame, text="Add Resonance", command=self.start_resonance, font=("Helvetica", 14, "bold"))
@@ -531,11 +537,11 @@ class ResonanceProgressDialog(tk.Toplevel):
         
         self.title("Optimizing...")
         self.geometry("300x100")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
         
-        tk.Label(self, text="Applying resonance...", bg="#F0EAD6").pack(pady=10)
+        tk.Label(self, text="Applying resonance...", bg=DIALOG_BG).pack(pady=10)
         self.progress = ttk.Progressbar(self, orient="horizontal", length=250, mode="determinate")
         self.progress.pack(pady=5)
         
@@ -571,11 +577,11 @@ class UninstallResonanceDialog(tk.Toplevel):
         
         self.title("Resetting...")
         self.geometry("300x100")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set() 
 
-        tk.Label(self, text="Uninstalling resonance...", bg="#F0EAD6").pack(pady=10)
+        tk.Label(self, text="Uninstalling resonance...", bg=DIALOG_BG).pack(pady=10)
         self.progress = ttk.Progressbar(self, orient="horizontal", length=250, mode="determinate")
         self.progress.pack(pady=5)
         self.update_progress(0)
@@ -601,47 +607,47 @@ class ExportPresetsWindow(tk.Toplevel):
         self.default_filename = default_filename
         self.ask_provenance = ask_provenance
         self.geometry("400x500")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
 
         self.vars = {}
 
-        tk.Label(self, text="Select sets to export:", bg="#F0EAD6", font=("Helvetica", 12)).pack(pady=10)
+        tk.Label(self, text="Select sets to export:", bg=DIALOG_BG, font=("Helvetica", 12)).pack(pady=10)
 
-        button_frame = tk.Frame(self, bg="#F0EAD6")
+        button_frame = tk.Frame(self, bg=DIALOG_BG)
         button_frame.pack(pady=5)
         tk.Button(button_frame, text="Select All", command=self.select_all).pack(side="left", padx=5)
         tk.Button(button_frame, text="Select None", command=self.select_none).pack(side="left", padx=5)
 
-        list_frame = tk.Frame(self, bg="#F0EAD6")
+        list_frame = tk.Frame(self, bg=DIALOG_BG)
         list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        self.canvas = tk.Canvas(list_frame, bg="#F0EAD6", highlightthickness=0)
+        self.canvas = tk.Canvas(list_frame, bg=DIALOG_BG, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#F0EAD6")
+        self.scrollable_frame = tk.Frame(self.canvas, bg=DIALOG_BG)
 
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
         if not presets:
-             tk.Label(self.scrollable_frame, text="No local sets found.", bg="#F0EAD6").pack(pady=10)
+             tk.Label(self.scrollable_frame, text="No local sets found.", bg=DIALOG_BG).pack(pady=10)
         else:
             # Check if this is a nested dictionary (Key Libraries)
             if any(isinstance(v, dict) for v in presets.values()):
                 for lib_name in sorted(self.presets.keys()):
-                    tk.Label(self.scrollable_frame, text=f"[{lib_name}]", bg="#F0EAD6", font=("Helvetica", 10, "bold")).pack(anchor='w', pady=(5,0))
+                    tk.Label(self.scrollable_frame, text=f"[{lib_name}]", bg=DIALOG_BG, font=("Helvetica", 10, "bold")).pack(anchor='w', pady=(5,0))
                     for preset_name in sorted(self.presets[lib_name].keys()):
                         var = tk.BooleanVar()
                         full_name = f"{lib_name}::{preset_name}" # Internal delimiter
-                        cb = tk.Checkbutton(self.scrollable_frame, text=f"  {preset_name}", variable=var, bg="#F0EAD6")
+                        cb = tk.Checkbutton(self.scrollable_frame, text=f"  {preset_name}", variable=var, bg=DIALOG_BG)
                         cb.pack(anchor='w')
                         self.vars[full_name] = var
             else: # Flat dictionary (Pad Presets)
                 for name in sorted(self.presets.keys()):
                     var = tk.BooleanVar()
-                    cb = tk.Checkbutton(self.scrollable_frame, text=name, variable=var, bg="#F0EAD6")
+                    cb = tk.Checkbutton(self.scrollable_frame, text=name, variable=var, bg=DIALOG_BG)
                     cb.pack(anchor='w')
                     self.vars[name] = var
 
@@ -733,36 +739,36 @@ class ImportPresetsWindow(tk.Toplevel):
         
         self.title(f"Import {preset_type_name}s")
         self.geometry("450x500")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
 
         self.vars = {}
 
-        tk.Label(self, text=f"Select {preset_type_name}s to import:", bg="#F0EAD6", font=("Helvetica", 12)).pack(pady=10)
+        tk.Label(self, text=f"Select {preset_type_name}s to import:", bg=DIALOG_BG, font=("Helvetica", 12)).pack(pady=10)
 
-        button_frame = tk.Frame(self, bg="#F0EAD6")
+        button_frame = tk.Frame(self, bg=DIALOG_BG)
         button_frame.pack(pady=5)
         tk.Button(button_frame, text="Select All", command=self.select_all).pack(side="left", padx=5)
         tk.Button(button_frame, text="Select None", command=self.select_none).pack(side="left", padx=5)
 
-        list_frame = tk.Frame(self, bg="#F0EAD6")
+        list_frame = tk.Frame(self, bg=DIALOG_BG)
         list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        self.canvas = tk.Canvas(list_frame, bg="#F0EAD6", highlightthickness=0)
+        self.canvas = tk.Canvas(list_frame, bg=DIALOG_BG, highlightthickness=0)
         self.scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg="#F0EAD6")
+        self.scrollable_frame = tk.Frame(self.canvas, bg=DIALOG_BG)
 
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
         if not imported_presets:
-             tk.Label(self.scrollable_frame, text="No presets found in file.", bg="#F0EAD6").pack(pady=10)
+             tk.Label(self.scrollable_frame, text="No presets found in file.", bg=DIALOG_BG).pack(pady=10)
         else:
             for name in sorted(self.imported_presets.keys()):
                 var = tk.BooleanVar(value=True) # Default to selected
-                cb = tk.Checkbutton(self.scrollable_frame, text=name, variable=var, bg="#F0EAD6")
+                cb = tk.Checkbutton(self.scrollable_frame, text=name, variable=var, bg=DIALOG_BG)
                 cb.pack(anchor='w')
                 self.vars[name] = var
 
@@ -834,29 +840,29 @@ class ImportTargetWindow(tk.Toplevel):
 
         self.title("Select Import Library")
         self.geometry("350x150")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
 
         self.mode = tk.StringVar(value="existing")
         
-        tk.Label(self, text="Where do you want to add these sets?", bg="#F0EAD6").pack(pady=10)
+        tk.Label(self, text="Where do you want to add these sets?", bg=DIALOG_BG).pack(pady=10)
 
-        existing_frame = tk.Frame(self, bg="#F0EAD6")
+        existing_frame = tk.Frame(self, bg=DIALOG_BG)
         existing_frame.pack(fill='x', padx=10)
-        tk.Radiobutton(existing_frame, text="Add to existing library:", variable=self.mode, value="existing", bg="#F0EAD6", command=self.toggle_widgets).pack(side="left")
+        tk.Radiobutton(existing_frame, text="Add to existing library:", variable=self.mode, value="existing", bg=DIALOG_BG, command=self.toggle_widgets).pack(side="left")
         self.library_dropdown = ttk.Combobox(existing_frame, values=self.existing_libraries, state="readonly", width=15)
         self.library_dropdown.pack(side="left", padx=5)
         if self.existing_libraries:
             self.library_dropdown.set(self.existing_libraries[0])
 
-        new_frame = tk.Frame(self, bg="#F0EAD6")
+        new_frame = tk.Frame(self, bg=DIALOG_BG)
         new_frame.pack(fill='x', padx=10, pady=5)
-        tk.Radiobutton(new_frame, text="Create new library:", variable=self.mode, value="new", bg="#F0EAD6", command=self.toggle_widgets).pack(side="left")
+        tk.Radiobutton(new_frame, text="Create new library:", variable=self.mode, value="new", bg=DIALOG_BG, command=self.toggle_widgets).pack(side="left")
         self.new_lib_entry = tk.Entry(new_frame, width=18)
         self.new_lib_entry.pack(side="left", padx=5)
         
-        button_frame = tk.Frame(self, bg="#F0EAD6")
+        button_frame = tk.Frame(self, bg=DIALOG_BG)
         button_frame.pack(pady=15)
         tk.Button(button_frame, text="Import", command=self.on_import).pack(side="left", padx=10)
         tk.Button(button_frame, text="Cancel", command=self.on_cancel).pack(side="left", padx=10)
@@ -921,7 +927,7 @@ class PolygonDrawWindow(tk.Toplevel):
 
         self.title("Draw Custom Shape")
         self.geometry("520x620")
-        self.configure(bg="#F0EAD6")
+        self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
 
@@ -938,14 +944,14 @@ class PolygonDrawWindow(tk.Toplevel):
         # Instructions
         unit_label = "inches" if self.unit == "in" else "cm"
         instr_text = f"Click grid points to draw shape (max {self.MAX_POINTS} points).\nClick near first point to close. Click a point to remove it."
-        tk.Label(self, text=instr_text, bg="#F0EAD6", justify="center").pack(pady=(10, 5))
+        tk.Label(self, text=instr_text, bg=DIALOG_BG, justify="center").pack(pady=(10, 5))
 
         # Grid info - each square = 1 unit (inch or cm)
         tk.Label(self, text=f"Grid: {self.grid_size}x{self.grid_size} {unit_label} (1 square = 1 {self.unit})",
-                 bg="#F0EAD6", font=("Helvetica", 9)).pack(pady=(0, 5))
+                 bg=DIALOG_BG, font=("Helvetica", 9)).pack(pady=(0, 5))
 
         # Canvas frame
-        canvas_frame = tk.Frame(self, bg="#F0EAD6")
+        canvas_frame = tk.Frame(self, bg=DIALOG_BG)
         canvas_frame.pack(padx=10, pady=5)
 
         self.canvas = tk.Canvas(canvas_frame, width=self.CANVAS_PX, height=self.CANVAS_PX,
@@ -955,10 +961,10 @@ class PolygonDrawWindow(tk.Toplevel):
 
         # Status label
         self.status_var = tk.StringVar(value="Click to add points...")
-        tk.Label(self, textvariable=self.status_var, bg="#F0EAD6", font=("Helvetica", 10)).pack(pady=5)
+        tk.Label(self, textvariable=self.status_var, bg=DIALOG_BG, font=("Helvetica", 10)).pack(pady=5)
 
         # Buttons
-        btn_frame = tk.Frame(self, bg="#F0EAD6")
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=10)
 
         tk.Button(btn_frame, text="Clear", command=self.on_clear, width=10).pack(side="left", padx=5)
@@ -1169,7 +1175,7 @@ class GcodeSettingsWindow:
         self.top = tk.Toplevel(parent)
         self.top.title("G-code Laser Settings")
         self.top.geometry("550x500")
-        self.top.configure(bg="#F0EAD6")
+        self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
 
@@ -1183,26 +1189,26 @@ class GcodeSettingsWindow:
 
     def _create_widgets(self):
         # Header
-        header_frame = tk.Frame(self.top, bg="#F0EAD6")
+        header_frame = tk.Frame(self.top, bg=DIALOG_BG)
         header_frame.pack(fill="x", padx=10, pady=10)
 
         tk.Label(header_frame, text="Configure laser speed and power for each material and operation.",
-                 bg="#F0EAD6", wraplength=500, justify="left").pack(anchor="w")
+                 bg=DIALOG_BG, wraplength=500, justify="left").pack(anchor="w")
 
         tk.Label(header_frame, text="Order: Engraving → Center Hole → Outer Cut",
-                 bg="#F0EAD6", font=("Helvetica", 9, "italic")).pack(anchor="w", pady=(5, 0))
+                 bg=DIALOG_BG, font=("Helvetica", 9, "italic")).pack(anchor="w", pady=(5, 0))
 
         tk.Label(header_frame, text="Note: Power uses Grbl's S0-S1000 scale. If power seems wrong, check that "
                  "your machine's $30 setting is 1000 (run \"$30=1000\" in your console).",
-                 bg="#F0EAD6", font=("Helvetica", 8), fg="#666666", wraplength=500, justify="left").pack(anchor="w", pady=(5, 0))
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666", wraplength=500, justify="left").pack(anchor="w", pady=(5, 0))
 
         # Main content with scrollable frame
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(fill="both", expand=True, padx=10)
 
-        canvas = tk.Canvas(main_canvas_frame, bg="#F0EAD6", highlightthickness=0)
+        canvas = tk.Canvas(main_canvas_frame, bg=DIALOG_BG, highlightthickness=0)
         scrollbar = tk.Scrollbar(main_canvas_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg="#F0EAD6")
+        scrollable_frame = tk.Frame(canvas, bg=DIALOG_BG)
 
         scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -1218,7 +1224,7 @@ class GcodeSettingsWindow:
             self._create_material_section(scrollable_frame, mat_key, mat_label)
 
         # Buttons
-        button_frame = tk.Frame(self.top, bg="#F0EAD6")
+        button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         button_frame.pack(fill="x", padx=10, pady=10)
 
         tk.Button(button_frame, text="Save", command=self._on_save).pack(side="left", padx=5)
@@ -1227,7 +1233,7 @@ class GcodeSettingsWindow:
 
     def _create_material_section(self, parent, mat_key, mat_label):
         """Create a settings section for one material."""
-        frame = tk.LabelFrame(parent, text=mat_label, bg="#F0EAD6", padx=10, pady=10)
+        frame = tk.LabelFrame(parent, text=mat_label, bg=DIALOG_BG, padx=10, pady=10)
         frame.pack(fill="x", pady=5, padx=5)
 
         self.vars[mat_key] = {}
@@ -1236,9 +1242,9 @@ class GcodeSettingsWindow:
         mat_settings = self.gcode_settings.get(mat_key, {})
 
         # Header row
-        tk.Label(frame, text="Operation", bg="#F0EAD6", font=("Helvetica", 9, "bold")).grid(row=0, column=0, sticky="w", padx=5)
-        tk.Label(frame, text="Speed (mm/min)", bg="#F0EAD6", font=("Helvetica", 9, "bold")).grid(row=0, column=1, padx=5)
-        tk.Label(frame, text="Power (%)", bg="#F0EAD6", font=("Helvetica", 9, "bold")).grid(row=0, column=2, padx=5)
+        tk.Label(frame, text="Operation", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=0, sticky="w", padx=5)
+        tk.Label(frame, text="Speed (mm/min)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=1, padx=5)
+        tk.Label(frame, text="Power (%)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=2, padx=5)
 
         for i, (op_key, op_label) in enumerate(self.OPERATIONS, start=1):
             self.vars[mat_key][op_key] = {}
@@ -1257,13 +1263,13 @@ class GcodeSettingsWindow:
             self.vars[mat_key][op_key]['speed'] = speed_var
             self.vars[mat_key][op_key]['power'] = power_var
 
-            tk.Label(frame, text=op_label, bg="#F0EAD6").grid(row=i, column=0, sticky="w", padx=5, pady=2)
+            tk.Label(frame, text=op_label, bg=DIALOG_BG).grid(row=i, column=0, sticky="w", padx=5, pady=2)
             tk.Entry(frame, textvariable=speed_var, width=10).grid(row=i, column=1, padx=5, pady=2)
             tk.Entry(frame, textvariable=power_var, width=10).grid(row=i, column=2, padx=5, pady=2)
 
         # Kerf width row (after operations)
         kerf_row = len(self.OPERATIONS) + 1
-        tk.Label(frame, text="Kerf width:", bg="#F0EAD6").grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
+        tk.Label(frame, text="Kerf width:", bg=DIALOG_BG).grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
 
         default_kerf = self._get_default(mat_key, "kerf_width")
         current_kerf = mat_settings.get("kerf_width", default_kerf)
@@ -1273,7 +1279,7 @@ class GcodeSettingsWindow:
         kerf_entry = tk.Spinbox(frame, textvariable=kerf_var, from_=0.0, to=1.0,
                                 increment=0.05, width=8, format="%.2f")
         kerf_entry.grid(row=kerf_row, column=1, sticky="w", padx=5, pady=(8, 2))
-        tk.Label(frame, text="mm", bg="#F0EAD6").grid(row=kerf_row, column=2, sticky="w", padx=5, pady=(8, 2))
+        tk.Label(frame, text="mm", bg=DIALOG_BG).grid(row=kerf_row, column=2, sticky="w", padx=5, pady=(8, 2))
 
     def _get_default(self, material, setting_key):
         """Get default value from DEFAULT_SETTINGS."""

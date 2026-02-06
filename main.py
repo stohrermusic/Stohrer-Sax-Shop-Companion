@@ -29,19 +29,21 @@ from library_features import LibraryFeaturesMixin
 # MAIN APP CLASS
 # ==========================================
 
+IS_MACOS = sys.platform == 'darwin'
+
 class PadSVGGeneratorApp(LibraryFeaturesMixin):
     def __init__(self, root):
         self.root = root
         self.root.title("Stohrer Sax Shop Companion")
         self.root.geometry("640x720")
-        self.default_bg = "#FFFDD0"
-        self.root.configure(bg=self.default_bg)
 
-        # Force light appearance on macOS so dark mode doesn't clash with
-        # our light-colored theme.  Try the native approach first (tells macOS
-        # to render this window in light mode), then fall back to tk_setPalette.
-        if sys.platform == 'darwin':
-            self._force_macos_light_mode()
+        # On macOS, use native system colors (supports dark/light mode).
+        # On Windows/Linux, use our custom cream theme.
+        if IS_MACOS:
+            self.default_bg = self.root.cget('bg')
+        else:
+            self.default_bg = "#FFFDD0"
+            self.root.configure(bg=self.default_bg)
 
         self.settings = load_settings()
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
@@ -98,41 +100,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         save_settings(self.settings)
         self.root.destroy()
 
-    def _force_macos_light_mode(self):
-        """Force light appearance on macOS so dark mode doesn't affect our UI."""
-        # Method 1: Set NSAppearance via Tk (best - tells macOS to use light mode)
-        try:
-            self.root.tk.call(
-                '::tk::unsupported::MacWindowStyle', 'appearance',
-                self.root._w, 'aqua'
-            )
-            return  # Worked - macOS will handle all widget colors correctly
-        except tk.TclError:
-            pass
-
-        # Method 2: wm_attributes (alternative API in some Tk builds)
-        try:
-            self.root.wm_attributes('-appearance', 'aqua')
-            return
-        except tk.TclError:
-            pass
-
-        # Method 3: Fallback - manually force light colors via palette
-        self.root.tk_setPalette(
-            background=self.default_bg,
-            foreground='black',
-            insertBackground='black',
-            selectBackground='#4A6FA5',
-            selectForeground='white',
-            activeBackground='#E8E4D0',
-            activeForeground='black',
-        )
-        self.root.option_add("*Entry.background", "white")
-        self.root.option_add("*Text.background", "white")
-        self.root.option_add("*Spinbox.background", "white")
-
     def _get_theme_color(self):
         """Get the current theme background color based on resonance clicks."""
+        if IS_MACOS:
+            return self.default_bg
         clicks = self.settings.get("resonance_clicks", 0)
         if 10 <= clicks < 50:
             return "#E0F7FA"  # COOL_BLUE
@@ -141,6 +112,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         return self.default_bg
 
     def apply_resonance_theme(self):
+        if IS_MACOS:
+            return
         color = self._get_theme_color()
         self.set_background_color(self.root, color)
         clicks = self.settings.get("resonance_clicks", 0)
@@ -148,14 +121,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             self.root.attributes('-alpha', 1.0)
 
     def set_background_color(self, parent, color):
+        if IS_MACOS:
+            return
         try:
             parent.configure(bg=color)
         except tk.TclError:
             pass
-        
+
         style = ttk.Style()
-        style.configure('.', foreground='black')
-        style.configure('TCombobox', fieldbackground='white', foreground='black')
         style.configure('App.TFrame', background=color)
         style.map('TNotebook.Tab', background=[('selected', color), ('!selected', color)], foreground=[('selected', 'black')])
         style.configure('TNotebook', background=color)
