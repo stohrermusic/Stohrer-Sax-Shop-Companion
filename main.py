@@ -37,10 +37,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.default_bg = "#FFFDD0"
         self.root.configure(bg=self.default_bg)
 
-        # Force black text everywhere so the app is readable on macOS dark mode
-        # (which otherwise defaults to white text on our light backgrounds)
+        # Force light-mode colors so the app is readable on macOS dark mode
+        # (which otherwise defaults to white text and dark input backgrounds)
         self.root.option_add("*foreground", "black")
+        self.root.option_add("*Entry.background", "white")
+        self.root.option_add("*Entry.foreground", "black")
+        self.root.option_add("*Text.background", "white")
         self.root.option_add("*Text.foreground", "black")
+        self.root.option_add("*Spinbox.background", "white")
+        self.root.option_add("*Spinbox.foreground", "black")
+        self.root.option_add("*Listbox.background", "white")
+        self.root.option_add("*Listbox.foreground", "black")
+        self.root.option_add("*Menu.background", "#F0EAD6")
+        self.root.option_add("*Menu.foreground", "black")
 
         self.settings = load_settings()
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
@@ -121,6 +130,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         
         style = ttk.Style()
         style.configure('.', foreground='black')
+        style.configure('TCombobox', fieldbackground='white', foreground='black')
         style.configure('App.TFrame', background=color)
         style.map('TNotebook.Tab', background=[('selected', color), ('!selected', color)], foreground=[('selected', 'black')])
         style.configure('TNotebook', background=color)
