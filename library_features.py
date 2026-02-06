@@ -380,6 +380,69 @@ class LibraryFeaturesMixin:
         except Exception as e:
             messagebox.showerror("Import Error", f"Could not import key sets:\n{e}")
 
+    def on_import_matts_key_heights(self):
+        """Fetch key height presets from stohrermusic.com and import with (Matt's) suffix."""
+        import urllib.request
+        import urllib.error
+
+        MATTS_KEYS_URL = "https://www.stohrermusic.com/data/key_height_library.json"
+        SUFFIX = " (Matt's)"
+        LIBRARY_NAME = "Matt's Library"
+
+        try:
+            req = urllib.request.Request(MATTS_KEYS_URL, headers={"User-Agent": "StohrerSaxShopCompanion"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                web_data = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            messagebox.showerror("Connection Error",
+                f"Could not fetch key heights from stohrermusic.com:\n\n{e}")
+            return
+        except (json.JSONDecodeError, ValueError) as e:
+            messagebox.showerror("Data Error",
+                f"Invalid data received from server:\n\n{e}")
+            return
+
+        if not isinstance(web_data, dict) or not web_data:
+            messagebox.showinfo("No Data", "No key height data found on the server.")
+            return
+
+        # Flatten all libraries from web into a single list of presets
+        all_presets = {}
+        for library_name, presets in web_data.items():
+            if not isinstance(presets, dict):
+                continue
+            for preset_name, preset_data in presets.items():
+                if isinstance(preset_data, dict):
+                    all_presets[preset_name] = preset_data
+
+        if not all_presets:
+            messagebox.showinfo("No Data", "No key height presets found on the server.")
+            return
+
+        # Check if Matt's Library already exists with any entries
+        existing_matts = []
+        if LIBRARY_NAME in self.key_presets:
+            existing_matts = list(self.key_presets[LIBRARY_NAME].keys())
+
+        if existing_matts:
+            overwrite = messagebox.askyesno("Overwrite Existing?",
+                f"Matt's Library already has {len(existing_matts)} preset(s).\n\n"
+                "Overwrite with latest from web?")
+            if not overwrite:
+                return
+
+        # Import into Matt's Library
+        self.key_presets[LIBRARY_NAME] = all_presets
+        count = len(all_presets)
+
+        if count > 0:
+            save_presets(self.key_presets, KEY_PRESET_FILE)
+            self.update_key_library_dropdown()
+            messagebox.showinfo("Import Complete",
+                f"Imported {count} key height preset(s) into \"{LIBRARY_NAME}\".")
+        else:
+            messagebox.showinfo("No Data", "No presets found to import.")
+
     def on_export_key_sets(self):
         ExportPresetsWindow(self.root, self.key_presets, "Key Height Sets", "key_height_export.json", True)
 
@@ -640,6 +703,72 @@ class LibraryFeaturesMixin:
                 for var in self.screw_vars.values():
                     var.set("")
                 self.screw_notes_text.delete("1.0", tk.END)
+
+    def on_import_matts_specs(self):
+        """Fetch screw specs from stohrermusic.com and import with (Matt's) suffix."""
+        import urllib.request
+        import urllib.error
+
+        MATTS_SPECS_URL = "https://www.stohrermusic.com/data/screw_specs.json"
+        SUFFIX = " (Matt's)"
+
+        try:
+            req = urllib.request.Request(MATTS_SPECS_URL, headers={"User-Agent": "StohrerSaxShopCompanion"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                web_data = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            messagebox.showerror("Connection Error",
+                f"Could not fetch specs from stohrermusic.com:\n\n{e}")
+            return
+        except (json.JSONDecodeError, ValueError) as e:
+            messagebox.showerror("Data Error",
+                f"Invalid data received from server:\n\n{e}")
+            return
+
+        if not isinstance(web_data, dict) or not web_data:
+            messagebox.showinfo("No Data", "No specs found on the server.")
+            return
+
+        # Check if any Matt's specs already exist locally
+        existing_matts = []
+        for maker, models in web_data.items():
+            if not isinstance(models, dict):
+                continue
+            for model in models:
+                matts_name = model + SUFFIX
+                if maker in self.screw_data and matts_name in self.screw_data[maker]:
+                    existing_matts.append(f"{maker} - {matts_name}")
+
+        if existing_matts:
+            overwrite = messagebox.askyesno("Overwrite Existing?",
+                f"{len(existing_matts)} Matt's spec(s) already exist locally:\n\n"
+                + "\n".join(existing_matts[:10])
+                + ("\n..." if len(existing_matts) > 10 else "")
+                + "\n\nOverwrite with latest from web?")
+            if not overwrite:
+                return
+
+        # Import specs with (Matt's) suffix
+        count = 0
+        for maker, models in web_data.items():
+            if not isinstance(models, dict):
+                continue
+            if maker not in self.screw_data:
+                self.screw_data[maker] = {}
+            for model, spec_data in models.items():
+                if not isinstance(spec_data, dict):
+                    continue
+                matts_name = model + SUFFIX
+                self.screw_data[maker][matts_name] = spec_data
+                count += 1
+
+        if count > 0:
+            save_presets(self.screw_data, SCREW_SPECS_FILE)
+            self.update_screw_maker_list()
+            messagebox.showinfo("Import Complete",
+                f"Imported {count} spec(s) from Matt's library.")
+        else:
+            messagebox.showinfo("No Data", "No specs found to import.")
 
     def on_export_screw_specs(self):
         ExportPresetsWindow(self.root, self.screw_data, "Screw Specs", "screw_specs_export.json", False)

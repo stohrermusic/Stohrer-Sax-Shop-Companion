@@ -166,10 +166,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         key_file_menu = tk.Menu(self.key_menu, tearoff=0)
         self.key_menu.add_cascade(label="File", menu=key_file_menu)
         key_file_menu.add_command(label="Import Key Sets...", command=self.on_import_key_sets)
+        key_file_menu.add_command(label="Import Matt's Key Heights", command=self.on_import_matts_key_heights)
         key_file_menu.add_command(label="Export Key Sets...", command=self.on_export_key_sets)
         key_file_menu.add_separator()
         key_file_menu.add_command(label="Exit", command=self.on_exit)
-        
+
         key_options_menu = tk.Menu(self.key_menu, tearoff=0)
         self.key_menu.add_cascade(label="Options", menu=key_options_menu)
         key_options_menu.add_command(label="Layout Options...", command=self.open_key_layout_window)
@@ -180,6 +181,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         screw_file_menu = tk.Menu(self.screw_menu, tearoff=0)
         self.screw_menu.add_cascade(label="File", menu=screw_file_menu)
         screw_file_menu.add_command(label="Import Screw Specs...", command=self.on_import_screw_specs)
+        screw_file_menu.add_command(label="Import Matt's Specs", command=self.on_import_matts_specs)
         screw_file_menu.add_command(label="Export Screw Specs...", command=self.on_export_screw_specs)
         screw_file_menu.add_separator()
         screw_file_menu.add_command(label="Exit", command=self.on_exit)
