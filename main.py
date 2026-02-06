@@ -37,21 +37,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.default_bg = "#FFFDD0"
         self.root.configure(bg=self.default_bg)
 
-        # Force light-mode color palette so the app is readable on macOS dark mode.
-        # tk_setPalette overrides the aqua theme which ignores option_add.
-        self.root.tk_setPalette(
-            background=self.default_bg,
-            foreground='black',
-            insertBackground='black',
-            selectBackground='#4A6FA5',
-            selectForeground='white',
-            activeBackground='#E8E4D0',
-            activeForeground='black',
-        )
-        # Keep input fields white so they stand out from the background
-        self.root.option_add("*Entry.background", "white")
-        self.root.option_add("*Text.background", "white")
-        self.root.option_add("*Spinbox.background", "white")
+        # Force light appearance on macOS so dark mode doesn't clash with
+        # our light-colored theme.  Try the native approach first (tells macOS
+        # to render this window in light mode), then fall back to tk_setPalette.
+        if sys.platform == 'darwin':
+            self._force_macos_light_mode()
 
         self.settings = load_settings()
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
@@ -107,6 +97,39 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
         save_settings(self.settings)
         self.root.destroy()
+
+    def _force_macos_light_mode(self):
+        """Force light appearance on macOS so dark mode doesn't affect our UI."""
+        # Method 1: Set NSAppearance via Tk (best - tells macOS to use light mode)
+        try:
+            self.root.tk.call(
+                '::tk::unsupported::MacWindowStyle', 'appearance',
+                self.root._w, 'aqua'
+            )
+            return  # Worked - macOS will handle all widget colors correctly
+        except tk.TclError:
+            pass
+
+        # Method 2: wm_attributes (alternative API in some Tk builds)
+        try:
+            self.root.wm_attributes('-appearance', 'aqua')
+            return
+        except tk.TclError:
+            pass
+
+        # Method 3: Fallback - manually force light colors via palette
+        self.root.tk_setPalette(
+            background=self.default_bg,
+            foreground='black',
+            insertBackground='black',
+            selectBackground='#4A6FA5',
+            selectForeground='white',
+            activeBackground='#E8E4D0',
+            activeForeground='black',
+        )
+        self.root.option_add("*Entry.background", "white")
+        self.root.option_add("*Text.background", "white")
+        self.root.option_add("*Spinbox.background", "white")
 
     def _get_theme_color(self):
         """Get the current theme background color based on resonance clicks."""
