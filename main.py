@@ -6,6 +6,7 @@ import shutil
 import sys
 import glob
 import subprocess
+import time
 
 # --- Local Imports ---
 from config import (
@@ -762,8 +763,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 if dialog.dont_show_again.get():
                     self.settings["show_engraving_warning"] = False
 
-        width_val = float(self.width_entry.get())
-        height_val = float(self.height_entry.get())
+        try:
+            width_val = float(self.width_entry.get())
+            height_val = float(self.height_entry.get())
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Sheet width and height must be valid numbers.")
+            return None
+
+        if width_val <= 0 or height_val <= 0:
+            messagebox.showerror("Invalid Input", "Sheet width and height must be greater than zero.")
+            return None
 
         if self.settings['units'] == 'in':
             width_mm, height_mm = width_val * 25.4, height_val * 25.4
@@ -1432,7 +1441,6 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
                 timeout=10
             )
             # Give it a moment to complete
-            import time
             time.sleep(1)
             # Check if drive is still accessible (if not, eject worked)
             return not os.path.exists(drive_letter + "\\")

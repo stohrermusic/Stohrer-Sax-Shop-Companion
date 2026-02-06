@@ -244,7 +244,7 @@ def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.0
     """
     Generate star/dart pattern points for G-code.
 
-    This matches the calculate_star_path logic in svg_engine.py but returns
+    Uses the same math as calculate_star_path() in svg_engine.py but returns
     a list of (x, y) points instead of an SVG path string.
 
     Args:
@@ -252,45 +252,34 @@ def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.0
         outer_r: Outer (tip) radius
         inner_r: Inner (valley) radius
         num_points: Number of points (tips) on the star
-        shape_factor: 0.0 = sine wave, 1.0 = square wave
+        shape_factor: 0.0 = sine wave, 1.0 = flattened (square-ish)
 
     Returns:
         List of (x, y) points forming a closed star shape
     """
     points = []
-    steps_per_segment = 8  # Smoothness of curves between tips
 
-    for i in range(num_points):
-        for j in range(steps_per_segment):
-            # Angle within this segment (0 to 1)
-            t = j / steps_per_segment
-            # Overall angle
-            angle = 2 * math.pi * (i + t) / num_points
+    avg_r = (outer_r + inner_r) / 2.0
+    amplitude = (outer_r - inner_r) / 2.0
 
-            # Calculate radius using sine wave, modified by shape_factor
-            # t=0 is tip (outer_r), t=0.5 is valley (inner_r)
-            sine_val = math.cos(2 * math.pi * t)  # 1 at t=0, -1 at t=0.5
+    steps = int(num_points * 8)
+    if steps < 64:
+        steps = 64
 
-            if shape_factor > 0:
-                # Blend toward square wave
-                if sine_val > 0:
-                    square_val = 1.0
-                else:
-                    square_val = -1.0
-                blended = sine_val * (1 - shape_factor) + square_val * shape_factor
-            else:
-                blended = sine_val
+    angle_step = (2 * math.pi) / steps
+    power = 1.0 - (0.9 * shape_factor)
 
-            # Map from [-1, 1] to [inner_r, outer_r]
-            r = inner_r + (outer_r - inner_r) * (blended + 1) / 2
+    for i in range(steps + 1):
+        theta = i * angle_step
 
-            x = cx + r * math.cos(angle)
-            y = cy + r * math.sin(angle)
-            points.append((x, y))
+        raw_wave = math.cos(num_points * theta)
+        shaped_wave = (1 if raw_wave >= 0 else -1) * (abs(raw_wave) ** power)
 
-    # Close the shape
-    if points:
-        points.append(points[0])
+        r = avg_r + amplitude * shaped_wave
+
+        x = cx + r * math.cos(theta)
+        y = cy + r * math.sin(theta)
+        points.append((x, y))
 
     return points
 
@@ -388,7 +377,7 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
         settings: App settings dictionary
         polygon: Optional custom polygon shape
     """
-    from svg_engine import _nest_discs, get_felt_thickness_mm
+    from svg_engine import _nest_discs
 
     # Use the same nesting as SVG generation
     placed, _, _ = _nest_discs(pads, material, sheet_width_mm, sheet_height_mm, settings, polygon=polygon)
@@ -396,176 +385,8 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
     if not placed:
         return
 
-    # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom
-    placed = [(pad_size, cx, sheet_height_mm - cy, radius) for (pad_size, cx, cy, radius) in placed]
-
-    # Get G-code settings for this material
-    gcode_settings = settings.get("gcode_settings", {})
-    mat_settings = gcode_settings.get(material, gcode_settings.get("felt", {}))
-
-    engraving_speed = mat_settings.get("engraving_speed", 1500)
-    engraving_power = mat_settings.get("engraving_power", 10)
-    hole_speed = mat_settings.get("hole_speed", 400)
-    hole_power = mat_settings.get("hole_power", 25)
-    cut_speed = mat_settings.get("cut_speed", 900)
-    cut_power = mat_settings.get("cut_power", 35)
-
-    # Kerf compensation (applied to cuts, not engraving) - per material
-    kerf_width = mat_settings.get("kerf_width", 0.0)
-    kerf_offset = kerf_width / 2  # Half kerf applied to each side
-
-    # Font size for engraving (use engraving_font_size from settings)
-    engraving_font_sizes = settings.get("engraving_font_size", {})
-    font_size = engraving_font_sizes.get(material, 3.0)
-
-    # Collect strokes for each layer
-    engraving_strokes = []
-    hole_strokes = []
-    cut_strokes = []
-
-    # Track bounds
-    all_x = []
-    all_y = []
-
-    # Check if this material uses star patterns
-    use_stars = material in ('leather', 'leather_topgrain') and settings.get("darts_enabled", True)
-    dart_threshold = settings.get("dart_threshold", 18.0)
-
-    for pad_size, cx, cy, radius in placed:
-        all_x.extend([cx - radius, cx + radius])
-        all_y.extend([cy - radius, cy + radius])
-
-        # Determine if this is a star/dart pad
-        is_dart_pad = use_stars and pad_size < dart_threshold
-
-        # Engraving - use same logic as svg_engine.py
-        should_engrave = False
-        engraving_settings = None
-
-        if is_dart_pad:
-            # Use star-specific engraving settings
-            if settings.get("dart_engraving_on", True):
-                engraving_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
-                should_engrave = True
-        else:
-            # Use standard engraving settings
-            if settings.get("engraving_on", True):
-                engraving_settings = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
-                should_engrave = True
-
-        # Safety check: don't engrave if text would be too large
-        if should_engrave and font_size >= radius * 0.8:
-            should_engrave = False
-
-        if should_engrave:
-            mode = engraving_settings.get('mode', 'centered')
-            value = engraving_settings.get('value', 0)
-
-            # Calculate engraving Y position (matching svg_engine.py exactly)
-            if mode == 'from_outside':
-                engraving_y = cy - (radius - value)
-            elif mode == 'from_inside':
-                hole_r = hole_dia / 2 if hole_dia > 0 else 0
-                engraving_y = cy - (hole_r + value)
-            else:  # centered
-                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
-                offset_from_center = (radius + hole_r) / 2
-                engraving_y = cy - offset_from_center
-
-            # Vertical adjustment for text baseline (same as SVG)
-            vertical_adjust = font_size * 0.35
-            label_y = engraving_y + vertical_adjust
-
-            text = f"{pad_size:.1f}".rstrip('0').rstrip('.')
-            text_strokes = get_text_strokes(text, font_size, cx, label_y)
-            engraving_strokes.extend(text_strokes)
-
-        # Center hole (respect min_hole_size setting)
-        # Kerf compensation: shrink hole radius so final hole is correct size
-        min_hole_size = settings.get("min_hole_size", 16.5)
-        if hole_dia > 0 and pad_size >= min_hole_size:
-            hole_radius = (hole_dia / 2) - kerf_offset
-            if hole_radius > 0:
-                hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
-                hole_strokes.append(hole_points)
-
-        # Outer cut - circle or star pattern
-        # Kerf compensation: expand outer cuts so final size is correct
-        if use_stars and pad_size < dart_threshold:
-            # Generate star path using same logic as svg_engine
-            felt_thick = get_felt_thickness_mm(settings)
-            overwrap = settings.get("dart_overwrap", 0.5)
-
-            # Inner radius (valley)
-            felt_r = (pad_size - settings.get("felt_offset", 0.75)) / 2
-            inner_r = felt_r + felt_thick + overwrap
-
-            # Outer radius is the full radius from nesting
-            outer_r = radius
-
-            if inner_r >= outer_r:
-                inner_r = outer_r - 0.2
-
-            # Apply kerf compensation - shift entire star outward
-            outer_r += kerf_offset
-            inner_r += kerf_offset
-
-            # Calculate number of points
-            circumference = 2 * math.pi * inner_r
-            freq_mult = settings.get("dart_frequency_multiplier", 1.0)
-            num_points = int((circumference / 3.5) * freq_mult)
-            if num_points < 12:
-                num_points = 12
-            if num_points % 2 != 0:
-                num_points += 1
-
-            shape_factor = settings.get("dart_shape_factor", 0.0)
-
-            # Generate star points directly
-            star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
-            cut_strokes.append(star_points)
-        else:
-            cut_radius = radius + kerf_offset
-            cut_points = linearize_circle(cx, cy, cut_radius, segments=72)
-            cut_strokes.append(cut_points)
-
-    # Generate G-code
-    gcode_lines = []
-
-    # Header
-    bounds_min_x = min(all_x) if all_x else 0
-    bounds_min_y = min(all_y) if all_y else 0
-    bounds_max_x = max(all_x) if all_x else sheet_width_mm
-    bounds_max_y = max(all_y) if all_y else sheet_height_mm
-    gcode_lines.extend(generate_gcode_header(bounds_min_x, bounds_min_y, bounds_max_x, bounds_max_y))
-
-    # Layer names based on material (matching LightBurn convention)
-    layer_names = {
-        'felt': ('C10', 'C09', 'C00'),
-        'card': ('C15', 'C14', 'C01'),
-        'leather': ('C05', 'C03', 'C02'),
-        'leather_topgrain': ('C05', 'C03', 'C02'),
-    }
-    eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
-
-    # Engraving layer (first)
-    if engraving_strokes:
-        gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer))
-
-    # Center hole layer (second)
-    if hole_strokes:
-        gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer))
-
-    # Outer cut layer (last)
-    if cut_strokes:
-        gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, cut_layer))
-
-    # Footer
-    gcode_lines.extend(generate_gcode_footer())
-
-    # Write file
-    with open(filename, 'w') as f:
-        f.write('\n'.join(gcode_lines))
+    generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
+                                hole_dia, settings, polygon=polygon)
 
 
 def can_generate_gcode(material):

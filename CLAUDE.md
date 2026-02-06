@@ -16,7 +16,9 @@ pip install -r requirements.txt
 python main.py
 ```
 
-The external dependency is `svgwrite`. The GUI uses Python's built-in `tkinter`.
+The external dependency is `svgwrite`. The GUI uses Python's built-in `tkinter`. Requires Python 3.11+.
+
+There is no automated test suite. Changes are verified by running the application manually.
 
 ## Building Executables
 
@@ -102,6 +104,8 @@ build.py               → Cross-platform PyInstaller build script
 
 **Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`. Supports both rectangular sheets and custom polygon shapes.
 
+**Coordinate Systems**: SVG uses Y=0 at top (Y increases downward), while G-code uses Y=0 at bottom (Y increases upward). The `gcode_engine.py` functions flip Y coordinates (`sheet_height_mm - cy`) to ensure G-code output matches the SVG preview.
+
 **Polygon Shape Tool**: Users can draw custom polygon shapes for irregular leather skins. Grid size adapts to unit setting: 15x15 inches (1" squares) or 40x40 cm (1cm squares). The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
 
 **Scrap Mode**: Allows users to place pads across multiple irregular scrap pieces instead of requiring one large sheet. Key components:
@@ -129,3 +133,42 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `pad_presets.json` - Saved pad size lists
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
+
+## Screw Specs Submission Form
+
+A web form at https://www.stohrermusic.com/articles/screw-specs-library/ (Submit Specs tab) allows colleagues to submit screw thread specifications. Submissions POST to a Google Apps Script endpoint that appends rows to a Google Sheet for review.
+
+### Integrating Submitted Data
+
+After reviewing submissions in the Google Sheet:
+
+1. **Update the app's screw_specs.json**: Edit `C:\code\saxshopcompanion\static\data\screw_specs.json` (or the user's local config file) to add verified entries. Format:
+   ```json
+   "Manufacturer": {
+     "Model": {
+       "neck_screw_th": "M4x0.7",
+       "neck_screw_dia": "",
+       "hinge_tiny_th": "",
+       "hinge_tiny_dia": "",
+       "hinge_small_th": "2-56 NC",
+       "hinge_small_dia": "side keys",
+       ...
+       "notes": "source info here"
+     }
+   }
+   ```
+
+2. **Update the website library**: Copy the same data to `C:\code\stohrermusic\static\data\screw_specs.json`, then commit and push to deploy.
+
+3. **Field mapping** (Google Sheet columns → JSON keys):
+   - Neck Screw Thread/Desc → `neck_screw_th`, `neck_screw_dia`
+   - Hinge Rod Tiny/Small/Medium/Large → `hinge_tiny_*`, `hinge_small_*`, `hinge_med_*`, `hinge_lrg_*`
+   - Pivot Small/Large → `pivot_small_*`, `pivot_lrg_*`
+   - Misc 1/2 → `misc1`, `misc2`
+   - Notes → `notes`
+
+Note: The `_dia` fields in the JSON are used for descriptions despite the legacy naming.
+
+## Related Repository
+
+The website at https://www.stohrermusic.com is a Hugo site with the Blowfish theme, located at `C:\code\stohrermusic`. The screw specs library page there loads data from `/static/data/screw_specs.json` and must be kept in sync with this app's data.

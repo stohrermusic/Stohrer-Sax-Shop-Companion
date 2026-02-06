@@ -230,15 +230,15 @@ DEFAULT_SETTINGS = {
         "large_notes": False,
         "show_B": True,
         "show_F": True,
-        "show_Palm F": False,
-        "show_Palm E": False,
-        "show_Palm Eb": False,
-        "show_Palm D": False,
+        "show_Palm_F": False,
+        "show_Palm_E": False,
+        "show_Palm_Eb": False,
+        "show_Palm_D": False,
         "show_G": False,
         "show_D": False,
-        "show_Low C": True,
-        "show_Low B": False,
-        "show_Low Bb": False
+        "show_Low_C": True,
+        "show_Low_B": False,
+        "show_Low_Bb": False
     },
 
     "engraving_font_size": {

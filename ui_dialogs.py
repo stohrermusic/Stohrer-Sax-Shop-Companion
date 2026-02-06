@@ -409,7 +409,7 @@ class LayerColorWindow:
             combo.grid(row=i, column=1, sticky='ew', padx=5)
             self.color_vars[key] = var
 
-        button_frame = tk.Frame(self.top, bg="#F0EAD6")
+        button_frame = tk.Frame(main_frame, bg="#F0EAD6")
         button_frame.grid(row=len(layer_map_keys), column=0, columnspan=2, pady=20)
         tk.Button(button_frame, text="Save", command=self.save_colors).pack(side="left", padx=10)
         tk.Button(button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=10)

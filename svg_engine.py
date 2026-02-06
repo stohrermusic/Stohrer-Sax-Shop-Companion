@@ -533,224 +533,8 @@ def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None
     return fixed_placed == fixed_total
 
 
-def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
-    placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
-
-    compatibility_mode = settings.get("compatibility_mode", False)
-
-    # Both modes use viewBox to ensure path coordinates (which can't have units) work correctly
-    if compatibility_mode:
-        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}")
-        stroke_w = 0.1
-    else:
-        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}", profile='tiny')
-        stroke_w = '0.1mm'
-
-    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
-
-    for pad_size, cx, cy, r in placed:
-        
-        threshold = settings.get("dart_threshold", 18.0)
-        darts_enabled = settings.get("darts_enabled", True)
-        
-        is_dart_pad = (material == 'leather' and darts_enabled and pad_size < threshold)
-        
-        if is_dart_pad:
-            # --- STAR LOGIC ---
-            felt_thick = get_felt_thickness_mm(settings)
-            overwrap = settings.get("dart_overwrap", 0.5)
-            
-            # 1. Inner Radius (Valley) - Safe Zone
-            felt_r = (pad_size - settings["felt_offset"]) / 2
-            inner_r = felt_r + felt_thick + overwrap
-            
-            # 2. Outer Radius (Tip) - The Boosted Wrap
-            # 'r' is the full Boosted radius from get_disc_diameter
-            outer_r = r
-            
-            # Safety Check
-            if inner_r >= outer_r:
-                 inner_r = outer_r - 0.2 
-            
-            # 3. Dynamic Points & Shape
-            circumference = 2 * math.pi * inner_r
-            freq_mult = settings.get("dart_frequency_multiplier", 1.0)
-            num_points = int((circumference / 3.5) * freq_mult)
-            if num_points < 12: num_points = 12 
-            if num_points % 2 != 0: num_points += 1 
-            
-            shape_factor = settings.get("dart_shape_factor", 0.0)
-            
-            path_d = calculate_star_path(cx, cy, outer_r, inner_r, num_points=num_points, shape_factor=shape_factor)
-            
-            dwg.add(dwg.path(d=path_d, stroke=layer_colors[f'{material}_outline'], fill='none', stroke_width=stroke_w))
-        else:
-            # --- STANDARD CIRCLE LOGIC ---
-            if compatibility_mode:
-                dwg.add(dwg.circle(center=(cx, cy), r=r, stroke=layer_colors[f'{material}_outline'], fill='none', stroke_width=stroke_w))
-            else:
-                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{r}mm", stroke=layer_colors[f'{material}_outline'], fill='none', stroke_width=stroke_w))
-
-        hole_dia = 0
-        if should_have_center_hole(pad_size, hole_dia_preset, settings):
-            hole_dia = hole_dia_preset
-
-        if hole_dia > 0:
-            if compatibility_mode:
-                dwg.add(dwg.circle(center=(cx, cy), r=hole_dia / 2, stroke=layer_colors[f'{material}_center_hole'], fill='none', stroke_width=stroke_w))
-            else:
-                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{hole_dia / 2}mm", stroke=layer_colors[f'{material}_center_hole'], fill='none', stroke_width=stroke_w))
-
-        font_size = settings.get("engraving_font_size", {}).get(material, 2.0)
-        
-        # --- Determine Engraving Settings (Standard vs Star) ---
-        should_engrave = False
-        
-        if is_dart_pad:
-            # Use Star Specific Settings
-            if settings.get("dart_engraving_on", True):
-                engraving_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
-                should_engrave = True
-        else:
-            # Use Standard Settings
-            if settings.get("engraving_on", True):
-                engraving_settings = settings["engraving_location"][material]
-                should_engrave = True
-
-        # Safety Check: Don't engrave if text is wider than the pad radius
-        if should_engrave and (font_size >= r * 0.8):
-            should_engrave = False
-        
-        if should_engrave:
-            mode = engraving_settings['mode']
-            value = engraving_settings['value']
-            
-            engraving_y = 0
-            if mode == 'from_outside':
-                engraving_y = cy - (r - value)
-            elif mode == 'from_inside':
-                hole_r = hole_dia / 2 if hole_dia > 0 else 0
-                engraving_y = cy - (hole_r + value)
-            else: # centered
-                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
-                offset_from_center = (r + hole_r) / 2
-                engraving_y = cy - offset_from_center
-
-            vertical_adjust = font_size * 0.35
-            text_content = f"{pad_size:.1f}".rstrip('0').rstrip('.')
-            
-            if compatibility_mode:
-                dwg.add(dwg.text(text_content,
-                                 insert=(cx, engraving_y + vertical_adjust),
-                                 text_anchor="middle",
-                                 font_size=font_size,
-                                 fill=layer_colors[f'{material}_engraving']))
-            else:
-                dwg.add(dwg.text(text_content,
-                                 insert=(f"{cx}mm", f"{engraving_y + vertical_adjust}mm"),
-                                 text_anchor="middle",
-                                 font_size=f"{font_size}mm",
-                                 fill=layer_colors[f'{material}_engraving']))
-        
-    dwg.save()
-
-
-# ==========================================
-# SCRAP MODE HELPERS
-# ==========================================
-
-def compute_remaining_pads(original_pads, placed):
-    """
-    Compute remaining pads after partial placement.
-
-    Args:
-        original_pads: List of {'size': float, 'qty': int|'max'} dicts
-        placed: List of (pad_size, cx, cy, r) tuples from _nest_discs
-
-    Returns:
-        List of {'size': float, 'qty': int} for unplaced pads (excludes 'max' qty)
-    """
-    # Count what was placed by size
-    placed_counts = {}
-    for pad_size, cx, cy, r in placed:
-        placed_counts[pad_size] = placed_counts.get(pad_size, 0) + 1
-
-    # Subtract from original (only fixed-qty pads, not 'max')
-    remaining = []
-    for pad in original_pads:
-        if pad['qty'] == 'max':
-            continue  # Max pads don't carry over between scraps
-
-        size = pad['size']
-        original_qty = pad['qty']
-        placed_qty = placed_counts.get(size, 0)
-
-        # Calculate remaining for this size
-        remaining_qty = original_qty - placed_qty
-
-        if remaining_qty > 0:
-            remaining.append({'size': size, 'qty': remaining_qty})
-
-        # Reduce placed_counts so we don't double-count
-        if placed_qty > 0:
-            placed_counts[size] = max(0, placed_qty - original_qty)
-
-    return remaining
-
-
-def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None):
-    """
-    Attempt to place as many pads as possible, return placed and remaining.
-
-    This is the main entry point for scrap mode - it tries to fit pads on a scrap
-    and returns both what was placed and what's left for the next scrap.
-
-    Args:
-        pads: List of {'size': float, 'qty': int|'max'} dicts
-        material: Material type string
-        width_mm, height_mm: Scrap dimensions in mm
-        settings: App settings dict
-        polygon: Optional polygon coordinates for irregular shapes
-
-    Returns:
-        (placed, remaining_pads, any_placed)
-        - placed: [(pad_size, cx, cy, r), ...] - what was placed
-        - remaining_pads: [{'size': float, 'qty': int}, ...] - what's left
-        - any_placed: bool - True if at least one pad was placed
-    """
-    placed, fixed_placed, fixed_total = _nest_discs(
-        pads, material, width_mm, height_mm, settings, polygon=polygon
-    )
-    remaining = compute_remaining_pads(pads, placed)
-    any_placed = len(placed) > 0
-    return placed, remaining, any_placed
-
-
-def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
-    """
-    Generate SVG from pre-computed placed discs.
-
-    This is used by scrap mode where nesting is done separately via try_nest_partial().
-    The function draws all the placed discs without re-running the nesting algorithm.
-
-    Args:
-        placed: List of (pad_size, cx, cy, r) tuples
-        material: Material type string
-        width_mm, height_mm: Sheet dimensions in mm
-        filename: Output file path
-        hole_dia_preset: Hole diameter setting
-        settings: App settings dict
-        polygon: Optional (unused, for API consistency)
-    """
-    compatibility_mode = settings.get("compatibility_mode", False)
-
-    if compatibility_mode:
-        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}")
-        stroke_w = 0.1
-    else:
-        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}", profile='tiny')
-        stroke_w = '0.1mm'
-
+def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w):
+    """Render placed discs (outlines, holes, engravings) into an SVG drawing."""
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
 
     for pad_size, cx, cy, r in placed:
@@ -848,4 +632,113 @@ def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, ho
                                  font_size=f"{font_size}mm",
                                  fill=layer_colors[f'{material}_engraving']))
 
+
+def _create_svg_drawing(filename, width_mm, height_mm, settings):
+    """Create an SVG drawing with the correct settings."""
+    compatibility_mode = settings.get("compatibility_mode", False)
+    if compatibility_mode:
+        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}")
+        stroke_w = 0.1
+    else:
+        dwg = svgwrite.Drawing(filename, size=(f"{width_mm}mm", f"{height_mm}mm"), viewBox=f"0 0 {width_mm} {height_mm}", profile='tiny')
+        stroke_w = '0.1mm'
+    return dwg, compatibility_mode, stroke_w
+
+
+def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
+    placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
+    dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+    _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w)
+    dwg.save()
+
+
+# ==========================================
+# SCRAP MODE HELPERS
+# ==========================================
+
+def compute_remaining_pads(original_pads, placed):
+    """
+    Compute remaining pads after partial placement.
+
+    Args:
+        original_pads: List of {'size': float, 'qty': int|'max'} dicts
+        placed: List of (pad_size, cx, cy, r) tuples from _nest_discs
+
+    Returns:
+        List of {'size': float, 'qty': int} for unplaced pads (excludes 'max' qty)
+    """
+    # Count what was placed by size
+    placed_counts = {}
+    for pad_size, cx, cy, r in placed:
+        placed_counts[pad_size] = placed_counts.get(pad_size, 0) + 1
+
+    # Subtract from original (only fixed-qty pads, not 'max')
+    remaining = []
+    for pad in original_pads:
+        if pad['qty'] == 'max':
+            continue  # Max pads don't carry over between scraps
+
+        size = pad['size']
+        original_qty = pad['qty']
+        placed_qty = placed_counts.get(size, 0)
+
+        # Calculate remaining for this size
+        remaining_qty = original_qty - placed_qty
+
+        if remaining_qty > 0:
+            remaining.append({'size': size, 'qty': remaining_qty})
+
+        # Reduce placed_counts so we don't double-count
+        if placed_qty > 0:
+            placed_counts[size] = max(0, placed_qty - original_qty)
+
+    return remaining
+
+
+def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None):
+    """
+    Attempt to place as many pads as possible, return placed and remaining.
+
+    This is the main entry point for scrap mode - it tries to fit pads on a scrap
+    and returns both what was placed and what's left for the next scrap.
+
+    Args:
+        pads: List of {'size': float, 'qty': int|'max'} dicts
+        material: Material type string
+        width_mm, height_mm: Scrap dimensions in mm
+        settings: App settings dict
+        polygon: Optional polygon coordinates for irregular shapes
+
+    Returns:
+        (placed, remaining_pads, any_placed)
+        - placed: [(pad_size, cx, cy, r), ...] - what was placed
+        - remaining_pads: [{'size': float, 'qty': int}, ...] - what's left
+        - any_placed: bool - True if at least one pad was placed
+    """
+    placed, fixed_placed, fixed_total = _nest_discs(
+        pads, material, width_mm, height_mm, settings, polygon=polygon
+    )
+    remaining = compute_remaining_pads(pads, placed)
+    any_placed = len(placed) > 0
+    return placed, remaining, any_placed
+
+
+def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
+    """
+    Generate SVG from pre-computed placed discs.
+
+    This is used by scrap mode where nesting is done separately via try_nest_partial().
+    The function draws all the placed discs without re-running the nesting algorithm.
+
+    Args:
+        placed: List of (pad_size, cx, cy, r) tuples
+        material: Material type string
+        width_mm, height_mm: Sheet dimensions in mm
+        filename: Output file path
+        hole_dia_preset: Hole diameter setting
+        settings: App settings dict
+        polygon: Optional (unused, for API consistency)
+    """
+    dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+    _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w)
     dwg.save()
