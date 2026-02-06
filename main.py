@@ -37,6 +37,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.default_bg = "#FFFDD0"
         self.root.configure(bg=self.default_bg)
 
+        # Force black text everywhere so the app is readable on macOS dark mode
+        # (which otherwise defaults to white text on our light backgrounds)
+        self.root.option_add("*foreground", "black")
+        self.root.option_add("*Text.foreground", "black")
+
         self.settings = load_settings()
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
@@ -115,6 +120,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             pass
         
         style = ttk.Style()
+        style.configure('.', foreground='black')
         style.configure('App.TFrame', background=color)
         style.map('TNotebook.Tab', background=[('selected', color), ('!selected', color)], foreground=[('selected', 'black')])
         style.configure('TNotebook', background=color)
