@@ -538,7 +538,7 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 
     Args:
         pads: List of pad dictionaries with 'size' and 'qty' keys
-        material: Material type ('felt', 'card', 'leather', 'leather_topgrain')
+        material: Material type ('felt', 'card', 'leather')
         sheet_width_mm, sheet_height_mm: Sheet dimensions in mm
         filename: Output filename
         hole_dia: Center hole diameter in mm (0 for no hole)
@@ -559,7 +559,7 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 
 def can_generate_gcode(material):
     """Check if G-code generation is supported for a material."""
-    return material in ('felt', 'card', 'leather', 'leather_topgrain')
+    return material in ('felt', 'card', 'leather')
 
 
 def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
@@ -572,7 +572,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
     Args:
         placed: List of (pad_size, cx, cy, radius) tuples from nesting
-        material: Material type ('felt', 'card', 'leather', 'leather_topgrain')
+        material: Material type ('felt', 'card', 'leather')
         sheet_width_mm, sheet_height_mm: Sheet dimensions in mm
         filename: Output filename
         hole_dia: Center hole diameter in mm (0 for no hole)
@@ -622,7 +622,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     all_y = []
 
     # Check if this material uses star patterns
-    use_stars = material in ('leather', 'leather_topgrain') and settings.get("darts_enabled", True)
+    use_stars = material == 'leather' and settings.get("darts_enabled", True)
     dart_threshold = settings.get("dart_threshold", 18.0)
 
     for pad_size, cx, cy, radius in placed:
@@ -724,7 +724,6 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         'felt': ('C10', 'C09', 'C00'),
         'card': ('C15', 'C14', 'C01'),
         'leather': ('C05', 'C03', 'C02'),
-        'leather_topgrain': ('C05', 'C03', 'C02'),
     }
     eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
 

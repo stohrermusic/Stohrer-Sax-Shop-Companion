@@ -219,19 +219,6 @@ DEFAULT_SETTINGS = {
             "cut_power": 75,
             "kerf_width": 0.3,
         },
-        "leather_topgrain": {
-            "engraving_mode": "line",
-            "engraving_speed": 2200,
-            "engraving_power": 5,
-            "filled_engraving_speed": 1800,
-            "filled_engraving_power": 8,
-            "filled_line_spacing": 0.15,
-            "hole_speed": 300,
-            "hole_power": 30,
-            "cut_speed": 1200,
-            "cut_power": 75,
-            "kerf_width": 0.3,
-        },
     },
 
     # SD CARD SETTINGS

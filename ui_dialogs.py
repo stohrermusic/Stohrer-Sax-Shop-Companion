@@ -1413,9 +1413,6 @@ class GcodeSettingsWindow:
                                      parent=self.top)
                 return
 
-        # Copy leather settings to leather_topgrain
-        new_gcode_settings["leather_topgrain"] = dict(new_gcode_settings["leather"])
-
         self.settings["gcode_settings"] = new_gcode_settings
         self.save_callback(self.settings)
 
