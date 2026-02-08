@@ -1200,7 +1200,7 @@ class GcodeSettingsWindow:
 
         tk.Label(header_frame, text="Note: Power uses Grbl's S0-S1000 scale. If power seems wrong, check that "
                  "your machine's $30 setting is 1000 (run \"$30=1000\" in your console).",
-                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666", wraplength=500, justify="left").pack(anchor="w", pady=(5, 0))
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666", wraplength=420, justify="left").pack(anchor="w", pady=(5, 0))
 
         # Main content with scrollable frame
         main_canvas_frame = tk.Frame(self.top)
@@ -1222,6 +1222,20 @@ class GcodeSettingsWindow:
         # Create material sections
         for mat_key, mat_label in self.MATERIALS:
             self._create_material_section(scrollable_frame, mat_key, mat_label)
+
+        # "Filled" engraving overscan option
+        overscan_frame = tk.Frame(scrollable_frame, bg=DIALOG_BG)
+        overscan_frame.pack(fill="x", padx=5, pady=(5, 0))
+
+        self.overscan_var = tk.BooleanVar(value=self.settings.get("filled_overscan_enabled", False))
+        tk.Checkbutton(overscan_frame,
+                        text='"Filled" engraving overscan optimization',
+                        variable=self.overscan_var, bg=DIALOG_BG,
+                        ).pack(anchor="w", padx=5)
+        tk.Label(overscan_frame,
+                 text="(extends scan lines so laser is at full speed at character edges)",
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666"
+                 ).pack(anchor="w", padx=(28, 5))
 
         # Buttons
         button_frame = tk.Frame(self.top, bg=DIALOG_BG)
@@ -1414,6 +1428,7 @@ class GcodeSettingsWindow:
                 return
 
         self.settings["gcode_settings"] = new_gcode_settings
+        self.settings["filled_overscan_enabled"] = self.overscan_var.get()
         self.save_callback(self.settings)
 
         self.top.destroy()
@@ -1452,3 +1467,6 @@ class GcodeSettingsWindow:
             # Reset kerf width
             default_kerf = mat_defaults.get("kerf_width", 0.0)
             self.vars[mat_key]['kerf_width'].set(default_kerf)
+
+        # Reset overscan
+        self.overscan_var.set(DEFAULT_SETTINGS.get("filled_overscan_enabled", False))

@@ -221,6 +221,10 @@ DEFAULT_SETTINGS = {
         },
     },
 
+    # FILLED ENGRAVING OPTIONS
+    "filled_overscan_enabled": False,  # Extend scan lines beyond character edges for consistent power
+    "filled_overscan_mm": 1.5,        # Distance in mm to extend on each side
+
     # SD CARD SETTINGS
     "sd_card_path": "",  # Last used SD card path for "Send to SD Card" feature
 

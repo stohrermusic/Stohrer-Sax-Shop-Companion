@@ -479,7 +479,7 @@ def generate_gcode_footer():
     return lines
 
 
-def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name):
+def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overscan_mm=0):
     """
     Generate G-code for a layer (set of strokes).
 
@@ -488,6 +488,9 @@ def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name):
         speed_mm_min: Feed rate in mm/min
         power_percent: Laser power as percentage (0-100)
         layer_name: Layer name for comment
+        overscan_mm: If > 0, extend horizontal 2-point scan lines by this amount
+                     on each side with laser off, so the head is at full speed
+                     when it reaches the actual fill area.
 
     Returns:
         List of G-code lines
@@ -510,21 +513,47 @@ def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name):
         if len(stroke) < 2:
             continue
 
-        # Rapid move to start of stroke
-        x0, y0 = stroke[0]
-        lines.append(f"G0 X{x0:.3f}Y{y0:.3f}")
+        # Check if this is a horizontal scan line eligible for overscan
+        is_scanline = (overscan_mm > 0 and len(stroke) == 2
+                       and abs(stroke[0][1] - stroke[1][1]) < 0.001)
 
-        if first_move:
-            lines.append(f"; Layer {layer_name}")
-            first_move = False
-
-        # Cut moves
-        for i, (x, y) in enumerate(stroke[1:], 1):
-            if i == 1:
-                # First cut move includes S and F parameters
-                lines.append(f"G1 X{x:.3f}Y{y:.3f}S{s_value}F{speed_mm_min}")
+        if is_scanline:
+            x0, y0 = stroke[0]
+            x1, y1 = stroke[1]
+            # Determine scan direction and extend
+            if x1 > x0:
+                approach_x = x0 - overscan_mm
+                exit_x = x1 + overscan_mm
             else:
-                lines.append(f"G1 X{x:.3f}Y{y:.3f}")
+                approach_x = x0 + overscan_mm
+                exit_x = x1 - overscan_mm
+
+            # Rapid to overscan start
+            lines.append(f"G0 X{approach_x:.3f}Y{y0:.3f}")
+            if first_move:
+                lines.append(f"; Layer {layer_name}")
+                first_move = False
+            # Approach at engrave speed, laser off
+            lines.append(f"G1 X{x0:.3f}Y{y0:.3f}S0F{speed_mm_min}")
+            # Engrave through fill area, laser on
+            lines.append(f"G1 X{x1:.3f}S{s_value}")
+            # Exit overscan, laser off
+            lines.append(f"G1 X{exit_x:.3f}S0")
+        else:
+            # Standard stroke: rapid to start, then cut
+            x0, y0 = stroke[0]
+            lines.append(f"G0 X{x0:.3f}Y{y0:.3f}")
+
+            if first_move:
+                lines.append(f"; Layer {layer_name}")
+                first_move = False
+
+            # Cut moves
+            for i, (x, y) in enumerate(stroke[1:], 1):
+                if i == 1:
+                    lines.append(f"G1 X{x:.3f}Y{y:.3f}S{s_value}F{speed_mm_min}")
+                else:
+                    lines.append(f"G1 X{x:.3f}Y{y:.3f}")
 
     return lines
 
@@ -599,6 +628,11 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     else:
         engraving_speed = mat_settings.get("engraving_speed", 1500)
         engraving_power = mat_settings.get("engraving_power", 10)
+
+    # Overscan: extend filled scan lines so the head is at speed at the character edge
+    overscan_mm = 0
+    if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
     hole_speed = mat_settings.get("hole_speed", 400)
     hole_power = mat_settings.get("hole_power", 25)
     cut_speed = mat_settings.get("cut_speed", 900)
@@ -728,7 +762,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
 
     if engraving_strokes:
-        gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer))
+        gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer,
+                                                 overscan_mm=overscan_mm))
 
     if hole_strokes:
         gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer))
