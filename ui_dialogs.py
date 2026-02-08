@@ -1162,8 +1162,8 @@ class GcodeSettingsWindow:
         ("leather", "Leather"),
     ]
 
+    # Non-engraving operations (engraving is handled separately with mode toggle)
     OPERATIONS = [
-        ("engraving", "Engraving"),
         ("hole", "Center Hole"),
         ("cut", "Outer Cut"),
     ]
@@ -1231,6 +1231,13 @@ class GcodeSettingsWindow:
         tk.Button(button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
         tk.Button(button_frame, text="Reset to Defaults", command=self._reset_defaults).pack(side="right", padx=5)
 
+    def _on_engraving_mode_changed(self, mat_key, mode):
+        """Handle engraving mode checkbox toggle - ensure exactly one is checked."""
+        if mode == "line":
+            self.vars[mat_key]['engraving_mode'].set("line")
+        else:
+            self.vars[mat_key]['engraving_mode'].set("filled")
+
     def _create_material_section(self, parent, mat_key, mat_label):
         """Create a settings section for one material."""
         frame = tk.LabelFrame(parent, text=mat_label, bg=DIALOG_BG, padx=10, pady=10)
@@ -1246,14 +1253,77 @@ class GcodeSettingsWindow:
         tk.Label(frame, text="Speed (mm/min)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=1, padx=5)
         tk.Label(frame, text="Power (%)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=2, padx=5)
 
-        for i, (op_key, op_label) in enumerate(self.OPERATIONS, start=1):
+        # --- Engraving mode section (rows 1-2) ---
+        current_mode = mat_settings.get("engraving_mode", "line")
+        mode_var = tk.StringVar(value=current_mode)
+        self.vars[mat_key]['engraving_mode'] = mode_var
+
+        # Line engraving row
+        self.vars[mat_key]['engraving'] = {}
+        default_eng_speed = self._get_default(mat_key, "engraving_speed")
+        default_eng_power = self._get_default(mat_key, "engraving_power")
+        current_eng_speed = mat_settings.get("engraving_speed", default_eng_speed)
+        current_eng_power = mat_settings.get("engraving_power", default_eng_power)
+
+        eng_speed_var = tk.IntVar(value=int(current_eng_speed))
+        eng_power_var = tk.DoubleVar(value=current_eng_power)
+        self.vars[mat_key]['engraving']['speed'] = eng_speed_var
+        self.vars[mat_key]['engraving']['power'] = eng_power_var
+
+        line_rb = tk.Radiobutton(frame, text="Engraving (Line)", bg=DIALOG_BG,
+                                 variable=mode_var, value="line",
+                                 command=lambda mk=mat_key: self._on_engraving_mode_changed(mk, "line"))
+        line_rb.grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        tk.Entry(frame, textvariable=eng_speed_var, width=10).grid(row=1, column=1, padx=5, pady=2)
+        tk.Entry(frame, textvariable=eng_power_var, width=10).grid(row=1, column=2, padx=5, pady=2)
+
+        # "Filled" engraving row
+        self.vars[mat_key]['filled_engraving'] = {}
+        default_fill_speed = self._get_default(mat_key, "filled_engraving_speed")
+        default_fill_power = self._get_default(mat_key, "filled_engraving_power")
+        current_fill_speed = mat_settings.get("filled_engraving_speed", default_fill_speed)
+        current_fill_power = mat_settings.get("filled_engraving_power", default_fill_power)
+
+        fill_speed_var = tk.IntVar(value=int(current_fill_speed))
+        fill_power_var = tk.DoubleVar(value=current_fill_power)
+        self.vars[mat_key]['filled_engraving']['speed'] = fill_speed_var
+        self.vars[mat_key]['filled_engraving']['power'] = fill_power_var
+
+        fill_rb = tk.Radiobutton(frame, text='Engraving ("Filled")', bg=DIALOG_BG,
+                                 variable=mode_var, value="filled",
+                                 command=lambda mk=mat_key: self._on_engraving_mode_changed(mk, "filled"))
+        fill_rb.grid(row=2, column=0, sticky="w", padx=5, pady=2)
+        tk.Entry(frame, textvariable=fill_speed_var, width=10).grid(row=2, column=1, padx=5, pady=2)
+        tk.Entry(frame, textvariable=fill_power_var, width=10).grid(row=2, column=2, padx=5, pady=2)
+
+        # Fill density slider (row 3)
+        default_spacing = self._get_default(mat_key, "filled_line_spacing")
+        current_spacing = mat_settings.get("filled_line_spacing", default_spacing)
+        # Map line spacing to density: less=0.3mm, more=0.08mm
+        # Slider value 0-100, density = 0.3 - (slider/100) * 0.22
+        density_val = int((0.3 - current_spacing) / 0.22 * 100)
+        density_val = max(0, min(100, density_val))
+        density_var = tk.IntVar(value=density_val)
+        self.vars[mat_key]['fill_density'] = density_var
+
+        density_frame = tk.Frame(frame, bg=DIALOG_BG)
+        density_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 4))
+        tk.Label(density_frame, text="Fill density:", bg=DIALOG_BG,
+                 font=("Helvetica", 8)).pack(side="left", padx=(20, 5))
+        tk.Label(density_frame, text="less", bg=DIALOG_BG,
+                 font=("Helvetica", 8), fg="#666666").pack(side="left")
+        tk.Scale(density_frame, from_=0, to=100, orient="horizontal",
+                 variable=density_var, showvalue=False, length=150,
+                 bg=DIALOG_BG, highlightthickness=0).pack(side="left", padx=2)
+        tk.Label(density_frame, text="more", bg=DIALOG_BG,
+                 font=("Helvetica", 8), fg="#666666").pack(side="left")
+
+        # --- Non-engraving operations (rows 4+) ---
+        for i, (op_key, op_label) in enumerate(self.OPERATIONS, start=4):
             self.vars[mat_key][op_key] = {}
 
-            # Get defaults from DEFAULT_SETTINGS
             default_speed = self._get_default(mat_key, f"{op_key}_speed")
             default_power = self._get_default(mat_key, f"{op_key}_power")
-
-            # Current values
             current_speed = mat_settings.get(f"{op_key}_speed", default_speed)
             current_power = mat_settings.get(f"{op_key}_power", default_power)
 
@@ -1267,8 +1337,8 @@ class GcodeSettingsWindow:
             tk.Entry(frame, textvariable=speed_var, width=10).grid(row=i, column=1, padx=5, pady=2)
             tk.Entry(frame, textvariable=power_var, width=10).grid(row=i, column=2, padx=5, pady=2)
 
-        # Kerf width row (after operations)
-        kerf_row = len(self.OPERATIONS) + 1
+        # Kerf width row
+        kerf_row = 4 + len(self.OPERATIONS)
         tk.Label(frame, text="Kerf width:", bg=DIALOG_BG).grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
 
         default_kerf = self._get_default(mat_key, "kerf_width")
@@ -1288,11 +1358,40 @@ class GcodeSettingsWindow:
 
     def _on_save(self):
         """Save settings and close."""
-        # Build gcode_settings dict from variables
         new_gcode_settings = {}
 
         for mat_key, _ in self.MATERIALS:
             new_gcode_settings[mat_key] = {}
+
+            # Engraving mode
+            new_gcode_settings[mat_key]["engraving_mode"] = self.vars[mat_key]['engraving_mode'].get()
+
+            # Line engraving speed/power
+            try:
+                new_gcode_settings[mat_key]["engraving_speed"] = self.vars[mat_key]['engraving']['speed'].get()
+                new_gcode_settings[mat_key]["engraving_power"] = self.vars[mat_key]['engraving']['power'].get()
+            except tk.TclError:
+                messagebox.showerror("Invalid Input",
+                                     f"Invalid value for {mat_key} line engraving. Please enter valid numbers.",
+                                     parent=self.top)
+                return
+
+            # "Filled" engraving speed/power
+            try:
+                new_gcode_settings[mat_key]["filled_engraving_speed"] = self.vars[mat_key]['filled_engraving']['speed'].get()
+                new_gcode_settings[mat_key]["filled_engraving_power"] = self.vars[mat_key]['filled_engraving']['power'].get()
+            except tk.TclError:
+                messagebox.showerror("Invalid Input",
+                                     f"Invalid value for {mat_key} filled engraving. Please enter valid numbers.",
+                                     parent=self.top)
+                return
+
+            # Fill density slider -> line spacing
+            density_val = self.vars[mat_key]['fill_density'].get()
+            line_spacing = 0.3 - (density_val / 100) * 0.22
+            new_gcode_settings[mat_key]["filled_line_spacing"] = round(line_spacing, 3)
+
+            # Other operations (hole, cut)
             for op_key, _ in self.OPERATIONS:
                 try:
                     speed = self.vars[mat_key][op_key]['speed'].get()
@@ -1305,7 +1404,7 @@ class GcodeSettingsWindow:
                                          parent=self.top)
                     return
 
-            # Save kerf width per material
+            # Kerf width
             try:
                 new_gcode_settings[mat_key]["kerf_width"] = self.vars[mat_key]['kerf_width'].get()
             except tk.TclError:
@@ -1314,10 +1413,9 @@ class GcodeSettingsWindow:
                                      parent=self.top)
                 return
 
-        # Also copy leather settings to leather_topgrain
+        # Copy leather settings to leather_topgrain
         new_gcode_settings["leather_topgrain"] = dict(new_gcode_settings["leather"])
 
-        # Update settings
         self.settings["gcode_settings"] = new_gcode_settings
         self.save_callback(self.settings)
 
@@ -1329,12 +1427,31 @@ class GcodeSettingsWindow:
 
         for mat_key, _ in self.MATERIALS:
             mat_defaults = default_gcode.get(mat_key, {})
+
+            # Reset engraving mode
+            self.vars[mat_key]['engraving_mode'].set(mat_defaults.get("engraving_mode", "line"))
+
+            # Reset line engraving
+            self.vars[mat_key]['engraving']['speed'].set(mat_defaults.get("engraving_speed", 1200))
+            self.vars[mat_key]['engraving']['power'].set(mat_defaults.get("engraving_power", 8))
+
+            # Reset filled engraving
+            self.vars[mat_key]['filled_engraving']['speed'].set(mat_defaults.get("filled_engraving_speed", 1000))
+            self.vars[mat_key]['filled_engraving']['power'].set(mat_defaults.get("filled_engraving_power", 12))
+
+            # Reset fill density
+            default_spacing = mat_defaults.get("filled_line_spacing", 0.15)
+            density_val = int((0.3 - default_spacing) / 0.22 * 100)
+            density_val = max(0, min(100, density_val))
+            self.vars[mat_key]['fill_density'].set(density_val)
+
+            # Reset other operations
             for op_key, _ in self.OPERATIONS:
                 default_speed = mat_defaults.get(f"{op_key}_speed", 100)
                 default_power = mat_defaults.get(f"{op_key}_power", 10)
                 self.vars[mat_key][op_key]['speed'].set(default_speed)
                 self.vars[mat_key][op_key]['power'].set(default_power)
 
-            # Reset kerf width per material
+            # Reset kerf width
             default_kerf = mat_defaults.get("kerf_width", 0.0)
             self.vars[mat_key]['kerf_width'].set(default_kerf)

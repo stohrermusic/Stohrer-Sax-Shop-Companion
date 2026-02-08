@@ -92,6 +92,8 @@ build.py               → Cross-platform PyInstaller build script
 
 **Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs.py handles platform-specific scroll behavior (Windows/macOS/Linux).
 
+**macOS Theming**: On macOS (`IS_MACOS` flag in main.py and ui_dialogs.py), the app uses native system colors instead of custom cream/beige backgrounds. This allows the app to work correctly in both macOS dark and light mode. The `DIALOG_BG` constant in ui_dialogs.py resolves to `"systemWindowBackgroundColor"` on macOS (a Tk system color that adapts to dark/light mode) and `"#F0EAD6"` on Windows/Linux. The resonance theme system is disabled on macOS. When adding new UI widgets, use `DIALOG_BG` for dialog backgrounds and `self.root.cget('bg')` for main window widgets.
+
 ### Data Flow
 
 **Pad Generation**: User input → `parse_pad_list()` → `can_all_pads_fit()` check → `generate_svg()` or `generate_gcode()` → output files
@@ -103,6 +105,8 @@ build.py               → Cross-platform PyInstaller build script
 - Exact: pad_size unchanged
 
 **Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`. Supports both rectangular sheets and custom polygon shapes.
+
+**Shared Rendering Helpers**: SVG rendering is centralized in `_render_svg_discs()` and `_create_svg_drawing()` in svg_engine.py. Both `generate_svg()` and `generate_svg_from_placed()` call these. Similarly, `generate_gcode()` delegates to `generate_gcode_from_placed()` after nesting, so all G-code disc rendering logic lives in one place.
 
 **Coordinate Systems**: SVG uses Y=0 at top (Y increases downward), while G-code uses Y=0 at bottom (Y increases upward). The `gcode_engine.py` functions flip Y coordinates (`sheet_height_mm - cy`) to ensure G-code output matches the SVG preview.
 
@@ -133,6 +137,17 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `pad_presets.json` - Saved pad size lists
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
+
+## Web Data Sync ("Import Matt's")
+
+The app can fetch reference data from https://www.stohrermusic.com:
+
+- **Screw Specs**: File > "Import Matt's Specs" fetches `/data/screw_specs.json` and imports each model with a "(Matt's)" suffix to avoid overwriting local entries.
+- **Key Heights**: File > "Import Matt's Key Heights" fetches `/data/key_height_library.json` and imports all presets into a dedicated "Matt's Library".
+
+Both use `urllib.request` (stdlib) with a 10-second timeout. The JSON formats on the website match the app's internal format exactly, so no conversion is needed.
+
+When adding new data to the website, update the JSON files in `C:\code\stohrermusic\static\data\` and push to deploy. App users can then re-import to get the latest.
 
 ## Screw Specs Submission Form
 

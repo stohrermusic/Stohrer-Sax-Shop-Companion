@@ -181,17 +181,25 @@ DEFAULT_SETTINGS = {
     "gcode_output_enabled": False,  # When True, generate G-code files alongside SVGs
     "gcode_settings": {
         "felt": {
-            "engraving_speed": 1200,   # mm/min
-            "engraving_power": 8,      # percent
-            "hole_speed": 300,         # mm/min
-            "hole_power": 35,          # percent
-            "cut_speed": 600,          # mm/min
-            "cut_power": 60,           # percent
-            "kerf_width": 0.5,         # mm (0 = no compensation)
+            "engraving_mode": "line",          # "line" or "filled"
+            "engraving_speed": 1200,           # mm/min (line mode)
+            "engraving_power": 8,              # percent (line mode)
+            "filled_engraving_speed": 1000,    # mm/min ("filled" mode)
+            "filled_engraving_power": 12,      # percent ("filled" mode)
+            "filled_line_spacing": 0.15,       # mm between scan lines
+            "hole_speed": 300,
+            "hole_power": 35,
+            "cut_speed": 600,
+            "cut_power": 60,
+            "kerf_width": 0.5,
         },
         "card": {
+            "engraving_mode": "line",
             "engraving_speed": 1500,
             "engraving_power": 10,
+            "filled_engraving_speed": 1200,
+            "filled_engraving_power": 15,
+            "filled_line_spacing": 0.15,
             "hole_speed": 400,
             "hole_power": 22.5,
             "cut_speed": 1500,
@@ -199,8 +207,12 @@ DEFAULT_SETTINGS = {
             "kerf_width": 0.2,
         },
         "leather": {
+            "engraving_mode": "line",
             "engraving_speed": 2200,
             "engraving_power": 5,
+            "filled_engraving_speed": 1800,
+            "filled_engraving_power": 8,
+            "filled_line_spacing": 0.15,
             "hole_speed": 300,
             "hole_power": 30,
             "cut_speed": 1200,
@@ -208,8 +220,12 @@ DEFAULT_SETTINGS = {
             "kerf_width": 0.3,
         },
         "leather_topgrain": {
+            "engraving_mode": "line",
             "engraving_speed": 2200,
             "engraving_power": 5,
+            "filled_engraving_speed": 1800,
+            "filled_engraving_power": 8,
+            "filled_line_spacing": 0.15,
             "hole_speed": 300,
             "hole_power": 30,
             "cut_speed": 1200,
