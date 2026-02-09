@@ -43,6 +43,16 @@ python build.py --dmg
 #   Linux:   dist/StohrerSaxShopCompanion
 ```
 
+## Branching Strategy
+
+- **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
+- **`beta`**: Active development branch. New features land here first (e.g. filled engraving, air assist toggles, cut grouping). Always work on `beta` unless told otherwise.
+- CI builds trigger on push to `main`, `beta`, or `gamma`.
+
+## Versioning
+
+`APP_VERSION` and `APP_BUILD_DATE` are defined in `config.py`. Update both when preparing a release. The About dialog reads these constants via `ui_dialogs.py`.
+
 ## CI/CD (GitHub Actions)
 
 The `.github/workflows/build.yml` workflow automatically builds for all three platforms:
@@ -110,6 +120,8 @@ build.py               → Cross-platform PyInstaller build script
 
 **Coordinate Systems**: SVG uses Y=0 at top (Y increases downward), while G-code uses Y=0 at bottom (Y increases upward). The `gcode_engine.py` functions flip Y coordinates (`sheet_height_mm - cy`) to ensure G-code output matches the SVG preview.
 
+**G-code Engine Details**: `gcode_engine.py` contains two font systems: `STROKE_FONT` (single-stroke outlines for "line" engraving mode) and `FILLED_FONT` (Roboto glyph outlines for "filled" raster mode). Filled engraving uses scan-line fill with even-odd rule to convert font outlines into horizontal raster lines, with optional overscan (extending lines beyond character edges so the laser reaches full speed). `generate_gcode_from_placed()` is the main entry point — it supports two cut grouping modes ("layer": all engravings → all holes → all cuts; "pad": complete each disc before moving to the next) and per-layer air assist control (M8 on / M9 off). The internal `_collect_disc_strokes()` helper extracts per-disc stroke data for both modes.
+
 **Polygon Shape Tool**: Users can draw custom polygon shapes for irregular leather skins. Grid size adapts to unit setting: 15x15 inches (1" squares) or 40x40 cm (1cm squares). The polygon nesting algorithm (`_nest_discs_polygon()`) uses ray-casting for point-in-polygon checks and distance-to-edge calculations for circle fitting. The rectangle algorithm remains the fast path when no custom shape is defined.
 
 **Scrap Mode**: Allows users to place pads across multiple irregular scrap pieces instead of requiring one large sheet. Key components:
@@ -126,6 +138,13 @@ build.py               → Cross-platform PyInstaller build script
 - Opens a file picker to select the .gcode file to send
 - Copies the file and safely ejects the SD card (Windows only)
 - User can then physically remove the card and use the laser's built-in controls
+
+### Settings Backward Compatibility
+
+`load_settings()` in config.py does a two-level deep merge: top-level keys merge with defaults, and nested dicts (like `gcode_settings.felt`) also merge key-by-key. This means adding new keys to `DEFAULT_SETTINGS` works automatically for existing users — their old config file loads, and new keys get default values filled in. When adding new settings:
+- Top-level keys: just add to `DEFAULT_SETTINGS`, the merge handles it
+- Nested keys (e.g. inside `gcode_settings.felt`): also handled by the two-level merge
+- In engine code, still use `.get(key, default)` as a safety net for any settings read outside the merge path
 
 ### Preset/Library System
 
