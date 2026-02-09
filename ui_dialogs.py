@@ -6,7 +6,8 @@ import sys
 
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, RESONANCE_MESSAGES,
-    ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets
+    ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets,
+    APP_VERSION, APP_BUILD_DATE
 )
 
 # On macOS, use native system colors for dark/light mode support.
@@ -1237,6 +1238,28 @@ class GcodeSettingsWindow:
                  bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666"
                  ).pack(anchor="w", padx=(28, 5))
 
+        # --- Global G-code Settings ---
+        global_frame = tk.LabelFrame(scrollable_frame, text="Global Settings", bg=DIALOG_BG, padx=10, pady=10)
+        global_frame.pack(fill="x", padx=5, pady=(10, 0))
+
+        # Return-to-home speed
+        return_frame = tk.Frame(global_frame, bg=DIALOG_BG)
+        return_frame.pack(fill="x")
+        tk.Label(return_frame, text="Return-to-home speed:", bg=DIALOG_BG).pack(side="left")
+        self.return_speed_var = tk.IntVar(value=int(self.settings.get("gcode_return_speed", 1000)))
+        tk.Entry(return_frame, textvariable=self.return_speed_var, width=8).pack(side="left", padx=5)
+        tk.Label(return_frame, text="mm/min", bg=DIALOG_BG).pack(side="left")
+
+        # Cut grouping
+        grouping_frame = tk.Frame(global_frame, bg=DIALOG_BG)
+        grouping_frame.pack(fill="x", pady=(8, 0))
+        tk.Label(grouping_frame, text="Cut grouping:", bg=DIALOG_BG).pack(anchor="w")
+        self.grouping_var = tk.StringVar(value=self.settings.get("gcode_cut_grouping", "layer"))
+        tk.Radiobutton(grouping_frame, text="By layer (all engravings, then all holes, then all cuts)",
+                       variable=self.grouping_var, value="layer", bg=DIALOG_BG).pack(anchor="w", padx=(20, 0))
+        tk.Radiobutton(grouping_frame, text="By pad (engrave + hole + cut for each pad, then next)",
+                       variable=self.grouping_var, value="pad", bg=DIALOG_BG).pack(anchor="w", padx=(20, 0))
+
         # Buttons
         button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         button_frame.pack(fill="x", padx=10, pady=10)
@@ -1266,6 +1289,7 @@ class GcodeSettingsWindow:
         tk.Label(frame, text="Operation", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=0, sticky="w", padx=5)
         tk.Label(frame, text="Speed (mm/min)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=1, padx=5)
         tk.Label(frame, text="Power (%)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=2, padx=5)
+        tk.Label(frame, text="Air", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=3, padx=5)
 
         # --- Engraving mode section (rows 1-2) ---
         current_mode = mat_settings.get("engraving_mode", "line")
@@ -1291,6 +1315,10 @@ class GcodeSettingsWindow:
         tk.Entry(frame, textvariable=eng_speed_var, width=10).grid(row=1, column=1, padx=5, pady=2)
         tk.Entry(frame, textvariable=eng_power_var, width=10).grid(row=1, column=2, padx=5, pady=2)
 
+        air_eng_var = tk.BooleanVar(value=mat_settings.get("air_assist_engraving", True))
+        self.vars[mat_key]['air_assist_engraving'] = air_eng_var
+        tk.Checkbutton(frame, variable=air_eng_var, bg=DIALOG_BG).grid(row=1, column=3, padx=5, pady=2)
+
         # "Filled" engraving row
         self.vars[mat_key]['filled_engraving'] = {}
         default_fill_speed = self._get_default(mat_key, "filled_engraving_speed")
@@ -1309,6 +1337,10 @@ class GcodeSettingsWindow:
         fill_rb.grid(row=2, column=0, sticky="w", padx=5, pady=2)
         tk.Entry(frame, textvariable=fill_speed_var, width=10).grid(row=2, column=1, padx=5, pady=2)
         tk.Entry(frame, textvariable=fill_power_var, width=10).grid(row=2, column=2, padx=5, pady=2)
+
+        air_fill_var = tk.BooleanVar(value=mat_settings.get("air_assist_filled_engraving", True))
+        self.vars[mat_key]['air_assist_filled_engraving'] = air_fill_var
+        tk.Checkbutton(frame, variable=air_fill_var, bg=DIALOG_BG).grid(row=2, column=3, padx=5, pady=2)
 
         # Fill density slider (row 3)
         default_spacing = self._get_default(mat_key, "filled_line_spacing")
@@ -1350,6 +1382,10 @@ class GcodeSettingsWindow:
             tk.Label(frame, text=op_label, bg=DIALOG_BG).grid(row=i, column=0, sticky="w", padx=5, pady=2)
             tk.Entry(frame, textvariable=speed_var, width=10).grid(row=i, column=1, padx=5, pady=2)
             tk.Entry(frame, textvariable=power_var, width=10).grid(row=i, column=2, padx=5, pady=2)
+
+            air_var = tk.BooleanVar(value=mat_settings.get(f"air_assist_{op_key}", True))
+            self.vars[mat_key][f'air_assist_{op_key}'] = air_var
+            tk.Checkbutton(frame, variable=air_var, bg=DIALOG_BG).grid(row=i, column=3, padx=5, pady=2)
 
         # Kerf width row
         kerf_row = 4 + len(self.OPERATIONS)
@@ -1427,8 +1463,23 @@ class GcodeSettingsWindow:
                                      parent=self.top)
                 return
 
+            # Air assist toggles
+            new_gcode_settings[mat_key]["air_assist_engraving"] = self.vars[mat_key]['air_assist_engraving'].get()
+            new_gcode_settings[mat_key]["air_assist_filled_engraving"] = self.vars[mat_key]['air_assist_filled_engraving'].get()
+            new_gcode_settings[mat_key]["air_assist_hole"] = self.vars[mat_key]['air_assist_hole'].get()
+            new_gcode_settings[mat_key]["air_assist_cut"] = self.vars[mat_key]['air_assist_cut'].get()
+
         self.settings["gcode_settings"] = new_gcode_settings
         self.settings["filled_overscan_enabled"] = self.overscan_var.get()
+
+        # Global G-code settings
+        try:
+            self.settings["gcode_return_speed"] = self.return_speed_var.get()
+        except tk.TclError:
+            messagebox.showerror("Invalid Input", "Return speed must be a valid number.", parent=self.top)
+            return
+        self.settings["gcode_cut_grouping"] = self.grouping_var.get()
+
         self.save_callback(self.settings)
 
         self.top.destroy()
@@ -1468,5 +1519,195 @@ class GcodeSettingsWindow:
             default_kerf = mat_defaults.get("kerf_width", 0.0)
             self.vars[mat_key]['kerf_width'].set(default_kerf)
 
+            # Reset air assist
+            self.vars[mat_key]['air_assist_engraving'].set(mat_defaults.get("air_assist_engraving", True))
+            self.vars[mat_key]['air_assist_filled_engraving'].set(mat_defaults.get("air_assist_filled_engraving", True))
+            self.vars[mat_key]['air_assist_hole'].set(mat_defaults.get("air_assist_hole", True))
+            self.vars[mat_key]['air_assist_cut'].set(mat_defaults.get("air_assist_cut", True))
+
         # Reset overscan
         self.overscan_var.set(DEFAULT_SETTINGS.get("filled_overscan_enabled", False))
+
+        # Reset global settings
+        self.return_speed_var.set(DEFAULT_SETTINGS.get("gcode_return_speed", 1000))
+        self.grouping_var.set(DEFAULT_SETTINGS.get("gcode_cut_grouping", "layer"))
+
+
+# ==========================================
+# HELP / ABOUT DIALOGS
+# ==========================================
+
+class UserGuideWindow(tk.Toplevel):
+    """Scrollable window showing the user guide."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("User Guide")
+        self.geometry("620x700")
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+
+        # Scrollable text widget
+        text_frame = tk.Frame(self, bg=DIALOG_BG)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        self.text = tk.Text(text_frame, wrap="word", yscrollcommand=scrollbar.set,
+                            font=("Helvetica", 11), padx=15, pady=10)
+        self.text.pack(fill="both", expand=True)
+        scrollbar.config(command=self.text.yview)
+
+        # Configure tags
+        self.text.tag_configure("h1", font=("Helvetica", 16, "bold"), spacing3=6)
+        self.text.tag_configure("h2", font=("Helvetica", 13, "bold"), spacing1=12, spacing3=4)
+        self.text.tag_configure("body", font=("Helvetica", 11), spacing1=2)
+        self.text.tag_configure("bullet", font=("Helvetica", 11), lmargin1=20, lmargin2=35)
+
+        self._insert_content()
+        self.text.config(state="disabled")
+
+        # Close button
+        tk.Button(self, text="Close", command=self.destroy).pack(pady=10)
+
+    def _h1(self, text):
+        self.text.insert("end", text + "\n", "h1")
+
+    def _h2(self, text):
+        self.text.insert("end", text + "\n", "h2")
+
+    def _body(self, text):
+        self.text.insert("end", text + "\n", "body")
+
+    def _bullet(self, text):
+        self.text.insert("end", "  \u2022 " + text + "\n", "bullet")
+
+    def _blank(self):
+        self.text.insert("end", "\n")
+
+    def _insert_content(self):
+        self._h1("Stohrer Sax Shop Companion")
+        self._body("A tool for saxophone technicians: generate laser-cutting templates, "
+                    "record key heights, look up serial numbers, and reference screw specs.")
+        self._blank()
+
+        self._h2("Pad SVG / G-code Generator")
+        self._body("Enter pad sizes (e.g. \"42.0 x 3\") and select materials to generate "
+                    "laser-cutting files. Pads are automatically nested onto the sheet.")
+        self._bullet("Felt: disc diameter = pad size minus felt offset")
+        self._bullet("Card: further reduced by card-to-felt offset")
+        self._bullet("Leather: enlarged to wrap around felt, with star/dart pattern for small pads")
+        self._bullet("Exact Size: no offset applied")
+        self._bullet("\"max\" quantity (e.g. \"18.0 x max\"): fills remaining sheet space with that size. "
+                      "Only one \"max\" entry is allowed per sheet.")
+        self._blank()
+
+        self._h2("Materials & Sizing Rules")
+        self._body("Options > Sizing Rules configures how disc sizes are calculated from "
+                    "the pad size you enter. Each material has its own sizing rules:")
+        self._bullet("Felt Offset: how much smaller the felt disc is than the pad cup "
+                      "(e.g. 0.75mm means the felt disc is 0.75mm smaller in diameter)")
+        self._bullet("Card-to-Felt Offset: additional reduction for cardboard backing "
+                      "(added on top of the felt offset)")
+        self._bullet("Leather Wrap Multiplier: controls how much extra leather is added "
+                      "for wrapping around the felt (1.0 = standard wrap)")
+        self._bullet("Felt Thickness: the thickness of felt being used, affects leather "
+                      "wrap calculation")
+        self._bullet("Star/Dart Settings: for leather pads below the dart threshold, "
+                      "star or dart patterns are added so the leather can fold around the felt. "
+                      "Threshold, overwrap, frequency, and shape factor are all adjustable.")
+        self._bullet("Engraving Location: where the pad label is placed, specified as "
+                      "distance from inside or outside edge of the disc")
+        self._blank()
+
+        self._h2("G-code Settings")
+        self._body("Options > G-code Settings configures the laser parameters for each material.")
+        self._bullet("Speed & Power: set per operation (engraving, center hole, outer cut)")
+        self._bullet("Engraving Mode: \"Line\" (single-stroke outline) or \"Filled\" (scan-line raster fill)")
+        self._bullet("Fill Density: controls scan line spacing for filled engraving")
+        self._bullet("Overscan: extends filled scan lines so the laser is at full speed at character edges")
+        self._bullet("Kerf Width: enter the full kerf width of your laser beam. "
+                      "The app compensates correctly on each cut (expanding outer cuts, "
+                      "shrinking hole cuts). Note: LightBurn asks for half-kerf; here you "
+                      "enter the full measured width.")
+        self._bullet("Air Assist: per-layer toggle for air assist (M8 on / M9 off)")
+        self._bullet("Return Speed: how fast the head returns home after the job (slower avoids endstop issues)")
+        self._bullet("Cut Grouping: \"By layer\" does all engravings, then all holes, then all cuts; "
+                      "\"By pad\" completes each pad before moving to the next")
+        self._blank()
+
+        self._h2("Layer Colors")
+        self._body("Options > Layer Colors maps each operation to a LightBurn color layer (C00-C29). "
+                    "This only affects SVG output for use in LightBurn.")
+        self._blank()
+
+        self._h2("Custom Shapes")
+        self._body("\"Draw Custom Shape\" lets you define an irregular polygon (up to 8 points) for "
+                    "leather skins or scrap pieces. The nesting algorithm fits circles inside the polygon.")
+        self._blank()
+
+        self._h2("Scrap Mode")
+        self._body("Check \"Scrap Mode\" to place pads across multiple irregular pieces:")
+        self._bullet("Select exactly one material")
+        self._bullet("Set dimensions (or draw a shape) for the first scrap piece")
+        self._bullet("Generate - placed pads are saved, remaining are tracked")
+        self._bullet("Adjust dimensions for the next scrap and generate again")
+        self._bullet("Repeat until all pads are placed")
+        self._blank()
+
+        self._h2("Send to SD Card")
+        self._body("File > Send G-code to SD Card copies a .gcode file to your SD card "
+                    "and safely ejects it (Windows). Useful for laser cutters that read from SD cards.")
+        self._blank()
+
+        self._h2("Import / Export & Sharing")
+        self._body("Each data tab supports importing and exporting so you can share "
+                    "data with colleagues or back up your measurements:")
+        self._bullet("Pad Presets: File > Export/Import Pad Presets to share saved pad size lists")
+        self._bullet("Key Heights: File > Export/Import Key Heights to share measurement sets")
+        self._bullet("Screw Specs: File > Export/Import Screw Specs to share thread data")
+        self._bullet("All Settings: File > Import Settings from Folder copies all config "
+                      "files from another installation")
+        self._body("Exported files are standard JSON and can be emailed or shared via any method.")
+        self._blank()
+
+        self._h2("Key Height Library")
+        self._body("Record and compare key height measurements for different saxophones. "
+                    "Organize sets into libraries, import/export, and share with colleagues.")
+        self._bullet("Options > Layout Options controls which key fields are visible")
+        self._bullet("File > Import Matt's Key Heights downloads reference data from stohrermusic.com")
+        self._blank()
+
+        self._h2("Serial Lookup")
+        self._body("Look up saxophone serial number ranges by manufacturer to estimate year of production.")
+        self._blank()
+
+        self._h2("Screw Specs")
+        self._body("Reference database of screw thread specifications for different saxophone models.")
+        self._bullet("File > Import Matt's Specs downloads the latest data from stohrermusic.com")
+        self._bullet("Import/export to share specs with colleagues")
+
+
+class AboutDialog(tk.Toplevel):
+    """Simple About dialog."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("About")
+        self.geometry("380x220")
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        tk.Label(self, text="Stohrer Sax Shop Companion", bg=DIALOG_BG,
+                 font=("Helvetica", 14, "bold")).pack(pady=(20, 5))
+        tk.Label(self, text="by Matt Stohrer", bg=DIALOG_BG,
+                 font=("Helvetica", 11)).pack()
+        tk.Label(self, text=f"Version {APP_VERSION}  \u2022  Built {APP_BUILD_DATE}",
+                 bg=DIALOG_BG, font=("Helvetica", 9)).pack(pady=(2, 0))
+        tk.Label(self, text="Pad cutting, key heights, serial lookup,\nand screw specs for saxophone technicians.",
+                 bg=DIALOG_BG, font=("Helvetica", 10), justify="center").pack(pady=10)
+
+        tk.Button(self, text="OK", command=self.destroy, width=10).pack(pady=10)

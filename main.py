@@ -21,7 +21,8 @@ from ui_dialogs import (
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow,
-    PolygonDrawWindow, GcodeSettingsWindow
+    PolygonDrawWindow, GcodeSettingsWindow,
+    UserGuideWindow, AboutDialog
 )
 from library_features import LibraryFeaturesMixin
 
@@ -200,6 +201,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         screw_file_menu.add_separator()
         screw_file_menu.add_command(label="Exit", command=self.on_exit)
 
+        # --- Serial Lookup Menu (was empty) ---
+        self.serial_menu = tk.Menu(self.root)
+
+        # --- Add Help menu to all tab menus ---
+        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu):
+            help_menu = tk.Menu(menu, tearoff=0)
+            menu.add_cascade(label="Help", menu=help_menu)
+            help_menu.add_command(label="User Guide...", command=self.open_user_guide)
+            help_menu.add_separator()
+            help_menu.add_command(label="About", command=self.open_about)
 
     def on_tab_changed(self, event):
         current_tab = self.notebook.index(self.notebook.select())
@@ -208,7 +219,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         elif current_tab == 1:
             self.root.config(menu=self.key_menu)
         elif current_tab == 2:
-            self.root.config(menu=tk.Menu(self.root))  # Empty menu for serials
+            self.root.config(menu=self.serial_menu)
         elif current_tab == 3:
             self.root.config(menu=self.screw_menu)
 
@@ -1346,6 +1357,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
+
+    def open_user_guide(self):
+        UserGuideWindow(self.root)
+
+    def open_about(self):
+        AboutDialog(self.root)
 
     def on_send_to_sd_card(self):
         """Send a G-code file to the SD card, clearing old files and ejecting."""

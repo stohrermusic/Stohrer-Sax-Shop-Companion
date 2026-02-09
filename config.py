@@ -9,6 +9,8 @@ from tkinter import messagebox
 # ==========================================
 
 APP_NAME = "StohrerSaxShopCompanion"
+APP_VERSION = "1.6"
+APP_BUILD_DATE = "2026-02-09"
 
 def get_config_dir():
     """
@@ -192,6 +194,10 @@ DEFAULT_SETTINGS = {
             "cut_speed": 600,
             "cut_power": 60,
             "kerf_width": 0.5,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
         },
         "card": {
             "engraving_mode": "line",
@@ -205,6 +211,10 @@ DEFAULT_SETTINGS = {
             "cut_speed": 1500,
             "cut_power": 50,
             "kerf_width": 0.2,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
         },
         "leather": {
             "engraving_mode": "line",
@@ -218,12 +228,20 @@ DEFAULT_SETTINGS = {
             "cut_speed": 1200,
             "cut_power": 75,
             "kerf_width": 0.3,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
         },
     },
 
     # FILLED ENGRAVING OPTIONS
     "filled_overscan_enabled": False,  # Extend scan lines beyond character edges for consistent power
     "filled_overscan_mm": 1.5,        # Distance in mm to extend on each side
+
+    # GLOBAL G-CODE OPTIONS
+    "gcode_return_speed": 1000,  # mm/min for return-to-home move (0 = rapid G0)
+    "gcode_cut_grouping": "layer",  # "layer" (all engravings, then holes, then cuts) or "pad" (all ops per pad)
 
     # SD CARD SETTINGS
     "sd_card_path": "",  # Last used SD card path for "Send to SD Card" feature
@@ -295,8 +313,16 @@ def load_settings():
                 for key, default_value in DEFAULT_SETTINGS.items():
                     if key in loaded_settings:
                         if isinstance(default_value, dict):
-                            settings[key] = default_value.copy()
-                            settings[key].update(loaded_settings[key])
+                            settings[key] = {}
+                            for sub_key, sub_default in default_value.items():
+                                if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
+                                    # Two-level deep merge (e.g. gcode_settings.felt)
+                                    settings[key][sub_key] = sub_default.copy()
+                                    settings[key][sub_key].update(loaded_settings[key][sub_key])
+                                elif sub_key in loaded_settings[key]:
+                                    settings[key][sub_key] = loaded_settings[key][sub_key]
+                                else:
+                                    settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
                         else:
                             settings[key] = loaded_settings[key]
                 

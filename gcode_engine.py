@@ -465,21 +465,25 @@ def generate_gcode_header(bounds_min_x, bounds_min_y, bounds_max_x, bounds_max_y
     return lines
 
 
-def generate_gcode_footer():
-    """Generate G-code file footer."""
+def generate_gcode_footer(return_speed=1000):
+    """Generate G-code file footer.
+
+    Args:
+        return_speed: Feed rate in mm/min for the return-to-home move.
+    """
     lines = [
         "M9",
         "G1 S0",
         "M5",
         "G90",
         "; return to origin",
-        "G0 X0Y0",
+        f"G1 X0Y0 F{return_speed}",
         "M2",
     ]
     return lines
 
 
-def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overscan_mm=0):
+def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overscan_mm=0, air_assist=True):
     """
     Generate G-code for a layer (set of strokes).
 
@@ -491,6 +495,7 @@ def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overs
         overscan_mm: If > 0, extend horizontal 2-point scan lines by this amount
                      on each side with laser off, so the head is at full speed
                      when it reaches the actual fill area.
+        air_assist: If True, emit M8 (air on); if False, emit M9 (air off).
 
     Returns:
         List of G-code lines
@@ -502,7 +507,7 @@ def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overs
 
     # Layer header
     lines.append(f"; Cut @ {speed_mm_min} mm/min, {power_percent}% power")
-    lines.append("M8")
+    lines.append("M8" if air_assist else "M9")
 
     # Power value for S parameter (percentage * 10 for 0-1000 scale)
     s_value = int(power_percent * 10)
@@ -638,6 +643,18 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     cut_speed = mat_settings.get("cut_speed", 900)
     cut_power = mat_settings.get("cut_power", 35)
 
+    # Global G-code options
+    return_speed = settings.get("gcode_return_speed", 1000)
+    cut_grouping = settings.get("gcode_cut_grouping", "layer")
+
+    # Air assist per layer type
+    if engraving_mode == "filled":
+        air_assist_engraving = mat_settings.get("air_assist_filled_engraving", True)
+    else:
+        air_assist_engraving = mat_settings.get("air_assist_engraving", True)
+    air_assist_hole = mat_settings.get("air_assist_hole", True)
+    air_assist_cut = mat_settings.get("air_assist_cut", True)
+
     # Kerf compensation (applied to cuts, not engraving) - per material
     kerf_width = mat_settings.get("kerf_width", 0.0)
     kerf_offset = kerf_width / 2
@@ -645,11 +662,6 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     # Font size for engraving
     engraving_font_sizes = settings.get("engraving_font_size", {})
     font_size = engraving_font_sizes.get(material, 3.0)
-
-    # Collect strokes for each layer
-    engraving_strokes = []
-    hole_strokes = []
-    cut_strokes = []
 
     # Track bounds
     all_x = []
@@ -659,32 +671,33 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     use_stars = material == 'leather' and settings.get("darts_enabled", True)
     dart_threshold = settings.get("dart_threshold", 18.0)
 
-    for pad_size, cx, cy, radius in placed:
-        all_x.extend([cx - radius, cx + radius])
-        all_y.extend([cy - radius, cy + radius])
+    def _collect_disc_strokes(pad_size, cx, cy, radius):
+        """Collect engraving, hole, and cut strokes for a single disc."""
+        disc_eng = []
+        disc_hole = []
+        disc_cut = []
 
-        # Determine if this is a star/dart pad
         is_dart_pad = use_stars and pad_size < dart_threshold
 
         # Engraving
         should_engrave = False
-        engraving_settings = None
+        eng_settings = None
 
         if is_dart_pad:
             if settings.get("dart_engraving_on", True):
-                engraving_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
+                eng_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
                 should_engrave = True
         else:
             if settings.get("engraving_on", True):
-                engraving_settings = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
+                eng_settings = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
                 should_engrave = True
 
         if should_engrave and font_size >= radius * 0.8:
             should_engrave = False
 
         if should_engrave:
-            mode = engraving_settings.get('mode', 'centered')
-            value = engraving_settings.get('value', 0)
+            mode = eng_settings.get('mode', 'centered')
+            value = eng_settings.get('value', 0)
 
             if mode == 'from_outside':
                 engraving_y = cy - (radius - value)
@@ -704,7 +717,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
                 text_strokes = get_filled_text_strokes(text, font_size, cx, label_y, filled_line_spacing)
             else:
                 text_strokes = get_text_strokes(text, font_size, cx, label_y)
-            engraving_strokes.extend(text_strokes)
+            disc_eng.extend(text_strokes)
 
         # Center hole
         min_hole_size = settings.get("min_hole_size", 16.5)
@@ -712,7 +725,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             hole_radius = (hole_dia / 2) - kerf_offset
             if hole_radius > 0:
                 hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
-                hole_strokes.append(hole_points)
+                disc_hole.append(hole_points)
 
         # Outer cut - circle or star pattern
         if use_stars and pad_size < dart_threshold:
@@ -739,11 +752,18 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
             shape_factor = settings.get("dart_shape_factor", 0.0)
             star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
-            cut_strokes.append(star_points)
+            disc_cut.append(star_points)
         else:
             cut_radius = radius + kerf_offset
             cut_points = linearize_circle(cx, cy, cut_radius, segments=72)
-            cut_strokes.append(cut_points)
+            disc_cut.append(cut_points)
+
+        return disc_eng, disc_hole, disc_cut
+
+    # Compute bounds
+    for pad_size, cx, cy, radius in placed:
+        all_x.extend([cx - radius, cx + radius])
+        all_y.extend([cy - radius, cy + radius])
 
     # Generate G-code
     gcode_lines = []
@@ -761,17 +781,45 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     }
     eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
 
-    if engraving_strokes:
-        gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer,
-                                                 overscan_mm=overscan_mm))
+    if cut_grouping == "pad":
+        # Per-pad grouping: engrave + hole + cut for each disc
+        for pad_size, cx, cy, radius in placed:
+            disc_eng, disc_hole, disc_cut = _collect_disc_strokes(pad_size, cx, cy, radius)
 
-    if hole_strokes:
-        gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer))
+            if disc_eng:
+                gcode_lines.extend(generate_gcode_layer(disc_eng, engraving_speed, engraving_power, eng_layer,
+                                                         overscan_mm=overscan_mm, air_assist=air_assist_engraving))
+            if disc_hole:
+                gcode_lines.extend(generate_gcode_layer(disc_hole, hole_speed, hole_power, hole_layer,
+                                                         air_assist=air_assist_hole))
+            if disc_cut:
+                gcode_lines.extend(generate_gcode_layer(disc_cut, cut_speed, cut_power, cut_layer,
+                                                         air_assist=air_assist_cut))
+    else:
+        # Layer grouping (default): all engravings, then all holes, then all cuts
+        engraving_strokes = []
+        hole_strokes = []
+        cut_strokes = []
 
-    if cut_strokes:
-        gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, cut_layer))
+        for pad_size, cx, cy, radius in placed:
+            disc_eng, disc_hole, disc_cut = _collect_disc_strokes(pad_size, cx, cy, radius)
+            engraving_strokes.extend(disc_eng)
+            hole_strokes.extend(disc_hole)
+            cut_strokes.extend(disc_cut)
 
-    gcode_lines.extend(generate_gcode_footer())
+        if engraving_strokes:
+            gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer,
+                                                     overscan_mm=overscan_mm, air_assist=air_assist_engraving))
+
+        if hole_strokes:
+            gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer,
+                                                     air_assist=air_assist_hole))
+
+        if cut_strokes:
+            gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, cut_layer,
+                                                     air_assist=air_assist_cut))
+
+    gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
 
     with open(filename, 'w') as f:
         f.write('\n'.join(gcode_lines))
