@@ -617,17 +617,38 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                 engraving_y = cy - offset_from_center
 
             vertical_adjust = font_size * 0.35
+            label_y = engraving_y + vertical_adjust
             text_content = f"{pad_size:.1f}".rstrip('0').rstrip('.')
+
+            # Auto-fit: check text bounding box corners against circle, scale if needed
+            min_clearance = 0.5
+            text_half_h = font_size / 2
+            text_half_w = sum(0.3 if c == '.' else 0.6 for c in text_content)
+            text_half_w += 0.1 * (len(text_content) - 1) if len(text_content) > 1 else 0
+            text_half_w = text_half_w * font_size / 2
+
+            # Check farthest corner of text bbox from disc center
+            corners = [(cx - text_half_w, label_y - text_half_h),
+                       (cx + text_half_w, label_y - text_half_h),
+                       (cx - text_half_w, label_y + text_half_h),
+                       (cx + text_half_w, label_y + text_half_h)]
+            max_dist = max(math.sqrt((px - cx)**2 + (py - cy)**2) for px, py in corners)
+
+            safe_radius = r - min_clearance
+            if max_dist > safe_radius > 0:
+                scale = safe_radius / max_dist
+                font_size = font_size * scale
+                label_y = cy + (label_y - cy) * scale
 
             if compatibility_mode:
                 dwg.add(dwg.text(text_content,
-                                 insert=(cx, engraving_y + vertical_adjust),
+                                 insert=(cx, label_y),
                                  text_anchor="middle",
                                  font_size=font_size,
                                  fill=layer_colors[f'{material}_engraving']))
             else:
                 dwg.add(dwg.text(text_content,
-                                 insert=(f"{cx}mm", f"{engraving_y + vertical_adjust}mm"),
+                                 insert=(f"{cx}mm", f"{label_y}mm"),
                                  text_anchor="middle",
                                  font_size=f"{font_size}mm",
                                  fill=layer_colors[f'{material}_engraving']))

@@ -719,10 +719,33 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             label_y = engraving_y + vertical_adjust
 
             text = f"{pad_size:.1f}".rstrip('0').rstrip('.')
+
+            # Auto-fit: generate strokes, check against circle, scale down if needed
+            min_clearance = 0.5  # mm from any stroke point to cut line
+            disc_font_size = font_size
             if engraving_mode == "filled":
-                text_strokes = get_filled_text_strokes(text, font_size, cx, label_y, filled_line_spacing)
+                text_strokes = get_filled_text_strokes(text, disc_font_size, cx, label_y, filled_line_spacing)
             else:
-                text_strokes = get_text_strokes(text, font_size, cx, label_y)
+                text_strokes = get_text_strokes(text, disc_font_size, cx, label_y)
+
+            # Find farthest stroke point from disc center
+            max_dist = 0
+            for stroke in text_strokes:
+                for px, py in stroke:
+                    dist = math.sqrt((px - cx)**2 + (py - cy)**2)
+                    if dist > max_dist:
+                        max_dist = dist
+
+            # Scale down and regenerate if any point exceeds clearance
+            safe_radius = radius - min_clearance
+            if max_dist > safe_radius > 0:
+                scale = safe_radius / max_dist
+                disc_font_size = disc_font_size * scale
+                new_label_y = cy + (label_y - cy) * scale
+                if engraving_mode == "filled":
+                    text_strokes = get_filled_text_strokes(text, disc_font_size, cx, new_label_y, filled_line_spacing)
+                else:
+                    text_strokes = get_text_strokes(text, disc_font_size, cx, new_label_y)
             disc_eng.extend(text_strokes)
 
         # Center hole

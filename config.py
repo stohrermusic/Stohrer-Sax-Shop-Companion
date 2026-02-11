@@ -186,8 +186,8 @@ DEFAULT_SETTINGS = {
             "engraving_mode": "line",          # "line" or "filled"
             "engraving_speed": 1200,           # mm/min (line mode)
             "engraving_power": 8,              # percent (line mode)
-            "filled_engraving_speed": 1000,    # mm/min ("filled" mode)
-            "filled_engraving_power": 12,      # percent ("filled" mode)
+            "filled_engraving_speed": 1200,    # mm/min ("filled" mode)
+            "filled_engraving_power": 8,       # percent ("filled" mode)
             "filled_line_spacing": 0.15,       # mm between scan lines
             "hole_speed": 300,
             "hole_power": 35,
