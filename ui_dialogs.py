@@ -1070,6 +1070,16 @@ class PolygonDrawWindow(tk.Toplevel):
                 self._update_status()
             return
 
+        # Check if clicking near first point to close the polygon (before point removal)
+        if len(self.points) >= 3:
+            first_cx, first_cy = self._grid_to_canvas(self.points[0][0], self.points[0][1])
+            dist = ((event.x - first_cx) ** 2 + (event.y - first_cy) ** 2) ** 0.5
+            if dist < self.CLOSE_THRESHOLD:
+                self.polygon_closed = True
+                self._redraw_polygon()
+                self._update_status()
+                return
+
         # Check if clicking on an existing point (to remove it)
         clicked_idx = self._get_clicked_point_index(event.x, event.y)
         if clicked_idx is not None:
@@ -1080,16 +1090,6 @@ class PolygonDrawWindow(tk.Toplevel):
 
         # Get grid coordinates
         gx, gy = self._canvas_to_grid(event.x, event.y)
-
-        # Check if this would close the polygon (clicking near first point)
-        if len(self.points) >= 3:
-            first_cx, first_cy = self._grid_to_canvas(self.points[0][0], self.points[0][1])
-            dist = ((event.x - first_cx) ** 2 + (event.y - first_cy) ** 2) ** 0.5
-            if dist < self.CLOSE_THRESHOLD:
-                self.polygon_closed = True
-                self._redraw_polygon()
-                self._update_status()
-                return
 
         # Check if we can add more points
         if len(self.points) >= self.MAX_POINTS:
@@ -1695,7 +1695,7 @@ class AboutDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("About")
-        self.geometry("380x220")
+        self.geometry("380x240")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
@@ -1705,6 +1705,8 @@ class AboutDialog(tk.Toplevel):
                  font=("Helvetica", 14, "bold")).pack(pady=(20, 5))
         tk.Label(self, text="by Matt Stohrer", bg=DIALOG_BG,
                  font=("Helvetica", 11)).pack()
+        tk.Label(self, text="~Salingeresque Sax Repair Techno-poet~", bg=DIALOG_BG,
+                 font=("Helvetica", 9, "italic")).pack()
         tk.Label(self, text=f"Version {APP_VERSION}  \u2022  Built {APP_BUILD_DATE}",
                  bg=DIALOG_BG, font=("Helvetica", 9)).pack(pady=(2, 0))
         tk.Label(self, text="Pad cutting, key heights, serial lookup,\nand screw specs for saxophone technicians.",

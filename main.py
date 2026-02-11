@@ -486,11 +486,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             if unit == "in":
                 grid_size = 15  # 15x15 inches
                 # Convert inches to mm
-                self.custom_polygon = [(x * 25.4, (grid_size - y) * 25.4) for (x, y) in polygon]
+                raw = [(x * 25.4, (grid_size - y) * 25.4) for (x, y) in polygon]
             else:
                 grid_size = 40  # 40x40 cm
                 # Convert cm to mm
-                self.custom_polygon = [(x * 10, (grid_size - y) * 10) for (x, y) in polygon]
+                raw = [(x * 10, (grid_size - y) * 10) for (x, y) in polygon]
+            # Normalize so bounding box starts at (0, 0)
+            min_x = min(p[0] for p in raw)
+            min_y = min(p[1] for p in raw)
+            self.custom_polygon = [(x - min_x, y - min_y) for (x, y) in raw]
             self._update_shape_status()
 
     def on_unload_custom_shape(self):

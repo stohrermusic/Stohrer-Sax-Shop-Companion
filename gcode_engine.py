@@ -474,10 +474,10 @@ def generate_gcode_footer(return_speed=1000):
     lines = [
         "M9",
         "G1 S0",
-        "M5",
         "G90",
         "; return to origin",
         f"G1 X0Y0 F{return_speed}",
+        "M5",
         "M2",
     ]
     return lines
@@ -611,7 +611,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         filename: Output filename
         hole_dia: Center hole diameter in mm (0 for no hole)
         settings: App settings dictionary
-        polygon: Optional (unused, for API consistency)
+        polygon: Optional polygon shape; when provided, its bounding box height
+                 is used for Y-flip instead of sheet_height_mm
     """
     from svg_engine import get_felt_thickness_mm
 
@@ -619,7 +620,12 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         return
 
     # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom
-    placed = [(pad_size, cx, sheet_height_mm - cy, radius) for (pad_size, cx, cy, radius) in placed]
+    # When a polygon is used, its bounding box defines the coordinate space
+    if polygon:
+        flip_height = max(p[1] for p in polygon)
+    else:
+        flip_height = sheet_height_mm
+    placed = [(pad_size, cx, flip_height - cy, radius) for (pad_size, cx, cy, radius) in placed]
 
     # Get G-code settings for this material
     gcode_settings = settings.get("gcode_settings", {})
