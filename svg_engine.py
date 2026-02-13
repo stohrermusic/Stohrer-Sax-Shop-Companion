@@ -620,7 +620,7 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
             label_y = engraving_y + vertical_adjust
             text_content = f"{pad_size:.1f}".rstrip('0').rstrip('.')
 
-            # Auto-fit: check text bounding box corners against circle, scale if needed
+            # Auto-fit: shift text toward center if it impinges on disc edge
             min_clearance = 0.5
             text_half_h = font_size / 2
             text_half_w = sum(0.3 if c == '.' else 0.6 for c in text_content)
@@ -636,9 +636,19 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
 
             safe_radius = r - min_clearance
             if max_dist > safe_radius > 0:
-                scale = safe_radius / max_dist
-                font_size = font_size * scale
-                label_y = cy + (label_y - cy) * scale
+                # Prefer shifting toward center over shrinking for readability
+                centered_max_dist = math.sqrt(text_half_w**2 + text_half_h**2)
+                if centered_max_dist <= safe_radius:
+                    # Fits at full size — shift toward center just enough
+                    max_offset = math.sqrt(safe_radius**2 - text_half_w**2) - text_half_h
+                    dy = label_y - cy
+                    if abs(dy) > max_offset:
+                        label_y = cy + math.copysign(max_offset, dy)
+                else:
+                    # Too large even centered — center and scale as last resort
+                    label_y = cy
+                    scale = safe_radius / centered_max_dist
+                    font_size *= scale
 
             if compatibility_mode:
                 dwg.add(dwg.text(text_content,

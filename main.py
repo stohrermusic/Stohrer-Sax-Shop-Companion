@@ -404,9 +404,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
         # Two generate buttons side by side
         generate_frame = tk.Frame(parent, bg=self.root.cget('bg'))
-        generate_frame.pack(pady=15)
+        generate_frame.pack(pady=(15, 5))
         tk.Button(generate_frame, text="Generate SVG", command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
         tk.Button(generate_frame, text="Generate G-code", command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
+
+        # Eject SD card checkbox below generate buttons (Windows only)
+        self.eject_sd_var = tk.BooleanVar(value=self.settings.get("eject_sd_after_gcode", False))
+        if sys.platform == 'win32':
+            tk.Checkbutton(parent, text="Eject SD card after G-code export",
+                           variable=self.eject_sd_var, bg=self.root.cget('bg'),
+                           command=self._on_eject_sd_changed).pack(pady=(0, 10))
 
     def toggle_custom_hole_entry(self):
         if self.hole_var.get() == "Custom":
@@ -501,6 +508,53 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         """Unload the custom shape and return to rectangle mode."""
         self.custom_polygon = None
         self._update_shape_status()
+
+    def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
+        """Show scrap continue dialog. If a polygon is loaded, offer to unload it."""
+        msg = (f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+               f"{remaining_count} pads remaining.\n"
+               f"Adjust dimensions and click Generate again.")
+
+        if not self.custom_polygon:
+            messagebox.showinfo("Scrap Generated", msg)
+            return
+
+        # Custom dialog with shape options
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Scrap Generated")
+        dlg.configure(bg=self._get_theme_color())
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+
+        bg = self._get_theme_color()
+        tk.Label(dlg, text=msg, wraplength=380, bg=bg, justify="left",
+                 font=("Helvetica", 10)).pack(padx=15, pady=(15, 10))
+        tk.Label(dlg, text="A custom shape is loaded for the next scrap:",
+                 bg=bg, font=("Helvetica", 9, "italic")).pack(padx=15)
+
+        btn_frame = tk.Frame(dlg, bg=bg)
+        btn_frame.pack(pady=15)
+        tk.Button(btn_frame, text="Unload Shape", width=16,
+                  command=lambda: self._scrap_dialog_close(dlg, unload=True)
+                  ).pack(side="left", padx=8)
+        tk.Button(btn_frame, text="Keep Shape", width=16,
+                  command=lambda: self._scrap_dialog_close(dlg, unload=False)
+                  ).pack(side="left", padx=8)
+
+        dlg.protocol("WM_DELETE_WINDOW", lambda: self._scrap_dialog_close(dlg, unload=False))
+        dlg.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dlg.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dlg.winfo_height() // 2)
+        dlg.geometry(f"+{x}+{y}")
+        dlg.wait_window()
+
+    def _scrap_dialog_close(self, dlg, unload):
+        """Handle scrap continue dialog button press."""
+        if unload:
+            self.custom_polygon = None
+            self._update_shape_status()
+        dlg.destroy()
 
     # --- Scrap Mode Methods ---
 
@@ -972,10 +1026,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                     f"All pads placed! Session complete.\n"
                     f"Files saved to: {save_dir}")
             else:
-                messagebox.showinfo("Scrap Generated",
-                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
-                    f"{remaining_count} pads remaining.\n"
-                    f"Adjust dimensions and click Generate again.")
+                self._show_scrap_continue_dialog(placed_count, scrap_num, remaining_count)
 
         except Exception as e:
             print(f"An error occurred during scrap mode SVG generation: {e}")
@@ -1041,7 +1092,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 working_popup.destroy()
 
             save_settings(self.settings)
-            messagebox.showinfo("Done", "G-code files generated successfully.")
+
+            # Auto-eject SD card if checkbox is checked and destination is removable
+            if self.eject_sd_var.get() and self._is_removable_drive(save_dir):
+                drive_letter = os.path.splitdrive(os.path.abspath(save_dir))[0]
+                eject_success = self._eject_drive(drive_letter) if drive_letter else False
+                if eject_success:
+                    messagebox.showinfo("Done", "G-code files generated successfully.\n\nSD card safely ejected — you can remove it now!")
+                else:
+                    messagebox.showinfo("Done", "G-code files generated successfully.\n\nPlease safely eject the SD card before removing.")
+            else:
+                messagebox.showinfo("Done", "G-code files generated successfully.")
 
         except Exception as e:
             print(f"An error occurred during G-code generation: {e}")
@@ -1137,10 +1198,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                     f"All pads placed! Session complete.\n"
                     f"Files saved to: {save_dir}")
             else:
-                messagebox.showinfo("Scrap Generated",
-                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
-                    f"{remaining_count} pads remaining.\n"
-                    f"Adjust dimensions and click Generate again.")
+                self._show_scrap_continue_dialog(placed_count, scrap_num, remaining_count)
 
         except Exception as e:
             print(f"An error occurred during scrap mode G-code generation: {e}")
@@ -1459,6 +1517,25 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to send file to SD card:\n\n{e}")
+
+    def _on_eject_sd_changed(self):
+        """Persist the eject SD card checkbox state."""
+        self.settings["eject_sd_after_gcode"] = self.eject_sd_var.get()
+        save_settings(self.settings)
+
+    def _is_removable_drive(self, path):
+        """Check if path is on a removable drive (USB/SD). Windows only."""
+        if sys.platform != 'win32':
+            return False
+        try:
+            import ctypes
+            drive = os.path.splitdrive(os.path.abspath(path))[0]
+            if not drive:
+                return False
+            # GetDriveTypeW: 2 = DRIVE_REMOVABLE
+            return ctypes.windll.kernel32.GetDriveTypeW(drive + "\\") == 2
+        except Exception:
+            return False
 
     def _eject_drive(self, drive_letter):
         """Safely eject a drive on Windows. Returns True on success."""

@@ -720,7 +720,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
             text = f"{pad_size:.1f}".rstrip('0').rstrip('.')
 
-            # Auto-fit: generate strokes, check against circle, scale down if needed
+            # Auto-fit: shift text toward center if it impinges on disc edge
             min_clearance = 0.5  # mm from any stroke point to cut line
             disc_font_size = font_size
             if engraving_mode == "filled":
@@ -736,16 +736,34 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
                     if dist > max_dist:
                         max_dist = dist
 
-            # Scale down and regenerate if any point exceeds clearance
+            # Prefer shifting toward center over shrinking for readability
             safe_radius = radius - min_clearance
             if max_dist > safe_radius > 0:
-                scale = safe_radius / max_dist
-                disc_font_size = disc_font_size * scale
-                new_label_y = cy + (label_y - cy) * scale
-                if engraving_mode == "filled":
-                    text_strokes = get_filled_text_strokes(text, disc_font_size, cx, new_label_y, filled_line_spacing)
+                # Compute stroke extents for shift-vs-scale decision
+                max_horiz = max((abs(px - cx) for stroke in text_strokes for px, py in stroke), default=0)
+                max_vert = max((abs(py - label_y) for stroke in text_strokes for px, py in stroke), default=0)
+                centered_max_dist = math.sqrt(max_horiz**2 + max_vert**2)
+
+                if centered_max_dist <= safe_radius:
+                    # Fits at full size — shift toward center just enough
+                    max_offset = math.sqrt(safe_radius**2 - max_horiz**2) - max_vert
+                    dy = label_y - cy
+                    new_label_y = label_y
+                    if abs(dy) > max_offset:
+                        new_label_y = cy + math.copysign(max_offset, dy)
+                    if new_label_y != label_y:
+                        if engraving_mode == "filled":
+                            text_strokes = get_filled_text_strokes(text, disc_font_size, cx, new_label_y, filled_line_spacing)
+                        else:
+                            text_strokes = get_text_strokes(text, disc_font_size, cx, new_label_y)
                 else:
-                    text_strokes = get_text_strokes(text, disc_font_size, cx, new_label_y)
+                    # Too large even centered — center and scale as last resort
+                    scale = safe_radius / centered_max_dist
+                    disc_font_size *= scale
+                    if engraving_mode == "filled":
+                        text_strokes = get_filled_text_strokes(text, disc_font_size, cx, cy, filled_line_spacing)
+                    else:
+                        text_strokes = get_text_strokes(text, disc_font_size, cx, cy)
             disc_eng.extend(text_strokes)
 
         # Center hole

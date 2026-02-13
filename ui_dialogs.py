@@ -1586,21 +1586,89 @@ class UserGuideWindow(tk.Toplevel):
     def _blank(self):
         self.text.insert("end", "\n")
 
+    def _link(self, display_text, url):
+        import webbrowser
+        tag = f"link_{id(url)}"
+        self.text.tag_configure(tag, font=("Helvetica", 11, "underline"),
+                                foreground="#0066CC", lmargin1=20)
+        self.text.insert("end", "  " + display_text + "\n", tag)
+        self.text.tag_bind(tag, "<Button-1>", lambda e: webbrowser.open(url))
+        self.text.tag_bind(tag, "<Enter>",
+                           lambda e: self.text.config(cursor="hand2"))
+        self.text.tag_bind(tag, "<Leave>",
+                           lambda e: self.text.config(cursor=""))
+
     def _insert_content(self):
         self._h1("Stohrer Sax Shop Companion")
         self._body("A tool for saxophone technicians: generate laser-cutting templates, "
                     "record key heights, look up serial numbers, and reference screw specs.")
         self._blank()
 
+        # ── PAD GENERATOR ──────────────────────────
         self._h2("Pad SVG / G-code Generator")
-        self._body("Enter pad sizes (e.g. \"42.0 x 3\") and select materials to generate "
-                    "laser-cutting files. Pads are automatically nested onto the sheet.")
+        self._body("Enter pad sizes in the text area, one per line, in the format "
+                    "\"size x quantity\" (e.g. \"42.0 x 3\"). Select one or more materials "
+                    "and click Generate to create laser-cutting files.")
         self._bullet("Felt: disc diameter = pad size minus felt offset")
         self._bullet("Card: further reduced by card-to-felt offset")
         self._bullet("Leather: enlarged to wrap around felt, with star/dart pattern for small pads")
-        self._bullet("Exact Size: no offset applied")
+        self._bullet("Exact Size: no offset applied (SVG only, not available for G-code)")
         self._bullet("\"max\" quantity (e.g. \"18.0 x max\"): fills remaining sheet space with that size. "
                       "Only one \"max\" entry is allowed per sheet.")
+        self._blank()
+
+        self._h2("SVG vs G-code Output")
+        self._body("The app can generate two output formats:")
+        self._bullet("SVG: for use with LightBurn or other laser software. Each operation "
+                      "(engraving, holes, cuts) is on a separate color layer that maps to "
+                      "LightBurn's layer system. Choose this if your laser software imports SVG files.")
+        self._bullet("G-code: standalone Grbl-compatible G-code with speeds and power levels "
+                      "baked in. Choose this if your laser reads G-code directly from an SD card "
+                      "or USB connection (e.g. Creality Falcon).")
+        self._body("Output files are named using your filename base plus the material "
+                    "(e.g. \"my_pad_job_felt.svg\", \"my_pad_job_leather.gcode\"). "
+                    "One file is created per selected material.")
+        self._blank()
+
+        self._h2("Units")
+        self._body("Pad sizes and sheet dimensions use the unit set in Options > Sizing Rules "
+                    "(inches, mm, or cm). The unit applies to all size entries throughout the app. "
+                    "Internal calculations and output files always use millimeters.")
+        self._blank()
+
+        self._h2("Center Hole")
+        self._body("Select a center hole size for rivet or screw mounting. Choose None, "
+                    "3.0mm, 3.5mm, or enter a custom diameter.")
+        self._bullet("Pads below the minimum hole size threshold (set in Sizing Rules) "
+                      "skip the center hole automatically \u2014 they're too small for it to be useful.")
+        self._blank()
+
+        self._h2("Sheet Size & Fit to Paper")
+        self._body("Enter the width and height of your material sheet. For card stock, "
+                    "check \"Fit card to paper\" to use a standard paper size (letter or A4) "
+                    "instead of the sheet dimensions.")
+        self._blank()
+
+        self._h2("Engraving")
+        self._body("Each disc is engraved with its pad size number for identification. "
+                    "Engraving can be toggled on/off and positioned per material in Sizing Rules.")
+        self._bullet("Position modes: distance from outside edge, distance from inside "
+                      "(center hole), or centered between the two")
+        self._bullet("Font size is set per material in Sizing Rules")
+        self._bullet("On small pads, the text automatically shifts toward the center to stay "
+                      "within the disc. If the text is too large to fit even when centered, "
+                      "it scales down as a last resort.")
+        self._bullet("If the font size exceeds 80% of the disc radius, engraving is skipped "
+                      "for that pad (a warning is shown before generating)")
+        self._blank()
+
+        self._h2("Pad Presets")
+        self._body("Save frequently-used pad lists as presets for quick recall. "
+                    "Presets are organized into libraries (e.g. \"My Presets\", \"Customer Jobs\").")
+        self._bullet("Save as Preset: saves the current pad list to the selected library")
+        self._bullet("Select a preset from the dropdown to load it into the text area")
+        self._bullet("Delete Preset: removes the selected preset")
+        self._bullet("File > Import/Export Pad Presets: share preset files with colleagues")
         self._blank()
 
         self._h2("Materials & Sizing Rules")
@@ -1644,23 +1712,40 @@ class UserGuideWindow(tk.Toplevel):
 
         self._h2("Custom Shapes")
         self._body("\"Draw Custom Shape\" lets you define an irregular polygon (up to 8 points) for "
-                    "leather skins or scrap pieces. The nesting algorithm fits circles inside the polygon.")
+                    "leather skins or scrap pieces. Click points on the grid to define the outline, "
+                    "then click Done. The nesting algorithm fits circles inside the polygon instead "
+                    "of the rectangular sheet.")
+        self._bullet("The grid is 15\u00d715 inches (1\" squares) or 40\u00d740 cm (1cm squares) "
+                      "depending on your unit setting")
+        self._bullet("Click \"Unload\" to clear the shape and return to rectangle mode")
+        self._bullet("The shape stays loaded until you unload it or draw a new one")
         self._blank()
 
         self._h2("Scrap Mode")
-        self._body("Check \"Scrap Mode\" to place pads across multiple irregular pieces:")
+        self._body("Check \"Scrap Mode\" to place pads across multiple irregular pieces "
+                    "instead of requiring one large sheet:")
         self._bullet("Select exactly one material")
         self._bullet("Set dimensions (or draw a shape) for the first scrap piece")
-        self._bullet("Generate - placed pads are saved, remaining are tracked")
+        self._bullet("Generate \u2014 placed pads are saved, remaining are tracked")
         self._bullet("Adjust dimensions for the next scrap and generate again")
-        self._bullet("Repeat until all pads are placed")
+        self._bullet("If a custom shape is loaded, you'll be asked whether to keep it "
+                      "or unload it for the next piece")
+        self._bullet("Repeat until all pads are placed, or click \"Done!\" to finish early")
+        self._bullet("Files are named with _scrap1, _scrap2, etc. suffixes")
         self._blank()
 
-        self._h2("Send to SD Card")
-        self._body("File > Send G-code to SD Card copies a .gcode file to your SD card "
-                    "and safely ejects it (Windows). Useful for laser cutters that read from SD cards.")
+        self._h2("SD Card & Eject")
+        self._body("Two ways to get G-code onto an SD card:")
+        self._bullet("Eject checkbox (below Generate buttons): check \"Eject SD card after "
+                      "G-code export\" and the app will automatically eject the SD card after "
+                      "generating. If the destination isn't a removable drive, nothing extra "
+                      "happens. (Windows only)")
+        self._bullet("File > Send G-code to SD Card: a guided workflow that selects a "
+                      "previously-generated .gcode file, copies it to the SD card, optionally "
+                      "clears old files, and ejects.")
         self._blank()
 
+        # ── IMPORT / EXPORT ────────────────────────
         self._h2("Import / Export & Sharing")
         self._body("Each data tab supports importing and exporting so you can share "
                     "data with colleagues or back up your measurements:")
@@ -1672,6 +1757,7 @@ class UserGuideWindow(tk.Toplevel):
         self._body("Exported files are standard JSON and can be emailed or shared via any method.")
         self._blank()
 
+        # ── OTHER TABS ─────────────────────────────
         self._h2("Key Height Library")
         self._body("Record and compare key height measurements for different saxophones. "
                     "Organize sets into libraries, import/export, and share with colleagues.")
@@ -1687,6 +1773,14 @@ class UserGuideWindow(tk.Toplevel):
         self._body("Reference database of screw thread specifications for different saxophone models.")
         self._bullet("File > Import Matt's Specs downloads the latest data from stohrermusic.com")
         self._bullet("Import/export to share specs with colleagues")
+        self._blank()
+
+        # ── PADMAKING GUIDE ────────────────────────
+        self._h2("Learn to Make Pads")
+        self._body("If you somehow got this program and missed the guide that started it all, "
+                    "here's the complete how-to on making saxophone pads:")
+        self._link("stohrermusic.com/articles/how-to-make-saxophone-pads/",
+                    "https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/")
 
 
 class AboutDialog(tk.Toplevel):
