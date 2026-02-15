@@ -20,6 +20,10 @@ The external dependency is `svgwrite`. The GUI uses Python's built-in `tkinter`.
 
 There is no automated test suite. Changes are verified by running the application manually.
 
+### Testing Before Commits
+
+Before committing, write a temporary test script in `tools/` that exercises affected code paths non-interactively (no GUI). Test engine/logic functions directly. Print PASS/FAIL per test with a summary. Cover: the specific changes, regressions in nearby code, all affected materials, and edge cases.
+
 ## Building Executables
 
 The app uses PyInstaller to create standalone executables. Each platform must build its own executable (no cross-compilation).
@@ -131,13 +135,13 @@ build.py               → Cross-platform PyInstaller build script
 - Progress popup window (`scrap_remaining_window`) shows two columns: Remaining and Done
 - Materials are locked (disabled) during active session to prevent switching
 - Files named with `_scrap1`, `_scrap2` suffixes
+- After each scrap with a polygon loaded, a dialog asks whether to unload or keep the shape for the next piece
 
-**Send to SD Card**: File → Send G-code to SD Card... provides a streamlined workflow for laser cutters that use SD cards (like the Creality Falcon2 Pro). The feature:
-- Opens a folder picker to select the SD card (remembers last used location)
-- Shows existing G-code files and confirms before erasing
-- Opens a file picker to select the .gcode file to send
-- Copies the file and safely ejects the SD card (Windows only)
-- User can then physically remove the card and use the laser's built-in controls
+**Engraving Auto-Fit**: When engraved text (pad size number) would impinge on the disc edge, both engines prefer shifting the text toward the disc center over shrinking it. Only scales down as a last resort when text can't fit even when centered. SVG engine uses bounding-box corner checks; G-code engine uses actual stroke-point measurements. Both maintain a 0.5mm clearance margin. The 80% radius check (`font_size >= r * 0.8`) disables engraving entirely before auto-fit runs.
+
+**SD Card & Eject**: Two mechanisms:
+- "Eject SD card after G-code export" checkbox (Windows only, below Generate buttons): auto-ejects removable drives after G-code generation. Uses `GetDriveTypeW` to detect removable drives; silently skips non-removable destinations.
+- File → Send G-code to SD Card: guided workflow that copies a .gcode file, optionally clears old files, and ejects (Windows only via PowerShell COM object).
 
 ### Settings Backward Compatibility
 

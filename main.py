@@ -22,7 +22,7 @@ from ui_dialogs import (
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
-    UserGuideWindow, AboutDialog
+    UserGuideWindow, AboutDialog, PadNotesWindow
 )
 from library_features import LibraryFeaturesMixin
 
@@ -266,29 +266,40 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.pad_entry = tk.Text(parent, height=10)
         self.pad_entry.pack(fill="x", padx=10)
 
-        preset_frame = tk.Frame(parent, bg=self.root.cget('bg'))
-        preset_frame.pack(pady=10)
-        
-        tk.Button(preset_frame, text="Save as Preset", command=self.on_save_pad_preset).pack(side="left", padx=5)
-        
-        tk.Label(preset_frame, text="Library:", bg=self.root.cget('bg')).pack(side="left", padx=(10, 2))
+        # Row 1: Library and preset dropdowns
+        preset_select_frame = tk.Frame(parent, bg=self.root.cget('bg'))
+        preset_select_frame.pack(pady=(10, 2), fill='x', padx=10)
+
+        tk.Label(preset_select_frame, text="Library:", bg=self.root.cget('bg')).pack(side="left", padx=(0, 2))
         self.pad_library_var = tk.StringVar()
-        self.pad_library_dropdown = ttk.Combobox(preset_frame, textvariable=self.pad_library_var, state="readonly", width=15)
+        self.pad_library_dropdown = ttk.Combobox(preset_select_frame, textvariable=self.pad_library_var, state="readonly", width=15)
         self.pad_library_dropdown.pack(side="left")
         self.pad_library_dropdown.bind("<<ComboboxSelected>>", self.on_pad_library_selected)
-        
-        preset_names = [] 
+
+        preset_names = []
         self.pad_preset_var = tk.StringVar()
-        self.pad_preset_menu = ttk.Combobox(preset_frame, textvariable=self.pad_preset_var, values=preset_names, state="readonly", width=40) 
+        self.pad_preset_menu = ttk.Combobox(preset_select_frame, textvariable=self.pad_preset_var, values=preset_names, state="readonly", width=40)
         self.pad_preset_menu.set("Load Pad Preset")
         self.pad_preset_menu.pack(side="left", padx=5)
         self.pad_preset_menu.bind("<<ComboboxSelected>>", lambda e: self.on_load_pad_preset(self.pad_preset_var.get()))
-        
-        tk.Button(preset_frame, text="Delete Preset", command=self.on_delete_pad_preset).pack(side="left", padx=5)
 
-        self.update_pad_library_dropdown() 
+        # Row 2: Save/Notes on left, Delete on right
+        preset_btn_frame = tk.Frame(parent, bg=self.root.cget('bg'))
+        preset_btn_frame.pack(pady=(2, 10), fill='x', padx=10)
 
-        tk.Label(parent, text="Select materials:", bg=self.root.cget('bg')).pack(pady=5)
+        left_btns = tk.Frame(preset_btn_frame, bg=self.root.cget('bg'))
+        left_btns.pack(side="left")
+        tk.Button(left_btns, text="Save as Preset", command=self.on_save_pad_preset).pack(side="left", padx=(0, 5))
+        self.pad_notes_btn = tk.Button(left_btns, text="View Notes", command=self.on_pad_notes, state="disabled")
+        self.pad_notes_btn.pack(side="left", padx=5)
+
+        tk.Button(preset_btn_frame, text="Delete Preset", command=self.on_delete_pad_preset).pack(side="right")
+
+        self.pad_preset_loaded_library = None
+        self.pad_preset_loaded_name = None
+
+        self.update_pad_library_dropdown()
+
         self.material_vars = {
             'felt': tk.BooleanVar(value=True),
             'card': tk.BooleanVar(value=True),
@@ -296,22 +307,26 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             'exact_size': tk.BooleanVar(value=False)
         }
         self.material_checkboxes = {}  # Store references for enable/disable
-        # Two-column layout for materials
-        materials_frame = tk.Frame(parent, bg=self.root.cget('bg'))
-        materials_frame.pack(anchor='w', padx=20)
-        material_list = list(self.material_vars.items())
-        for i, (m, var) in enumerate(material_list):
-            row, col = i // 2, i % 2
-            cb = tk.Checkbutton(materials_frame, text=m.replace('_', ' ').capitalize(),
-                               variable=var, bg=self.root.cget('bg'))
-            cb.grid(row=row, column=col, sticky='w', padx=(0, 20))
-            self.material_checkboxes[m] = cb
 
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         options_frame.pack(pady=10, fill='x', padx=10)
 
-        hole_frame = tk.LabelFrame(options_frame, text="Center Hole", bg=self.root.cget('bg'), padx=5, pady=5)
-        hole_frame.pack(fill="x")
+        # Materials and Center Hole side by side
+        mat_hole_row = tk.Frame(options_frame, bg=self.root.cget('bg'))
+        mat_hole_row.pack(fill="x")
+
+        mat_frame = tk.LabelFrame(mat_hole_row, text="Materials", bg=self.root.cget('bg'), padx=5, pady=5)
+        mat_frame.pack(side="left", fill="y")
+        material_list = list(self.material_vars.items())
+        for i, (m, var) in enumerate(material_list):
+            row, col = i // 2, i % 2
+            cb = tk.Checkbutton(mat_frame, text=m.replace('_', ' ').capitalize(),
+                               variable=var, bg=self.root.cget('bg'))
+            cb.grid(row=row, column=col, sticky='w', padx=(0, 10))
+            self.material_checkboxes[m] = cb
+
+        hole_frame = tk.LabelFrame(mat_hole_row, text="Center Hole", bg=self.root.cget('bg'), padx=5, pady=5)
+        hole_frame.pack(side="left", fill="both", expand=True, padx=(10, 0))
         self.hole_var = tk.StringVar(value=self.settings["hole_option"])
         
         tk.Radiobutton(hole_frame, text="None", variable=self.hole_var, value="No center holes", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
@@ -1253,6 +1268,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.pad_library_var.set("All Libraries")
         self.on_pad_library_selected()
 
+    def _get_pad_preset_data(self, raw):
+        """Extract pads text and notes from a preset entry (handles both old string and new dict formats)."""
+        if isinstance(raw, dict):
+            return raw.get("pads", ""), raw.get("notes", "")
+        return raw, ""
+
     def on_save_pad_preset(self):
         active_library = self.pad_library_var.get()
         if not active_library or active_library == "All Libraries":
@@ -1265,42 +1286,53 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             if not text_data.strip():
                 messagebox.showwarning("Save Pad Preset", "Cannot save an empty list.")
                 return
-            
+
             if active_library not in self.pad_presets:
                 self.pad_presets[active_library] = {}
 
+            # Preserve existing notes if overwriting
+            existing_notes = ""
             if name in self.pad_presets[active_library]:
                 if not messagebox.askyesno("Overwrite", f"A set named '{name}' already exists in this library. Overwrite it?"):
                     return
-            
-            self.pad_presets[active_library][name] = text_data
-            
+                _, existing_notes = self._get_pad_preset_data(self.pad_presets[active_library][name])
+
+            self.pad_presets[active_library][name] = {"pads": text_data, "notes": existing_notes}
+
             if save_presets(self.pad_presets, PAD_PRESET_FILE):
+                self.pad_preset_loaded_library = active_library
+                self.pad_preset_loaded_name = name
+                self.pad_notes_btn.config(state="normal")
                 self.on_pad_library_selected()
                 messagebox.showinfo("Preset Saved", f"Preset '{name}' saved successfully.")
 
     def on_load_pad_preset(self, selected_name):
         if not selected_name or selected_name == "Load Pad Preset":
             return
-            
+
         lib_name = self.pad_library_var.get()
-        data = None
-        
+        preset_name = selected_name
+        raw = None
+
         if lib_name == "All Libraries":
             try:
                 lib_name, preset_name = selected_name.split("] ", 1)
-                lib_name = lib_name[1:] 
+                lib_name = lib_name[1:]
                 if lib_name in self.pad_presets and preset_name in self.pad_presets[lib_name]:
-                    data = self.pad_presets[lib_name][preset_name]
+                    raw = self.pad_presets[lib_name][preset_name]
             except ValueError:
-                return 
+                return
         else:
-            if lib_name in self.pad_presets and selected_name in self.pad_presets[lib_name]:
-                data = self.pad_presets[lib_name][selected_name]
+            if lib_name in self.pad_presets and preset_name in self.pad_presets[lib_name]:
+                raw = self.pad_presets[lib_name][preset_name]
 
-        if data:
+        if raw is not None:
+            pads_text, _ = self._get_pad_preset_data(raw)
             self.pad_entry.delete("1.0", tk.END)
-            self.pad_entry.insert(tk.END, data)
+            self.pad_entry.insert(tk.END, pads_text)
+            self.pad_preset_loaded_library = lib_name
+            self.pad_preset_loaded_name = preset_name
+            self.pad_notes_btn.config(state="normal")
 
     def on_delete_pad_preset(self):
         selected_lib = self.pad_library_var.get()
@@ -1322,11 +1354,29 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             if selected_lib in self.pad_presets and selected_preset in self.pad_presets[selected_lib]:
                 del self.pad_presets[selected_lib][selected_preset]
                 if save_presets(self.pad_presets, PAD_PRESET_FILE):
-                    self.on_pad_library_selected() 
+                    self.on_pad_library_selected()
                     self.pad_entry.delete("1.0", tk.END)
+                    self.pad_preset_loaded_library = None
+                    self.pad_preset_loaded_name = None
+                    self.pad_notes_btn.config(state="disabled")
                     messagebox.showinfo("Preset Deleted", f"Preset '{selected_preset}' deleted.")
             else:
                 messagebox.showerror("Delete Error", "Could not find the preset to delete.")
+
+    def on_pad_notes(self):
+        lib = self.pad_preset_loaded_library
+        name = self.pad_preset_loaded_name
+        if not lib or not name or lib not in self.pad_presets or name not in self.pad_presets[lib]:
+            messagebox.showwarning("Notes", "No preset loaded.")
+            return
+
+        _, current_notes = self._get_pad_preset_data(self.pad_presets[lib][name])
+        dlg = PadNotesWindow(self.root, name, current_notes)
+        if dlg.result is not None:
+            # Update notes in the preset data
+            pads_text, _ = self._get_pad_preset_data(self.pad_presets[lib][name])
+            self.pad_presets[lib][name] = {"pads": pads_text, "notes": dlg.result}
+            save_presets(self.pad_presets, PAD_PRESET_FILE)
 
     def on_import_pad_presets(self):
         filepath = filedialog.askopenfilename(

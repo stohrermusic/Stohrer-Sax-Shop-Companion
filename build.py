@@ -103,9 +103,10 @@ def build():
 
     # Platform-specific options
     if sys.platform == 'darwin':
-        # macOS: Create .app bundle
+        # macOS: Create universal .app bundle (Intel + Apple Silicon)
         cmd.extend([
             '--osx-bundle-identifier', 'com.stohrer.saxshopcompanion',
+            '--target-arch', 'universal2',
         ])
     elif sys.platform == 'win32':
         # Windows: Add icon if available

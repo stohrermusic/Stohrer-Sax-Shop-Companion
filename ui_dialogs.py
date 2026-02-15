@@ -1807,3 +1807,41 @@ class AboutDialog(tk.Toplevel):
                  bg=DIALOG_BG, font=("Helvetica", 10), justify="center").pack(pady=10)
 
         tk.Button(self, text="OK", command=self.destroy, width=10).pack(pady=10)
+
+
+class PadNotesWindow(tk.Toplevel):
+    """Small modal dialog for viewing/editing notes on a pad preset."""
+
+    def __init__(self, parent, preset_name, notes_text=""):
+        super().__init__(parent)
+        self.title(f"Preset Notes \u2014 {preset_name}")
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        self.result = None  # Will be the new notes text if saved, None if cancelled
+
+        tk.Label(self, text=f"Notes for \"{preset_name}\":", bg=DIALOG_BG,
+                 font=("Helvetica", 10)).pack(padx=15, pady=(15, 5), anchor="w")
+
+        self.notes_text = tk.Text(self, height=6, width=45, font=("Helvetica", 10), wrap="word")
+        self.notes_text.pack(padx=15, pady=5)
+        self.notes_text.insert("1.0", notes_text)
+
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=(5, 15))
+        tk.Button(btn_frame, text="Save", command=self.on_save, width=10).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Close", command=self.on_close, width=10).pack(side="left", padx=5)
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.notes_text.focus_set()
+        self.wait_window(self)
+
+    def on_save(self):
+        self.result = self.notes_text.get("1.0", tk.END).strip()
+        self.destroy()
+
+    def on_close(self):
+        self.result = None
+        self.destroy()
