@@ -10,7 +10,7 @@ from tkinter import messagebox
 
 APP_NAME = "StohrerSaxShopCompanion"
 APP_VERSION = "1.6"
-APP_BUILD_DATE = "2026-02-09"
+APP_BUILD_DATE = "2026-02-15"
 
 def get_config_dir():
     """
