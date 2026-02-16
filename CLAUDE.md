@@ -61,7 +61,7 @@ python build.py --dmg
 
 The `.github/workflows/build.yml` workflow automatically builds for all three platforms:
 - Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually
-- Builds Windows .exe, macOS .app (zipped), and Linux binary in parallel
+- Builds Windows .exe, macOS .app (universal2: Intel + Apple Silicon, zipped), and Linux binary in parallel
 - Uploads artifacts to the workflow run
 - Auto-attaches binaries to GitHub Releases
 
@@ -91,7 +91,7 @@ library_features.py     → LibraryFeaturesMixin (Key Heights, Serial Lookup, Sc
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow)
+ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 build.py               → Cross-platform PyInstaller build script
 ```
@@ -153,6 +153,8 @@ build.py               → Cross-platform PyInstaller build script
 ### Preset/Library System
 
 All presets use a nested dictionary structure: `{library_name: {preset_name: data}}`. Flat legacy formats are auto-migrated on load (see `load_presets()` in config.py).
+
+**Pad preset data format**: Pad presets can be either a plain string (legacy) or a dict `{"pads": "...", "notes": "..."}`. The helper `_get_pad_preset_data()` in main.py handles both formats transparently. When saving, always use the dict format. When loading, check `isinstance(raw, str)` for backward compatibility.
 
 ### Data Files (JSON, in platform config directory)
 

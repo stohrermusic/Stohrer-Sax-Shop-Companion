@@ -1669,6 +1669,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Select a preset from the dropdown to load it into the text area")
         self._bullet("Delete Preset: removes the selected preset")
         self._bullet("File > Import/Export Pad Presets: share preset files with colleagues")
+        self._bullet("File > Import Matt's Pad Sets: downloads reference pad sets from stohrermusic.com")
         self._blank()
 
         self._h2("Materials & Sizing Rules")

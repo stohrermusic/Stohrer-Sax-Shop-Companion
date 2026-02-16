@@ -162,6 +162,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         pad_file_menu.add_command(label="Import Pad Presets...", command=self.on_import_pad_presets)
         pad_file_menu.add_command(label="Export Pad Presets...", command=self.on_export_pad_presets)
         pad_file_menu.add_separator()
+        pad_file_menu.add_command(label="Import Matt's Pad Sets", command=self.on_import_matts_pad_sets)
+        pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Import Settings from Folder...", command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Send G-code to SD Card...", command=self.on_send_to_sd_card)
@@ -1405,6 +1407,63 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
 
     def on_export_pad_presets(self):
         ExportPresetsWindow(self.root, self.pad_presets, "Pad Presets", "pad_preset_export.json", False)
+
+    def on_import_matts_pad_sets(self):
+        """Fetch pad set presets from stohrermusic.com and import by library."""
+        import urllib.request
+        import urllib.error
+
+        MATTS_PADS_URL = "https://www.stohrermusic.com/data/pad_presets.json"
+
+        try:
+            req = urllib.request.Request(MATTS_PADS_URL, headers={"User-Agent": "StohrerSaxShopCompanion"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                web_data = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
+            messagebox.showerror("Connection Error",
+                f"Could not fetch pad sets from stohrermusic.com:\n\n{e}")
+            return
+        except (json.JSONDecodeError, ValueError) as e:
+            messagebox.showerror("Data Error",
+                f"Invalid data received from server:\n\n{e}")
+            return
+
+        if not isinstance(web_data, dict) or not web_data:
+            messagebox.showinfo("No Data", "No pad set data found on the server.")
+            return
+
+        # Count libraries and total presets
+        lib_count = 0
+        preset_count = 0
+        for lib_name, presets in web_data.items():
+            if isinstance(presets, dict):
+                lib_count += 1
+                preset_count += len(presets)
+
+        if preset_count == 0:
+            messagebox.showinfo("No Data", "No pad set presets found on the server.")
+            return
+
+        # Check which web libraries already exist locally
+        existing_libs = [name for name in web_data if name in self.pad_presets]
+
+        if existing_libs:
+            overwrite = messagebox.askyesno("Overwrite Existing?",
+                f"{len(existing_libs)} library/libraries already exist locally:\n\n"
+                + "\n".join(f"  \u2022 {name}" for name in existing_libs)
+                + "\n\nOverwrite with latest from web?")
+            if not overwrite:
+                return
+
+        # Import each library
+        for lib_name, presets in web_data.items():
+            if isinstance(presets, dict):
+                self.pad_presets[lib_name] = presets
+
+        save_presets(self.pad_presets, PAD_PRESET_FILE)
+        self.update_pad_library_dropdown()
+        messagebox.showinfo("Import Complete",
+            f"Imported {lib_count} libraries ({preset_count} pad sets) from stohrermusic.com.")
 
     def on_import_settings_folder(self):
         """Import all config files from a user-selected folder."""
