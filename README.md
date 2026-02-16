@@ -31,7 +31,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 ### Pad Presets
 - Save and load pad size lists organized into libraries
 - **Notes field** for annotating presets with context (source, instrument details)
-- **Import Matt's Pad Sets** — download reference pad sets from stohrermusic.com
+- **Import Matt's Pad Sets** — download reference pad sets from the [Pad Sets Library](https://www.stohrermusic.com/articles/pad-sets-library/)
 - Import/export preset files for sharing with colleagues
 
 ### SD Card Workflow (Windows)
@@ -40,7 +40,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 
 ### Key Height Library
 - Store and organize key height measurements by instrument
-- **Import Matt's Key Heights** — download reference data from stohrermusic.com
+- **Import Matt's Key Heights** — download reference data from the [Key Heights Library](https://www.stohrermusic.com/articles/key-heights-library/)
 - Import/export libraries for backup or sharing
 
 ### Serial Number Lookup
@@ -48,7 +48,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 
 ### Screw Specifications
 - OEM screw and rod specifications database
-- **Import Matt's Specs** — download reference data from stohrermusic.com
+- **Import Matt's Specs** — download reference data from the [Screw Specs Library](https://www.stohrermusic.com/articles/screw-specs-library/)
 - Import/export for sharing specs
 
 ### Cross-Platform
