@@ -832,6 +832,105 @@ class ImportPresetsWindow(tk.Toplevel):
             
         self.destroy()
 
+
+class WebImportPresetsWindow(tk.Toplevel):
+    """Import dialog for web-fetched presets grouped by library."""
+    def __init__(self, parent, web_data, local_presets, file_path, app_instance):
+        super().__init__(parent)
+        self.web_data = web_data
+        self.local_presets = local_presets
+        self.file_path = file_path
+        self.parent_app = app_instance
+
+        self.title("Import Matt's Pad Sets")
+        self.geometry("500x550")
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+
+        self.vars = {}
+
+        tk.Label(self, text="Select pad sets to import:", bg=DIALOG_BG,
+                 font=("Helvetica", 12)).pack(pady=10)
+
+        button_frame = tk.Frame(self, bg=DIALOG_BG)
+        button_frame.pack(pady=5)
+        tk.Button(button_frame, text="Select All", command=self.select_all).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Select None", command=self.select_none).pack(side="left", padx=5)
+
+        list_frame = tk.Frame(self, bg=DIALOG_BG)
+        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        self.canvas = tk.Canvas(list_frame, bg=DIALOG_BG, highlightthickness=0)
+        self.scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=DIALOG_BG)
+
+        self.scrollable_frame.bind("<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        for lib_name in sorted(web_data.keys()):
+            presets = web_data[lib_name]
+            if not isinstance(presets, dict):
+                continue
+            tk.Label(self.scrollable_frame, text=f"[{lib_name}]", bg=DIALOG_BG,
+                     font=("Helvetica", 10, "bold")).pack(anchor='w', pady=(5, 0))
+            for preset_name in sorted(presets.keys()):
+                var = tk.BooleanVar(value=True)
+                full_name = f"{lib_name}::{preset_name}"
+                cb = tk.Checkbutton(self.scrollable_frame, text=f"  {preset_name}",
+                                    variable=var, bg=DIALOG_BG)
+                cb.pack(anchor='w')
+                self.vars[full_name] = var
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        bind_mousewheel(self, self.canvas)
+
+        import_button = tk.Button(self, text="Import Selected",
+                                  command=self.import_selected,
+                                  font=("Helvetica", 10, "bold"))
+        import_button.pack(pady=10)
+
+    def select_all(self):
+        for var in self.vars.values():
+            var.set(True)
+
+    def select_none(self):
+        for var in self.vars.values():
+            var.set(False)
+
+    def import_selected(self):
+        added_count = 0
+        libs_touched = set()
+
+        for full_name, var in self.vars.items():
+            if not var.get():
+                continue
+            lib_name, preset_name = full_name.split("::", 1)
+            preset_data = self.web_data[lib_name][preset_name]
+
+            if lib_name not in self.local_presets:
+                self.local_presets[lib_name] = {}
+            self.local_presets[lib_name][preset_name] = preset_data
+            added_count += 1
+            libs_touched.add(lib_name)
+
+        if added_count > 0:
+            if save_presets(self.local_presets, self.file_path):
+                self.parent_app.update_pad_library_dropdown()
+                messagebox.showinfo("Import Complete",
+                    f"Imported {added_count} pad sets into "
+                    f"{len(libs_touched)} library/libraries.")
+            else:
+                messagebox.showerror("Import Error", "Could not save presets to file.")
+        else:
+            messagebox.showinfo("Import Complete", "No pad sets were imported.")
+
+        self.destroy()
+
+
 class ImportTargetWindow(tk.Toplevel):
     def __init__(self, parent, existing_libraries):
         super().__init__(parent)

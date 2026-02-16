@@ -20,7 +20,7 @@ from gcode_engine import generate_gcode, generate_gcode_from_placed
 from ui_dialogs import (
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
-    ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow,
+    ImportPresetsWindow, ExportPresetsWindow, WebImportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
     UserGuideWindow, AboutDialog, PadNotesWindow
 )
@@ -1409,7 +1409,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         ExportPresetsWindow(self.root, self.pad_presets, "Pad Presets", "pad_preset_export.json", False)
 
     def on_import_matts_pad_sets(self):
-        """Fetch pad set presets from stohrermusic.com and import by library."""
+        """Fetch pad set presets from stohrermusic.com and let user pick which to import."""
         import urllib.request
         import urllib.error
 
@@ -1432,38 +1432,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             messagebox.showinfo("No Data", "No pad set data found on the server.")
             return
 
-        # Count libraries and total presets
-        lib_count = 0
-        preset_count = 0
-        for lib_name, presets in web_data.items():
-            if isinstance(presets, dict):
-                lib_count += 1
-                preset_count += len(presets)
-
-        if preset_count == 0:
-            messagebox.showinfo("No Data", "No pad set presets found on the server.")
-            return
-
-        # Check which web libraries already exist locally
-        existing_libs = [name for name in web_data if name in self.pad_presets]
-
-        if existing_libs:
-            overwrite = messagebox.askyesno("Overwrite Existing?",
-                f"{len(existing_libs)} library/libraries already exist locally:\n\n"
-                + "\n".join(f"  \u2022 {name}" for name in existing_libs)
-                + "\n\nOverwrite with latest from web?")
-            if not overwrite:
-                return
-
-        # Import each library
-        for lib_name, presets in web_data.items():
-            if isinstance(presets, dict):
-                self.pad_presets[lib_name] = presets
-
-        save_presets(self.pad_presets, PAD_PRESET_FILE)
-        self.update_pad_library_dropdown()
-        messagebox.showinfo("Import Complete",
-            f"Imported {lib_count} libraries ({preset_count} pad sets) from stohrermusic.com.")
+        WebImportPresetsWindow(self.root, web_data, self.pad_presets, PAD_PRESET_FILE, self)
 
     def on_import_settings_folder(self):
         """Import all config files from a user-selected folder."""
