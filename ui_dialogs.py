@@ -849,6 +849,7 @@ class WebImportPresetsWindow(tk.Toplevel):
         self.grab_set()
 
         self.vars = {}
+        self.lib_vars = {}  # library-level toggle vars
 
         tk.Label(self, text="Select pad sets to import:", bg=DIALOG_BG,
                  font=("Helvetica", 12)).pack(pady=10)
@@ -874,8 +875,13 @@ class WebImportPresetsWindow(tk.Toplevel):
             presets = web_data[lib_name]
             if not isinstance(presets, dict):
                 continue
-            tk.Label(self.scrollable_frame, text=f"[{lib_name}]", bg=DIALOG_BG,
-                     font=("Helvetica", 10, "bold")).pack(anchor='w', pady=(5, 0))
+            lib_var = tk.BooleanVar(value=True)
+            self.lib_vars[lib_name] = lib_var
+            lib_cb = tk.Checkbutton(self.scrollable_frame, text=f"[{lib_name}]",
+                                    variable=lib_var, bg=DIALOG_BG,
+                                    font=("Helvetica", 10, "bold"),
+                                    command=lambda ln=lib_name: self.toggle_library(ln))
+            lib_cb.pack(anchor='w', pady=(5, 0))
             for preset_name in sorted(presets.keys()):
                 var = tk.BooleanVar(value=True)
                 full_name = f"{lib_name}::{preset_name}"
@@ -893,12 +899,22 @@ class WebImportPresetsWindow(tk.Toplevel):
                                   font=("Helvetica", 10, "bold"))
         import_button.pack(pady=10)
 
+    def toggle_library(self, lib_name):
+        checked = self.lib_vars[lib_name].get()
+        for full_name, var in self.vars.items():
+            if full_name.startswith(f"{lib_name}::"):
+                var.set(checked)
+
     def select_all(self):
         for var in self.vars.values():
+            var.set(True)
+        for var in self.lib_vars.values():
             var.set(True)
 
     def select_none(self):
         for var in self.vars.values():
+            var.set(False)
+        for var in self.lib_vars.values():
             var.set(False)
 
     def import_selected(self):
