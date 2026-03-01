@@ -12,10 +12,10 @@ import sys
 from svg_engine import (
     _nest_discs, try_nest_partial, compute_remaining_pads, can_all_pads_fit,
     generate_die_svg, generate_die_svg_from_placed,
-    generate_holder_svg
+    generate_holder_svg, generate_kerf_test_svg
 )
 from gcode_engine import (
-    generate_die_gcode_from_placed, generate_holder_gcode
+    generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode
 )
 from ui_dialogs import GcodeSettingsWindow
 
@@ -184,6 +184,58 @@ class ToolingTabMixin:
                   command=self._on_generate_holder_svg).pack(side='left', padx=(0, 10))
         tk.Button(holder_gen_frame, text="Generate G-code", width=15,
                   command=self._on_generate_holder_gcode).pack(side='left')
+
+        # ========================================
+        # KERF TEST SECTION
+        # ========================================
+        kerf_frame = tk.LabelFrame(content_frame, text="Kerf Test", bg=bg,
+                                   padx=10, pady=10, font=("Helvetica", 10, "bold"))
+        kerf_frame.pack(fill='x', padx=10, pady=(10, 10))
+
+        # Material dropdown
+        mat_row = tk.Frame(kerf_frame, bg=bg)
+        mat_row.pack(fill='x', pady=(0, 5))
+
+        tk.Label(mat_row, text="Material:", bg=bg).pack(side='left')
+        self.kerf_material_var = tk.StringVar(value="Acrylic")
+        kerf_materials = ["Felt", "Card", "Leather", "Acrylic"]
+        kerf_dropdown = ttk.Combobox(mat_row, textvariable=self.kerf_material_var,
+                                     values=kerf_materials, state="readonly", width=12)
+        kerf_dropdown.pack(side='left', padx=(5, 0))
+
+        # Use existing settings checkbox
+        settings_row = tk.Frame(kerf_frame, bg=bg)
+        settings_row.pack(fill='x', pady=(0, 5))
+
+        self.kerf_use_existing_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(settings_row, text="Use existing G-code settings for this material",
+                       variable=self.kerf_use_existing_var, bg=bg,
+                       command=self._toggle_kerf_custom_settings).pack(anchor='w')
+
+        # Custom settings (hidden by default)
+        self.kerf_custom_frame = tk.Frame(kerf_frame, bg=bg)
+
+        custom_row = tk.Frame(self.kerf_custom_frame, bg=bg)
+        custom_row.pack(fill='x')
+
+        tk.Label(custom_row, text="Cut speed:", bg=bg).pack(side='left')
+        self.kerf_speed_var = tk.StringVar(value="180")
+        tk.Entry(custom_row, textvariable=self.kerf_speed_var, width=8).pack(side='left', padx=(2, 5))
+        tk.Label(custom_row, text="mm/min", bg=bg).pack(side='left', padx=(0, 15))
+
+        tk.Label(custom_row, text="Cut power:", bg=bg).pack(side='left')
+        self.kerf_power_var = tk.StringVar(value="100")
+        tk.Entry(custom_row, textvariable=self.kerf_power_var, width=8).pack(side='left', padx=(2, 5))
+        tk.Label(custom_row, text="%", bg=bg).pack(side='left')
+
+        # Generate buttons
+        kerf_gen_frame = tk.Frame(kerf_frame, bg=bg)
+        kerf_gen_frame.pack(fill='x', pady=(5, 0))
+
+        tk.Button(kerf_gen_frame, text="Generate SVG", width=15,
+                  command=self._on_generate_kerf_svg).pack(side='left', padx=(0, 10))
+        tk.Button(kerf_gen_frame, text="Generate G-code", width=15,
+                  command=self._on_generate_kerf_gcode).pack(side='left')
 
     # ========================================
     # SIZE PARSING
@@ -731,6 +783,94 @@ class ToolingTabMixin:
             except tk.TclError:
                 pass
             self.tooling_scrap_window = None
+
+    # ========================================
+    # KERF TEST GENERATION
+    # ========================================
+
+    def _toggle_kerf_custom_settings(self):
+        """Show/hide custom speed/power fields based on checkbox."""
+        if self.kerf_use_existing_var.get():
+            self.kerf_custom_frame.pack_forget()
+        else:
+            self.kerf_custom_frame.pack(fill='x', pady=(0, 5))
+
+    def _get_kerf_material_key(self):
+        """Map display name to settings key."""
+        return self.kerf_material_var.get().lower()
+
+    def _on_generate_kerf_svg(self):
+        """Generate SVG kerf test pattern."""
+        try:
+            material_name = self.kerf_material_var.get()
+            save_path = filedialog.asksaveasfilename(
+                title="Save Kerf Test SVG",
+                defaultextension=".svg",
+                filetypes=[("SVG files", "*.svg")],
+                initialfile=f"kerf_test_{material_name.lower()}.svg",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+            generate_kerf_test_svg(material_name, save_path, self.settings)
+            messagebox.showinfo("Done",
+                f"Kerf test pattern for {material_name} saved.\n\n{save_path}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
+
+    def _on_generate_kerf_gcode(self):
+        """Generate G-code kerf test pattern."""
+        try:
+            material_name = self.kerf_material_var.get()
+            mat_key = self._get_kerf_material_key()
+
+            # Get cut speed/power
+            if self.kerf_use_existing_var.get():
+                gcode_settings = self.settings.get("gcode_settings", {})
+                mat_settings = gcode_settings.get(mat_key, {})
+                cut_speed = mat_settings.get("cut_speed", 180)
+                cut_power = mat_settings.get("cut_power", 100)
+                eng_mode = mat_settings.get("engraving_mode", "line")
+                if eng_mode == "filled":
+                    eng_speed = mat_settings.get("filled_engraving_speed", 1000)
+                    eng_power = mat_settings.get("filled_engraving_power", 15)
+                else:
+                    eng_speed = mat_settings.get("engraving_speed", 1000)
+                    eng_power = mat_settings.get("engraving_power", 15)
+                filled_spacing = mat_settings.get("filled_line_spacing", 0.15)
+            else:
+                try:
+                    cut_speed = float(self.kerf_speed_var.get())
+                    cut_power = float(self.kerf_power_var.get())
+                except (ValueError, TypeError):
+                    messagebox.showerror("Invalid Input", "Speed and power must be valid numbers.")
+                    return
+                eng_mode = "line"
+                eng_speed = 1000
+                eng_power = 15
+                filled_spacing = 0.15
+
+            save_path = filedialog.asksaveasfilename(
+                title="Save Kerf Test G-code",
+                defaultextension=".gcode",
+                filetypes=[("G-code files", "*.gcode")],
+                initialfile=f"kerf_test_{mat_key}.gcode",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+            generate_kerf_test_gcode(material_name, save_path, self.settings,
+                                     cut_speed, cut_power, eng_speed, eng_power,
+                                     engraving_mode=eng_mode,
+                                     filled_line_spacing=filled_spacing)
+            messagebox.showinfo("Done",
+                f"Kerf test G-code for {material_name} saved.\n\n{save_path}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
 
     # ========================================
     # DIE HOLDER GENERATION

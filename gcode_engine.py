@@ -1112,3 +1112,101 @@ def generate_holder_gcode(variant, filename, settings):
 
     with open(filename, 'w') as f:
         f.write('\n'.join(gcode_lines))
+
+
+# ==========================================
+# KERF TEST G-CODE GENERATION
+# ==========================================
+
+def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_power,
+                              eng_speed, eng_power, engraving_mode="line",
+                              filled_line_spacing=0.15):
+    """
+    Generate G-code for a kerf test pattern: 3 circles at known diameters
+    with engraved labels and instructions. No kerf compensation applied.
+    """
+    from svg_engine import KERF_TEST_DIAMETERS
+
+    spacing = 5.0
+    max_r = max(KERF_TEST_DIAMETERS) / 2
+    title_height = 8.0
+    label_height = 6.0
+    instruction_height = 12.0
+
+    positions = []
+    x_cursor = spacing
+    for dia in KERF_TEST_DIAMETERS:
+        r = dia / 2
+        cx = x_cursor + max_r
+        positions.append((dia, cx, r))
+        x_cursor += max_r * 2 + spacing
+
+    width_mm = x_cursor
+    svg_cy = title_height + label_height + max_r + spacing
+    height_mm = svg_cy + max_r + spacing + instruction_height
+
+    # Flip Y for G-code
+    cy = height_mm - svg_cy
+
+    return_speed = settings.get("gcode_return_speed", 1000)
+
+    overscan_mm = 0
+    if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
+
+    # Engraving strokes
+    engraving_strokes = []
+
+    # Title
+    title_text = f"Kerf Test - {material_name}"
+    title_y_svg = title_height * 0.7
+    title_y = height_mm - title_y_svg
+    if engraving_mode == "filled":
+        engraving_strokes.extend(get_filled_text_strokes(title_text, 4.0, width_mm / 2, title_y, filled_line_spacing))
+    else:
+        engraving_strokes.extend(get_text_strokes(title_text, 4.0, width_mm / 2, title_y))
+
+    # Labels
+    for dia, cx, r in positions:
+        label_text = f"{dia:.0f}"
+        label_y_svg = title_height + label_height * 0.5
+        label_y = height_mm - label_y_svg
+        if engraving_mode == "filled":
+            engraving_strokes.extend(get_filled_text_strokes(label_text, 3.5, cx, label_y, filled_line_spacing))
+        else:
+            engraving_strokes.extend(get_text_strokes(label_text, 3.5, cx, label_y))
+
+    # Instruction text (simplified for stroke font charset)
+    inst1 = "Measure cutout with calipers"
+    inst2 = "Kerf = (nominal - measured) / 2"
+    inst_y1_svg = svg_cy + max_r + spacing + 3.0
+    inst_y2_svg = inst_y1_svg + 5.0
+    inst_y1 = height_mm - inst_y1_svg
+    inst_y2 = height_mm - inst_y2_svg
+    if engraving_mode == "filled":
+        engraving_strokes.extend(get_filled_text_strokes(inst1, 2.8, width_mm / 2, inst_y1, filled_line_spacing))
+        engraving_strokes.extend(get_filled_text_strokes(inst2, 2.8, width_mm / 2, inst_y2, filled_line_spacing))
+    else:
+        engraving_strokes.extend(get_text_strokes(inst1, 2.8, width_mm / 2, inst_y1))
+        engraving_strokes.extend(get_text_strokes(inst2, 2.8, width_mm / 2, inst_y2))
+
+    # Cut strokes - NO kerf compensation
+    cut_strokes = []
+    for dia, cx, r in positions:
+        cut_strokes.append(linearize_circle(cx, cy, r, segments=72))
+
+    # Build G-code
+    gcode_lines = []
+    gcode_lines.extend(generate_gcode_header(0, 0, width_mm, height_mm))
+
+    if engraving_strokes:
+        gcode_lines.extend(generate_gcode_layer(engraving_strokes, eng_speed, eng_power, 'C03',
+                                                 overscan_mm=overscan_mm, air_assist=True))
+    if cut_strokes:
+        gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, 'C02',
+                                                 air_assist=True))
+
+    gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))

@@ -2019,6 +2019,20 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Files are named with _scrap1, _scrap2, etc. suffixes")
         self._blank()
 
+        self._h2("Tooling \u2014 Kerf Test")
+        self._body("Generate a quick test pattern to measure your laser's kerf width for any material. "
+                    "The pattern cuts three circles at known diameters (10, 20, 30mm) with engraved "
+                    "labels and measurement instructions.")
+        self._bullet("Select the material you want to calibrate")
+        self._bullet("Cut the pattern, pop out the three discs")
+        self._bullet("Measure each disc with calipers")
+        self._bullet("Kerf = (nominal diameter \u2212 measured diameter) \u00f7 2")
+        self._bullet("Enter the result in your G-code settings for that material")
+        self._body("By default, the test uses your existing G-code settings (speed/power) for the "
+                    "selected material. Uncheck \"Use existing settings\" to enter custom values "
+                    "for a quick one-off test.")
+        self._blank()
+
         self._h2("Tooling \u2014 Settings")
         self._body("Options > Settings opens the Tooling Settings dialog with:")
         self._bullet("Acrylic G-code parameters: speed, power, kerf, and air assist "

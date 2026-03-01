@@ -967,3 +967,86 @@ def generate_holder_svg(variant, filename, settings):
                 dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{inner_r}mm", stroke=cut_color, fill='none', stroke_width=stroke_w))
 
     dwg.save()
+
+
+# ==========================================
+# KERF TEST SVG GENERATION
+# ==========================================
+
+KERF_TEST_DIAMETERS = [10.0, 20.0, 30.0]
+
+def generate_kerf_test_svg(material_name, filename, settings):
+    """
+    Generate an SVG kerf test pattern: 3 circles at known diameters with
+    engraved labels and measurement instructions. No kerf compensation applied.
+    """
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    cut_color = layer_colors.get('die_outer_cut', '#FF0000')
+    eng_color = layer_colors.get('die_engraving', '#00E000')
+
+    # Layout: row of 3 circles with spacing
+    spacing = 5.0
+    max_r = max(KERF_TEST_DIAMETERS) / 2
+    title_height = 8.0
+    label_height = 6.0
+    instruction_height = 12.0
+
+    # Calculate positions
+    positions = []
+    x_cursor = spacing
+    for dia in KERF_TEST_DIAMETERS:
+        r = dia / 2
+        cx = x_cursor + max_r  # Align centers based on largest radius
+        positions.append((dia, cx, r))
+        x_cursor += max_r * 2 + spacing
+
+    width_mm = x_cursor
+    cy = title_height + label_height + max_r + spacing
+    height_mm = cy + max_r + spacing + instruction_height
+
+    dwg, compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+
+    # Title
+    title_text = f"Kerf Test \u2014 {material_name}"
+    title_y = title_height * 0.7
+    if compat:
+        dwg.add(dwg.text(title_text, insert=(width_mm / 2, title_y),
+                         text_anchor="middle", font_size=4.0, fill=eng_color,
+                         font_weight="bold"))
+    else:
+        dwg.add(dwg.text(title_text, insert=(f"{width_mm / 2}mm", f"{title_y}mm"),
+                         text_anchor="middle", font_size="4.0mm", fill=eng_color,
+                         font_weight="bold"))
+
+    # Circles and labels
+    for dia, cx, r in positions:
+        label_text = f"{dia:.0f}"
+        label_y = title_height + label_height * 0.5
+        if compat:
+            dwg.add(dwg.text(label_text, insert=(cx, label_y),
+                             text_anchor="middle", font_size=3.5, fill=eng_color))
+            dwg.add(dwg.circle(center=(cx, cy), r=r, stroke=cut_color,
+                               fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.text(label_text, insert=(f"{cx}mm", f"{label_y}mm"),
+                             text_anchor="middle", font_size="3.5mm", fill=eng_color))
+            dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{r}mm",
+                               stroke=cut_color, fill='none', stroke_width=stroke_w))
+
+    # Instructions below circles
+    inst_y1 = cy + max_r + spacing + 3.0
+    inst_y2 = inst_y1 + 5.0
+    inst1 = "Measure each cutout disc with calipers."
+    inst2 = "Kerf = (nominal \u2212 measured) \u00f7 2"
+    if compat:
+        dwg.add(dwg.text(inst1, insert=(width_mm / 2, inst_y1),
+                         text_anchor="middle", font_size=2.8, fill=eng_color))
+        dwg.add(dwg.text(inst2, insert=(width_mm / 2, inst_y2),
+                         text_anchor="middle", font_size=2.8, fill=eng_color))
+    else:
+        dwg.add(dwg.text(inst1, insert=(f"{width_mm / 2}mm", f"{inst_y1}mm"),
+                         text_anchor="middle", font_size="2.8mm", fill=eng_color))
+        dwg.add(dwg.text(inst2, insert=(f"{width_mm / 2}mm", f"{inst_y2}mm"),
+                         text_anchor="middle", font_size="2.8mm", fill=eng_color))
+
+    dwg.save()

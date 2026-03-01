@@ -14,12 +14,13 @@ from svg_engine import (
     get_disc_diameter, _nest_discs, can_all_pads_fit,
     try_nest_partial, compute_remaining_pads,
     generate_die_svg, generate_die_svg_from_placed,
-    generate_holder_svg,
+    generate_holder_svg, generate_kerf_test_svg,
     HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
     HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R,
 )
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, can_generate_gcode,
+    generate_kerf_test_gcode,
 )
 
 passed = 0
@@ -326,6 +327,42 @@ check("Parse invalid input gracefully", parse_die_sizes("abc, 10, xyz") == [10.0
 
 check("Parse reversed range: '12-10'",
       parse_die_sizes("12-10") == [10.0, 10.5, 11.0, 11.5, 12.0])
+
+# ============================================================
+print("\n=== Kerf Test SVG Generation ===")
+# ============================================================
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    for material in ["Felt", "Card", "Leather", "Acrylic"]:
+        svg_path = os.path.join(tmpdir, f"kerf_test_{material.lower()}.svg")
+        generate_kerf_test_svg(material, svg_path, settings)
+        check(f"Kerf test SVG ({material}) created", os.path.exists(svg_path))
+        with open(svg_path, 'r') as f:
+            content = f.read()
+        circle_count = content.count('<circle')
+        check(f"Kerf test SVG ({material}) has 3 circles (found {circle_count})", circle_count == 3)
+        text_count = content.count('<text')
+        check(f"Kerf test SVG ({material}) has text (found {text_count})", text_count > 0)
+        check(f"Kerf test SVG ({material}) mentions material name", material in content)
+
+# ============================================================
+print("\n=== Kerf Test G-code Generation ===")
+# ============================================================
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    for material in ["Felt", "Acrylic"]:
+        gcode_path = os.path.join(tmpdir, f"kerf_test_{material.lower()}.gcode")
+        generate_kerf_test_gcode(material, gcode_path, settings,
+                                  cut_speed=180, cut_power=100,
+                                  eng_speed=1000, eng_power=15)
+        check(f"Kerf test G-code ({material}) created", os.path.exists(gcode_path))
+        with open(gcode_path, 'r') as f:
+            content = f.read()
+        check(f"Kerf test G-code ({material}) has header", "G90" in content)
+        check(f"Kerf test G-code ({material}) has moves", "G1" in content)
+        # Verify cut speed is correct (S180 for speed 180)
+        check(f"Kerf test G-code ({material}) uses correct cut speed",
+              "F180" in content)
 
 # ============================================================
 print(f"\n{'='*50}")
