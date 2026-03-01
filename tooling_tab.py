@@ -37,28 +37,36 @@ class ToolingTabMixin:
         self.tooling_scrap_window = None
 
     def create_tooling_tab(self, parent):
-        """Build the Tooling tab UI."""
+        """Build the Tooling tab UI with accordion-style tool selector."""
         tooling = self.settings.get("tooling_settings", {})
         bg = self.root.cget('bg') if IS_MACOS else self.default_bg
 
-        # Scrollable canvas for the tab content
-        canvas = tk.Canvas(parent, bg=bg, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        content_frame = tk.Frame(canvas, bg=bg)
+        # Tool selector buttons at top
+        selector_frame = tk.Frame(parent, bg=bg)
+        selector_frame.pack(fill='x', padx=10, pady=(10, 5))
 
-        content_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        self._tooling_sections = {}
+        self._tooling_buttons = {}
 
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        tool_names = [
+            ("die_inserts", "Die Inserts"),
+            ("die_holders", "Die Holders"),
+            ("kerf_test", "Kerf Test"),
+        ]
+        for key, label in tool_names:
+            btn = tk.Button(selector_frame, text=label, width=15,
+                            command=lambda k=key: self._show_tooling_section(k))
+            btn.pack(side='left', padx=(0, 5))
+            self._tooling_buttons[key] = btn
+
+        # Content area (each section is a frame, only one visible at a time)
+        self._tooling_content = tk.Frame(parent, bg=bg)
+        self._tooling_content.pack(fill='both', expand=True, padx=10, pady=(0, 5))
 
         # ========================================
         # DIE INSERTS SECTION
         # ========================================
-        die_frame = tk.LabelFrame(content_frame, text="Die Inserts", bg=bg,
-                                  padx=10, pady=10, font=("Helvetica", 10, "bold"))
-        die_frame.pack(fill='x', padx=10, pady=(10, 5))
+        die_frame = tk.Frame(self._tooling_content, bg=bg)
 
         # Size input
         size_input_frame = tk.Frame(die_frame, bg=bg)
@@ -108,16 +116,19 @@ class ToolingTabMixin:
         size_row = tk.Frame(sheet_frame, bg=bg)
         size_row.pack(fill='x')
 
-        units = self.settings.get("units", "in")
-        unit_label = "in" if units == "in" else "mm"
-
-        tk.Label(size_row, text=f"Width ({unit_label}):", bg=bg).pack(side='left')
+        tk.Label(size_row, text="Width:", bg=bg).pack(side='left')
         self.die_width_var = tk.StringVar(value=tooling.get("sheet_width", "12"))
         tk.Entry(size_row, textvariable=self.die_width_var, width=8).pack(side='left', padx=(2, 10))
 
-        tk.Label(size_row, text=f"Height ({unit_label}):", bg=bg).pack(side='left')
+        tk.Label(size_row, text="Height:", bg=bg).pack(side='left')
         self.die_height_var = tk.StringVar(value=tooling.get("sheet_height", "12"))
-        tk.Entry(size_row, textvariable=self.die_height_var, width=8).pack(side='left', padx=(2, 0))
+        tk.Entry(size_row, textvariable=self.die_height_var, width=8).pack(side='left', padx=(2, 10))
+
+        self.die_units_var = tk.StringVar(value=self.settings.get("units", "in"))
+        tk.Radiobutton(size_row, text="in", variable=self.die_units_var,
+                       value="in", bg=bg).pack(side='left')
+        tk.Radiobutton(size_row, text="mm", variable=self.die_units_var,
+                       value="mm", bg=bg).pack(side='left', padx=(5, 0))
 
         # Scrap mode
         scrap_row = tk.Frame(die_frame, bg=bg)
@@ -151,12 +162,19 @@ class ToolingTabMixin:
         tk.Button(gen_frame, text="Generate G-code", width=15,
                   command=self._on_generate_die_gcode).pack(side='left')
 
+        self._tooling_sections['die_inserts'] = die_frame
+
         # ========================================
         # DIE HOLDERS SECTION
         # ========================================
-        holder_frame = tk.LabelFrame(content_frame, text="Die Holders", bg=bg,
-                                     padx=10, pady=10, font=("Helvetica", 10, "bold"))
-        holder_frame.pack(fill='x', padx=10, pady=(10, 10))
+        holder_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        # Sheet size info
+        holder_info = tk.Label(holder_frame, bg=bg, font=("Helvetica", 9), fg="gray",
+                               text="Required sheet: 185 \u00d7 185 mm (7.3 \u00d7 7.3 in) per holder,\n"
+                                    "275 \u00d7 185 mm (10.8 \u00d7 7.3 in) for both",
+                               justify="left")
+        holder_info.pack(anchor='w', pady=(0, 8))
 
         variant_frame = tk.Frame(holder_frame, bg=bg)
         variant_frame.pack(fill='x', pady=(0, 5))
@@ -185,12 +203,18 @@ class ToolingTabMixin:
         tk.Button(holder_gen_frame, text="Generate G-code", width=15,
                   command=self._on_generate_holder_gcode).pack(side='left')
 
+        self._tooling_sections['die_holders'] = holder_frame
+
         # ========================================
         # KERF TEST SECTION
         # ========================================
-        kerf_frame = tk.LabelFrame(content_frame, text="Kerf Test", bg=bg,
-                                   padx=10, pady=10, font=("Helvetica", 10, "bold"))
-        kerf_frame.pack(fill='x', padx=10, pady=(10, 10))
+        kerf_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        # Sheet size info
+        kerf_info = tk.Label(kerf_frame, bg=bg, font=("Helvetica", 9), fg="gray",
+                             text="Pattern size: 110 \u00d7 54 mm (4.3 \u00d7 2.1 in)",
+                             justify="left")
+        kerf_info.pack(anchor='w', pady=(0, 8))
 
         # Material dropdown
         mat_row = tk.Frame(kerf_frame, bg=bg)
@@ -236,6 +260,34 @@ class ToolingTabMixin:
                   command=self._on_generate_kerf_svg).pack(side='left', padx=(0, 10))
         tk.Button(kerf_gen_frame, text="Generate G-code", width=15,
                   command=self._on_generate_kerf_gcode).pack(side='left')
+
+        self._tooling_sections['kerf_test'] = kerf_frame
+
+        # Nothing shown initially — user clicks a button
+        self._active_tooling_section = None
+
+    def _show_tooling_section(self, key):
+        """Show the selected tooling section, hide others. Toggle off if already active."""
+        # Toggle: clicking the active button hides it
+        if self._active_tooling_section == key:
+            self._tooling_sections[key].pack_forget()
+            self._tooling_buttons[key].config(relief="raised")
+            self._active_tooling_section = None
+            return
+
+        for section_key, frame in self._tooling_sections.items():
+            if section_key == key:
+                frame.pack(fill='both', expand=True, pady=(5, 0))
+            else:
+                frame.pack_forget()
+
+        for btn_key, btn in self._tooling_buttons.items():
+            if btn_key == key:
+                btn.config(relief="sunken")
+            else:
+                btn.config(relief="raised")
+
+        self._active_tooling_section = key
 
     # ========================================
     # SIZE PARSING
@@ -307,8 +359,7 @@ class ToolingTabMixin:
             messagebox.showerror("Invalid Input", "Sheet dimensions must be positive.")
             return None, None
 
-        units = self.settings.get("units", "in")
-        if units == "in":
+        if self.die_units_var.get() == "in":
             w *= 25.4
             h *= 25.4
 

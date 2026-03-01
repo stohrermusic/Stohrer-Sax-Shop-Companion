@@ -925,16 +925,24 @@ def generate_holder_svg(variant, filename, settings):
             pieces.append(('pin', None))
             pieces.append(('ring', HOLDER_SMALL_INNER_R))
 
-    # Layout: arrange in a row
+    # Layout: grid arrangement to fit on 300x300mm sheets
     num_pieces = len(pieces)
-    width_mm = num_pieces * outer_d + (num_pieces + 1) * spacing
-    height_mm = outer_d + 2 * spacing
+    if num_pieces <= 4:
+        cols = 2
+    else:
+        cols = 3
+    rows = (num_pieces + cols - 1) // cols
+
+    width_mm = cols * outer_d + (cols + 1) * spacing
+    height_mm = rows * outer_d + (rows + 1) * spacing
 
     dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
 
     for i, (piece_type, inner_r) in enumerate(pieces):
-        cx = spacing + HOLDER_OUTER_R + i * (outer_d + spacing)
-        cy = spacing + HOLDER_OUTER_R
+        col = i % cols
+        row = i // cols
+        cx = spacing + HOLDER_OUTER_R + col * (outer_d + spacing)
+        cy = spacing + HOLDER_OUTER_R + row * (outer_d + spacing)
 
         # Outer circle (always present)
         if compatibility_mode:

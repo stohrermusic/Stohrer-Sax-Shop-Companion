@@ -1063,18 +1063,26 @@ def generate_holder_gcode(variant, filename, settings):
             pieces.append(('ring', HOLDER_SMALL_INNER_R))
 
     num_pieces = len(pieces)
-    width_mm = num_pieces * outer_d + (num_pieces + 1) * spacing
-    height_mm = outer_d + 2 * spacing
+    if num_pieces <= 4:
+        cols = 2
+    else:
+        cols = 3
+    rows = (num_pieces + cols - 1) // cols
+
+    width_mm = cols * outer_d + (cols + 1) * spacing
+    height_mm = rows * outer_d + (rows + 1) * spacing
 
     hole_strokes = []
     outer_cut_strokes = []
     inner_cut_strokes = []
 
     for i, (piece_type, inner_r) in enumerate(pieces):
-        cx = spacing + HOLDER_OUTER_R + i * (outer_d + spacing)
+        col = i % cols
+        row = i // cols
+        cx = spacing + HOLDER_OUTER_R + col * (outer_d + spacing)
         # G-code Y flip: Y=0 at bottom
-        cy = spacing + HOLDER_OUTER_R
-        cy = height_mm - cy
+        svg_cy = spacing + HOLDER_OUTER_R + row * (outer_d + spacing)
+        cy = height_mm - svg_cy
 
         # Outer circle (always present)
         outer_cut_strokes.append(linearize_circle(cx, cy, HOLDER_OUTER_R + kerf_offset, segments=72))
