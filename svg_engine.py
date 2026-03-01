@@ -978,31 +978,29 @@ KERF_TEST_DIAMETERS = [10.0, 20.0, 30.0]
 def generate_kerf_test_svg(material_name, filename, settings):
     """
     Generate an SVG kerf test pattern: 3 circles at known diameters with
-    engraved labels and measurement instructions. No kerf compensation applied.
+    engraved size labels. No kerf compensation applied.
     """
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
     cut_color = layer_colors.get('die_outer_cut', '#FF0000')
     eng_color = layer_colors.get('die_engraving', '#00E000')
 
-    # Layout: row of 3 circles with spacing
     spacing = 5.0
     max_r = max(KERF_TEST_DIAMETERS) / 2
     title_height = 8.0
     label_height = 6.0
-    instruction_height = 12.0
 
     # Calculate positions
     positions = []
     x_cursor = spacing
     for dia in KERF_TEST_DIAMETERS:
         r = dia / 2
-        cx = x_cursor + max_r  # Align centers based on largest radius
+        cx = x_cursor + max_r
         positions.append((dia, cx, r))
         x_cursor += max_r * 2 + spacing
 
     width_mm = x_cursor
     cy = title_height + label_height + max_r + spacing
-    height_mm = cy + max_r + spacing + instruction_height
+    height_mm = cy + max_r + spacing
 
     dwg, compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
 
@@ -1032,51 +1030,5 @@ def generate_kerf_test_svg(material_name, filename, settings):
                              text_anchor="middle", font_size="3.5mm", fill=eng_color))
             dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{r}mm",
                                stroke=cut_color, fill='none', stroke_width=stroke_w))
-
-    # Instructions below circles
-    inst_y1 = cy + max_r + spacing + 3.0
-    inst_y2 = inst_y1 + 4.5
-    inst_y3 = inst_y2 + 4.5
-    inst1 = "Measure hole ID and disc OD with calipers."
-    inst2 = "Kerf = hole ID \u2212 disc OD"
-    inst3 = "Enter full kerf in G-code Settings."
-    height_mm = inst_y3 + 4.0  # Extend height for 3rd line
-
-    # Recreate drawing with updated height
-    dwg, compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
-
-    # Re-draw title
-    if compat:
-        dwg.add(dwg.text(title_text, insert=(width_mm / 2, title_y),
-                         text_anchor="middle", font_size=4.0, fill=eng_color,
-                         font_weight="bold"))
-    else:
-        dwg.add(dwg.text(title_text, insert=(f"{width_mm / 2}mm", f"{title_y}mm"),
-                         text_anchor="middle", font_size="4.0mm", fill=eng_color,
-                         font_weight="bold"))
-
-    # Re-draw circles and labels
-    for dia, cx_pos, r in positions:
-        label_text = f"{dia:.0f}"
-        label_y = title_height + label_height * 0.5
-        if compat:
-            dwg.add(dwg.text(label_text, insert=(cx_pos, label_y),
-                             text_anchor="middle", font_size=3.5, fill=eng_color))
-            dwg.add(dwg.circle(center=(cx_pos, cy), r=r, stroke=cut_color,
-                               fill='none', stroke_width=stroke_w))
-        else:
-            dwg.add(dwg.text(label_text, insert=(f"{cx_pos}mm", f"{label_y}mm"),
-                             text_anchor="middle", font_size="3.5mm", fill=eng_color))
-            dwg.add(dwg.circle(center=(f"{cx_pos}mm", f"{cy}mm"), r=f"{r}mm",
-                               stroke=cut_color, fill='none', stroke_width=stroke_w))
-
-    # Draw instructions
-    for inst_text, inst_y in [(inst1, inst_y1), (inst2, inst_y2), (inst3, inst_y3)]:
-        if compat:
-            dwg.add(dwg.text(inst_text, insert=(width_mm / 2, inst_y),
-                             text_anchor="middle", font_size=2.8, fill=eng_color))
-        else:
-            dwg.add(dwg.text(inst_text, insert=(f"{width_mm / 2}mm", f"{inst_y}mm"),
-                             text_anchor="middle", font_size="2.8mm", fill=eng_color))
 
     dwg.save()

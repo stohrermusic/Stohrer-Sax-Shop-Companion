@@ -1176,28 +1176,8 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
         else:
             engraving_strokes.extend(get_text_strokes(label_text, 3.5, cx, label_y))
 
-    # Instruction text (simplified for stroke font charset)
-    inst1 = "Measure hole ID and disc OD"
-    inst2 = "Kerf = hole ID - disc OD"
-    inst3 = "Enter full kerf in settings"
-    inst_y1_svg = svg_cy + max_r + spacing + 3.0
-    inst_y2_svg = inst_y1_svg + 4.5
-    inst_y3_svg = inst_y2_svg + 4.5
-    height_mm = inst_y3_svg + 4.0  # Extend for 3rd line
-    cy = height_mm - svg_cy  # Recompute after height change
-    inst_y1 = height_mm - inst_y1_svg
-    inst_y2 = height_mm - inst_y2_svg
-    inst_y3 = height_mm - inst_y3_svg
-    if engraving_mode == "filled":
-        engraving_strokes.extend(get_filled_text_strokes(inst1, 2.8, width_mm / 2, inst_y1, filled_line_spacing))
-        engraving_strokes.extend(get_filled_text_strokes(inst2, 2.8, width_mm / 2, inst_y2, filled_line_spacing))
-    else:
-        engraving_strokes.extend(get_text_strokes(inst1, 2.8, width_mm / 2, inst_y1))
-        engraving_strokes.extend(get_text_strokes(inst2, 2.8, width_mm / 2, inst_y2))
-    if engraving_mode == "filled":
-        engraving_strokes.extend(get_filled_text_strokes(inst3, 2.8, width_mm / 2, inst_y3, filled_line_spacing))
-    else:
-        engraving_strokes.extend(get_text_strokes(inst3, 2.8, width_mm / 2, inst_y3))
+    height_mm = svg_cy + max_r + spacing
+    cy = height_mm - svg_cy  # Recompute with final height
 
     # Cut strokes - NO kerf compensation
     cut_strokes = []

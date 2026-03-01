@@ -281,6 +281,7 @@ DEFAULT_SETTINGS = {
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
     "seen_sdcard_tutorial": False,
+    "seen_kerf_test_tutorial": False,
 
     "key_layout": {
         "show_serial": False,

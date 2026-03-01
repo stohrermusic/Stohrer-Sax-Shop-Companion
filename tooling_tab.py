@@ -799,6 +799,57 @@ class ToolingTabMixin:
         """Map display name to settings key."""
         return self.kerf_material_var.get().lower()
 
+    def _show_kerf_instructions(self, material_name):
+        """Show kerf test measurement instructions with a don't-show-again option."""
+        if self.settings.get("seen_kerf_test_tutorial", False):
+            return
+
+        from config import save_settings
+
+        mat_key = material_name.lower()
+        # Map to settings location
+        if mat_key == "acrylic":
+            settings_path = "Tooling > Options > Settings > Acrylic > Kerf Width"
+        else:
+            settings_path = f"Pad Generator > Options > G-code Settings > {material_name} > Kerf Width"
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Kerf Test \u2014 {material_name}")
+        dlg.geometry("420x310")
+        theme_bg = self._get_theme_color()
+        dlg.configure(bg=theme_bg)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+
+        tk.Label(dlg, text=f"Kerf Test \u2014 {material_name}", bg=theme_bg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(15, 10))
+
+        steps = [
+            "1.  Cut the pattern on your material",
+            "2.  Pop out the 3 discs (10mm, 20mm, 30mm)",
+            "3.  For each circle, measure the hole ID\n"
+            "     and disc OD with calipers",
+            "4.  Kerf = hole ID \u2212 disc OD",
+            "5.  Average the 3 results for best accuracy",
+            f"6.  Enter the full kerf value in:\n     {settings_path}",
+        ]
+        for step in steps:
+            tk.Label(dlg, text=step, bg=theme_bg, font=("Helvetica", 10),
+                     justify="left", anchor="w").pack(fill="x", padx=20, pady=1)
+
+        dont_show_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(dlg, text="Don't show this again", variable=dont_show_var,
+                       bg=theme_bg).pack(pady=(10, 5))
+
+        def on_ok():
+            if dont_show_var.get():
+                self.settings["seen_kerf_test_tutorial"] = True
+                save_settings(self.settings)
+            dlg.destroy()
+
+        tk.Button(dlg, text="OK", command=on_ok, width=10).pack(pady=(5, 15))
+
     def _on_generate_kerf_svg(self):
         """Generate SVG kerf test pattern."""
         try:
@@ -814,8 +865,7 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             generate_kerf_test_svg(material_name, save_path, self.settings)
-            messagebox.showinfo("Done",
-                f"Kerf test pattern for {material_name} saved.\n\n{save_path}")
+            self._show_kerf_instructions(material_name)
 
         except Exception as e:
             messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
@@ -866,8 +916,7 @@ class ToolingTabMixin:
                                      cut_speed, cut_power, eng_speed, eng_power,
                                      engraving_mode=eng_mode,
                                      filled_line_spacing=filled_spacing)
-            messagebox.showinfo("Done",
-                f"Kerf test G-code for {material_name} saved.\n\n{save_path}")
+            self._show_kerf_instructions(material_name)
 
         except Exception as e:
             messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
