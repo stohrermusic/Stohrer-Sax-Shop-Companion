@@ -2025,9 +2025,13 @@ class UserGuideWindow(tk.Toplevel):
                     "labels and measurement instructions.")
         self._bullet("Select the material you want to calibrate")
         self._bullet("Cut the pattern, pop out the three discs")
-        self._bullet("Measure each disc with calipers")
-        self._bullet("Kerf = (nominal diameter \u2212 measured diameter) \u00f7 2")
-        self._bullet("Enter the result in your G-code settings for that material")
+        self._bullet("Measure the hole ID (inner diameter of the hole in the sheet) "
+                      "and the disc OD (outer diameter of the cutout disc) with calipers")
+        self._bullet("Kerf = hole ID \u2212 disc OD (this is the full width of material "
+                      "vaporized by the laser beam)")
+        self._bullet("Enter the full kerf value in G-code Settings for that material \u2014 "
+                      "the app automatically splits it in half and applies the correct "
+                      "compensation (outer cuts expand, hole cuts shrink)")
         self._body("By default, the test uses your existing G-code settings (speed/power) for the "
                     "selected material. Uncheck \"Use existing settings\" to enter custom values "
                     "for a quick one-off test.")

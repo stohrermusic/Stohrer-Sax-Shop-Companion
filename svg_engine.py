@@ -1035,18 +1035,48 @@ def generate_kerf_test_svg(material_name, filename, settings):
 
     # Instructions below circles
     inst_y1 = cy + max_r + spacing + 3.0
-    inst_y2 = inst_y1 + 5.0
-    inst1 = "Measure each cutout disc with calipers."
-    inst2 = "Kerf = (nominal \u2212 measured) \u00f7 2"
+    inst_y2 = inst_y1 + 4.5
+    inst_y3 = inst_y2 + 4.5
+    inst1 = "Measure hole ID and disc OD with calipers."
+    inst2 = "Kerf = hole ID \u2212 disc OD"
+    inst3 = "Enter full kerf in G-code Settings."
+    height_mm = inst_y3 + 4.0  # Extend height for 3rd line
+
+    # Recreate drawing with updated height
+    dwg, compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+
+    # Re-draw title
     if compat:
-        dwg.add(dwg.text(inst1, insert=(width_mm / 2, inst_y1),
-                         text_anchor="middle", font_size=2.8, fill=eng_color))
-        dwg.add(dwg.text(inst2, insert=(width_mm / 2, inst_y2),
-                         text_anchor="middle", font_size=2.8, fill=eng_color))
+        dwg.add(dwg.text(title_text, insert=(width_mm / 2, title_y),
+                         text_anchor="middle", font_size=4.0, fill=eng_color,
+                         font_weight="bold"))
     else:
-        dwg.add(dwg.text(inst1, insert=(f"{width_mm / 2}mm", f"{inst_y1}mm"),
-                         text_anchor="middle", font_size="2.8mm", fill=eng_color))
-        dwg.add(dwg.text(inst2, insert=(f"{width_mm / 2}mm", f"{inst_y2}mm"),
-                         text_anchor="middle", font_size="2.8mm", fill=eng_color))
+        dwg.add(dwg.text(title_text, insert=(f"{width_mm / 2}mm", f"{title_y}mm"),
+                         text_anchor="middle", font_size="4.0mm", fill=eng_color,
+                         font_weight="bold"))
+
+    # Re-draw circles and labels
+    for dia, cx_pos, r in positions:
+        label_text = f"{dia:.0f}"
+        label_y = title_height + label_height * 0.5
+        if compat:
+            dwg.add(dwg.text(label_text, insert=(cx_pos, label_y),
+                             text_anchor="middle", font_size=3.5, fill=eng_color))
+            dwg.add(dwg.circle(center=(cx_pos, cy), r=r, stroke=cut_color,
+                               fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.text(label_text, insert=(f"{cx_pos}mm", f"{label_y}mm"),
+                             text_anchor="middle", font_size="3.5mm", fill=eng_color))
+            dwg.add(dwg.circle(center=(f"{cx_pos}mm", f"{cy}mm"), r=f"{r}mm",
+                               stroke=cut_color, fill='none', stroke_width=stroke_w))
+
+    # Draw instructions
+    for inst_text, inst_y in [(inst1, inst_y1), (inst2, inst_y2), (inst3, inst_y3)]:
+        if compat:
+            dwg.add(dwg.text(inst_text, insert=(width_mm / 2, inst_y),
+                             text_anchor="middle", font_size=2.8, fill=eng_color))
+        else:
+            dwg.add(dwg.text(inst_text, insert=(f"{width_mm / 2}mm", f"{inst_y}mm"),
+                             text_anchor="middle", font_size="2.8mm", fill=eng_color))
 
     dwg.save()
