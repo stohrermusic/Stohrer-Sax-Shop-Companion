@@ -25,6 +25,7 @@ from ui_dialogs import (
     UserGuideWindow, AboutDialog, PadNotesWindow
 )
 from library_features import LibraryFeaturesMixin
+from tooling_tab import ToolingTabMixin
 
 # ==========================================
 # MAIN APP CLASS
@@ -32,7 +33,7 @@ from library_features import LibraryFeaturesMixin
 
 IS_MACOS = sys.platform == 'darwin'
 
-class PadSVGGeneratorApp(LibraryFeaturesMixin):
+class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
     def __init__(self, root):
         self.root = root
         self.root.title("Stohrer Sax Shop Companion")
@@ -62,6 +63,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             'hole_dia': 0,             # Locked hole diameter
         }
         self.scrap_remaining_window = None  # Popup showing progress
+
+        # --- Tooling Tab Init ---
+        self._init_tooling_state()
 
         # --- Screw Specs Init ---
         if not os.path.exists(SCREW_SPECS_FILE):
@@ -97,6 +101,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.settings["card_use_paper_size"] = self.card_paper_var.get()
         dropdown_val = self.card_paper_dropdown.get().lower()
         self.settings["card_paper_size"] = "a4" if dropdown_val.startswith("a4") else "letter"
+
+        # Save tooling tab settings
+        self._update_tooling_settings()
 
         save_settings(self.settings)
         self.root.destroy()
@@ -137,7 +144,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         for widget in parent.winfo_children():
             widget_class = widget.winfo_class()
             
-            if widget_class in ('Frame', 'Label', 'Radiobutton', 'Checkbutton', 'LabelFrame'):
+            if widget_class in ('Frame', 'Label', 'Radiobutton', 'Checkbutton', 'LabelFrame', 'Canvas'):
                 try:
                     widget.configure(bg=color)
                 except tk.TclError:
@@ -150,7 +157,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
                 except tk.TclError:
                     pass
 
-            if isinstance(widget, (tk.Frame, tk.LabelFrame, ttk.Frame, ttk.LabelFrame, ttk.Notebook)):
+            if isinstance(widget, (tk.Frame, tk.LabelFrame, tk.Canvas, ttk.Frame, ttk.LabelFrame, ttk.Notebook)):
                 self.set_background_color(widget, color)
 
     def create_menus(self):
@@ -206,8 +213,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         # --- Serial Lookup Menu (was empty) ---
         self.serial_menu = tk.Menu(self.root)
 
+        # --- Tooling Menu ---
+        self.tooling_menu = tk.Menu(self.root)
+
+        tooling_file_menu = tk.Menu(self.tooling_menu, tearoff=0)
+        self.tooling_menu.add_cascade(label="File", menu=tooling_file_menu)
+        tooling_file_menu.add_command(label="Exit", command=self.on_exit)
+
+        tooling_options_menu = tk.Menu(self.tooling_menu, tearoff=0)
+        self.tooling_menu.add_cascade(label="Options", menu=tooling_options_menu)
+        tooling_options_menu.add_command(label="Settings...", command=self._open_tooling_gcode_settings)
+
         # --- Add Help menu to all tab menus ---
-        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu):
+        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu):
             help_menu = tk.Menu(menu, tearoff=0)
             menu.add_cascade(label="Help", menu=help_menu)
             help_menu.add_command(label="User Guide...", command=self.open_user_guide)
@@ -224,6 +242,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
             self.root.config(menu=self.serial_menu)
         elif current_tab == 3:
             self.root.config(menu=self.screw_menu)
+        elif current_tab == 4:
+            self.root.config(menu=self.tooling_menu)
 
     def create_widgets(self):
         self.notebook = ttk.Notebook(self.root)
@@ -247,6 +267,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         self.screw_tab = ttk.Frame(self.notebook, style='App.TFrame')
         self.notebook.add(self.screw_tab, text='Screw Specs')
         self.create_screw_specs_tab(self.screw_tab)
+
+        self.tooling_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
+        self.notebook.add(self.tooling_tab_frame, text='Tooling')
+        self.create_tooling_tab(self.tooling_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
@@ -1493,7 +1517,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin):
         LayerColorWindow(self.root, self.settings, lambda: save_settings(self.settings))
 
     def open_gcode_settings_window(self):
-        GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s))
+        # Show only pad materials (felt/card/leather) from the pad generator tab
+        pad_materials = [("felt", "Felt"), ("card", "Card"), ("leather", "Leather")]
+        GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
+                            materials=pad_materials)
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)

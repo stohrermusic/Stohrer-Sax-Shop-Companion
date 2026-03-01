@@ -66,10 +66,12 @@ def get_felt_thickness_mm(settings):
     return thickness
 
 def get_disc_diameter(pad_size, material, settings):
+    if material == 'die_ring':
+        return 70.0 if pad_size >= 40.0 else 50.0
     if material == 'felt': return pad_size - settings["felt_offset"]
     if material == 'card': return pad_size - (settings["felt_offset"] + settings["card_to_felt_offset"])
     if material == 'exact_size': return pad_size
-    
+
     if material == 'leather':
         threshold = settings.get("dart_threshold", 18.0)
         darts_enabled = settings.get("darts_enabled", True)
@@ -772,4 +774,196 @@ def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, ho
     """
     dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
     _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w)
+    dwg.save()
+
+
+# ==========================================
+# DIE INSERT SVG GENERATION
+# ==========================================
+
+def _render_svg_dies(dwg, placed, settings, compatibility_mode, stroke_w):
+    """Render placed die rings (outer cut, inner cut, engravings) into an SVG drawing."""
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    tooling = settings.get("tooling_settings", {})
+    engrave_ring = tooling.get("engrave_ring", True)
+    engrave_cutout = tooling.get("engrave_cutout", True)
+    engraving_mode = tooling.get("engraving_mode", "filled")
+
+    # Get kerf from acrylic gcode settings for cutout size calculation
+    gcode_settings = settings.get("gcode_settings", {})
+    acrylic_settings = gcode_settings.get("acrylic", {})
+    kerf_width = acrylic_settings.get("kerf_width", 0.15)
+
+    outer_cut_color = layer_colors.get('die_outer_cut', '#FF0000')
+    inner_cut_color = layer_colors.get('die_inner_cut', '#0000FF')
+    engraving_color = layer_colors.get('die_engraving', '#00E000')
+    cutout_eng_color = layer_colors.get('die_cutout_engraving', '#FF8000')
+
+    ring_font_size = tooling.get("ring_font_size", 3.5)
+    cutout_font_size = tooling.get("cutout_font_size", 3.5)
+    ring_location = tooling.get("ring_engraving_location", "centered")
+    ring_offset = tooling.get("ring_engraving_offset", 0.0)
+
+    for pad_size, cx, cy, r in placed:
+        inner_r = pad_size / 2
+
+        # Outer cut circle
+        if compatibility_mode:
+            dwg.add(dwg.circle(center=(cx, cy), r=r, stroke=outer_cut_color, fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{r}mm", stroke=outer_cut_color, fill='none', stroke_width=stroke_w))
+
+        # Inner cut circle (pad-sized hole)
+        if compatibility_mode:
+            dwg.add(dwg.circle(center=(cx, cy), r=inner_r, stroke=inner_cut_color, fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{inner_r}mm", stroke=inner_cut_color, fill='none', stroke_width=stroke_w))
+
+        # Engraving on ring (pad size label between inner and outer circles)
+        if engrave_ring:
+            text_content = f"{pad_size:.1f}".rstrip('0').rstrip('.')
+            font_size = ring_font_size
+            ring_width = r - inner_r
+            # Clamp font size to ring width
+            if font_size > ring_width * 0.9:
+                font_size = ring_width * 0.9
+            if font_size < 1.0:
+                font_size = 1.0
+
+            if ring_location == "from_outside":
+                label_y = cy - (r - ring_offset) + font_size * 0.35
+            else:  # centered
+                ring_center_r = (r + inner_r) / 2
+                label_y = cy - ring_center_r + font_size * 0.35
+
+            if compatibility_mode:
+                dwg.add(dwg.text(text_content, insert=(cx, label_y),
+                                 text_anchor="middle", font_size=font_size,
+                                 fill=engraving_color))
+            else:
+                dwg.add(dwg.text(text_content, insert=(f"{cx}mm", f"{label_y}mm"),
+                                 text_anchor="middle", font_size=f"{font_size}mm",
+                                 fill=engraving_color))
+
+        # Engraving on inner cutout disc (actual size after kerf)
+        if engrave_cutout:
+            actual_size = pad_size - kerf_width
+            text_content = f"{actual_size:.2f}".rstrip('0').rstrip('.')
+            font_size = cutout_font_size
+            # Only engrave if inner disc is large enough
+            if inner_r > font_size:
+                label_y = cy + font_size * 0.35
+                if compatibility_mode:
+                    dwg.add(dwg.text(text_content, insert=(cx, label_y),
+                                     text_anchor="middle", font_size=font_size,
+                                     fill=cutout_eng_color))
+                else:
+                    dwg.add(dwg.text(text_content, insert=(f"{cx}mm", f"{label_y}mm"),
+                                     text_anchor="middle", font_size=f"{font_size}mm",
+                                     fill=cutout_eng_color))
+
+
+def generate_die_svg(pads, width_mm, height_mm, filename, settings):
+    """Generate SVG for die insert rings."""
+    placed, _, _ = _nest_discs(pads, 'die_ring', width_mm, height_mm, settings)
+    dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+    _render_svg_dies(dwg, placed, settings, compatibility_mode, stroke_w)
+    dwg.save()
+    return placed
+
+
+def generate_die_svg_from_placed(placed, width_mm, height_mm, filename, settings):
+    """Generate SVG for die inserts from pre-computed placements (scrap mode)."""
+    dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+    _render_svg_dies(dwg, placed, settings, compatibility_mode, stroke_w)
+    dwg.save()
+
+
+# ==========================================
+# DIE HOLDER SVG GENERATION
+# ==========================================
+
+# Die holder constants
+HOLDER_OUTER_R = 42.5        # 85mm outer diameter
+HOLDER_MAGNET_HOLE_R = 1.75  # 3.5mm magnet hole
+HOLDER_PIN_HOLE_R = 3.0      # 6.0mm pin hole
+HOLDER_PIN_OFFSET = 25.0     # Pin hole distance from center
+HOLDER_LARGE_INNER_R = 35.0  # 70mm inner for large holder
+HOLDER_SMALL_INNER_R = 25.0  # 50mm inner for small holder
+
+def generate_holder_svg(variant, filename, settings):
+    """
+    Generate SVG for die holder pieces.
+
+    Args:
+        variant: "large", "small", or "both"
+        filename: Output file path
+        settings: App settings dict
+    """
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    cut_color = layer_colors.get('die_holder_cut', '#FF0000')
+    hole_color = layer_colors.get('die_holder_hole', '#0000FF')
+
+    spacing = 5.0
+    outer_d = HOLDER_OUTER_R * 2
+
+    # Determine pieces to generate
+    # Each holder variant needs: solid disc, magnet disc, pin disc, retaining ring
+    pieces = []
+    if variant in ('large', 'both'):
+        pieces.append(('solid', None))
+        pieces.append(('magnet', None))
+        pieces.append(('pin', None))
+        pieces.append(('ring', HOLDER_LARGE_INNER_R))
+    if variant in ('small', 'both'):
+        if variant == 'both':
+            # Shared layers already added, just add the small retaining ring
+            pieces.append(('ring', HOLDER_SMALL_INNER_R))
+        else:
+            pieces.append(('solid', None))
+            pieces.append(('magnet', None))
+            pieces.append(('pin', None))
+            pieces.append(('ring', HOLDER_SMALL_INNER_R))
+
+    # Layout: arrange in a row
+    num_pieces = len(pieces)
+    width_mm = num_pieces * outer_d + (num_pieces + 1) * spacing
+    height_mm = outer_d + 2 * spacing
+
+    dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+
+    for i, (piece_type, inner_r) in enumerate(pieces):
+        cx = spacing + HOLDER_OUTER_R + i * (outer_d + spacing)
+        cy = spacing + HOLDER_OUTER_R
+
+        # Outer circle (always present)
+        if compatibility_mode:
+            dwg.add(dwg.circle(center=(cx, cy), r=HOLDER_OUTER_R, stroke=cut_color, fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_OUTER_R}mm", stroke=cut_color, fill='none', stroke_width=stroke_w))
+
+        if piece_type == 'magnet':
+            # Center hole for magnet
+            if compatibility_mode:
+                dwg.add(dwg.circle(center=(cx, cy), r=HOLDER_MAGNET_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
+            else:
+                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_MAGNET_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
+
+        elif piece_type == 'pin':
+            # Center alignment hole + offset pin hole
+            if compatibility_mode:
+                dwg.add(dwg.circle(center=(cx, cy), r=HOLDER_MAGNET_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
+                dwg.add(dwg.circle(center=(cx, cy + HOLDER_PIN_OFFSET), r=HOLDER_PIN_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
+            else:
+                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_MAGNET_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
+                pin_y = cy + HOLDER_PIN_OFFSET
+                dwg.add(dwg.circle(center=(f"{cx}mm", f"{pin_y}mm"), r=f"{HOLDER_PIN_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
+
+        elif piece_type == 'ring':
+            # Retaining ring: inner circle
+            if compatibility_mode:
+                dwg.add(dwg.circle(center=(cx, cy), r=inner_r, stroke=cut_color, fill='none', stroke_width=stroke_w))
+            else:
+                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{inner_r}mm", stroke=cut_color, fill='none', stroke_width=stroke_w))
+
     dwg.save()

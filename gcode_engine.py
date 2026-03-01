@@ -593,7 +593,7 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 
 def can_generate_gcode(material):
     """Check if G-code generation is supported for a material."""
-    return material in ('felt', 'card', 'leather')
+    return material in ('felt', 'card', 'leather', 'die_ring', 'acrylic')
 
 
 def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
@@ -865,6 +865,248 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         if cut_strokes:
             gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, cut_layer,
                                                      air_assist=air_assist_cut))
+
+    gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))
+
+
+# ==========================================
+# DIE INSERT G-CODE GENERATION
+# ==========================================
+
+def generate_die_gcode_from_placed(placed, sheet_width_mm, sheet_height_mm, filename, settings):
+    """
+    Generate G-code for die insert rings from pre-computed placements.
+
+    Each die ring has: optional ring engraving, optional cutout engraving,
+    inner cut (pad-sized hole), outer cut (die boundary).
+    Cut order: engravings → inner cuts → outer cuts (so ring stays in place).
+    """
+    if not placed:
+        return
+
+    # Flip Y coordinates for G-code
+    flip_height = sheet_height_mm
+    placed = [(pad_size, cx, flip_height - cy, radius) for (pad_size, cx, cy, radius) in placed]
+
+    # Get acrylic G-code settings
+    gcode_settings = settings.get("gcode_settings", {})
+    mat_settings = gcode_settings.get("acrylic", {})
+    tooling = settings.get("tooling_settings", {})
+
+    engraving_mode = mat_settings.get("engraving_mode", "filled")
+    if engraving_mode == "filled":
+        engraving_speed = mat_settings.get("filled_engraving_speed", 800)
+        engraving_power = mat_settings.get("filled_engraving_power", 15)
+        filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
+    else:
+        engraving_speed = mat_settings.get("engraving_speed", 800)
+        engraving_power = mat_settings.get("engraving_power", 15)
+
+    overscan_mm = 0
+    if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
+
+    cut_speed = mat_settings.get("cut_speed", 150)
+    cut_power = mat_settings.get("cut_power", 100)
+
+    kerf_width = mat_settings.get("kerf_width", 0.15)
+    kerf_offset = kerf_width / 2
+
+    return_speed = settings.get("gcode_return_speed", 1000)
+
+    engrave_ring = tooling.get("engrave_ring", True)
+    engrave_cutout = tooling.get("engrave_cutout", True)
+    ring_font_size = tooling.get("ring_font_size", 3.5)
+    cutout_font_size = tooling.get("cutout_font_size", 3.5)
+    ring_location = tooling.get("ring_engraving_location", "centered")
+    ring_offset = tooling.get("ring_engraving_offset", 0.0)
+
+    if engraving_mode == "filled":
+        air_assist_engraving = mat_settings.get("air_assist_filled_engraving", True)
+    else:
+        air_assist_engraving = mat_settings.get("air_assist_engraving", True)
+    air_assist_cut = mat_settings.get("air_assist_cut", True)
+
+    # Collect strokes
+    engraving_strokes = []
+    inner_cut_strokes = []
+    outer_cut_strokes = []
+
+    for pad_size, cx, cy, radius in placed:
+        inner_r = pad_size / 2
+
+        # Ring engraving (pad size on ring annulus)
+        if engrave_ring:
+            text_content = f"{pad_size:.1f}".rstrip('0').rstrip('.')
+            ring_width = radius - inner_r
+            font_size = ring_font_size
+            if font_size > ring_width * 0.9:
+                font_size = ring_width * 0.9
+            if font_size < 1.0:
+                font_size = 1.0
+
+            # G-code Y is flipped vs SVG
+            if ring_location == "from_outside":
+                label_y = cy + (radius - ring_offset) - font_size * 0.35
+            else:  # centered
+                ring_center_r = (radius + inner_r) / 2
+                label_y = cy + ring_center_r - font_size * 0.35
+
+            if engraving_mode == "filled":
+                strokes = get_filled_text_strokes(text_content, font_size, cx, label_y, filled_line_spacing)
+            else:
+                strokes = get_text_strokes(text_content, font_size, cx, label_y)
+            engraving_strokes.extend(strokes)
+
+        # Cutout engraving (actual size on inner disc)
+        if engrave_cutout:
+            actual_size = pad_size - kerf_width
+            text_content = f"{actual_size:.2f}".rstrip('0').rstrip('.')
+            font_size = cutout_font_size
+            if inner_r > font_size:
+                label_y = cy - font_size * 0.35  # Centered in inner disc
+
+                if engraving_mode == "filled":
+                    strokes = get_filled_text_strokes(text_content, font_size, cx, label_y, filled_line_spacing)
+                else:
+                    strokes = get_text_strokes(text_content, font_size, cx, label_y)
+                engraving_strokes.extend(strokes)
+
+        # Inner cut (pad hole) - shrink by kerf offset
+        inner_cut_r = inner_r - kerf_offset
+        if inner_cut_r > 0:
+            inner_cut_strokes.append(linearize_circle(cx, cy, inner_cut_r, segments=72))
+
+        # Outer cut (die boundary) - expand by kerf offset
+        outer_cut_r = radius + kerf_offset
+        outer_cut_strokes.append(linearize_circle(cx, cy, outer_cut_r, segments=72))
+
+    # Build G-code: engravings → inner cuts → outer cuts
+    all_x = []
+    all_y = []
+    for pad_size, cx, cy, radius in placed:
+        all_x.extend([cx - radius, cx + radius])
+        all_y.extend([cy - radius, cy + radius])
+
+    gcode_lines = []
+    bounds_min_x = min(all_x) if all_x else 0
+    bounds_min_y = min(all_y) if all_y else 0
+    bounds_max_x = max(all_x) if all_x else sheet_width_mm
+    bounds_max_y = max(all_y) if all_y else sheet_height_mm
+    gcode_lines.extend(generate_gcode_header(bounds_min_x, bounds_min_y, bounds_max_x, bounds_max_y))
+
+    if engraving_strokes:
+        gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, 'C03',
+                                                 overscan_mm=overscan_mm, air_assist=air_assist_engraving))
+    if inner_cut_strokes:
+        gcode_lines.extend(generate_gcode_layer(inner_cut_strokes, cut_speed, cut_power, 'C01',
+                                                 air_assist=air_assist_cut))
+    if outer_cut_strokes:
+        gcode_lines.extend(generate_gcode_layer(outer_cut_strokes, cut_speed, cut_power, 'C02',
+                                                 air_assist=air_assist_cut))
+
+    gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))
+
+
+# ==========================================
+# DIE HOLDER G-CODE GENERATION
+# ==========================================
+
+def generate_holder_gcode(variant, filename, settings):
+    """
+    Generate G-code for die holder pieces.
+
+    Args:
+        variant: "large", "small", or "both"
+        filename: Output file path
+        settings: App settings dict
+    """
+    from svg_engine import (HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
+                            HOLDER_PIN_OFFSET, HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R)
+
+    gcode_settings = settings.get("gcode_settings", {})
+    mat_settings = gcode_settings.get("acrylic", {})
+
+    hole_speed = mat_settings.get("hole_speed", 200)
+    hole_power = mat_settings.get("hole_power", 80)
+    cut_speed = mat_settings.get("cut_speed", 150)
+    cut_power = mat_settings.get("cut_power", 100)
+    kerf_width = mat_settings.get("kerf_width", 0.15)
+    kerf_offset = kerf_width / 2
+    return_speed = settings.get("gcode_return_speed", 1000)
+    air_assist_hole = mat_settings.get("air_assist_hole", True)
+    air_assist_cut = mat_settings.get("air_assist_cut", True)
+
+    spacing = 5.0
+    outer_d = HOLDER_OUTER_R * 2
+
+    # Build piece list (same logic as SVG)
+    pieces = []
+    if variant in ('large', 'both'):
+        pieces.append(('solid', None))
+        pieces.append(('magnet', None))
+        pieces.append(('pin', None))
+        pieces.append(('ring', HOLDER_LARGE_INNER_R))
+    if variant in ('small', 'both'):
+        if variant == 'both':
+            pieces.append(('ring', HOLDER_SMALL_INNER_R))
+        else:
+            pieces.append(('solid', None))
+            pieces.append(('magnet', None))
+            pieces.append(('pin', None))
+            pieces.append(('ring', HOLDER_SMALL_INNER_R))
+
+    num_pieces = len(pieces)
+    width_mm = num_pieces * outer_d + (num_pieces + 1) * spacing
+    height_mm = outer_d + 2 * spacing
+
+    hole_strokes = []
+    outer_cut_strokes = []
+    inner_cut_strokes = []
+
+    for i, (piece_type, inner_r) in enumerate(pieces):
+        cx = spacing + HOLDER_OUTER_R + i * (outer_d + spacing)
+        # G-code Y flip: Y=0 at bottom
+        cy = spacing + HOLDER_OUTER_R
+        cy = height_mm - cy
+
+        # Outer circle (always present)
+        outer_cut_strokes.append(linearize_circle(cx, cy, HOLDER_OUTER_R + kerf_offset, segments=72))
+
+        if piece_type == 'magnet':
+            hole_strokes.append(linearize_circle(cx, cy, HOLDER_MAGNET_HOLE_R - kerf_offset, segments=36))
+
+        elif piece_type == 'pin':
+            hole_strokes.append(linearize_circle(cx, cy, HOLDER_MAGNET_HOLE_R - kerf_offset, segments=36))
+            # Pin hole offset below center (in SVG coords, below = +Y; in G-code, flip)
+            pin_y = cy - HOLDER_PIN_OFFSET  # Flipped
+            hole_strokes.append(linearize_circle(cx, pin_y, HOLDER_PIN_HOLE_R - kerf_offset, segments=36))
+
+        elif piece_type == 'ring':
+            inner_cut_strokes.append(linearize_circle(cx, cy, inner_r - kerf_offset, segments=72))
+
+    # Bounds
+    all_x = [0, width_mm]
+    all_y = [0, height_mm]
+
+    gcode_lines = []
+    gcode_lines.extend(generate_gcode_header(min(all_x), min(all_y), max(all_x), max(all_y)))
+
+    if hole_strokes:
+        gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, 'C01',
+                                                 air_assist=air_assist_hole))
+    if inner_cut_strokes:
+        gcode_lines.extend(generate_gcode_layer(inner_cut_strokes, cut_speed, cut_power, 'C02',
+                                                 air_assist=air_assist_cut))
+    if outer_cut_strokes:
+        gcode_lines.extend(generate_gcode_layer(outer_cut_strokes, cut_speed, cut_power, 'C00',
+                                                 air_assist=air_assist_cut))
 
     gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
 

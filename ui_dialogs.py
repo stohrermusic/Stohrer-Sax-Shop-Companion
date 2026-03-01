@@ -1276,6 +1276,7 @@ class GcodeSettingsWindow:
         ("felt", "Felt"),
         ("card", "Card"),
         ("leather", "Leather"),
+        ("acrylic", "Acrylic"),
     ]
 
     # Non-engraving operations (engraving is handled separately with mode toggle)
@@ -1284,12 +1285,17 @@ class GcodeSettingsWindow:
         ("cut", "Outer Cut"),
     ]
 
-    def __init__(self, parent, settings, save_callback):
+    def __init__(self, parent, settings, save_callback, materials=None,
+                 show_tooling_engraving=False):
         self.settings = settings
         self.save_callback = save_callback
+        # Allow filtering which materials to show
+        self.active_materials = materials if materials else self.MATERIALS
+        self.show_tooling_engraving = show_tooling_engraving
 
         self.top = tk.Toplevel(parent)
-        self.top.title("G-code Laser Settings")
+        title = "Tooling Settings" if show_tooling_engraving else "G-code Laser Settings"
+        self.top.title(title)
         self.top.geometry("550x500")
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
@@ -1336,8 +1342,12 @@ class GcodeSettingsWindow:
         bind_mousewheel(self.top, canvas)
 
         # Create material sections
-        for mat_key, mat_label in self.MATERIALS:
+        for mat_key, mat_label in self.active_materials:
             self._create_material_section(scrollable_frame, mat_key, mat_label)
+
+        # Tooling engraving settings (shown only for tooling dialog)
+        if self.show_tooling_engraving:
+            self._create_tooling_engraving_section(scrollable_frame)
 
         # "Filled" engraving overscan option
         overscan_frame = tk.Frame(scrollable_frame, bg=DIALOG_BG)
@@ -1516,6 +1526,52 @@ class GcodeSettingsWindow:
         kerf_entry.grid(row=kerf_row, column=1, sticky="w", padx=5, pady=(8, 2))
         tk.Label(frame, text="mm", bg=DIALOG_BG).grid(row=kerf_row, column=2, sticky="w", padx=5, pady=(8, 2))
 
+    def _create_tooling_engraving_section(self, parent):
+        """Create the engraving settings section for tooling (die inserts)."""
+        tooling = self.settings.get("tooling_settings", {})
+
+        frame = tk.LabelFrame(parent, text="Die Engraving", bg=DIALOG_BG, padx=10, pady=10)
+        frame.pack(fill="x", pady=5, padx=5)
+
+        # Engraving mode (filled / line)
+        mode_frame = tk.Frame(frame, bg=DIALOG_BG)
+        mode_frame.pack(fill="x", pady=(0, 5))
+
+        tk.Label(mode_frame, text="Engraving:", bg=DIALOG_BG).pack(side="left")
+        self.tooling_eng_mode_var = tk.StringVar(value=tooling.get("engraving_mode", "filled"))
+        tk.Radiobutton(mode_frame, text="Filled", variable=self.tooling_eng_mode_var,
+                       value="filled", bg=DIALOG_BG).pack(side="left", padx=(5, 10))
+        tk.Radiobutton(mode_frame, text="Line", variable=self.tooling_eng_mode_var,
+                       value="line", bg=DIALOG_BG).pack(side="left")
+
+        # Font sizes
+        font_frame = tk.Frame(frame, bg=DIALOG_BG)
+        font_frame.pack(fill="x", pady=(0, 5))
+
+        tk.Label(font_frame, text="Ring font size:", bg=DIALOG_BG).pack(side="left")
+        self.tooling_ring_font_var = tk.DoubleVar(value=tooling.get("ring_font_size", 3.5))
+        tk.Entry(font_frame, textvariable=self.tooling_ring_font_var, width=5).pack(side="left", padx=(2, 5))
+        tk.Label(font_frame, text="mm", bg=DIALOG_BG).pack(side="left", padx=(0, 15))
+
+        tk.Label(font_frame, text="Cutout font size:", bg=DIALOG_BG).pack(side="left")
+        self.tooling_cutout_font_var = tk.DoubleVar(value=tooling.get("cutout_font_size", 3.5))
+        tk.Entry(font_frame, textvariable=self.tooling_cutout_font_var, width=5).pack(side="left", padx=(2, 5))
+        tk.Label(font_frame, text="mm", bg=DIALOG_BG).pack(side="left")
+
+        # Ring engraving placement
+        loc_frame = tk.Frame(frame, bg=DIALOG_BG)
+        loc_frame.pack(fill="x", pady=(0, 0))
+
+        tk.Label(loc_frame, text="Ring engraving placement:", bg=DIALOG_BG).pack(side="left")
+        self.tooling_ring_loc_var = tk.StringVar(value=tooling.get("ring_engraving_location", "centered"))
+        tk.Radiobutton(loc_frame, text="Centered", variable=self.tooling_ring_loc_var,
+                       value="centered", bg=DIALOG_BG).pack(side="left", padx=(5, 5))
+        tk.Radiobutton(loc_frame, text="From outside", variable=self.tooling_ring_loc_var,
+                       value="from_outside", bg=DIALOG_BG).pack(side="left", padx=(0, 5))
+        self.tooling_ring_offset_var = tk.DoubleVar(value=tooling.get("ring_engraving_offset", 0.0))
+        tk.Entry(loc_frame, textvariable=self.tooling_ring_offset_var, width=5).pack(side="left", padx=(2, 2))
+        tk.Label(loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
+
     def _get_default(self, material, setting_key):
         """Get default value from DEFAULT_SETTINGS."""
         defaults = DEFAULT_SETTINGS.get("gcode_settings", {}).get(material, {})
@@ -1523,9 +1579,10 @@ class GcodeSettingsWindow:
 
     def _on_save(self):
         """Save settings and close."""
-        new_gcode_settings = {}
+        # Start with existing settings to preserve materials not shown in this dialog
+        new_gcode_settings = dict(self.settings.get("gcode_settings", {}))
 
-        for mat_key, _ in self.MATERIALS:
+        for mat_key, _ in self.active_materials:
             new_gcode_settings[mat_key] = {}
 
             # Engraving mode
@@ -1587,6 +1644,20 @@ class GcodeSettingsWindow:
         self.settings["gcode_settings"] = new_gcode_settings
         self.settings["filled_overscan_enabled"] = self.overscan_var.get()
 
+        # Save tooling engraving settings if shown
+        if self.show_tooling_engraving:
+            tooling = self.settings.get("tooling_settings", {})
+            tooling["engraving_mode"] = self.tooling_eng_mode_var.get()
+            try:
+                tooling["ring_font_size"] = self.tooling_ring_font_var.get()
+                tooling["cutout_font_size"] = self.tooling_cutout_font_var.get()
+                tooling["ring_engraving_offset"] = self.tooling_ring_offset_var.get()
+            except tk.TclError:
+                messagebox.showerror("Invalid Input", "Font sizes must be valid numbers.", parent=self.top)
+                return
+            tooling["ring_engraving_location"] = self.tooling_ring_loc_var.get()
+            self.settings["tooling_settings"] = tooling
+
         # Global G-code settings
         try:
             self.settings["gcode_return_speed"] = self.return_speed_var.get()
@@ -1603,7 +1674,7 @@ class GcodeSettingsWindow:
         """Reset all values to defaults."""
         default_gcode = DEFAULT_SETTINGS.get("gcode_settings", {})
 
-        for mat_key, _ in self.MATERIALS:
+        for mat_key, _ in self.active_materials:
             mat_defaults = default_gcode.get(mat_key, {})
 
             # Reset engraving mode
@@ -1642,6 +1713,15 @@ class GcodeSettingsWindow:
 
         # Reset overscan
         self.overscan_var.set(DEFAULT_SETTINGS.get("filled_overscan_enabled", False))
+
+        # Reset tooling engraving settings
+        if self.show_tooling_engraving:
+            default_tooling = DEFAULT_SETTINGS.get("tooling_settings", {})
+            self.tooling_eng_mode_var.set(default_tooling.get("engraving_mode", "filled"))
+            self.tooling_ring_font_var.set(default_tooling.get("ring_font_size", 3.5))
+            self.tooling_cutout_font_var.set(default_tooling.get("cutout_font_size", 3.5))
+            self.tooling_ring_loc_var.set(default_tooling.get("ring_engraving_location", "centered"))
+            self.tooling_ring_offset_var.set(default_tooling.get("ring_engraving_offset", 0.0))
 
         # Reset global settings
         self.return_speed_var.set(DEFAULT_SETTINGS.get("gcode_return_speed", 1000))

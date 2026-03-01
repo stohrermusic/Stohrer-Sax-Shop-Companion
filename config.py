@@ -233,6 +233,37 @@ DEFAULT_SETTINGS = {
             "air_assist_hole": True,
             "air_assist_cut": True,
         },
+        "acrylic": {
+            "engraving_mode": "filled",
+            "engraving_speed": 4000,
+            "engraving_power": 26,
+            "filled_engraving_speed": 4000,
+            "filled_engraving_power": 26,
+            "filled_line_spacing": 0.15,
+            "hole_speed": 180,
+            "hole_power": 100,
+            "cut_speed": 180,
+            "cut_power": 100,
+            "kerf_width": 0.15,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
+        },
+    },
+
+    # TOOLING SETTINGS (Die Inserts & Die Holders)
+    "tooling_settings": {
+        "sheet_width": "12",
+        "sheet_height": "12",
+        "engrave_ring": True,
+        "engrave_cutout": True,
+        "engraving_mode": "filled",
+        "step_size": "0.5",
+        "ring_font_size": 3.5,
+        "cutout_font_size": 3.5,
+        "ring_engraving_location": "centered",   # "centered" or "from_outside"
+        "ring_engraving_offset": 0.0,             # mm offset (used with from_outside)
     },
 
     # FILLED ENGRAVING OPTIONS
@@ -291,7 +322,13 @@ DEFAULT_SETTINGS = {
         'leather_engraving': '#FF8000',
         'exact_size_outline': '#D0D000',
         'exact_size_center_hole': '#A0A000',
-        'exact_size_engraving': '#BB7784'
+        'exact_size_engraving': '#BB7784',
+        'die_outer_cut': '#FF0000',
+        'die_inner_cut': '#0000FF',
+        'die_engraving': '#00E000',
+        'die_cutout_engraving': '#FF8000',
+        'die_holder_cut': '#FF0000',
+        'die_holder_hole': '#0000FF',
     }
 }
 
