@@ -1971,6 +1971,63 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Import/export to share specs with colleagues")
         self._blank()
 
+        # ── TOOLING TAB ───────────────────────────
+        self._h2("Tooling \u2014 Die Inserts")
+        self._body("Generate laser-cutting files (SVG or G-code) for acrylic pad die inserts. "
+                    "Dies are rings with a fixed outer diameter and an inner hole matching the "
+                    "pad size.")
+        self._bullet("Small dies (pad sizes 7.0\u201339.5mm): 50mm outer diameter")
+        self._bullet("Large dies (pad sizes 40.0\u201360.0mm): 70mm outer diameter")
+        self._bullet("Enter sizes as individual values (\"7, 8.5, 25\"), ranges (\"15-30\"), "
+                      "or use the Full Set buttons. Step size controls the increment for ranges "
+                      "(default 0.5mm).")
+        self._bullet("\"Engrave size on ring\" labels the die ring with the pad size number")
+        self._bullet("\"Engrave size on cutout\" labels the inner disc with its actual physical "
+                      "size after kerf deduction")
+        self._blank()
+
+        self._h2("Tooling \u2014 Cutout Discs as Pad Cup Tools")
+        self._body("When a die ring is laser-cut, the inner circle falls out as a solid disc "
+                    "matching the pad cup diameter (minus the laser kerf). These cutout discs "
+                    "are useful as pad cup tools: stiffeners during key geometry operations, "
+                    "rim rounders, leveling helpers, bending braces, and so on.")
+        self._body("For precise pad cup tools where you need exact control over the diameter, "
+                    "use the \"Exact Size\" material option in the Pad SVG Generator tab instead. "
+                    "If outputting G-code for acrylic, adjust the G-code settings for the "
+                    "exact_size material to match acrylic speeds and powers.")
+        self._blank()
+
+        self._h2("Tooling \u2014 Die Holders")
+        self._body("Generate laser-cutting files for the acrylic die holder assembly. "
+                    "Each holder is a stack of four 85mm discs:")
+        self._bullet("Solid bottom disc")
+        self._bullet("Magnet disc (3.5mm center hole for a magnet)")
+        self._bullet("Pin disc (alignment holes)")
+        self._bullet("Retaining ring (inner diameter matches the die size class)")
+        self._body("Choose Large (70mm inner), Small (50mm inner), or Both. "
+                    "When generating both, shared layers are included once plus two "
+                    "retaining rings.")
+        self._blank()
+
+        self._h2("Tooling \u2014 Scrap Mode")
+        self._body("A full set of dies (107 sizes from 7\u201360mm) takes many sheets of acrylic. "
+                    "Check Scrap Mode to spread die generation across multiple sheets:")
+        self._bullet("Enter your die sizes and sheet dimensions")
+        self._bullet("Generate \u2014 what fits is saved, the rest is tracked")
+        self._bullet("Adjust the sheet size if needed and generate again")
+        self._bullet("A progress window shows remaining and completed dies")
+        self._bullet("Files are named with _scrap1, _scrap2, etc. suffixes")
+        self._blank()
+
+        self._h2("Tooling \u2014 Settings")
+        self._body("Options > Settings opens the Tooling Settings dialog with:")
+        self._bullet("Acrylic G-code parameters: speed, power, kerf, and air assist "
+                      "(defaults tuned for the Creality Falcon2 Pro 40W cutting 3mm black acrylic)")
+        self._bullet("Die Engraving: filled vs. line mode, font sizes for ring and cutout "
+                      "engravings, and ring engraving placement (centered in the ring annulus, "
+                      "or offset from the outer edge)")
+        self._blank()
+
         # ── PADMAKING GUIDE ────────────────────────
         self._h2("Learn to Make Pads")
         self._body("If you somehow got this program and missed the guide that started it all, "
