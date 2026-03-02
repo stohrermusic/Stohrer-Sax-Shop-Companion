@@ -171,10 +171,10 @@ class ToolingTabMixin:
         # ========================================
         holder_frame = tk.Frame(self._tooling_content, bg=bg)
 
-        # Sheet size info
+        # Sheet size info (6 pieces in 2x3 grid or 7 in 3x3 for both)
         holder_info = tk.Label(holder_frame, bg=bg, font=("Helvetica", 9), fg="gray",
-                               text="Required sheet: 185 \u00d7 185 mm (7.3 \u00d7 7.3 in) per holder,\n"
-                                    "275 \u00d7 185 mm (10.8 \u00d7 7.3 in) for both",
+                               text="6-layer holder: base, magnet (6.5mm), 3\u00d7 pin (3.5mm), ring.\n"
+                                    "Required sheet: 185 \u00d7 275 mm per holder, 275 \u00d7 275 mm for both.",
                                justify="left")
         holder_info.pack(anchor='w', pady=(0, 8))
 

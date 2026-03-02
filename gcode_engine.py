@@ -1028,7 +1028,7 @@ def generate_holder_gcode(variant, filename, settings):
         settings: App settings dict
     """
     from svg_engine import (HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
-                            HOLDER_PIN_OFFSET, HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R)
+                            HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R)
 
     gcode_settings = settings.get("gcode_settings", {})
     mat_settings = gcode_settings.get("acrylic", {})
@@ -1046,11 +1046,13 @@ def generate_holder_gcode(variant, filename, settings):
     spacing = 5.0
     outer_d = HOLDER_OUTER_R * 2
 
-    # Build piece list (same logic as SVG)
+    # Build piece list (same logic as SVG) — 6-layer holder
     pieces = []
     if variant in ('large', 'both'):
         pieces.append(('solid', None))
         pieces.append(('magnet', None))
+        pieces.append(('pin', None))
+        pieces.append(('pin', None))
         pieces.append(('pin', None))
         pieces.append(('ring', HOLDER_LARGE_INNER_R))
     if variant in ('small', 'both'):
@@ -1059,6 +1061,8 @@ def generate_holder_gcode(variant, filename, settings):
         else:
             pieces.append(('solid', None))
             pieces.append(('magnet', None))
+            pieces.append(('pin', None))
+            pieces.append(('pin', None))
             pieces.append(('pin', None))
             pieces.append(('ring', HOLDER_SMALL_INNER_R))
 
@@ -1088,13 +1092,12 @@ def generate_holder_gcode(variant, filename, settings):
         outer_cut_strokes.append(linearize_circle(cx, cy, HOLDER_OUTER_R + kerf_offset, segments=72))
 
         if piece_type == 'magnet':
+            # 6.5mm dia magnet hole
             hole_strokes.append(linearize_circle(cx, cy, HOLDER_MAGNET_HOLE_R - kerf_offset, segments=36))
 
         elif piece_type == 'pin':
-            hole_strokes.append(linearize_circle(cx, cy, HOLDER_MAGNET_HOLE_R - kerf_offset, segments=36))
-            # Pin hole offset below center (in SVG coords, below = +Y; in G-code, flip)
-            pin_y = cy - HOLDER_PIN_OFFSET  # Flipped
-            hole_strokes.append(linearize_circle(cx, pin_y, HOLDER_PIN_HOLE_R - kerf_offset, segments=36))
+            # 3.5mm dia alignment hole
+            hole_strokes.append(linearize_circle(cx, cy, HOLDER_PIN_HOLE_R - kerf_offset, segments=36))
 
         elif piece_type == 'ring':
             inner_cut_strokes.append(linearize_circle(cx, cy, inner_r - kerf_offset, segments=72))
@@ -1256,15 +1259,15 @@ def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_h
         cut_strokes.append(rect_points)
 
         if layer_type == "slotted":
-            for row_y, slot_len, entries in rows:
+            for row_y, slot_len, s_width, entries in rows:
                 for size, x in entries:
-                    slot_x = x - SLOT_WIDTH / 2
+                    slot_x = x - s_width / 2
                     svg_slot_y = row_y + ORGANIZER_LABEL_HEIGHT
                     gy_top = height - svg_slot_y
                     gy_bot = height - (svg_slot_y + slot_len)
                     slot_points = [
-                        (slot_x, gy_top), (slot_x + SLOT_WIDTH, gy_top),
-                        (slot_x + SLOT_WIDTH, gy_bot), (slot_x, gy_bot),
+                        (slot_x, gy_top), (slot_x + s_width, gy_top),
+                        (slot_x + s_width, gy_bot), (slot_x, gy_bot),
                         (slot_x, gy_top)
                     ]
                     cut_strokes.append(slot_points)

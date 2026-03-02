@@ -230,8 +230,8 @@ print("\n=== Holder Constants ===")
 # ============================================================
 
 check("Holder outer radius is 42.5mm", HOLDER_OUTER_R == 42.5)
-check("Holder magnet hole radius is 1.75mm", HOLDER_MAGNET_HOLE_R == 1.75)
-check("Holder pin hole radius is 3.0mm", HOLDER_PIN_HOLE_R == 3.0)
+check("Holder magnet hole radius is 3.25mm (6.5mm dia)", HOLDER_MAGNET_HOLE_R == 3.25)
+check("Holder pin hole radius is 1.75mm (3.5mm dia)", HOLDER_PIN_HOLE_R == 1.75)
 check("Large holder inner radius is 35.0mm", HOLDER_LARGE_INNER_R == 35.0)
 check("Small holder inner radius is 25.0mm", HOLDER_SMALL_INNER_R == 25.0)
 
@@ -380,7 +380,7 @@ check("Full set + holders fits on 400x400 at 5mm spacing",
       len(sheets) == 1)
 if sheets:
     rows, width, height = sheets[0]
-    total_slots = sum(len(r[2]) for r in rows)
+    total_slots = sum(len(r[3]) for r in rows)
     check(f"Full set: {total_slots} slots (107 dies + 2 holders = 109)",
           total_slots == 109)
     check(f"Full set sheet: {width:.0f}x{height:.0f} fits 400x400",
@@ -392,7 +392,7 @@ sheets = _layout_organizer(small_set, False, 300, 300, 5.0)
 check("4-die set fits on one sheet", len(sheets) == 1)
 if sheets:
     rows, width, height = sheets[0]
-    total_slots = sum(len(r[2]) for r in rows)
+    total_slots = sum(len(r[3]) for r in rows)
     check("4-die set: 4 slots", total_slots == 4)
 
 # Force multi-sheet by using tiny sheet

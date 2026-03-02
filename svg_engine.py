@@ -885,11 +885,12 @@ def generate_die_svg_from_placed(placed, width_mm, height_mm, filename, settings
 
 # Die holder constants
 HOLDER_OUTER_R = 42.5        # 85mm outer diameter
-HOLDER_MAGNET_HOLE_R = 1.75  # 3.5mm magnet hole
-HOLDER_PIN_HOLE_R = 3.0      # 6.0mm pin hole
-HOLDER_PIN_OFFSET = 25.0     # Pin hole distance from center
+HOLDER_MAGNET_HOLE_R = 3.25  # 6.5mm magnet hole (layer 2)
+HOLDER_PIN_HOLE_R = 1.75     # 3.5mm pin/alignment hole (layers 3-5)
 HOLDER_LARGE_INNER_R = 35.0  # 70mm inner for large holder
 HOLDER_SMALL_INNER_R = 25.0  # 50mm inner for small holder
+HOLDER_LAYERS = 6            # Total layers in a holder stack
+HOLDER_THICKNESS_MM = HOLDER_LAYERS * 3.0  # 18mm total
 
 def generate_holder_svg(variant, filename, settings):
     """
@@ -908,11 +909,13 @@ def generate_holder_svg(variant, filename, settings):
     outer_d = HOLDER_OUTER_R * 2
 
     # Determine pieces to generate
-    # Each holder variant needs: solid disc, magnet disc, pin disc, retaining ring
+    # 6-layer holder: solid, magnet (6.5mm hole), 3x pin (3.5mm hole), retaining ring
     pieces = []
     if variant in ('large', 'both'):
         pieces.append(('solid', None))
         pieces.append(('magnet', None))
+        pieces.append(('pin', None))
+        pieces.append(('pin', None))
         pieces.append(('pin', None))
         pieces.append(('ring', HOLDER_LARGE_INNER_R))
     if variant in ('small', 'both'):
@@ -922,6 +925,8 @@ def generate_holder_svg(variant, filename, settings):
         else:
             pieces.append(('solid', None))
             pieces.append(('magnet', None))
+            pieces.append(('pin', None))
+            pieces.append(('pin', None))
             pieces.append(('pin', None))
             pieces.append(('ring', HOLDER_SMALL_INNER_R))
 
@@ -951,21 +956,18 @@ def generate_holder_svg(variant, filename, settings):
             dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_OUTER_R}mm", stroke=cut_color, fill='none', stroke_width=stroke_w))
 
         if piece_type == 'magnet':
-            # Center hole for magnet
+            # Center hole for magnet (6.5mm dia)
             if compatibility_mode:
                 dwg.add(dwg.circle(center=(cx, cy), r=HOLDER_MAGNET_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
             else:
                 dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_MAGNET_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
 
         elif piece_type == 'pin':
-            # Center alignment hole + offset pin hole
+            # Center alignment hole (3.5mm dia)
             if compatibility_mode:
-                dwg.add(dwg.circle(center=(cx, cy), r=HOLDER_MAGNET_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
-                dwg.add(dwg.circle(center=(cx, cy + HOLDER_PIN_OFFSET), r=HOLDER_PIN_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
+                dwg.add(dwg.circle(center=(cx, cy), r=HOLDER_PIN_HOLE_R, stroke=hole_color, fill='none', stroke_width=stroke_w))
             else:
-                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_MAGNET_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
-                pin_y = cy + HOLDER_PIN_OFFSET
-                dwg.add(dwg.circle(center=(f"{cx}mm", f"{pin_y}mm"), r=f"{HOLDER_PIN_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
+                dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{HOLDER_PIN_HOLE_R}mm", stroke=hole_color, fill='none', stroke_width=stroke_w))
 
         elif piece_type == 'ring':
             # Retaining ring: inner circle
@@ -1047,6 +1049,7 @@ def generate_kerf_test_svg(material_name, filename, settings):
 # ==========================================
 
 SLOT_WIDTH = 3.2       # mm (slightly wider than 3mm acrylic die thickness)
+HOLDER_SLOT_WIDTH = HOLDER_THICKNESS_MM + 0.5  # 18.5mm (6-layer holder + clearance)
 SLOT_CLEARANCE = 2.0   # mm extra on slot length beyond die OD
 ORGANIZER_MARGIN = 5.0
 ORGANIZER_ROW_GAP = 3.0
@@ -1059,10 +1062,10 @@ def _get_slot_length(die_od):
 def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm):
     """
     Compute organizer layout: group dies into rows, pack rows onto sheets.
+    Slots are evenly distributed across the row width.
 
-    Returns list of sheets, each sheet is a list of rows.
-    Each row is: (y_offset, slot_length, list_of_(size, x_offset) tuples)
-    Also returns the trimmed (width, height) for each sheet.
+    Returns list of sheets. Each sheet is (rows, width, height).
+    Each row is: (y_offset, slot_length, slot_width, list_of_(size, x_offset) tuples)
     """
     margin = ORGANIZER_MARGIN
     label_h = ORGANIZER_LABEL_HEIGHT
@@ -1077,7 +1080,7 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
     small_sizes = sorted([s for s in die_sizes if s <= 39.5])
     large_sizes = sorted([s for s in die_sizes if s >= 40.0])
 
-    # Build row specs: (slot_length, list_of_sizes)
+    # Build row specs: (slot_length, slot_width, list_of_sizes)
     all_rows = []
 
     for sizes, od in [(small_sizes, 50.0), (large_sizes, 70.0)]:
@@ -1086,44 +1089,52 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
         slot_len = _get_slot_length(od)
         for i in range(0, len(sizes), slots_per_row):
             chunk = sizes[i:i + slots_per_row]
-            all_rows.append((slot_len, chunk))
+            all_rows.append((slot_len, SLOT_WIDTH, chunk))
 
     if include_holders:
         holder_slot_len = _get_slot_length(85.0)
-        holder_entries = ['H-L', 'H-S']  # Large and small holder
-        all_rows.append((holder_slot_len, holder_entries))
+        # Holder slots use wider spacing to accommodate 18mm holders
+        holder_entries = ['H-L', 'H-S']
+        all_rows.append((holder_slot_len, HOLDER_SLOT_WIDTH, holder_entries))
 
     # Pack rows onto sheets
     sheets = []
     current_sheet_rows = []
     current_y = margin
 
-    for slot_len, sizes in all_rows:
+    for slot_len, s_width, sizes in all_rows:
         row_height = slot_len + label_h
         if current_y + row_height + margin > sheet_height_mm and current_sheet_rows:
-            # This row doesn't fit — start new sheet
-            sheets.append((current_sheet_rows, current_y + margin))
+            sheets.append(current_sheet_rows)
             current_sheet_rows = []
             current_y = margin
 
-        # Build row with x positions
+        # Evenly distribute slots across usable width
+        n = len(sizes)
+        if n == 1:
+            spacing = usable_width
+        else:
+            spacing = usable_width / n
         row_entries = []
         for j, size in enumerate(sizes):
-            x = margin + j * slot_spacing_mm + slot_spacing_mm / 2
+            x = margin + spacing * (j + 0.5)
             row_entries.append((size, x))
 
-        current_sheet_rows.append((current_y, slot_len, row_entries))
+        current_sheet_rows.append((current_y, slot_len, s_width, row_entries))
         current_y += row_height + row_gap
 
     if current_sheet_rows:
-        sheets.append((current_sheet_rows, current_y - row_gap + margin))
+        sheets.append(current_sheet_rows)
 
-    # Calculate actual width needed per sheet
+    # Calculate tight-fit dimensions per sheet
     result = []
-    for rows, height in sheets:
-        max_slots_in_row = max(len(r[2]) for r in rows)
-        width = 2 * margin + max_slots_in_row * slot_spacing_mm
-        width = min(width, sheet_width_mm)
+    for rows in sheets:
+        # Height: last row bottom + margin
+        last_row = rows[-1]
+        last_y, last_slot_len, _, _ = last_row
+        height = last_y + ORGANIZER_LABEL_HEIGHT + last_slot_len + margin
+        # Width: use full usable width + margins (slots are distributed across it)
+        width = sheet_width_mm
         result.append((rows, width, height))
 
     return result
@@ -1167,18 +1178,18 @@ def generate_organizer_svg(die_sizes, include_holders, sheet_width_mm, sheet_hei
                              stroke=cut_color, fill='none', stroke_width=stroke_w))
 
         if layer_type == "slotted":
-            for row_y, slot_len, entries in rows:
+            for row_y, slot_len, s_width, entries in rows:
                 for size, x in entries:
-                    # Slot rectangle (narrow vertical cut)
-                    slot_x = x - SLOT_WIDTH / 2
+                    # Slot rectangle
+                    slot_x = x - s_width / 2
                     slot_y = row_y + ORGANIZER_LABEL_HEIGHT
                     if compat:
                         dwg.add(dwg.rect(insert=(slot_x, slot_y),
-                                         size=(SLOT_WIDTH, slot_len),
+                                         size=(s_width, slot_len),
                                          stroke=cut_color, fill='none', stroke_width=stroke_w))
                     else:
                         dwg.add(dwg.rect(insert=(f"{slot_x}mm", f"{slot_y}mm"),
-                                         size=(f"{SLOT_WIDTH}mm", f"{slot_len}mm"),
+                                         size=(f"{s_width}mm", f"{slot_len}mm"),
                                          stroke=cut_color, fill='none', stroke_width=stroke_w))
 
                     # Size label above slot
