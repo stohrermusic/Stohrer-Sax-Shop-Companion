@@ -171,10 +171,10 @@ class ToolingTabMixin:
         # ========================================
         holder_frame = tk.Frame(self._tooling_content, bg=bg)
 
-        # Sheet size info (6 pieces in 2x3 grid or 7 in 3x3 for both)
+        # Sheet size info
         holder_info = tk.Label(holder_frame, bg=bg, font=("Helvetica", 9), fg="gray",
                                text="6-layer holder: base, magnet (6.5mm), 3\u00d7 pin (3.5mm), ring.\n"
-                                    "Required sheet: 185 \u00d7 275 mm per holder, 275 \u00d7 275 mm for both.",
+                                    "Required sheet: 275 \u00d7 185 mm (10.8 \u00d7 7.3 in).",
                                justify="left")
         holder_info.pack(anchor='w', pady=(0, 8))
 
@@ -182,13 +182,11 @@ class ToolingTabMixin:
         variant_frame.pack(fill='x', pady=(0, 5))
 
         tk.Label(variant_frame, text="Generate:", bg=bg).pack(side='left')
-        self.holder_variant_var = tk.StringVar(value="both")
-        tk.Radiobutton(variant_frame, text="Large (70mm)", variable=self.holder_variant_var,
+        self.holder_variant_var = tk.StringVar(value="large")
+        tk.Radiobutton(variant_frame, text="Large (40\u201360mm pads)", variable=self.holder_variant_var,
                        value="large", bg=bg).pack(side='left', padx=(5, 10))
-        tk.Radiobutton(variant_frame, text="Small (50mm)", variable=self.holder_variant_var,
-                       value="small", bg=bg).pack(side='left', padx=(0, 10))
-        tk.Radiobutton(variant_frame, text="Both", variable=self.holder_variant_var,
-                       value="both", bg=bg).pack(side='left')
+        tk.Radiobutton(variant_frame, text="Small (7\u201339.5mm pads)", variable=self.holder_variant_var,
+                       value="small", bg=bg).pack(side='left')
 
         holder_name_frame = tk.Frame(holder_frame, bg=bg)
         holder_name_frame.pack(fill='x', pady=(0, 5))
@@ -1250,7 +1248,7 @@ class ToolingTabMixin:
             settings = self._get_die_settings()
             generate_holder_svg(variant, save_path, settings)
 
-            variant_label = {"large": "Large", "small": "Small", "both": "Large + Small"}[variant]
+            variant_label = {"large": "Large (40\u201360mm)", "small": "Small (7\u201339.5mm)"}[variant]
             messagebox.showinfo("Done",
                 f"Generated {variant_label} die holder.\n\nSaved to: {save_path}")
 
@@ -1276,7 +1274,7 @@ class ToolingTabMixin:
             settings = self._get_die_settings()
             generate_holder_gcode(variant, save_path, settings)
 
-            variant_label = {"large": "Large", "small": "Small", "both": "Large + Small"}[variant]
+            variant_label = {"large": "Large (40\u201360mm)", "small": "Small (7\u201339.5mm)"}[variant]
             messagebox.showinfo("Done",
                 f"Generated {variant_label} die holder G-code.\n\nSaved to: {save_path}")
 

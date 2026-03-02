@@ -1079,6 +1079,10 @@ def generate_holder_gcode(variant, filename, settings):
     hole_strokes = []
     outer_cut_strokes = []
     inner_cut_strokes = []
+    engraving_strokes = []
+    engraving_mode = mat_settings.get("engraving_mode", "filled")
+    eng_speed = mat_settings.get("engraving_speed", 800)
+    eng_power = mat_settings.get("engraving_power", 15)
 
     for i, (piece_type, inner_r) in enumerate(pieces):
         col = i % cols
@@ -1102,12 +1106,38 @@ def generate_holder_gcode(variant, filename, settings):
         elif piece_type == 'ring':
             inner_cut_strokes.append(linearize_circle(cx, cy, inner_r - kerf_offset, segments=72))
 
+            # Engrave size range on ring
+            if inner_r == HOLDER_LARGE_INNER_R:
+                ring_label = "40-60"
+            else:
+                ring_label = "7-39.5"
+            ring_center_r = (HOLDER_OUTER_R + inner_r) / 2
+            label_y = cy + ring_center_r - 1.2
+            filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
+            if engraving_mode == "filled":
+                eng_speed = mat_settings.get("filled_engraving_speed", 800)
+                eng_power = mat_settings.get("filled_engraving_power", 15)
+                engraving_strokes.extend(get_filled_text_strokes(ring_label, 3.0, cx, label_y, filled_line_spacing))
+            else:
+                eng_speed = mat_settings.get("engraving_speed", 800)
+                eng_power = mat_settings.get("engraving_power", 15)
+                engraving_strokes.extend(get_text_strokes(ring_label, 3.0, cx, label_y))
+
     # Bounds
     all_x = [0, width_mm]
     all_y = [0, height_mm]
 
     gcode_lines = []
     gcode_lines.extend(generate_gcode_header(min(all_x), min(all_y), max(all_x), max(all_y)))
+
+    # Engrave ring labels first (if any)
+    if engraving_strokes:
+        air_assist_eng = mat_settings.get("air_assist_engraving", True)
+        overscan_mm = 0
+        if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+            overscan_mm = settings.get("filled_overscan_mm", 1.5)
+        gcode_lines.extend(generate_gcode_layer(engraving_strokes, eng_speed, eng_power, 'C03',
+                                                 overscan_mm=overscan_mm, air_assist=air_assist_eng))
 
     if hole_strokes:
         gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, 'C01',
