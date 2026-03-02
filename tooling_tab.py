@@ -1015,13 +1015,16 @@ class ToolingTabMixin:
 
             filename_base = os.path.join(save_dir, base)
             depth = self.org_depth_var.get()
+            depth_mm = float(depth)
             slotted_copies = 2 if depth == "6" else 3
 
             # Generate slotted layer(s) and base layer
             slotted = generate_organizer_svg(sizes, include_holders, width_mm, height_mm,
-                                              spacing, filename_base, self.settings, layer_type="slotted")
+                                              spacing, filename_base, self.settings,
+                                              layer_type="slotted", depth_mm=depth_mm)
             base_files = generate_organizer_svg(sizes, include_holders, width_mm, height_mm,
-                                                 spacing, filename_base, self.settings, layer_type="base")
+                                                 spacing, filename_base, self.settings,
+                                                 layer_type="base", depth_mm=depth_mm)
 
             # Summary
             num_sheets = len(slotted)
@@ -1067,12 +1070,15 @@ class ToolingTabMixin:
 
             filename_base = os.path.join(save_dir, base)
             depth = self.org_depth_var.get()
+            depth_mm = float(depth)
             slotted_copies = 2 if depth == "6" else 3
 
             slotted = generate_organizer_gcode(sizes, include_holders, width_mm, height_mm,
-                                                spacing, filename_base, self.settings, layer_type="slotted")
+                                                spacing, filename_base, self.settings,
+                                                layer_type="slotted", depth_mm=depth_mm)
             base_files = generate_organizer_gcode(sizes, include_holders, width_mm, height_mm,
-                                                   spacing, filename_base, self.settings, layer_type="base")
+                                                   spacing, filename_base, self.settings,
+                                                   layer_type="base", depth_mm=depth_mm)
 
             num_sheets = len(slotted)
             dims = [f"{w:.0f}\u00d7{h:.0f}mm" for _, w, h in slotted]

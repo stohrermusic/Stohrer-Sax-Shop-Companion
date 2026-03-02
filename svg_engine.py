@@ -1070,20 +1070,29 @@ def generate_kerf_test_svg(material_name, filename, settings):
 
 SLOT_WIDTH = 3.2       # mm (slightly wider than 3mm acrylic die thickness)
 HOLDER_SLOT_WIDTH = HOLDER_THICKNESS_MM + 0.5  # 18.5mm (6-layer holder + clearance)
-SLOT_CLEARANCE = 2.0   # mm extra on slot length beyond die OD
 ORGANIZER_MARGIN = 5.0
 ORGANIZER_ROW_GAP = 3.0
 ORGANIZER_LABEL_HEIGHT = 5.0
 
-def _get_slot_length(die_od):
-    """Slot length for a given die outer diameter."""
-    return die_od + SLOT_CLEARANCE
+def _get_slot_length(die_od, depth_mm):
+    """
+    Slot length for a die to sit at a given depth.
+    The slot is narrower than the die diameter so the die is held snugly.
+    Calculated as the chord width at the given depth minus a snug factor.
+    """
+    import math
+    r = die_od / 2
+    if depth_mm >= r:
+        return die_od  # Full diameter if depth exceeds radius
+    chord = 2 * math.sqrt(2 * r * depth_mm - depth_mm * depth_mm)
+    return chord - 1.0  # 1mm narrower for snug fit
 
-def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm):
+def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm, depth_mm=6.0):
     """
     Compute organizer layout: group dies into rows, pack rows onto sheets.
     Slots are packed at fixed spacing. Holder slots merge into the last
-    row of large dies when there's room.
+    row of large dies when there's room. Slot length is calculated from
+    the chord width at the given depth for a snug fit.
 
     Returns list of sheets. Each sheet is (rows, width, height).
     Each row is: (y_offset, slot_length, slot_width, list_of_(size, x_offset) tuples)
@@ -1107,7 +1116,7 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
     for sizes, od in [(small_sizes, 50.0), (large_sizes, 70.0)]:
         if not sizes:
             continue
-        slot_len = _get_slot_length(od)
+        slot_len = _get_slot_length(od, depth_mm)
         for i in range(0, len(sizes), slots_per_row):
             chunk = sizes[i:i + slots_per_row]
             all_rows.append((slot_len, SLOT_WIDTH, chunk))
@@ -1116,16 +1125,13 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
     holders_merged = False
     if include_holders and large_sizes:
         holder_entries = ['H-L', 'H-S']
-        # Check if last row has room for holder slots
         if all_rows:
             last_slot_len, last_s_width, last_sizes = all_rows[-1]
-            # Holder slots need more width each (HOLDER_SLOT_WIDTH + gap)
             holder_slots_needed = len(holder_entries)
             holder_width_each = HOLDER_SLOT_WIDTH + slot_spacing_mm
             remaining_width = usable_width - len(last_sizes) * slot_spacing_mm
             if remaining_width >= holder_slots_needed * holder_width_each:
-                # Merge: use the taller slot length, add holders at end
-                holder_slot_len = _get_slot_length(85.0)
+                holder_slot_len = _get_slot_length(85.0, depth_mm)
                 merged_slot_len = max(last_slot_len, holder_slot_len)
                 merged_entries = list(last_sizes) + holder_entries
                 merged_widths = [last_s_width] * len(last_sizes) + [HOLDER_SLOT_WIDTH] * len(holder_entries)
@@ -1133,7 +1139,7 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
                 holders_merged = True
 
     if include_holders and not holders_merged:
-        holder_slot_len = _get_slot_length(85.0)
+        holder_slot_len = _get_slot_length(85.0, depth_mm)
         holder_entries = ['H-L', 'H-S']
         all_rows.append((holder_slot_len, HOLDER_SLOT_WIDTH, holder_entries))
 
@@ -1206,7 +1212,7 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
 
 
 def generate_organizer_svg(die_sizes, include_holders, sheet_width_mm, sheet_height_mm,
-                            slot_spacing_mm, filename_base, settings, layer_type="slotted"):
+                            slot_spacing_mm, filename_base, settings, layer_type="slotted", depth_mm=6.0):
     """
     Generate SVG files for the die organizer.
 
@@ -1225,7 +1231,7 @@ def generate_organizer_svg(die_sizes, include_holders, sheet_width_mm, sheet_hei
     cut_color = layer_colors.get('die_outer_cut', '#FF0000')
     eng_color = layer_colors.get('die_engraving', '#00E000')
 
-    sheets = _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm)
+    sheets = _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm, depth_mm)
     generated = []
 
     for sheet_idx, (rows, width, height) in enumerate(sheets):

@@ -1252,7 +1252,7 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
 # ==========================================
 
 def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_height_mm,
-                              slot_spacing_mm, filename_base, settings, layer_type="slotted"):
+                              slot_spacing_mm, filename_base, settings, layer_type="slotted", depth_mm=6.0):
     """
     Generate G-code files for the die organizer.
     Returns list of (filename, width_mm, height_mm).
@@ -1279,7 +1279,7 @@ def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_h
     if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
         overscan_mm = settings.get("filled_overscan_mm", 1.5)
 
-    sheets = _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm)
+    sheets = _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm, depth_mm)
     generated = []
 
     for sheet_idx, (rows, width, height) in enumerate(sheets):
