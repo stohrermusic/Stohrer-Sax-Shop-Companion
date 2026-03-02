@@ -1295,14 +1295,15 @@ def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_h
 
         if layer_type == "slotted":
             for row_y, slot_len, s_width, entries in rows:
-                for size, x in entries:
-                    slot_x = x - s_width / 2
+                for j, (size, x) in enumerate(entries):
+                    sw = s_width[j] if isinstance(s_width, list) else s_width
+                    slot_x = x - sw / 2
                     svg_slot_y = row_y + ORGANIZER_LABEL_HEIGHT
                     gy_top = height - svg_slot_y
                     gy_bot = height - (svg_slot_y + slot_len)
                     slot_points = [
-                        (slot_x, gy_top), (slot_x + s_width, gy_top),
-                        (slot_x + s_width, gy_bot), (slot_x, gy_bot),
+                        (slot_x, gy_top), (slot_x + sw, gy_top),
+                        (slot_x + sw, gy_bot), (slot_x, gy_bot),
                         (slot_x, gy_top)
                     ]
                     cut_strokes.append(slot_points)

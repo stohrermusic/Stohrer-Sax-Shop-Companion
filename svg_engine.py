@@ -1082,7 +1082,8 @@ def _get_slot_length(die_od):
 def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm):
     """
     Compute organizer layout: group dies into rows, pack rows onto sheets.
-    Slots are evenly distributed across the row width.
+    Slots are packed at fixed spacing. Holder slots merge into the last
+    row of large dies when there's room.
 
     Returns list of sheets. Each sheet is (rows, width, height).
     Each row is: (y_offset, slot_length, slot_width, list_of_(size, x_offset) tuples)
@@ -1111,13 +1112,32 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
             chunk = sizes[i:i + slots_per_row]
             all_rows.append((slot_len, SLOT_WIDTH, chunk))
 
-    if include_holders:
+    # Try to merge holders into last large die row
+    holders_merged = False
+    if include_holders and large_sizes:
+        holder_entries = ['H-L', 'H-S']
+        # Check if last row has room for holder slots
+        if all_rows:
+            last_slot_len, last_s_width, last_sizes = all_rows[-1]
+            # Holder slots need more width each (HOLDER_SLOT_WIDTH + gap)
+            holder_slots_needed = len(holder_entries)
+            holder_width_each = HOLDER_SLOT_WIDTH + slot_spacing_mm
+            remaining_width = usable_width - len(last_sizes) * slot_spacing_mm
+            if remaining_width >= holder_slots_needed * holder_width_each:
+                # Merge: use the taller slot length, add holders at end
+                holder_slot_len = _get_slot_length(85.0)
+                merged_slot_len = max(last_slot_len, holder_slot_len)
+                merged_entries = list(last_sizes) + holder_entries
+                merged_widths = [last_s_width] * len(last_sizes) + [HOLDER_SLOT_WIDTH] * len(holder_entries)
+                all_rows[-1] = (merged_slot_len, merged_widths, merged_entries)
+                holders_merged = True
+
+    if include_holders and not holders_merged:
         holder_slot_len = _get_slot_length(85.0)
-        # Holder slots use wider spacing to accommodate 18mm holders
         holder_entries = ['H-L', 'H-S']
         all_rows.append((holder_slot_len, HOLDER_SLOT_WIDTH, holder_entries))
 
-    # Pack rows onto sheets
+    # Pack rows onto sheets with fixed spacing
     sheets = []
     current_sheet_rows = []
     current_y = margin
@@ -1129,18 +1149,35 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
             current_sheet_rows = []
             current_y = margin
 
-        # Evenly distribute slots across usable width
-        n = len(sizes)
-        if n == 1:
-            spacing = usable_width
-        else:
-            spacing = usable_width / n
+        # Pack slots at fixed spacing from left
         row_entries = []
+        x_cursor = margin + slot_spacing_mm / 2
         for j, size in enumerate(sizes):
-            x = margin + spacing * (j + 0.5)
-            row_entries.append((size, x))
+            # Get per-slot width (handles mixed-width merged rows)
+            if isinstance(s_width, list):
+                sw = s_width[j]
+            else:
+                sw = s_width
+            # For wide slots (holders), add extra spacing
+            if sw > SLOT_WIDTH:
+                if j > 0:
+                    prev_sw = s_width[j-1] if isinstance(s_width, list) else s_width
+                    x_cursor += (sw - prev_sw) / 2  # Extra gap before wide slot
+            row_entries.append((size, x_cursor))
+            if isinstance(s_width, list) and j + 1 < len(sizes):
+                next_sw = s_width[j + 1]
+                x_cursor += max(slot_spacing_mm, (sw + next_sw) / 2 + 2)
+            else:
+                x_cursor += slot_spacing_mm
 
-        current_sheet_rows.append((current_y, slot_len, s_width, row_entries))
+        # Determine uniform slot_width for this row (or keep mixed)
+        if isinstance(s_width, list):
+            # Mixed row: store the per-slot widths
+            row_slot_width = s_width
+        else:
+            row_slot_width = s_width
+
+        current_sheet_rows.append((current_y, slot_len, row_slot_width, row_entries))
         current_y += row_height + row_gap
 
     if current_sheet_rows:
@@ -1149,12 +1186,20 @@ def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_m
     # Calculate tight-fit dimensions per sheet
     result = []
     for rows in sheets:
-        # Height: last row bottom + margin
         last_row = rows[-1]
-        last_y, last_slot_len, _, _ = last_row
+        last_y, last_slot_len, _, last_entries = last_row
         height = last_y + ORGANIZER_LABEL_HEIGHT + last_slot_len + margin
-        # Width: use full usable width + margins (slots are distributed across it)
-        width = sheet_width_mm
+        # Width: rightmost slot position + half slot width + margin
+        max_x = 0
+        for _, _, sw, entries in rows:
+            if entries:
+                last_size, last_x = entries[-1]
+                if isinstance(sw, list):
+                    last_sw = sw[-1]
+                else:
+                    last_sw = sw
+                max_x = max(max_x, last_x + last_sw / 2)
+        width = max_x + margin
         result.append((rows, width, height))
 
     return result
@@ -1199,17 +1244,18 @@ def generate_organizer_svg(die_sizes, include_holders, sheet_width_mm, sheet_hei
 
         if layer_type == "slotted":
             for row_y, slot_len, s_width, entries in rows:
-                for size, x in entries:
-                    # Slot rectangle
-                    slot_x = x - s_width / 2
+                for j, (size, x) in enumerate(entries):
+                    # Get per-slot width
+                    sw = s_width[j] if isinstance(s_width, list) else s_width
+                    slot_x = x - sw / 2
                     slot_y = row_y + ORGANIZER_LABEL_HEIGHT
                     if compat:
                         dwg.add(dwg.rect(insert=(slot_x, slot_y),
-                                         size=(s_width, slot_len),
+                                         size=(sw, slot_len),
                                          stroke=cut_color, fill='none', stroke_width=stroke_w))
                     else:
                         dwg.add(dwg.rect(insert=(f"{slot_x}mm", f"{slot_y}mm"),
-                                         size=(f"{s_width}mm", f"{slot_len}mm"),
+                                         size=(f"{sw}mm", f"{slot_len}mm"),
                                          stroke=cut_color, fill='none', stroke_width=stroke_w))
 
                     # Size label above slot
