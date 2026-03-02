@@ -978,18 +978,23 @@ def generate_holder_svg(variant, filename, settings):
 
             # Engrave size range on ring
             eng_color = layer_colors.get('die_engraving', '#00E000')
+            tooling = settings.get("tooling_settings", {})
+            font_size = tooling.get("ring_font_size", 3.5)
+            ring_width = HOLDER_OUTER_R - inner_r
+            if font_size > ring_width * 0.9:
+                font_size = ring_width * 0.9
             if inner_r == HOLDER_LARGE_INNER_R:
                 ring_label = "40\u201360mm"
             else:
                 ring_label = "7\u201339.5mm"
             ring_center_r = (HOLDER_OUTER_R + inner_r) / 2
-            label_y = cy - ring_center_r + 1.2
+            label_y = cy - ring_center_r + font_size * 0.35
             if compatibility_mode:
                 dwg.add(dwg.text(ring_label, insert=(cx, label_y),
-                                 text_anchor="middle", font_size=3.0, fill=eng_color))
+                                 text_anchor="middle", font_size=font_size, fill=eng_color))
             else:
                 dwg.add(dwg.text(ring_label, insert=(f"{cx}mm", f"{label_y}mm"),
-                                 text_anchor="middle", font_size="3.0mm", fill=eng_color))
+                                 text_anchor="middle", font_size=f"{font_size}mm", fill=eng_color))
 
     dwg.save()
 

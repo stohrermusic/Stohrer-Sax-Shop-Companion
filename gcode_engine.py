@@ -1107,21 +1107,26 @@ def generate_holder_gcode(variant, filename, settings):
             inner_cut_strokes.append(linearize_circle(cx, cy, inner_r - kerf_offset, segments=72))
 
             # Engrave size range on ring
+            tooling = settings.get("tooling_settings", {})
+            font_size = tooling.get("ring_font_size", 3.5)
+            ring_width = HOLDER_OUTER_R - inner_r
+            if font_size > ring_width * 0.9:
+                font_size = ring_width * 0.9
             if inner_r == HOLDER_LARGE_INNER_R:
                 ring_label = "40-60"
             else:
                 ring_label = "7-39.5"
             ring_center_r = (HOLDER_OUTER_R + inner_r) / 2
-            label_y = cy + ring_center_r - 1.2
+            label_y = cy + ring_center_r - font_size * 0.35
             filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
             if engraving_mode == "filled":
                 eng_speed = mat_settings.get("filled_engraving_speed", 800)
                 eng_power = mat_settings.get("filled_engraving_power", 15)
-                engraving_strokes.extend(get_filled_text_strokes(ring_label, 3.0, cx, label_y, filled_line_spacing))
+                engraving_strokes.extend(get_filled_text_strokes(ring_label, font_size, cx, label_y, filled_line_spacing))
             else:
                 eng_speed = mat_settings.get("engraving_speed", 800)
                 eng_power = mat_settings.get("engraving_power", 15)
-                engraving_strokes.extend(get_text_strokes(ring_label, 3.0, cx, label_y))
+                engraving_strokes.extend(get_text_strokes(ring_label, font_size, cx, label_y))
 
     # Bounds
     all_x = [0, width_mm]
