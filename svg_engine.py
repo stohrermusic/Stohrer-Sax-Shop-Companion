@@ -1040,3 +1040,164 @@ def generate_kerf_test_svg(material_name, filename, settings):
                                stroke=cut_color, fill='none', stroke_width=stroke_w))
 
     dwg.save()
+
+
+# ==========================================
+# DIE ORGANIZER SVG GENERATION
+# ==========================================
+
+SLOT_WIDTH = 3.2       # mm (slightly wider than 3mm acrylic die thickness)
+SLOT_CLEARANCE = 2.0   # mm extra on slot length beyond die OD
+ORGANIZER_MARGIN = 5.0
+ORGANIZER_ROW_GAP = 3.0
+ORGANIZER_LABEL_HEIGHT = 5.0
+
+def _get_slot_length(die_od):
+    """Slot length for a given die outer diameter."""
+    return die_od + SLOT_CLEARANCE
+
+def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm):
+    """
+    Compute organizer layout: group dies into rows, pack rows onto sheets.
+
+    Returns list of sheets, each sheet is a list of rows.
+    Each row is: (y_offset, slot_length, list_of_(size, x_offset) tuples)
+    Also returns the trimmed (width, height) for each sheet.
+    """
+    margin = ORGANIZER_MARGIN
+    label_h = ORGANIZER_LABEL_HEIGHT
+    row_gap = ORGANIZER_ROW_GAP
+    usable_width = sheet_width_mm - 2 * margin
+
+    if slot_spacing_mm <= 0:
+        slot_spacing_mm = 5.0
+    slots_per_row = max(1, int(usable_width / slot_spacing_mm))
+
+    # Group dies by size class
+    small_sizes = sorted([s for s in die_sizes if s <= 39.5])
+    large_sizes = sorted([s for s in die_sizes if s >= 40.0])
+
+    # Build row specs: (slot_length, list_of_sizes)
+    all_rows = []
+
+    for sizes, od in [(small_sizes, 50.0), (large_sizes, 70.0)]:
+        if not sizes:
+            continue
+        slot_len = _get_slot_length(od)
+        for i in range(0, len(sizes), slots_per_row):
+            chunk = sizes[i:i + slots_per_row]
+            all_rows.append((slot_len, chunk))
+
+    if include_holders:
+        holder_slot_len = _get_slot_length(85.0)
+        holder_entries = ['H-L', 'H-S']  # Large and small holder
+        all_rows.append((holder_slot_len, holder_entries))
+
+    # Pack rows onto sheets
+    sheets = []
+    current_sheet_rows = []
+    current_y = margin
+
+    for slot_len, sizes in all_rows:
+        row_height = slot_len + label_h
+        if current_y + row_height + margin > sheet_height_mm and current_sheet_rows:
+            # This row doesn't fit — start new sheet
+            sheets.append((current_sheet_rows, current_y + margin))
+            current_sheet_rows = []
+            current_y = margin
+
+        # Build row with x positions
+        row_entries = []
+        for j, size in enumerate(sizes):
+            x = margin + j * slot_spacing_mm + slot_spacing_mm / 2
+            row_entries.append((size, x))
+
+        current_sheet_rows.append((current_y, slot_len, row_entries))
+        current_y += row_height + row_gap
+
+    if current_sheet_rows:
+        sheets.append((current_sheet_rows, current_y - row_gap + margin))
+
+    # Calculate actual width needed per sheet
+    result = []
+    for rows, height in sheets:
+        max_slots_in_row = max(len(r[2]) for r in rows)
+        width = 2 * margin + max_slots_in_row * slot_spacing_mm
+        width = min(width, sheet_width_mm)
+        result.append((rows, width, height))
+
+    return result
+
+
+def generate_organizer_svg(die_sizes, include_holders, sheet_width_mm, sheet_height_mm,
+                            slot_spacing_mm, filename_base, settings, layer_type="slotted"):
+    """
+    Generate SVG files for the die organizer.
+
+    Args:
+        die_sizes: sorted list of die size floats
+        include_holders: whether to include holder slots
+        sheet_width_mm, sheet_height_mm: max sheet dimensions
+        slot_spacing_mm: center-to-center slot spacing
+        filename_base: base path for output files (e.g. "/path/to/organizer")
+        settings: app settings dict
+        layer_type: "slotted" (slots + engravings) or "base" (solid rectangle only)
+
+    Returns: list of (filename, width_mm, height_mm) for generated files
+    """
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    cut_color = layer_colors.get('die_outer_cut', '#FF0000')
+    eng_color = layer_colors.get('die_engraving', '#00E000')
+
+    sheets = _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm)
+    generated = []
+
+    for sheet_idx, (rows, width, height) in enumerate(sheets):
+        suffix = f"_sheet{sheet_idx + 1}" if len(sheets) > 1 else ""
+        filename = f"{filename_base}{suffix}_{layer_type}.svg"
+
+        dwg, compat, stroke_w = _create_svg_drawing(filename, width, height, settings)
+
+        # Outer rectangle (cut line to trim sheet to size)
+        if compat:
+            dwg.add(dwg.rect(insert=(0, 0), size=(width, height),
+                             stroke=cut_color, fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.rect(insert=("0mm", "0mm"), size=(f"{width}mm", f"{height}mm"),
+                             stroke=cut_color, fill='none', stroke_width=stroke_w))
+
+        if layer_type == "slotted":
+            for row_y, slot_len, entries in rows:
+                for size, x in entries:
+                    # Slot rectangle (narrow vertical cut)
+                    slot_x = x - SLOT_WIDTH / 2
+                    slot_y = row_y + ORGANIZER_LABEL_HEIGHT
+                    if compat:
+                        dwg.add(dwg.rect(insert=(slot_x, slot_y),
+                                         size=(SLOT_WIDTH, slot_len),
+                                         stroke=cut_color, fill='none', stroke_width=stroke_w))
+                    else:
+                        dwg.add(dwg.rect(insert=(f"{slot_x}mm", f"{slot_y}mm"),
+                                         size=(f"{SLOT_WIDTH}mm", f"{slot_len}mm"),
+                                         stroke=cut_color, fill='none', stroke_width=stroke_w))
+
+                    # Size label above slot
+                    if isinstance(size, str):
+                        label = size  # Holder label
+                    else:
+                        label = f"{size:.1f}".rstrip('0').rstrip('.')
+                    label_y = row_y + ORGANIZER_LABEL_HEIGHT * 0.7
+                    font_size = min(2.5, slot_spacing_mm * 0.6)
+                    if compat:
+                        dwg.add(dwg.text(label, insert=(x, label_y),
+                                         text_anchor="middle", font_size=font_size,
+                                         fill=eng_color))
+                    else:
+                        dwg.add(dwg.text(label, insert=(f"{x}mm", f"{label_y}mm"),
+                                         text_anchor="middle", font_size=f"{font_size}mm",
+                                         fill=eng_color))
+
+        dwg.save()
+        generated.append((filename, width, height))
+
+    return generated

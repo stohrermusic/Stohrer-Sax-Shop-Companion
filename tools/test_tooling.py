@@ -15,12 +15,13 @@ from svg_engine import (
     try_nest_partial, compute_remaining_pads,
     generate_die_svg, generate_die_svg_from_placed,
     generate_holder_svg, generate_kerf_test_svg,
+    generate_organizer_svg, _layout_organizer,
     HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
     HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R,
 )
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, can_generate_gcode,
-    generate_kerf_test_gcode,
+    generate_kerf_test_gcode, generate_organizer_gcode,
 )
 
 passed = 0
@@ -363,6 +364,84 @@ with tempfile.TemporaryDirectory() as tmpdir:
         # Verify cut speed is correct (S180 for speed 180)
         check(f"Kerf test G-code ({material}) uses correct cut speed",
               "F180" in content)
+
+# ============================================================
+print("\n=== Die Organizer Layout ===")
+# ============================================================
+
+# Full set on 400x400mm
+full_small = [s / 2 for s in range(14, 80)]  # 7.0 to 39.5
+full_large = [s / 2 for s in range(80, 121)]  # 40.0 to 60.0
+full_set = sorted(full_small + full_large)
+check("Full set is 107 sizes", len(full_set) == 107)
+
+sheets = _layout_organizer(full_set, True, 400, 400, 5.0)
+check("Full set + holders fits on 400x400 at 5mm spacing",
+      len(sheets) == 1)
+if sheets:
+    rows, width, height = sheets[0]
+    total_slots = sum(len(r[2]) for r in rows)
+    check(f"Full set: {total_slots} slots (107 dies + 2 holders = 109)",
+          total_slots == 109)
+    check(f"Full set sheet: {width:.0f}x{height:.0f} fits 400x400",
+          width <= 400 and height <= 400)
+
+# Small custom set
+small_set = [10.0, 15.0, 20.0, 25.0]
+sheets = _layout_organizer(small_set, False, 300, 300, 5.0)
+check("4-die set fits on one sheet", len(sheets) == 1)
+if sheets:
+    rows, width, height = sheets[0]
+    total_slots = sum(len(r[2]) for r in rows)
+    check("4-die set: 4 slots", total_slots == 4)
+
+# Force multi-sheet by using tiny sheet
+sheets = _layout_organizer(full_set, False, 200, 100, 5.0)
+check("Full set on 200x100: needs multiple sheets", len(sheets) > 1)
+
+# ============================================================
+print("\n=== Die Organizer SVG Generation ===")
+# ============================================================
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    base = os.path.join(tmpdir, "organizer")
+    sizes = [10.0, 15.0, 20.0, 40.0, 45.0]
+    generated = generate_organizer_svg(sizes, True, 400, 400, 5.0, base, settings, "slotted")
+    check("Organizer SVG slotted created", len(generated) > 0)
+    fname, w, h = generated[0]
+    check("Organizer SVG file exists", os.path.exists(fname))
+    with open(fname, 'r') as f:
+        content = f.read()
+    rect_count = content.count('<rect')
+    # 7 slots (5 dies + 2 holders) + 1 outer rect = 8 rects
+    check(f"Organizer SVG has rects (found {rect_count})", rect_count >= 7)
+    text_count = content.count('<text')
+    check(f"Organizer SVG has labels (found {text_count})", text_count >= 5)
+
+    # Base layer
+    base_gen = generate_organizer_svg(sizes, True, 400, 400, 5.0, base, settings, "base")
+    check("Organizer SVG base created", len(base_gen) > 0)
+    fname_b, _, _ = base_gen[0]
+    with open(fname_b, 'r') as f:
+        content_b = f.read()
+    rect_count_b = content_b.count('<rect')
+    check(f"Base layer: just 1 rect (found {rect_count_b})", rect_count_b == 1)
+
+# ============================================================
+print("\n=== Die Organizer G-code Generation ===")
+# ============================================================
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    base = os.path.join(tmpdir, "organizer")
+    sizes = [10.0, 20.0, 40.0]
+    generated = generate_organizer_gcode(sizes, False, 400, 400, 5.0, base, settings, "slotted")
+    check("Organizer G-code created", len(generated) > 0)
+    fname, _, _ = generated[0]
+    check("Organizer G-code file exists", os.path.exists(fname))
+    with open(fname, 'r') as f:
+        content = f.read()
+    check("Organizer G-code has header", "G90" in content)
+    check("Organizer G-code has moves", "G1" in content)
 
 # ============================================================
 print(f"\n{'='*50}")

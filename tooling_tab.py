@@ -12,10 +12,11 @@ import sys
 from svg_engine import (
     _nest_discs, try_nest_partial, compute_remaining_pads, can_all_pads_fit,
     generate_die_svg, generate_die_svg_from_placed,
-    generate_holder_svg, generate_kerf_test_svg
+    generate_holder_svg, generate_kerf_test_svg, generate_organizer_svg
 )
 from gcode_engine import (
-    generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode
+    generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode,
+    generate_organizer_gcode
 )
 from ui_dialogs import GcodeSettingsWindow
 
@@ -51,6 +52,7 @@ class ToolingTabMixin:
         tool_names = [
             ("die_inserts", "Die Inserts"),
             ("die_holders", "Die Holders"),
+            ("die_organizer", "Die Organizer"),
             ("kerf_test", "Kerf Test"),
         ]
         for key, label in tool_names:
@@ -204,6 +206,95 @@ class ToolingTabMixin:
                   command=self._on_generate_holder_gcode).pack(side='left')
 
         self._tooling_sections['die_holders'] = holder_frame
+
+        # ========================================
+        # DIE ORGANIZER SECTION
+        # ========================================
+        org_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        # Size input (own field, same pattern as die inserts)
+        org_size_frame = tk.Frame(org_frame, bg=bg)
+        org_size_frame.pack(fill='x', pady=(0, 5))
+
+        tk.Label(org_size_frame, text="Die sizes (mm):", bg=bg).pack(anchor='w')
+        self.org_size_entry = tk.Text(org_size_frame, height=2, width=50, font=("Courier", 10))
+        self.org_size_entry.pack(fill='x', pady=(2, 2))
+        tk.Label(org_size_frame, text='e.g. "7-39.5, 40-60" or use Full Set buttons',
+                 bg=bg, fg="gray", font=("Helvetica", 8)).pack(anchor='w')
+
+        org_btn_frame = tk.Frame(org_frame, bg=bg)
+        org_btn_frame.pack(fill='x', pady=(0, 5))
+
+        tk.Button(org_btn_frame, text="Full Set (S)", width=12,
+                  command=lambda: self._fill_org_sizes("7-39.5")).pack(side='left', padx=(0, 5))
+        tk.Button(org_btn_frame, text="Full Set (L)", width=12,
+                  command=lambda: self._fill_org_sizes("40-60")).pack(side='left', padx=(0, 5))
+        tk.Button(org_btn_frame, text="Full Set (All)", width=12,
+                  command=lambda: self._fill_org_sizes("7-60")).pack(side='left', padx=(0, 15))
+        tk.Label(org_btn_frame, text="Step:", bg=bg).pack(side='left')
+        self.org_step_var = tk.StringVar(value="0.5")
+        tk.Entry(org_btn_frame, textvariable=self.org_step_var, width=5).pack(side='left', padx=(2, 2))
+        tk.Label(org_btn_frame, text="mm", bg=bg).pack(side='left')
+
+        # Include holders checkbox
+        self.org_holders_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(org_frame, text="Include die holder slots", variable=self.org_holders_var,
+                       bg=bg).pack(anchor='w', pady=(0, 5))
+
+        # Sheet size
+        org_sheet_frame = tk.Frame(org_frame, bg=bg)
+        org_sheet_frame.pack(fill='x', pady=(0, 5))
+
+        tk.Label(org_sheet_frame, text="Sheet size:", bg=bg).pack(side='left')
+        self.org_width_var = tk.StringVar(value="400")
+        tk.Entry(org_sheet_frame, textvariable=self.org_width_var, width=8).pack(side='left', padx=(5, 5))
+        tk.Label(org_sheet_frame, text="\u00d7", bg=bg).pack(side='left')
+        self.org_height_var = tk.StringVar(value="400")
+        tk.Entry(org_sheet_frame, textvariable=self.org_height_var, width=8).pack(side='left', padx=(5, 5))
+        self.org_units_var = tk.StringVar(value="mm")
+        tk.Radiobutton(org_sheet_frame, text="mm", variable=self.org_units_var,
+                       value="mm", bg=bg).pack(side='left')
+        tk.Radiobutton(org_sheet_frame, text="in", variable=self.org_units_var,
+                       value="in", bg=bg).pack(side='left', padx=(5, 0))
+
+        # Slot spacing
+        org_spacing_frame = tk.Frame(org_frame, bg=bg)
+        org_spacing_frame.pack(fill='x', pady=(0, 5))
+
+        tk.Label(org_spacing_frame, text="Slot spacing:", bg=bg).pack(side='left')
+        self.org_spacing_var = tk.StringVar(value="5")
+        tk.Entry(org_spacing_frame, textvariable=self.org_spacing_var, width=5).pack(side='left', padx=(5, 2))
+        tk.Label(org_spacing_frame, text="mm center-to-center", bg=bg).pack(side='left')
+
+        # Depth
+        org_depth_frame = tk.Frame(org_frame, bg=bg)
+        org_depth_frame.pack(fill='x', pady=(0, 5))
+
+        tk.Label(org_depth_frame, text="Depth:", bg=bg).pack(side='left')
+        self.org_depth_var = tk.StringVar(value="6")
+        tk.Radiobutton(org_depth_frame, text="6mm (3 sheets)", variable=self.org_depth_var,
+                       value="6", bg=bg).pack(side='left', padx=(5, 10))
+        tk.Radiobutton(org_depth_frame, text="9mm (4 sheets)", variable=self.org_depth_var,
+                       value="9", bg=bg).pack(side='left')
+
+        # Output filename
+        org_name_frame = tk.Frame(org_frame, bg=bg)
+        org_name_frame.pack(fill='x', pady=(5, 5))
+
+        tk.Label(org_name_frame, text="Output filename:", bg=bg).pack(side='left')
+        self.org_filename_var = tk.StringVar(value="die_organizer")
+        tk.Entry(org_name_frame, textvariable=self.org_filename_var, width=25).pack(side='left', padx=(5, 0))
+
+        # Generate buttons
+        org_gen_frame = tk.Frame(org_frame, bg=bg)
+        org_gen_frame.pack(fill='x', pady=(5, 0))
+
+        tk.Button(org_gen_frame, text="Generate SVG", width=15,
+                  command=self._on_generate_organizer_svg).pack(side='left', padx=(0, 10))
+        tk.Button(org_gen_frame, text="Generate G-code", width=15,
+                  command=self._on_generate_organizer_gcode).pack(side='left')
+
+        self._tooling_sections['die_organizer'] = org_frame
 
         # ========================================
         # KERF TEST SECTION
@@ -834,6 +925,170 @@ class ToolingTabMixin:
             except tk.TclError:
                 pass
             self.tooling_scrap_window = None
+
+    # ========================================
+    # DIE ORGANIZER GENERATION
+    # ========================================
+
+    def _fill_org_sizes(self, range_text):
+        """Fill the organizer size entry."""
+        self.org_size_entry.delete("1.0", tk.END)
+        self.org_size_entry.insert("1.0", range_text)
+
+    def _parse_org_sizes(self):
+        """Parse organizer size input (same logic as die sizes)."""
+        text = self.org_size_entry.get("1.0", tk.END).strip()
+        if not text:
+            return []
+        try:
+            step = float(self.org_step_var.get())
+        except (ValueError, TypeError):
+            step = 0.5
+        if step <= 0:
+            step = 0.5
+
+        sizes = set()
+        for part in text.split(','):
+            part = part.strip()
+            if not part:
+                continue
+            if '-' in part:
+                parts = part.split('-', 1)
+                try:
+                    lo = float(parts[0].strip())
+                    hi = float(parts[1].strip())
+                except ValueError:
+                    continue
+                if lo > hi:
+                    lo, hi = hi, lo
+                current = lo
+                while current <= hi + 0.001:
+                    sizes.add(round(current, 2))
+                    current += step
+            else:
+                try:
+                    sizes.add(float(part))
+                except ValueError:
+                    continue
+        return sorted(sizes)
+
+    def _get_org_sheet_mm(self):
+        """Parse organizer sheet size to mm."""
+        try:
+            w = float(self.org_width_var.get())
+            h = float(self.org_height_var.get())
+        except (ValueError, TypeError):
+            messagebox.showerror("Invalid Input", "Sheet dimensions must be valid numbers.")
+            return None, None
+        if w <= 0 or h <= 0:
+            messagebox.showerror("Invalid Input", "Sheet dimensions must be positive.")
+            return None, None
+        if self.org_units_var.get() == "in":
+            w *= 25.4
+            h *= 25.4
+        return w, h
+
+    def _on_generate_organizer_svg(self):
+        """Generate SVG files for die organizer."""
+        try:
+            sizes = self._parse_org_sizes()
+            if not sizes:
+                messagebox.showerror("Error", "No valid die sizes entered.")
+                return
+
+            width_mm, height_mm = self._get_org_sheet_mm()
+            if width_mm is None:
+                return
+
+            try:
+                spacing = float(self.org_spacing_var.get())
+            except (ValueError, TypeError):
+                spacing = 5.0
+
+            include_holders = self.org_holders_var.get()
+            base = self.org_filename_var.get().strip() or "die_organizer"
+
+            save_dir = filedialog.askdirectory(
+                title="Select Folder to Save Organizer Files",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_dir:
+                return
+            self.settings["last_output_dir"] = save_dir
+
+            filename_base = os.path.join(save_dir, base)
+            depth = self.org_depth_var.get()
+            slotted_copies = 2 if depth == "6" else 3
+
+            # Generate slotted layer(s) and base layer
+            slotted = generate_organizer_svg(sizes, include_holders, width_mm, height_mm,
+                                              spacing, filename_base, self.settings, layer_type="slotted")
+            base_files = generate_organizer_svg(sizes, include_holders, width_mm, height_mm,
+                                                 spacing, filename_base, self.settings, layer_type="base")
+
+            # Summary
+            num_sheets = len(slotted)
+            dims = [f"{w:.0f}\u00d7{h:.0f}mm" for _, w, h in slotted]
+            summary = f"Generated {num_sheets} sheet(s):\n"
+            for i, d in enumerate(dims):
+                summary += f"  Sheet {i+1}: {d}\n"
+            summary += f"\nCut each slotted layer {slotted_copies} times.\n"
+            summary += f"Cut each base layer 1 time.\n"
+            summary += f"\nFiles saved to: {save_dir}"
+
+            messagebox.showinfo("Done", summary)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
+
+    def _on_generate_organizer_gcode(self):
+        """Generate G-code files for die organizer."""
+        try:
+            sizes = self._parse_org_sizes()
+            if not sizes:
+                messagebox.showerror("Error", "No valid die sizes entered.")
+                return
+
+            width_mm, height_mm = self._get_org_sheet_mm()
+            if width_mm is None:
+                return
+
+            try:
+                spacing = float(self.org_spacing_var.get())
+            except (ValueError, TypeError):
+                spacing = 5.0
+
+            include_holders = self.org_holders_var.get()
+            base = self.org_filename_var.get().strip() or "die_organizer"
+
+            save_dir = filedialog.askdirectory(
+                title="Select Folder to Save Organizer G-code",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_dir:
+                return
+            self.settings["last_output_dir"] = save_dir
+
+            filename_base = os.path.join(save_dir, base)
+            depth = self.org_depth_var.get()
+            slotted_copies = 2 if depth == "6" else 3
+
+            slotted = generate_organizer_gcode(sizes, include_holders, width_mm, height_mm,
+                                                spacing, filename_base, self.settings, layer_type="slotted")
+            base_files = generate_organizer_gcode(sizes, include_holders, width_mm, height_mm,
+                                                   spacing, filename_base, self.settings, layer_type="base")
+
+            num_sheets = len(slotted)
+            dims = [f"{w:.0f}\u00d7{h:.0f}mm" for _, w, h in slotted]
+            summary = f"Generated {num_sheets} sheet(s):\n"
+            for i, d in enumerate(dims):
+                summary += f"  Sheet {i+1}: {d}\n"
+            summary += f"\nCut each slotted layer {slotted_copies} times.\n"
+            summary += f"Cut each base layer 1 time.\n"
+            summary += f"\nFiles saved to: {save_dir}"
+
+            messagebox.showinfo("Done", summary)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
 
     # ========================================
     # KERF TEST GENERATION

@@ -1207,3 +1207,97 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
 
     with open(filename, 'w') as f:
         f.write('\n'.join(gcode_lines))
+
+
+# ==========================================
+# DIE ORGANIZER G-CODE GENERATION
+# ==========================================
+
+def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_height_mm,
+                              slot_spacing_mm, filename_base, settings, layer_type="slotted"):
+    """
+    Generate G-code files for the die organizer.
+    Returns list of (filename, width_mm, height_mm).
+    """
+    from svg_engine import (_layout_organizer, SLOT_WIDTH, ORGANIZER_LABEL_HEIGHT)
+
+    gcode_settings = settings.get("gcode_settings", {})
+    mat_settings = gcode_settings.get("acrylic", {})
+
+    engraving_mode = mat_settings.get("engraving_mode", "filled")
+    if engraving_mode == "filled":
+        eng_speed = mat_settings.get("filled_engraving_speed", 800)
+        eng_power = mat_settings.get("filled_engraving_power", 15)
+        filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
+    else:
+        eng_speed = mat_settings.get("engraving_speed", 800)
+        eng_power = mat_settings.get("engraving_power", 15)
+
+    cut_speed = mat_settings.get("cut_speed", 150)
+    cut_power = mat_settings.get("cut_power", 100)
+    return_speed = settings.get("gcode_return_speed", 1000)
+
+    overscan_mm = 0
+    if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
+
+    sheets = _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm)
+    generated = []
+
+    for sheet_idx, (rows, width, height) in enumerate(sheets):
+        suffix = f"_sheet{sheet_idx + 1}" if len(sheets) > 1 else ""
+        filename = f"{filename_base}{suffix}_{layer_type}.gcode"
+
+        engraving_strokes = []
+        cut_strokes = []
+
+        # Outer rectangle — G-code Y=0 at bottom
+        rect_points = [(0, height), (width, height), (width, 0), (0, 0), (0, height)]
+        cut_strokes.append(rect_points)
+
+        if layer_type == "slotted":
+            for row_y, slot_len, entries in rows:
+                for size, x in entries:
+                    slot_x = x - SLOT_WIDTH / 2
+                    svg_slot_y = row_y + ORGANIZER_LABEL_HEIGHT
+                    gy_top = height - svg_slot_y
+                    gy_bot = height - (svg_slot_y + slot_len)
+                    slot_points = [
+                        (slot_x, gy_top), (slot_x + SLOT_WIDTH, gy_top),
+                        (slot_x + SLOT_WIDTH, gy_bot), (slot_x, gy_bot),
+                        (slot_x, gy_top)
+                    ]
+                    cut_strokes.append(slot_points)
+
+                    if isinstance(size, str):
+                        label = size
+                    else:
+                        label = f"{size:.1f}".rstrip('0').rstrip('.')
+                    svg_label_y = row_y + ORGANIZER_LABEL_HEIGHT * 0.7
+                    label_y = height - svg_label_y
+                    font_size = min(2.5, slot_spacing_mm * 0.6)
+                    if engraving_mode == "filled":
+                        engraving_strokes.extend(
+                            get_filled_text_strokes(label, font_size, x, label_y, filled_line_spacing))
+                    else:
+                        engraving_strokes.extend(
+                            get_text_strokes(label, font_size, x, label_y))
+
+        gcode_lines = []
+        gcode_lines.extend(generate_gcode_header(0, 0, width, height))
+
+        if engraving_strokes:
+            gcode_lines.extend(generate_gcode_layer(engraving_strokes, eng_speed, eng_power, 'C03',
+                                                     overscan_mm=overscan_mm, air_assist=True))
+        if cut_strokes:
+            gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, 'C02',
+                                                     air_assist=True))
+
+        gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
+
+        with open(filename, 'w') as f:
+            f.write('\n'.join(gcode_lines))
+
+        generated.append((filename, width, height))
+
+    return generated
