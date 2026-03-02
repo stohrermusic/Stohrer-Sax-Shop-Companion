@@ -1294,17 +1294,16 @@ def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_h
         cut_strokes.append(rect_points)
 
         if layer_type == "slotted":
-            for row_y, slot_len, s_width, entries in rows:
-                for j, (size, x) in enumerate(entries):
-                    sw = s_width[j] if isinstance(s_width, list) else s_width
-                    slot_x = x - sw / 2
-                    svg_slot_y = row_y + ORGANIZER_LABEL_HEIGHT
+            for col_x, col_width, entries in rows:
+                for size, y, sh in entries:
+                    # Horizontal slot — flip Y
+                    svg_slot_y = y - sh / 2
                     gy_top = height - svg_slot_y
-                    gy_bot = height - (svg_slot_y + slot_len)
+                    gy_bot = height - (svg_slot_y + sh)
                     slot_points = [
-                        (slot_x, gy_top), (slot_x + sw, gy_top),
-                        (slot_x + sw, gy_bot), (slot_x, gy_bot),
-                        (slot_x, gy_top)
+                        (col_x, gy_top), (col_x + col_width, gy_top),
+                        (col_x + col_width, gy_bot), (col_x, gy_bot),
+                        (col_x, gy_top)
                     ]
                     cut_strokes.append(slot_points)
 
@@ -1312,15 +1311,15 @@ def generate_organizer_gcode(die_sizes, include_holders, sheet_width_mm, sheet_h
                         label = size
                     else:
                         label = f"{size:.1f}".rstrip('0').rstrip('.')
-                    svg_label_y = row_y + ORGANIZER_LABEL_HEIGHT * 0.7
-                    label_y = height - svg_label_y
                     font_size = min(2.5, slot_spacing_mm * 0.6)
+                    label_x = col_x + col_width + 1.5 + 5  # Approximate center of label
+                    label_y_gcode = height - y
                     if engraving_mode == "filled":
                         engraving_strokes.extend(
-                            get_filled_text_strokes(label, font_size, x, label_y, filled_line_spacing))
+                            get_filled_text_strokes(label, font_size, label_x, label_y_gcode, filled_line_spacing))
                     else:
                         engraving_strokes.extend(
-                            get_text_strokes(label, font_size, x, label_y))
+                            get_text_strokes(label, font_size, label_x, label_y_gcode))
 
         gcode_lines = []
         gcode_lines.extend(generate_gcode_header(0, 0, width, height))

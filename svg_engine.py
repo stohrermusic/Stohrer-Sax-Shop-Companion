@@ -1089,124 +1089,111 @@ def _get_slot_length(die_od, depth_mm):
 
 def _layout_organizer(die_sizes, include_holders, sheet_width_mm, sheet_height_mm, slot_spacing_mm, depth_mm=6.0):
     """
-    Compute organizer layout: group dies into rows, pack rows onto sheets.
-    Slots are packed at fixed spacing. Holder slots merge into the last
-    row of large dies when there's room. Slot length is calculated from
-    the chord width at the given depth for a snug fit.
+    Column-based organizer layout. Slots run horizontally, stacked vertically
+    in columns. Columns arranged left to right by size class.
 
-    Returns list of sheets. Each sheet is (rows, width, height).
-    Each row is: (y_offset, slot_length, slot_width, list_of_(size, x_offset) tuples)
+    Returns list of sheets. Each sheet is (columns, width, height).
+    Each column is: (x_offset, col_width, slot_height, list_of_(size, y_offset) tuples)
+    slot_height is the slot's narrow dimension (SLOT_WIDTH or HOLDER_SLOT_WIDTH).
+    col_width is the slot length (chord width).
     """
     margin = ORGANIZER_MARGIN
-    label_h = ORGANIZER_LABEL_HEIGHT
-    row_gap = ORGANIZER_ROW_GAP
-    usable_width = sheet_width_mm - 2 * margin
+    col_gap = 3.0
 
     if slot_spacing_mm <= 0:
         slot_spacing_mm = 5.0
-    slots_per_row = max(1, int(usable_width / slot_spacing_mm))
+
+    usable_height = sheet_height_mm - 2 * margin
+    slots_per_col = max(1, int(usable_height / slot_spacing_mm))
 
     # Group dies by size class
     small_sizes = sorted([s for s in die_sizes if s <= 39.5])
     large_sizes = sorted([s for s in die_sizes if s >= 40.0])
 
-    # Build row specs: (slot_length, slot_width, list_of_sizes)
-    all_rows = []
+    small_chord = _get_slot_length(50.0, depth_mm) if small_sizes else 0
+    large_chord = _get_slot_length(70.0, depth_mm) if large_sizes else 0
+    holder_chord = _get_slot_length(85.0, depth_mm) if include_holders else 0
 
-    for sizes, od in [(small_sizes, 50.0), (large_sizes, 70.0)]:
+    # Build columns
+    all_columns = []  # (col_chord_width, slot_height, list_of_sizes)
+
+    # Target balanced column heights: use the smaller of slots_per_col
+    # and a balanced split to avoid one tall column + one short one
+    def _balanced_columns(sizes, chord, max_per_col):
+        """Split sizes into balanced columns."""
         if not sizes:
-            continue
-        slot_len = _get_slot_length(od, depth_mm)
-        for i in range(0, len(sizes), slots_per_row):
-            chunk = sizes[i:i + slots_per_row]
-            all_rows.append((slot_len, SLOT_WIDTH, chunk))
+            return
+        num_cols = max(1, -(-len(sizes) // max_per_col))
+        # If we have room for more columns, split further for balance
+        # (e.g. 41 in 1 col vs 21+20 in 2 cols — prefer 2)
+        if num_cols == 1 and len(sizes) > max_per_col // 2:
+            num_cols = 2
+        per_col = -(-len(sizes) // num_cols)
+        for i in range(0, len(sizes), per_col):
+            chunk = sizes[i:i + per_col]
+            all_columns.append((chord, SLOT_WIDTH, chunk))
 
-    # Try to merge holders into last large die row
+    _balanced_columns(small_sizes, small_chord, slots_per_col)
+    _balanced_columns(large_sizes, large_chord, slots_per_col)
+
+    # Try to merge holders into last large column's remaining space
     holders_merged = False
-    if include_holders and large_sizes:
+    if include_holders and all_columns:
+        last_chord, last_sh, last_sizes = all_columns[-1]
+        remaining_slots = slots_per_col - len(last_sizes)
         holder_entries = ['H-L', 'H-S']
-        if all_rows:
-            last_slot_len, last_s_width, last_sizes = all_rows[-1]
-            holder_slots_needed = len(holder_entries)
-            holder_width_each = HOLDER_SLOT_WIDTH + slot_spacing_mm
-            remaining_width = usable_width - len(last_sizes) * slot_spacing_mm
-            if remaining_width >= holder_slots_needed * holder_width_each:
-                holder_slot_len = _get_slot_length(85.0, depth_mm)
-                merged_slot_len = max(last_slot_len, holder_slot_len)
-                merged_entries = list(last_sizes) + holder_entries
-                merged_widths = [last_s_width] * len(last_sizes) + [HOLDER_SLOT_WIDTH] * len(holder_entries)
-                all_rows[-1] = (merged_slot_len, merged_widths, merged_entries)
-                holders_merged = True
+        if remaining_slots >= len(holder_entries) and last_chord >= 0:
+            # Merge: widen column to fit holders, add holder entries
+            merged_chord = max(last_chord, holder_chord)
+            merged_entries = list(last_sizes) + holder_entries
+            merged_heights = [last_sh] * len(last_sizes) + [HOLDER_SLOT_WIDTH] * len(holder_entries)
+            all_columns[-1] = (merged_chord, merged_heights, merged_entries)
+            holders_merged = True
 
     if include_holders and not holders_merged:
-        holder_slot_len = _get_slot_length(85.0, depth_mm)
         holder_entries = ['H-L', 'H-S']
-        all_rows.append((holder_slot_len, HOLDER_SLOT_WIDTH, holder_entries))
+        all_columns.append((holder_chord, HOLDER_SLOT_WIDTH, holder_entries))
 
-    # Pack rows onto sheets with fixed spacing
+    # Pack columns onto sheets left to right
     sheets = []
-    current_sheet_rows = []
-    current_y = margin
+    current_sheet_cols = []
+    current_x = margin
 
-    for slot_len, s_width, sizes in all_rows:
-        row_height = slot_len + label_h
-        if current_y + row_height + margin > sheet_height_mm and current_sheet_rows:
-            sheets.append(current_sheet_rows)
-            current_sheet_rows = []
-            current_y = margin
+    for col_chord, s_height, sizes in all_columns:
+        col_width = col_chord
+        if current_x + col_width + margin > sheet_width_mm and current_sheet_cols:
+            sheets.append(current_sheet_cols)
+            current_sheet_cols = []
+            current_x = margin
 
-        # Pack slots at fixed spacing from left
-        row_entries = []
-        x_cursor = margin + slot_spacing_mm / 2
+        # Stack slots vertically at fixed spacing
+        col_entries = []
         for j, size in enumerate(sizes):
-            # Get per-slot width (handles mixed-width merged rows)
-            if isinstance(s_width, list):
-                sw = s_width[j]
-            else:
-                sw = s_width
-            # For wide slots (holders), add extra spacing
-            if sw > SLOT_WIDTH:
-                if j > 0:
-                    prev_sw = s_width[j-1] if isinstance(s_width, list) else s_width
-                    x_cursor += (sw - prev_sw) / 2  # Extra gap before wide slot
-            row_entries.append((size, x_cursor))
-            if isinstance(s_width, list) and j + 1 < len(sizes):
-                next_sw = s_width[j + 1]
-                x_cursor += max(slot_spacing_mm, (sw + next_sw) / 2 + 2)
-            else:
-                x_cursor += slot_spacing_mm
+            y = margin + j * slot_spacing_mm + slot_spacing_mm / 2
+            sh = s_height[j] if isinstance(s_height, list) else s_height
+            col_entries.append((size, y, sh))
 
-        # Determine uniform slot_width for this row (or keep mixed)
-        if isinstance(s_width, list):
-            # Mixed row: store the per-slot widths
-            row_slot_width = s_width
-        else:
-            row_slot_width = s_width
+        current_sheet_cols.append((current_x, col_width, col_entries))
+        current_x += col_width + col_gap
 
-        current_sheet_rows.append((current_y, slot_len, row_slot_width, row_entries))
-        current_y += row_height + row_gap
+    if current_sheet_cols:
+        sheets.append(current_sheet_cols)
 
-    if current_sheet_rows:
-        sheets.append(current_sheet_rows)
-
-    # Calculate tight-fit dimensions per sheet
+    # Calculate tight-fit dimensions
     result = []
-    for rows in sheets:
-        last_row = rows[-1]
-        last_y, last_slot_len, _, last_entries = last_row
-        height = last_y + ORGANIZER_LABEL_HEIGHT + last_slot_len + margin
-        # Width: rightmost slot position + half slot width + margin
-        max_x = 0
-        for _, _, sw, entries in rows:
+    for cols in sheets:
+        # Width: rightmost column edge + label space + margin
+        last_col_x, last_col_w, _ = cols[-1]
+        label_space = 12.0  # Room for size labels to the right
+        width = last_col_x + last_col_w + label_space + margin
+        # Height: tallest column content + margin
+        max_y = 0
+        for _, _, entries in cols:
             if entries:
-                last_size, last_x = entries[-1]
-                if isinstance(sw, list):
-                    last_sw = sw[-1]
-                else:
-                    last_sw = sw
-                max_x = max(max_x, last_x + last_sw / 2)
-        width = max_x + margin
-        result.append((rows, width, height))
+                last_size, last_y, last_sh = entries[-1]
+                max_y = max(max_y, last_y + last_sh / 2)
+        height = max_y + margin
+        result.append((cols, width, height))
 
     return result
 
@@ -1249,36 +1236,34 @@ def generate_organizer_svg(die_sizes, include_holders, sheet_width_mm, sheet_hei
                              stroke=cut_color, fill='none', stroke_width=stroke_w))
 
         if layer_type == "slotted":
-            for row_y, slot_len, s_width, entries in rows:
-                for j, (size, x) in enumerate(entries):
-                    # Get per-slot width
-                    sw = s_width[j] if isinstance(s_width, list) else s_width
-                    slot_x = x - sw / 2
-                    slot_y = row_y + ORGANIZER_LABEL_HEIGHT
+            for col_x, col_width, entries in rows:
+                for size, y, sh in entries:
+                    # Horizontal slot: slot_width = col_width (chord), slot_height = sh (3.2mm or holder width)
+                    slot_x = col_x
+                    slot_y = y - sh / 2
                     if compat:
                         dwg.add(dwg.rect(insert=(slot_x, slot_y),
-                                         size=(sw, slot_len),
+                                         size=(col_width, sh),
                                          stroke=cut_color, fill='none', stroke_width=stroke_w))
                     else:
                         dwg.add(dwg.rect(insert=(f"{slot_x}mm", f"{slot_y}mm"),
-                                         size=(f"{sw}mm", f"{slot_len}mm"),
+                                         size=(f"{col_width}mm", f"{sh}mm"),
                                          stroke=cut_color, fill='none', stroke_width=stroke_w))
 
-                    # Size label above slot
+                    # Size label to the right of slot
                     if isinstance(size, str):
-                        label = size  # Holder label
+                        label = size
                     else:
                         label = f"{size:.1f}".rstrip('0').rstrip('.')
-                    label_y = row_y + ORGANIZER_LABEL_HEIGHT * 0.7
                     font_size = min(2.5, slot_spacing_mm * 0.6)
+                    label_x = col_x + col_width + 1.5
                     if compat:
-                        dwg.add(dwg.text(label, insert=(x, label_y),
-                                         text_anchor="middle", font_size=font_size,
-                                         fill=eng_color))
+                        dwg.add(dwg.text(label, insert=(label_x, y + font_size * 0.35),
+                                         font_size=font_size, fill=eng_color))
                     else:
-                        dwg.add(dwg.text(label, insert=(f"{x}mm", f"{label_y}mm"),
-                                         text_anchor="middle", font_size=f"{font_size}mm",
-                                         fill=eng_color))
+                        label_y_pos = y + font_size * 0.35
+                        dwg.add(dwg.text(label, insert=(f"{label_x}mm", f"{label_y_pos}mm"),
+                                         font_size=f"{font_size}mm", fill=eng_color))
 
         dwg.save()
         generated.append((filename, width, height))

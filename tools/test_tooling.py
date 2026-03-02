@@ -379,8 +379,8 @@ sheets = _layout_organizer(full_set, True, 400, 400, 5.0)
 check("Full set + holders fits on 400x400 at 5mm spacing",
       len(sheets) == 1)
 if sheets:
-    rows, width, height = sheets[0]
-    total_slots = sum(len(r[3]) for r in rows)
+    cols, width, height = sheets[0]
+    total_slots = sum(len(c[2]) for c in cols)
     check(f"Full set: {total_slots} slots (107 dies + 2 holders = 109)",
           total_slots == 109)
     check(f"Full set sheet: {width:.0f}x{height:.0f} fits 400x400",
@@ -391,13 +391,13 @@ small_set = [10.0, 15.0, 20.0, 25.0]
 sheets = _layout_organizer(small_set, False, 300, 300, 5.0)
 check("4-die set fits on one sheet", len(sheets) == 1)
 if sheets:
-    rows, width, height = sheets[0]
-    total_slots = sum(len(r[3]) for r in rows)
+    cols, width, height = sheets[0]
+    total_slots = sum(len(c[2]) for c in cols)
     check("4-die set: 4 slots", total_slots == 4)
 
 # Force multi-sheet by using tiny sheet
-sheets = _layout_organizer(full_set, False, 200, 100, 5.0)
-check("Full set on 200x100: needs multiple sheets", len(sheets) > 1)
+sheets = _layout_organizer(full_set, False, 50, 400, 5.0)
+check("Full set on narrow sheet: needs multiple sheets", len(sheets) > 1)
 
 # ============================================================
 print("\n=== Die Organizer SVG Generation ===")
