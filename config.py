@@ -256,6 +256,15 @@ DEFAULT_SETTINGS = {
         },
     },
 
+    # TUNER SETTINGS (Strobe Tuner)
+    "tuner_settings": {
+        "stripe_color": "#00FF00",
+        "reference_pitch": 440.0,
+        "transposition": "concert",  # concert, bb, eb, f
+        "sensitivity": 50,           # 0-100
+        "waveform": "pure",          # pure or rich
+    },
+
     # TOOLING SETTINGS (Die Inserts & Die Holders)
     "tooling_settings": {
         "sheet_width": "12",

@@ -2061,6 +2061,33 @@ class UserGuideWindow(tk.Toplevel):
                       "or offset from the outer edge)")
         self._blank()
 
+        # ── STROBE TUNER ─────────────────────────
+        self._h2("Strobe Tuner")
+        self._body("A 12-wheel chromatic strobe tuner modeled after the Peterson Stroboconn 6T-5. "
+                    "Each wheel shows concentric rings of alternating colored and dark segments "
+                    "visible through a wedge-shaped cutout \u2014 just like the real thing.")
+        self._bullet("When the input pitch matches the reference, the pattern freezes (appears stationary)")
+        self._bullet("Sharp \u2192 pattern drifts one direction. Flat \u2192 drifts the other direction")
+        self._bullet("Faster drift = farther from in-tune. Frozen = perfectly in tune")
+        self._bullet("Multiple wheels respond simultaneously from harmonics in the sound \u2014 "
+                      "this is real FFT analysis of the audio, not simulated")
+        self._blank()
+
+        self._body("Controls:")
+        self._bullet("Instrument in Key of: relabels notes for transposing instruments "
+                      "(Concert C, Bb, Eb, F)")
+        self._bullet("A = ___Hz: set the reference pitch (default 440)")
+        self._bullet("Sensitivity: how loud a signal needs to be to activate a wheel")
+        self._bullet("Color: choose the stripe color for the disc segments")
+        self._bullet("Reference tone: play a pure sine or richer tone at any note "
+                      "from C3 to B6 through your speakers")
+        self._blank()
+
+        self._body("The tuner activates automatically when you switch to the Strobe Tuner tab "
+                    "and stops when you leave it, so there is no CPU or audio usage when "
+                    "you are on other tabs.")
+        self._blank()
+
         # ── PADMAKING GUIDE ────────────────────────
         self._h2("Learn to Make Pads")
         self._body("If you somehow got this program and missed the guide that started it all, "

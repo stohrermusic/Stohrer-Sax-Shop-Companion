@@ -1,2 +1,4 @@
 svgwrite
 pyinstaller
+numpy
+sounddevice

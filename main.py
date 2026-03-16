@@ -26,6 +26,7 @@ from ui_dialogs import (
 )
 from library_features import LibraryFeaturesMixin
 from tooling_tab import ToolingTabMixin
+from tuner_tab import TunerTabMixin
 
 # ==========================================
 # MAIN APP CLASS
@@ -33,7 +34,7 @@ from tooling_tab import ToolingTabMixin
 
 IS_MACOS = sys.platform == 'darwin'
 
-class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
+class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
     def __init__(self, root):
         self.root = root
         self.root.title("Stohrer Sax Shop Companion")
@@ -66,6 +67,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
 
         # --- Tooling Tab Init ---
         self._init_tooling_state()
+
+        # --- Tuner Tab Init ---
+        self._init_tuner_state()
 
         # --- Screw Specs Init ---
         if not os.path.exists(SCREW_SPECS_FILE):
@@ -105,6 +109,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
         # Save tooling tab settings
         self._update_tooling_settings()
 
+        # Stop tuner and save tuner settings
+        self._tuner_stop()
+        self._tuner_save_settings()
+
         save_settings(self.settings)
         self.root.destroy()
 
@@ -142,9 +150,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
         style.configure('TNotebook', background=color)
 
         for widget in parent.winfo_children():
+            # Skip entire subtree for dark-themed widgets (e.g. strobe tuner)
+            if getattr(widget, '_skip_theme', False):
+                continue
+
             widget_class = widget.winfo_class()
-            
+
             if widget_class in ('Frame', 'Label', 'Radiobutton', 'Checkbutton', 'LabelFrame', 'Canvas'):
+                # Skip dark canvases (e.g. strobe tuner display)
+                if widget_class == 'Canvas' and getattr(widget, '_dark_canvas', False):
+                    continue
                 try:
                     widget.configure(bg=color)
                 except tk.TclError:
@@ -224,8 +239,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
         self.tooling_menu.add_cascade(label="Options", menu=tooling_options_menu)
         tooling_options_menu.add_command(label="Settings...", command=self._open_tooling_gcode_settings)
 
+        # --- Tuner Menu ---
+        self.tuner_menu = tk.Menu(self.root)
+
+        tuner_file_menu = tk.Menu(self.tuner_menu, tearoff=0)
+        self.tuner_menu.add_cascade(label="File", menu=tuner_file_menu)
+        tuner_file_menu.add_command(label="Exit", command=self.on_exit)
+
         # --- Add Help menu to all tab menus ---
-        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu):
+        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu):
             help_menu = tk.Menu(menu, tearoff=0)
             menu.add_cascade(label="Help", menu=help_menu)
             help_menu.add_command(label="User Guide...", command=self.open_user_guide)
@@ -244,6 +266,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
             self.root.config(menu=self.screw_menu)
         elif current_tab == 4:
             self.root.config(menu=self.tooling_menu)
+        elif current_tab == 5:
+            self.root.config(menu=self.tuner_menu)
+
+        # Start/stop tuner when switching tabs
+        if current_tab == 5:
+            self._tuner_start()
+        else:
+            self._tuner_stop()
 
     def create_widgets(self):
         self.notebook = ttk.Notebook(self.root)
@@ -271,6 +301,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
         self.tooling_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
         self.notebook.add(self.tooling_tab_frame, text='Tooling')
         self.create_tooling_tab(self.tooling_tab_frame)
+
+        # --- Create Tab 6: Strobe Tuner ---
+        self.tuner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
+        self.notebook.add(self.tuner_tab_frame, text='Strobe Tuner')
+        self.create_tuner_tab(self.tuner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)

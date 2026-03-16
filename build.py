@@ -114,6 +114,14 @@ def build():
         if os.path.exists(icon_path):
             cmd.extend(['--icon', icon_path])
 
+    # Hidden imports for optional audio dependencies (strobe tuner)
+    cmd.extend([
+        '--hidden-import', 'numpy',
+        '--hidden-import', 'sounddevice',
+        '--hidden-import', '_sounddevice_data',
+        '--collect-data', 'sounddevice',
+    ])
+
     # Add the main script
     cmd.append(MAIN_SCRIPT)
 
