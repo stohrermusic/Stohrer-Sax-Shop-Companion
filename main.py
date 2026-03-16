@@ -368,6 +368,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
 
         sheet_frame = tk.LabelFrame(options_frame, text="Sheet Size", bg=self.root.cget('bg'), padx=5, pady=5)
         sheet_frame.pack(fill="x", pady=(10,0))
+        sheet_frame.columnconfigure(2, weight=1)  # Scrap Mode column absorbs extra space
 
         self.unit_label = tk.Label(sheet_frame, text=f"Width ({self.settings['units']}):", bg=self.root.cget('bg'))
         self.unit_label.grid(row=0, column=0, sticky='w', padx=5)
@@ -383,7 +384,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
 
         # Scrap Mode checkbox and status (right side of sheet frame, centered)
         scrap_inner_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
-        scrap_inner_frame.grid(row=0, column=2, rowspan=2, sticky='n', padx=(20, 5))
+        scrap_inner_frame.grid(row=0, column=2, rowspan=4, sticky='n', padx=(20, 5))
 
         self.scrap_mode_var = tk.BooleanVar(value=False)
         tk.Checkbutton(scrap_inner_frame, text="Scrap Mode",
@@ -399,6 +400,36 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
         # Clear button (shown when scrap mode checked)
         self.clear_scrap_btn = tk.Button(scrap_inner_frame, text="Clear", font=("Helvetica", 8),
                                          command=self._on_clear_scrap_clicked)
+
+        # Edge Bias d-pad (right side of sheet frame)
+        bias_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
+        bias_frame.grid(row=0, column=3, rowspan=4, sticky='n', padx=(15, 20))
+
+        tk.Label(bias_frame, text="Edge Bias", font=("Helvetica", 8),
+                 bg=self.root.cget('bg')).grid(row=0, column=0, columnspan=3)
+
+        self.edge_bias_var = tk.StringVar(value=self.settings.get("edge_bias", "center"))
+        self._edge_bias_buttons = {}
+        _tmp_btn = tk.Button(bias_frame)
+        self._edge_bias_default_bg = _tmp_btn.cget('bg')
+        _tmp_btn.destroy()
+        dpad_positions = {
+            "nw": (1, 0), "n": (1, 1), "ne": (1, 2),
+            "w":  (2, 0), "center": (2, 1), "e":  (2, 2),
+            "sw": (3, 0), "s": (3, 1), "se": (3, 2),
+        }
+        dpad_labels = {
+            "nw": "\u2196", "n": "\u2191", "ne": "\u2197",
+            "w":  "\u2190", "center": "\u00b7", "e":  "\u2192",
+            "sw": "\u2199", "s": "\u2193", "se": "\u2198",
+        }
+        for direction, (row, col) in dpad_positions.items():
+            btn = tk.Button(bias_frame, text=dpad_labels[direction], width=2, height=1,
+                           font=("Helvetica", 8), relief="raised",
+                           command=lambda d=direction: self._set_edge_bias(d))
+            btn.grid(row=row, column=col, padx=1, pady=1)
+            self._edge_bias_buttons[direction] = btn
+        self._update_edge_bias_display()
 
         # Card paper size option
         card_paper_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
@@ -596,6 +627,30 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin):
             self.custom_polygon = None
             self._update_shape_status()
         dlg.destroy()
+
+    # --- Edge Bias Methods ---
+
+    def _set_edge_bias(self, direction):
+        """Set the edge bias direction and update button display."""
+        self.edge_bias_var.set(direction)
+        self.settings["edge_bias"] = direction
+        self._update_edge_bias_display()
+
+    def _update_edge_bias_display(self):
+        """Highlight the active edge bias button."""
+        active = self.edge_bias_var.get()
+        default_bg = self._edge_bias_default_bg
+        for direction, btn in self._edge_bias_buttons.items():
+            if direction == active:
+                if IS_MACOS:
+                    btn.configure(relief="sunken")
+                else:
+                    btn.configure(relief="sunken", bg="#4a90d9", fg="white")
+            else:
+                if IS_MACOS:
+                    btn.configure(relief="raised")
+                else:
+                    btn.configure(relief="raised", bg=default_bg, fg="black")
 
     # --- Scrap Mode Methods ---
 

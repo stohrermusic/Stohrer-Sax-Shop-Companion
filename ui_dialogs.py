@@ -1930,6 +1930,21 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Files are named with _scrap1, _scrap2, etc. suffixes")
         self._blank()
 
+        self._h2("Edge Bias")
+        self._body("The Edge Bias d-pad control lets you tell the nesting algorithm which "
+                    "direction to pack circles toward. This is useful for leather skins or "
+                    "scrap pieces where some edges are cleaner than others.")
+        self._bullet("Click an arrow to bias packing toward that edge or corner")
+        self._bullet("Click the center dot to return to default behavior (no bias)")
+        self._bullet("For rectangular sheets, the algorithm scans from the biased edge inward")
+        self._bullet("For custom polygon shapes, positions closer to the biased edge or "
+                      "corner are scored more favorably")
+        self._bullet("Example: a triangular scrap with two clean edges forming a right angle "
+                      "and a rough hypotenuse \u2014 bias toward the corner where the good "
+                      "edges meet so pads pack there first")
+        self._bullet("The setting is saved and persists between sessions")
+        self._blank()
+
         self._h2("SD Card & Eject")
         self._body("Two ways to get G-code onto an SD card:")
         self._bullet("Eject checkbox (below Generate buttons): check \"Eject SD card after "

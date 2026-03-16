@@ -142,23 +142,49 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     fixed_total = len(discs)
     fixed_placed = 0
 
+    # Edge bias scan direction
+    edge_bias = settings.get("edge_bias", "center")
+    # Determine scan directions: bias south means start from bottom, east from right, etc.
+    scan_y_reversed = edge_bias in ("s", "se", "sw")
+    scan_x_reversed = edge_bias in ("e", "ne", "se")
+
+    def _scan_place(dia, r_val, placed_list):
+        """Scan the sheet for a valid placement respecting edge bias direction."""
+        if scan_y_reversed:
+            y = height_mm - spacing_mm - dia
+            y_end = lambda yv: yv >= spacing_mm
+            y_step = -1
+        else:
+            y = spacing_mm
+            y_end = lambda yv: yv + dia + spacing_mm <= height_mm
+            y_step = 1
+
+        while y_end(y):
+            if scan_x_reversed:
+                x = width_mm - spacing_mm - dia
+                x_end = lambda xv: xv >= spacing_mm
+                x_step = -1
+            else:
+                x = spacing_mm
+                x_end = lambda xv: xv + dia + spacing_mm <= width_mm
+                x_step = 1
+
+            while x_end(x):
+                cx, cy = x + r_val, y + r_val
+                is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
+                if not is_collision:
+                    return (cx, cy)
+                x += x_step
+            y += y_step
+        return None
+
     # Place fixed pads
     for pad_size, dia in discs:
         r = dia / 2
-        placed_successfully = False
-        y = spacing_mm
-        while y + dia + spacing_mm <= height_mm and not placed_successfully:
-            x = spacing_mm
-            while x + dia + spacing_mm <= width_mm:
-                cx, cy = x + r, y + r
-                is_collision = any((cx - px)**2 + (cy - py)**2 < (r + pr + spacing_mm)**2 for _, px, py, pr in placed)
-                if not is_collision:
-                    placed.append((pad_size, cx, cy, r))
-                    placed_successfully = True
-                    fixed_placed += 1
-                    break
-                x += 1
-            y += 1
+        pos = _scan_place(dia, r, placed)
+        if pos:
+            placed.append((pad_size, pos[0], pos[1], r))
+            fixed_placed += 1
 
     # Fill remaining space with max pad (if any)
     if max_pads:
@@ -168,20 +194,10 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
         max_r = max_dia / 2
 
         while True:
-            placed_successfully = False
-            y = spacing_mm
-            while y + max_dia + spacing_mm <= height_mm and not placed_successfully:
-                x = spacing_mm
-                while x + max_dia + spacing_mm <= width_mm:
-                    cx, cy = x + max_r, y + max_r
-                    is_collision = any((cx - px)**2 + (cy - py)**2 < (max_r + pr + spacing_mm)**2 for _, px, py, pr in placed)
-                    if not is_collision:
-                        placed.append((max_size, cx, cy, max_r))
-                        placed_successfully = True
-                        break
-                    x += 1
-                y += 1
-            if not placed_successfully:
+            pos = _scan_place(max_dia, max_r, placed)
+            if pos:
+                placed.append((max_size, pos[0], pos[1], max_r))
+            else:
                 break  # No more room for max pads
 
     return placed, fixed_placed, fixed_total
@@ -339,8 +355,35 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     # Size threshold - small pads use edge-seeking behavior
     size_threshold = settings.get("dart_threshold", 18.0)
 
+    # Edge bias: compute a target point that pulls discs toward the biased edge/corner
+    edge_bias = settings.get("edge_bias", "center")
+    bbox_w = max_x - min_x
+    bbox_h = max_y - min_y
+    # Map bias direction to a target point on/near the polygon bounding box
+    _bias_targets = {
+        "center": (centroid_x, centroid_y),
+        "n":  (centroid_x, min_y),
+        "ne": (max_x, min_y),
+        "e":  (max_x, centroid_y),
+        "se": (max_x, max_y),
+        "s":  (centroid_x, max_y),
+        "sw": (min_x, max_y),
+        "w":  (min_x, centroid_y),
+        "nw": (min_x, min_y),
+    }
+    bias_target_x, bias_target_y = _bias_targets.get(edge_bias, (centroid_x, centroid_y))
+    # Bias weight controls how strongly packing favors the biased direction
+    # Scale relative to polygon size so it works for any shape
+    bias_weight = 0.0 if edge_bias == "center" else 2.0
+
     # Use 1mm grid steps for accuracy (worth the extra time for scrap efficiency)
     step = 1
+
+    def _bias_score(cx, cy):
+        """Distance penalty pulling toward biased edge/corner."""
+        if bias_weight == 0.0:
+            return 0.0
+        return bias_weight * math.sqrt((cx - bias_target_x) ** 2 + (cy - bias_target_y) ** 2)
 
     def calc_snugness(cx, cy, r, placed_discs):
         """
@@ -358,7 +401,7 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
         return min_gap
 
     def find_best_position_large(r, placed_discs):
-        """Find position closest to centroid (for large discs)."""
+        """Find position closest to centroid, with edge bias pull (for large discs)."""
         best_pos = None
         best_score = float('inf')
 
@@ -368,8 +411,8 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
             while x + r <= max_x:
                 cx, cy = x + r, y + r
 
-                # Score = distance to centroid (lower = better)
-                score = math.sqrt((cx - centroid_x) ** 2 + (cy - centroid_y) ** 2)
+                # Score = distance to centroid + edge bias pull (lower = better)
+                score = math.sqrt((cx - centroid_x) ** 2 + (cy - centroid_y) ** 2) + _bias_score(cx, cy)
 
                 if score < best_score:
                     if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
@@ -422,7 +465,7 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
                 # Combined score: weight edge proximity and corners heavily
                 # Lower score = better position
-                score = edge_gap * 1.0 + vertex_dist * 0.3 + snugness * 0.5
+                score = edge_gap * 1.0 + vertex_dist * 0.3 + snugness * 0.5 + _bias_score(cx, cy)
 
                 if score < best_score:
                     best_score = score
@@ -455,7 +498,7 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
                 # Quick score check - skip if can't possibly be better
                 dist_to_edge = _distance_point_to_segment(cx, cy, longest_ex1, longest_ey1, longest_ex2, longest_ey2)
-                if dist_to_edge >= best_score:
+                if dist_to_edge + _bias_score(cx, cy) >= best_score:
                     x += edge_step
                     continue
 
@@ -482,7 +525,7 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
                         min_gap = min(min_gap, gap)
                     snugness = min_gap
 
-                score = dist_to_edge + snugness * 0.3
+                score = dist_to_edge + snugness * 0.3 + _bias_score(cx, cy)
 
                 if score < best_score:
                     best_score = score

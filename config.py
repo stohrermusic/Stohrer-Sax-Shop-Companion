@@ -175,6 +175,10 @@ DEFAULT_SETTINGS = {
     # MAX FILL SETTINGS
     "max_fill_style": "center_out",  # "center_out" or "longest_edge"
 
+    # EDGE BIAS - direction to bias circle packing toward
+    # "center" (no bias), "n", "ne", "e", "se", "s", "sw", "w", "nw"
+    "edge_bias": "center",
+
     # CARD PAPER SIZE SETTINGS
     "card_use_paper_size": False,  # When True, card uses standard paper size instead of sheet dimensions
     "card_paper_size": "letter",   # "letter" (8.5x11 in) or "a4" (210x297 mm)
