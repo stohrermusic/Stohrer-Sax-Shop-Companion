@@ -313,7 +313,7 @@ class TunerEngine:
                     result.cents_errors[pc] = cents
 
                     # Accumulate phase offset (the strobe rotation)
-                    self._phase_offsets[pc] += cents * DRIFT_RATE * dt
+                    self._phase_offsets[pc] -= cents * DRIFT_RATE * dt
                     self._phase_offsets[pc] %= 360.0
 
             result.phase_offsets[pc] = self._phase_offsets[pc]

@@ -225,6 +225,51 @@ phase2 = r2.phase_offsets[9]
 
 test("Phase accumulates over time", phase2 != phase1)
 
+# Direction: sharp should decrease phase (clockwise in canvas coords)
+# flat should increase phase (counterclockwise in canvas coords)
+engine_dir = TunerEngine()
+engine_dir._window = np.hanning(FFT_SIZE).astype(np.float32)
+engine_dir._last_time = None
+
+# Sharp: 445 Hz vs 440 Hz reference → positive cents → phase should decrease
+audio_sharp_dir = make_sine(445.0, duration=0.5, amplitude=0.8)
+r_sharp = engine_dir.analyze_buffer(audio_sharp_dir)
+# With -= sign, positive cents causes phase to go down from 0 → wraps to near 360
+# Since it wraps via % 360, a small negative becomes ~35x.x
+# Just verify the direction by checking two frames
+engine_dir2 = TunerEngine()
+engine_dir2._window = np.hanning(FFT_SIZE).astype(np.float32)
+engine_dir2._last_time = None
+chunk = make_sine(445.0, duration=2.0, amplitude=0.8)
+r_s1 = engine_dir2.analyze_buffer(chunk[:FFT_SIZE])
+p_s1 = r_s1.phase_offsets[9]
+time.sleep(0.02)
+r_s2 = engine_dir2.analyze_buffer(chunk[:FFT_SIZE * 2])
+p_s2 = r_s2.phase_offsets[9]
+# Phase wraps at 360, so unwrap: if p_s2 > p_s1 by a lot, it wrapped down
+delta_sharp = p_s2 - p_s1
+if delta_sharp > 180:
+    delta_sharp -= 360
+elif delta_sharp < -180:
+    delta_sharp += 360
+test(f"Sharp: phase drifts negative/clockwise (delta={delta_sharp:.1f})", delta_sharp < 0)
+
+engine_dir3 = TunerEngine()
+engine_dir3._window = np.hanning(FFT_SIZE).astype(np.float32)
+engine_dir3._last_time = None
+chunk_flat = make_sine(435.0, duration=2.0, amplitude=0.8)
+r_f1 = engine_dir3.analyze_buffer(chunk_flat[:FFT_SIZE])
+p_f1 = r_f1.phase_offsets[9]
+time.sleep(0.02)
+r_f2 = engine_dir3.analyze_buffer(chunk_flat[:FFT_SIZE * 2])
+p_f2 = r_f2.phase_offsets[9]
+delta_flat = p_f2 - p_f1
+if delta_flat > 180:
+    delta_flat -= 360
+elif delta_flat < -180:
+    delta_flat += 360
+test(f"Flat: phase drifts positive/counterclockwise (delta={delta_flat:.1f})", delta_flat > 0)
+
 # ============================================
 # SENSITIVITY
 # ============================================
