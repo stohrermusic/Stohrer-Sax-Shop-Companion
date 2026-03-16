@@ -6,8 +6,8 @@ sys.path.insert(0, '.')
 import numpy as np
 from tuner_engine import (
     TunerEngine, AudioRingBuffer, ReferencePlayer, TunerResult,
-    SAMPLE_RATE, FFT_SIZE, PITCH_CLASSES, AUDIO_AVAILABLE, DRIFT_RATE,
-    MIN_OCTAVE, MAX_OCTAVE,
+    SAMPLE_RATE, FFT_SIZE, PITCH_CLASSES, AUDIO_AVAILABLE,
+    DISC_BASE_SEGMENTS, MIN_OCTAVE, MAX_OCTAVE,
 )
 
 passed = 0
@@ -85,6 +85,36 @@ engine.set_reference_pitch(440.0)  # Reset
 # All 12 pitch classes at octave 4 should be in chromatic order
 freqs_oct4 = [engine._freq_table[pc][4 - MIN_OCTAVE] for pc in range(12)]
 test("Chromatic scale ascending", all(freqs_oct4[i] < freqs_oct4[i+1] for i in range(11)))
+
+# ============================================
+# DRIFT RATES (Stroboconn physics)
+# ============================================
+print("\n--- Drift Rates (Stroboconn Physics) ---")
+# A disc: 440 Hz / 16 segments = 27.5 rev/sec
+# Drift = ln(2)/1200 * 27.5 * 360 = 5.72 deg/sec/cent
+expected_a_drift = math.log(2) / 1200.0 * (440.0 / DISC_BASE_SEGMENTS) * 360.0
+test(f"A drift rate = {engine._drift_rates[9]:.2f} (expect {expected_a_drift:.2f})",
+     abs(engine._drift_rates[9] - expected_a_drift) < 0.01)
+
+# C disc should drift slower than A disc (lower frequency = slower disc)
+test("C drift rate < A drift rate", engine._drift_rates[0] < engine._drift_rates[9])
+
+# B disc should drift faster than A disc
+test("B drift rate > A drift rate", engine._drift_rates[11] > engine._drift_rates[9])
+
+# All drift rates should be positive
+test("All drift rates positive", all(r > 0 for r in engine._drift_rates))
+
+# Drift rates should increase chromatically (C < C# < D < ... < B)
+test("Drift rates increase chromatically",
+     all(engine._drift_rates[i] < engine._drift_rates[i+1] for i in range(11)))
+
+# Drift rate scales with reference pitch
+engine.set_reference_pitch(442.0)
+a_drift_442 = engine._drift_rates[9]
+engine.set_reference_pitch(440.0)
+test(f"Higher ref pitch = higher drift rate ({a_drift_442:.2f} > {engine._drift_rates[9]:.2f})",
+     a_drift_442 > engine._drift_rates[9])
 
 # ============================================
 # RING BUFFER

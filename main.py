@@ -242,9 +242,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
         # --- Tuner Menu ---
         self.tuner_menu = tk.Menu(self.root)
 
-        tuner_file_menu = tk.Menu(self.tuner_menu, tearoff=0)
-        self.tuner_menu.add_cascade(label="File", menu=tuner_file_menu)
-        tuner_file_menu.add_command(label="Exit", command=self.on_exit)
+        tuner_options_menu = tk.Menu(self.tuner_menu, tearoff=0)
+        self.tuner_menu.add_cascade(label="Options", menu=tuner_options_menu)
+        tuner_options_menu.add_command(label="Settings...", command=self._tuner_open_settings)
 
         # --- Add Help menu to all tab menus ---
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu):

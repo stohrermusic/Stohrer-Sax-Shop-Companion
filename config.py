@@ -260,9 +260,10 @@ DEFAULT_SETTINGS = {
     "tuner_settings": {
         "stripe_color": "#00FF00",
         "reference_pitch": 440.0,
-        "transposition": "concert",  # concert, bb, eb, f
+        "transposition": "C",        # C, Eb, Bb, F
         "sensitivity": 50,           # 0-100
         "waveform": "pure",          # pure or rich
+        "fps": "60",                 # 60, 90, or 120
     },
 
     # TOOLING SETTINGS (Die Inserts & Die Holders)

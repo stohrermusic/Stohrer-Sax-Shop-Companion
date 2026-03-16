@@ -36,9 +36,13 @@ FFT_SIZE = 4096  # ~93ms at 44100Hz, ~10.77Hz bin resolution
 
 PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-# Phase drift rate: degrees per second per cent of error
-# Tuned so 10 cents ≈ 36°/s (one revolution every 10 seconds)
-DRIFT_RATE = 3.6
+# Stroboconn disc physics: drift rate is computed from disc RPM.
+# Each pitch class disc spins at a different speed (gear-driven from
+# a 55Hz tuning fork synchronous motor). The A disc spins at 27.5 rev/sec.
+# Drift = ln(2)/1200 * disc_rps * 360 degrees/sec/cent
+# disc_rps = reference_freq_for_pitch_class / DISC_BASE_SEGMENTS
+# Using the 16-segment ring (octave 4) as reference:
+DISC_BASE_SEGMENTS = 16
 
 # Octave range for analysis
 MIN_OCTAVE = 1
@@ -120,6 +124,7 @@ class TunerEngine:
         self._sensitivity = 50
         self._freq_table = None   # freq_table[pc][oct_idx] = frequency in Hz
         self._phase_offsets = [0.0] * 12
+        self._drift_rates = [0.0] * 12  # Per-pitch-class drift rates (deg/sec/cent)
         self._last_time = None
         self._running = False
         self._window = None
@@ -130,6 +135,10 @@ class TunerEngine:
 
         freq_table[pc][oct_idx] gives the frequency for pitch class pc
         at octave (MIN_OCTAVE + oct_idx). pc 0 = C, pc 9 = A.
+
+        Also computes per-pitch-class drift rates matching Stroboconn physics.
+        Each disc spins at disc_rps = freq_octave4 / DISC_BASE_SEGMENTS.
+        Drift = ln(2)/1200 * disc_rps * 360 degrees/sec/cent.
         """
         self._freq_table = []
         for pc in range(12):
@@ -140,6 +149,12 @@ class TunerEngine:
                 freq = self._reference_pitch * (2.0 ** (semitones / 12.0))
                 octave_freqs.append(freq)
             self._freq_table.append(octave_freqs)
+
+            # Drift rate for this pitch class: matches physical Stroboconn disc speed
+            # freq_oct4 = reference_pitch * 2^((pc-9)/12)
+            freq_oct4 = self._reference_pitch * (2.0 ** ((pc - 9) / 12.0))
+            disc_rps = freq_oct4 / DISC_BASE_SEGMENTS
+            self._drift_rates[pc] = math.log(2) / 1200.0 * disc_rps * 360.0
 
     @property
     def reference_pitch(self):
@@ -313,7 +328,8 @@ class TunerEngine:
                     result.cents_errors[pc] = cents
 
                     # Accumulate phase offset (the strobe rotation)
-                    self._phase_offsets[pc] -= cents * DRIFT_RATE * dt
+                    # Uses per-pitch-class drift rate matching Stroboconn disc physics
+                    self._phase_offsets[pc] -= cents * self._drift_rates[pc] * dt
                     self._phase_offsets[pc] %= 360.0
 
             result.phase_offsets[pc] = self._phase_offsets[pc]

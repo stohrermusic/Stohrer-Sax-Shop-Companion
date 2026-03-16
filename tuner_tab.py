@@ -38,10 +38,10 @@ WHEEL_BG = "#0D0D0D"
 DIM_MULTIPLIER = 0.2      # Inactive wheel brightness
 LABEL_COLOR = "#888888"
 LABEL_ACTIVE_COLOR = "#FFFFFF"
-FRAME_INTERVAL_MS = 16     # ~60fps
+FRAME_RATES = {"60": 16, "90": 11, "120": 8}
 
 # Ring segment counts (7 rings, doubling — matches patent)
-RING_SEGMENTS = [2, 4, 8, 16, 32, 64, 128]
+RING_SEGMENTS = [4, 8, 16, 32, 64, 128, 256]
 NUM_RINGS = len(RING_SEGMENTS)
 
 # Wedge cutout parameters
@@ -49,11 +49,12 @@ WEDGE_ANGLE = 80.0   # Total visible arc in degrees
 
 # Transposition label shifts (concert pitch class 0=C → displayed label)
 TRANSPOSITION_SHIFTS = {
-    "concert": 0,
-    "bb": 2,
-    "eb": 9,
-    "f": 7,
+    "C": 0,
+    "Eb": 9,
+    "Bb": 2,
+    "F": 7,
 }
+TRANSPOSITION_KEYS = list(TRANSPOSITION_SHIFTS.keys())  # C, Eb, Bb, F
 
 # Reference tone note names and frequencies (concert pitch, A=440)
 def _build_ref_notes(ref_pitch=440.0):
@@ -339,12 +340,15 @@ class TunerTabMixin:
         tk.Label(row1, text="Instrument in Key of:", bg=ctrl_bg, fg=ctrl_fg,
                  font=("Helvetica", 10)).pack(side="left", padx=(0, 4))
 
-        self._tuner_transpose_var = tk.StringVar(
-            value=tuner_settings.get("transposition", "concert"))
+        # Migrate old lowercase keys to new display format
+        _trans_migrate = {"concert": "C", "bb": "Bb", "eb": "Eb", "f": "F"}
+        saved_trans = tuner_settings.get("transposition", "C")
+        saved_trans = _trans_migrate.get(saved_trans, saved_trans)
+        self._tuner_transpose_var = tk.StringVar(value=saved_trans)
         transpose_combo = ttk.Combobox(
             row1, textvariable=self._tuner_transpose_var,
-            values=["concert", "bb", "eb", "f"],
-            state="readonly", width=8
+            values=TRANSPOSITION_KEYS,
+            state="readonly", width=4
         )
         transpose_combo.pack(side="left", padx=(0, 15))
         transpose_combo.bind("<<ComboboxSelected>>", lambda e: self._tuner_update_labels())
@@ -379,15 +383,10 @@ class TunerTabMixin:
         )
         sens_scale.pack(side="left", padx=(0, 15))
 
-        # Color picker button
+        # Settings initialized here, configured via Options > Settings dialog
         self._tuner_color = tuner_settings.get("stripe_color", "#00FF00")
-        tk.Label(row1, text="Color:", bg=ctrl_bg, fg=ctrl_fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 4))
-        self._tuner_color_btn = tk.Button(
-            row1, text="  ", bg=self._tuner_color, width=3,
-            command=self._tuner_pick_color, relief="raised", bd=1
-        )
-        self._tuner_color_btn.pack(side="left")
+        self._tuner_fps_var = tk.StringVar(
+            value=str(tuner_settings.get("fps", "60")))
 
         # Row 2: Reference tone
         row2 = tk.Frame(ctrl_frame, bg=ctrl_bg)
@@ -487,12 +486,11 @@ class TunerTabMixin:
         col_w = w / 7
         margin_x = col_w * 0.08  # Small left/right margin
 
-        # Row layout: top row, label band, bottom row
-        label_band = 22
-        row_h = (wheel_h - label_band) / 2
+        # Row layout: top row, gap, bottom row
+        label_gap = 28  # vertical space between rows for labels
+        row_h = (wheel_h - label_gap) / 2
         top_cy = row_h * 0.50
-        bottom_cy = row_h + label_band + row_h * 0.50
-        label_y = row_h + label_band * 0.45
+        bottom_cy = row_h + label_gap + row_h * 0.50
 
         # Wheel radius — fit to cell
         radius = min(col_w * 0.40, row_h * 0.44)
@@ -508,22 +506,23 @@ class TunerTabMixin:
         top_pcs = {1, 3, 6, 8, 10}  # C#, D#, F#, G#, A#
 
         # Create wheels in pitch class order (0-11) so engine indices match
+        label_offset = 6  # pixels past the wedge apex
         self._tuner_wheels = []
         for pc in range(12):
             cx, cy = positions[pc]
             direction = "up" if pc in top_pcs else "down"
             wheel = StrobeWheel(canvas, cx, cy, radius, self._tuner_color, direction)
             self._tuner_wheels.append(wheel)
-            # Move label to the label band between the rows
-            canvas.coords(wheel._label_id, cx, label_y)
+            # Position label at wedge apex:
+            #   Accidentals (top row, wedge up): apex at cy+radius, label just below
+            #   Naturals (bottom row, wedge down): apex at cy-radius, label just above
+            if pc in top_pcs:
+                lbl_y = cy + radius + label_offset
+            else:
+                lbl_y = cy - radius - label_offset
+            canvas.coords(wheel._label_id, cx, lbl_y)
 
         self._tuner_update_labels()
-
-        # --- Horizontal dividing line between rows ---
-        canvas.create_line(
-            15, row_h + label_band, w - 15, row_h + label_band,
-            fill="#2A2A2A", width=1
-        )
 
         # --- Decorative strip at bottom ---
         deco_top = wheel_h
@@ -640,17 +639,59 @@ class TunerTabMixin:
         if self._tuner_engine:
             self._tuner_engine.set_sensitivity(self._tuner_sens_var.get())
 
-    def _tuner_pick_color(self):
-        """Open color picker for stripe color."""
-        color = colorchooser.askcolor(
-            initialcolor=self._tuner_color,
-            title="Choose Stripe Color"
+    def _tuner_open_settings(self):
+        """Open tuner settings dialog (backlight color, FPS)."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Strobe Tuner Settings")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        # Backlight color
+        color_row = tk.Frame(frame, bg=bg)
+        color_row.pack(fill="x", pady=(0, 10))
+        tk.Label(color_row, text="Backlight Color:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        color_swatch = tk.Button(
+            color_row, text="  ", bg=self._tuner_color, width=4,
+            relief="raised", bd=1
         )
-        if color[1]:
-            self._tuner_color = color[1]
-            self._tuner_color_btn.configure(bg=self._tuner_color)
-            for wheel in self._tuner_wheels:
-                wheel.set_color(self._tuner_color)
+        color_swatch.pack(side="left")
+
+        def pick_color():
+            c = colorchooser.askcolor(
+                initialcolor=self._tuner_color,
+                title="Choose Backlight Color", parent=dlg
+            )
+            if c[1]:
+                self._tuner_color = c[1]
+                color_swatch.configure(bg=self._tuner_color)
+                for wheel in self._tuner_wheels:
+                    wheel.set_color(self._tuner_color)
+
+        color_swatch.configure(command=pick_color)
+
+        # FPS
+        fps_row = tk.Frame(frame, bg=bg)
+        fps_row.pack(fill="x", pady=(0, 10))
+        tk.Label(fps_row, text="Frame Rate:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        fps_combo = ttk.Combobox(
+            fps_row, textvariable=self._tuner_fps_var,
+            values=["60", "90", "120"], state="readonly", width=5
+        )
+        fps_combo.pack(side="left")
+        tk.Label(fps_row, text="fps", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(4, 0))
+
+        # Close button
+        tk.Button(frame, text="Close", command=dlg.destroy,
+                  width=10).pack(pady=(5, 0))
 
     def _tuner_toggle_ref_tone(self):
         """Toggle reference tone playback."""
@@ -734,7 +775,8 @@ class TunerTabMixin:
                 mag = min(1.0, result.magnitudes[i] * gain)
                 wheel.update(result.phase_offsets[i], mag)
 
-        self._tuner_anim_id = self.root.after(FRAME_INTERVAL_MS, self._tuner_animate)
+        interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
+        self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
 
     # ------------------------------------------------------------------
     # SETTINGS SAVE/RESTORE
@@ -745,7 +787,8 @@ class TunerTabMixin:
         self.settings["tuner_settings"] = {
             "stripe_color": self._tuner_color if hasattr(self, '_tuner_color') else "#00FF00",
             "reference_pitch": float(self._tuner_pitch_var.get()) if hasattr(self, '_tuner_pitch_var') else 440.0,
-            "transposition": self._tuner_transpose_var.get() if hasattr(self, '_tuner_transpose_var') else "concert",
+            "transposition": self._tuner_transpose_var.get() if hasattr(self, '_tuner_transpose_var') else "C",
             "sensitivity": self._tuner_sens_var.get() if hasattr(self, '_tuner_sens_var') else 50,
             "waveform": self._tuner_waveform_var.get() if hasattr(self, '_tuner_waveform_var') else "pure",
+            "fps": self._tuner_fps_var.get() if hasattr(self, '_tuner_fps_var') else "60",
         }
