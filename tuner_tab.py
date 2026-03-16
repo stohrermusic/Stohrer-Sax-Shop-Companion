@@ -123,7 +123,7 @@ class StrobeWheel:
         self.stripe_color = stripe_color
         self.direction = direction
         self._brightness = 0.0       # 0.0 = dark, 1.0 = full brightness
-        self._last_fill = None        # Cache to avoid redundant itemconfigure calls
+        self._last_ring_fills = None  # Cache to avoid redundant itemconfigure calls
         self._phase_offset = 0.0
 
         # Wedge center angle: 90° = up, 270° = down
@@ -233,34 +233,46 @@ class StrobeWheel:
     def set_color(self, hex_color):
         """Update the stripe color."""
         self.stripe_color = hex_color
-        self._last_fill = None  # Force fill refresh
+        self._last_ring_fills = None  # Force fill refresh
         fill = _scale_color(hex_color, DIM_MULTIPLIER + self._brightness * (1.0 - DIM_MULTIPLIER))
         for ring_segs in self._segments:
             for poly_id, _, _, _ in ring_segs:
                 self.canvas.itemconfigure(poly_id, fill=fill)
 
-    def update(self, phase_offset, magnitude):
+    def update(self, phase_offset, magnitude, ring_magnitudes=None):
         """Update wheel for one animation frame.
 
         Args:
             phase_offset: Rotation angle in degrees (from engine phase tracking)
-            magnitude: Signal strength 0.0-1.0 (drives brightness like the neon tube)
+            magnitude: Overall signal strength 0.0-1.0 (drives label brightness)
+            ring_magnitudes: Optional list of per-ring magnitudes (0.0-1.0).
+                If provided, each ring gets independent brightness matching
+                the real Stroboconn stroboscopic effect where the played
+                octave's ring appears bright while others are dim.
         """
-        # Compute brightness: magnitude drives the neon tube intensity
-        # Slight nonlinear curve so low signals are dimmer, loud signals glow
+        # Compute overall brightness for label
         brightness = min(1.0, magnitude ** 0.6) if magnitude > 0.05 else 0.0
 
-        # Map brightness to fill color (DIM_MULTIPLIER at 0, full at 1)
-        fill_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
-        fill = _scale_color(self.stripe_color, fill_factor)
+        # Per-ring brightness from real spectral data
+        if ring_magnitudes:
+            ring_fills = []
+            for ring_idx in range(NUM_RINGS):
+                rm = min(1.0, ring_magnitudes[ring_idx])
+                rb = min(1.0, rm ** 0.6) if rm > 0.05 else 0.0
+                rf = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
+                ring_fills.append(_scale_color(self.stripe_color, rf))
+        else:
+            fill_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
+            ring_fills = [_scale_color(self.stripe_color, fill_factor)] * NUM_RINGS
 
-        # Only update fill if it changed (avoid redundant itemconfigure calls)
-        if fill != self._last_fill:
-            self._last_fill = fill
-            for ring_segs in self._segments:
+        # Update fill colors per ring (only if changed)
+        if ring_fills != self._last_ring_fills:
+            self._last_ring_fills = ring_fills
+            for ring_idx, ring_segs in enumerate(self._segments):
+                fill = ring_fills[ring_idx]
                 for poly_id, _, _, _ in ring_segs:
                     self.canvas.itemconfigure(poly_id, fill=fill)
-            # Label brightness tracks the wheel
+            # Label brightness tracks overall magnitude
             label_color = _scale_color("#FFFFFF", 0.35 + brightness * 0.65)
             self.canvas.itemconfigure(self._label_id, fill=label_color)
 
@@ -773,7 +785,9 @@ class TunerTabMixin:
             gain = 0.2 + sens * 4.8  # 0.2x to 5.0x
             for i, wheel in enumerate(self._tuner_wheels):
                 mag = min(1.0, result.magnitudes[i] * gain)
-                wheel.update(result.phase_offsets[i], mag)
+                # Apply gain to per-ring magnitudes too
+                ring_mags = [min(1.0, rm * gain) for rm in result.ring_magnitudes[i]]
+                wheel.update(result.phase_offsets[i], mag, ring_mags)
 
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
         self._tuner_anim_id = self.root.after(interval, self._tuner_animate)

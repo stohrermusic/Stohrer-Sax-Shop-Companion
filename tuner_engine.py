@@ -99,15 +99,24 @@ class AudioRingBuffer:
 # ANALYSIS RESULT
 # ============================================
 
+NUM_RINGS = MAX_OCTAVE - MIN_OCTAVE + 1  # 7 rings = 7 octaves
+
 class TunerResult:
     """Result of one analysis frame."""
-    __slots__ = ['magnitudes', 'phase_offsets', 'cents_errors', 'active']
+    __slots__ = ['magnitudes', 'phase_offsets', 'cents_errors', 'active',
+                 'ring_magnitudes']
 
     def __init__(self):
         self.magnitudes = [0.0] * 12       # Energy per pitch class (0-1 normalized)
         self.phase_offsets = [0.0] * 12     # Accumulated rotation angle in degrees
         self.cents_errors = [0.0] * 12      # Current cents error from reference
         self.active = [False] * 12          # Whether wheel is "lit"
+        # Per-ring (per-octave) magnitudes for each pitch class.
+        # ring_magnitudes[pc][ring_idx] = energy at that specific octave.
+        # Drives per-ring brightness like the real Stroboconn's stroboscopic
+        # effect where the played octave's ring appears sharp/bright while
+        # other rings are dim/fuzzy.
+        self.ring_magnitudes = [[0.0] * NUM_RINGS for _ in range(12)]
 
 
 # ============================================
@@ -297,6 +306,7 @@ class TunerEngine:
 
                 if mag > threshold:
                     total_mag += mag
+                    result.ring_magnitudes[pc][oct_idx] = float(mag)
                     if mag > best_mag:
                         best_mag = mag
                         best_octave = oct_idx
@@ -338,6 +348,8 @@ class TunerEngine:
         if max_mag > 0:
             for pc in range(12):
                 result.magnitudes[pc] /= max_mag
+                for r in range(NUM_RINGS):
+                    result.ring_magnitudes[pc][r] /= max_mag
 
         # Determine active wheels (>5% of max magnitude)
         for pc in range(12):

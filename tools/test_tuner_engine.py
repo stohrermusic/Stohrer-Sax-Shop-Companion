@@ -161,6 +161,14 @@ test("A cents error < 5", abs(result.cents_errors[9]) < 5.0)
 active_count = sum(result.active)
 test(f"Few wheels active for pure sine ({active_count})", active_count <= 3)
 
+# Per-ring magnitudes: pure A4 should light up the octave-4 ring most
+a_rings = result.ring_magnitudes[9]  # A pitch class
+oct4_idx = 4 - 1  # Octave 4 maps to ring index 3 (MIN_OCTAVE=1)
+test(f"A4 ring: octave 4 ring has energy ({a_rings[oct4_idx]:.3f})", a_rings[oct4_idx] > 0)
+# Octave 4 should be the strongest ring
+test("A4 ring: octave 4 is brightest ring",
+     a_rings[oct4_idx] == max(a_rings))
+
 # ============================================
 # FFT ANALYSIS — PURE C4 (261.63 Hz)
 # ============================================
@@ -197,6 +205,17 @@ test(f"More wheels active with harmonics ({active_complex})", active_complex >= 
 
 # E should have some energy from the 3rd harmonic
 test("E (pc=4) has nonzero magnitude from 3rd harmonic", result_complex.magnitudes[4] > 0)
+
+# Per-ring: A wheel should have energy in octave 4 AND octave 5 (2nd harmonic)
+a_complex_rings = result_complex.ring_magnitudes[9]
+oct4 = 4 - 1  # ring index for octave 4
+oct5 = 5 - 1  # ring index for octave 5
+test(f"Complex A4: octave 4 ring has energy ({a_complex_rings[oct4]:.3f})",
+     a_complex_rings[oct4] > 0)
+test(f"Complex A4: octave 5 ring has energy from 2nd harmonic ({a_complex_rings[oct5]:.3f})",
+     a_complex_rings[oct5] > 0)
+test("Complex A4: octave 4 ring brighter than octave 5",
+     a_complex_rings[oct4] > a_complex_rings[oct5])
 
 # ============================================
 # PHASE TRACKING — DIRECTION
@@ -410,6 +429,10 @@ test("TunerResult has 12 cents_errors", len(r.cents_errors) == 12)
 test("TunerResult has 12 active flags", len(r.active) == 12)
 test("All magnitudes start at 0", all(m == 0.0 for m in r.magnitudes))
 test("All active flags start False", all(not a for a in r.active))
+test("TunerResult has 12x7 ring_magnitudes",
+     len(r.ring_magnitudes) == 12 and all(len(rm) == 7 for rm in r.ring_magnitudes))
+test("All ring_magnitudes start at 0",
+     all(rm == 0.0 for row in r.ring_magnitudes for rm in row))
 
 # ============================================
 # SUMMARY
