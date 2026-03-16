@@ -96,19 +96,22 @@ def build():
     cmd = [
         sys.executable, '-m', 'PyInstaller',
         '--name', APP_NAME,
-        '--onefile',          # Single executable
         '--windowed',         # No console window (GUI app)
         '--noconfirm',        # Overwrite without asking
     ]
 
     # Platform-specific options
     if sys.platform == 'darwin':
-        # macOS: Create universal .app bundle (Intel + Apple Silicon)
+        # macOS: onedir mode (.app bundle) — onefile+windowed is deprecated
         cmd.extend([
+            '--onedir',
             '--osx-bundle-identifier', 'com.stohrer.saxshopcompanion',
-            '--target-arch', 'universal2',
         ])
-    elif sys.platform == 'win32':
+    else:
+        # Windows/Linux: single executable
+        cmd.append('--onefile')
+
+    if sys.platform == 'win32':
         # Windows: Add icon if available
         icon_path = 'icon.ico'
         if os.path.exists(icon_path):
@@ -136,7 +139,6 @@ def build():
             print(f"  Executable: dist/{APP_NAME}.exe")
         elif sys.platform == 'darwin':
             print(f"  App Bundle: dist/{APP_NAME}.app")
-            print(f"  Executable: dist/{APP_NAME}")
         else:
             print(f"  Executable: dist/{APP_NAME}")
     else:
