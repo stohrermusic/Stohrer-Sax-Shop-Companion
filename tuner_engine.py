@@ -61,6 +61,8 @@ class AudioRingBuffer:
         self.write_pos = 0
         self.lock = threading.Lock()
         self.has_data = False
+        self.write_count = 0         # Increments on each write
+        self.last_read_count = 0     # write_count at last read
 
     def write(self, data):
         """Write audio data. Called from audio callback thread."""
@@ -79,13 +81,20 @@ class AudioRingBuffer:
                     self.buffer[:n - first] = data[first:]
                 self.write_pos = (self.write_pos + n) % len(self.buffer)
             self.has_data = True
+            self.write_count += 1
 
     def read(self):
         """Read the full buffer in chronological order. Returns None if no data."""
         with self.lock:
             if not self.has_data:
                 return None
+            self.last_read_count = self.write_count
             return np.roll(self.buffer, -self.write_pos).copy()
+
+    def is_stale(self):
+        """True if no new data has been written since last read."""
+        with self.lock:
+            return self.write_count == self.last_read_count
 
     def clear(self):
         """Zero out the buffer."""
@@ -93,6 +102,8 @@ class AudioRingBuffer:
             self.buffer[:] = 0
             self.write_pos = 0
             self.has_data = False
+            self.write_count = 0
+            self.last_read_count = 0
 
 
 # ============================================
@@ -137,6 +148,8 @@ class TunerEngine:
         self._last_time = None
         self._running = False
         self._window = None
+        self._last_device = None   # For auto-restart
+        self._stale_count = 0      # Consecutive stale reads
         self._build_freq_table()
 
     def _build_freq_table(self):
@@ -190,6 +203,8 @@ class TunerEngine:
         self._window = np.hanning(FFT_SIZE).astype(np.float32)
         self._phase_offsets = [0.0] * 12
         self._last_time = time.perf_counter()
+        self._last_device = device
+        self._stale_count = 0
 
         try:
             self._stream = sd.InputStream(
@@ -231,6 +246,9 @@ class TunerEngine:
     def analyze(self):
         """Analyze current audio buffer. Returns TunerResult.
 
+        Monitors stream health and auto-restarts if the audio callback
+        appears to have died (no new data for ~1 second).
+
         For each pitch class:
         - Sums FFT magnitude across all octaves → magnitudes[pc]
         - Finds dominant frequency via parabolic interpolation
@@ -242,11 +260,46 @@ class TunerEngine:
         if not self._running or self._ring_buffer is None:
             return result
 
+        # Check stream health
+        if self._ring_buffer.is_stale():
+            self._stale_count += 1
+            if self._stale_count > 60:  # ~1 sec at 60fps
+                self._stale_count = 0
+                self._restart_stream()
+                return result
+        else:
+            self._stale_count = 0
+
         audio = self._ring_buffer.read()
         if audio is None:
             return result
 
         return self.analyze_buffer(audio)
+
+    def _restart_stream(self):
+        """Restart the audio stream (recover from dead callback)."""
+        if self._stream is not None:
+            try:
+                self._stream.stop()
+                self._stream.close()
+            except Exception:
+                pass
+
+        self._ring_buffer = AudioRingBuffer(BUFFER_SIZE)
+        self._window = np.hanning(FFT_SIZE).astype(np.float32)
+
+        try:
+            self._stream = sd.InputStream(
+                samplerate=SAMPLE_RATE,
+                channels=1,
+                dtype='float32',
+                blocksize=1024,
+                device=self._last_device,
+                callback=self._audio_callback,
+            )
+            self._stream.start()
+        except Exception:
+            self._running = False
 
     def analyze_buffer(self, audio):
         """Analyze a raw audio buffer. Used by analyze() and tests.

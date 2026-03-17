@@ -1733,11 +1733,26 @@ class GcodeSettingsWindow:
 # ==========================================
 
 class UserGuideWindow(tk.Toplevel):
-    """Scrollable window showing the user guide."""
+    """Scrollable window showing the user guide, optionally filtered by section."""
 
-    def __init__(self, parent):
+    # Map section names to display titles
+    SECTION_TITLES = {
+        "pad_generator": "Pad SVG / G-code Generator",
+        "key_heights": "Key Height Library",
+        "serial_lookup": "Serial Lookup",
+        "screw_specs": "Screw Specs",
+        "tooling": "Tooling",
+        "tuner": "Tuner",
+        "toner": "Toner",
+    }
+
+    def __init__(self, parent, section=None):
         super().__init__(parent)
-        self.title("User Guide")
+        self._section = section
+        if section and section in self.SECTION_TITLES:
+            self.title(f"User Guide \u2014 {self.SECTION_TITLES[section]}")
+        else:
+            self.title("User Guide")
         self.geometry("620x700")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
@@ -1763,8 +1778,22 @@ class UserGuideWindow(tk.Toplevel):
         self._insert_content()
         self.text.config(state="disabled")
 
-        # Close button
-        tk.Button(self, text="Close", command=self.destroy).pack(pady=10)
+        # Bottom buttons
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=10)
+        if section:
+            tk.Button(btn_frame, text="Show Full Guide",
+                      command=self._show_all).pack(side="left", padx=(0, 10))
+        tk.Button(btn_frame, text="Close", command=self.destroy).pack(side="left")
+
+    def _show_all(self):
+        """Reload with all sections visible."""
+        self._section = None
+        self.title("User Guide")
+        self.text.config(state="normal")
+        self.text.delete("1.0", "end")
+        self._insert_content()
+        self.text.config(state="disabled")
 
     def _h1(self, text):
         self.text.insert("end", text + "\n", "h1")
@@ -1794,12 +1823,42 @@ class UserGuideWindow(tk.Toplevel):
                            lambda e: self.text.config(cursor=""))
 
     def _insert_content(self):
-        self._h1("Stohrer Sax Shop Companion")
-        self._body("A tool for saxophone technicians: generate laser-cutting templates, "
-                    "record key heights, look up serial numbers, and reference screw specs.")
-        self._blank()
+        section = self._section
 
-        # ── PAD GENERATOR ──────────────────────────
+        if section is None:
+            # Full guide
+            self._h1("Stohrer Sax Shop Companion")
+            self._body("A tool for saxophone technicians: generate laser-cutting templates, "
+                        "record key heights, look up serial numbers, reference screw specs, "
+                        "tune, and analyze tone.")
+            self._blank()
+            self._section_pad_generator()
+            self._section_key_heights()
+            self._section_serial_lookup()
+            self._section_screw_specs()
+            self._section_tooling()
+            self._section_tuner()
+            self._section_toner()
+            self._section_import_export()
+            self._section_padmaking_guide()
+        else:
+            dispatch = {
+                "pad_generator": self._section_pad_generator,
+                "key_heights": self._section_key_heights,
+                "serial_lookup": self._section_serial_lookup,
+                "screw_specs": self._section_screw_specs,
+                "tooling": self._section_tooling,
+                "tuner": self._section_tuner,
+                "toner": self._section_toner,
+            }
+            fn = dispatch.get(section)
+            if fn:
+                fn()
+            # Always show the padmaking link and import/export
+            self._section_import_export()
+            self._section_padmaking_guide()
+
+    def _section_pad_generator(self):
         self._h2("Pad SVG / G-code Generator")
         self._body("Enter pad sizes in the text area, one per line, in the format "
                     "\"size x quantity\" (e.g. \"42.0 x 3\"). Select one or more materials "
@@ -1956,19 +2015,7 @@ class UserGuideWindow(tk.Toplevel):
                       "clears old files, and ejects.")
         self._blank()
 
-        # ── IMPORT / EXPORT ────────────────────────
-        self._h2("Import / Export & Sharing")
-        self._body("Each data tab supports importing and exporting so you can share "
-                    "data with colleagues or back up your measurements:")
-        self._bullet("Pad Presets: File > Export/Import Pad Presets to share saved pad size lists")
-        self._bullet("Key Heights: File > Export/Import Key Heights to share measurement sets")
-        self._bullet("Screw Specs: File > Export/Import Screw Specs to share thread data")
-        self._bullet("All Settings: File > Import Settings from Folder copies all config "
-                      "files from another installation")
-        self._body("Exported files are standard JSON and can be emailed or shared via any method.")
-        self._blank()
-
-        # ── OTHER TABS ─────────────────────────────
+    def _section_key_heights(self):
         self._h2("Key Height Library")
         self._body("Record and compare key height measurements for different saxophones. "
                     "Organize sets into libraries, import/export, and share with colleagues.")
@@ -1976,17 +2023,19 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("File > Import Matt's Key Heights downloads reference data from stohrermusic.com")
         self._blank()
 
+    def _section_serial_lookup(self):
         self._h2("Serial Lookup")
         self._body("Look up saxophone serial number ranges by manufacturer to estimate year of production.")
         self._blank()
 
+    def _section_screw_specs(self):
         self._h2("Screw Specs")
         self._body("Reference database of screw thread specifications for different saxophone models.")
         self._bullet("File > Import Matt's Specs downloads the latest data from stohrermusic.com")
         self._bullet("Import/export to share specs with colleagues")
         self._blank()
 
-        # ── TOOLING TAB ───────────────────────────
+    def _section_tooling(self):
         self._h2("Tooling \u2014 Die Inserts")
         self._body("Generate laser-cutting files (SVG or G-code) for acrylic pad die inserts. "
                     "Dies are rings with a fixed outer diameter and an inner hole matching the "
@@ -2061,14 +2110,14 @@ class UserGuideWindow(tk.Toplevel):
                       "or offset from the outer edge)")
         self._blank()
 
-        # ── TUNER ─────────────────────────
+    def _section_tuner(self):
         self._h2("Tuner")
         self._body("A 12-wheel chromatic strobe tuner modeled after the Peterson Stroboconn 6T-5. "
                     "Each wheel shows concentric rings of alternating colored and dark segments "
                     "visible through a wedge-shaped cutout \u2014 just like the real thing. "
                     "An analog VU meter at the bottom shows the detected fundamental pitch and cents error.")
         self._bullet("When the input pitch matches the reference, the pattern freezes (appears stationary)")
-        self._bullet("Sharp \u2192 pattern drifts one direction. Flat \u2192 drifts the other direction")
+        self._bullet("Sharp: pattern drifts one direction. Flat: drifts the other direction")
         self._bullet("Faster drift = farther from in-tune. Frozen = perfectly in tune")
         self._bullet("Multiple wheels respond simultaneously from harmonics in the sound \u2014 "
                       "this is real FFT analysis of the audio, not simulated")
@@ -2096,7 +2145,129 @@ class UserGuideWindow(tk.Toplevel):
                     "you are on other tabs.")
         self._blank()
 
-        # ── PADMAKING GUIDE ────────────────────────
+    def _section_toner(self):
+        self._h2("Toner \u2014 Tone Analyzer")
+        self._body("A real-time harmonic analyzer for saxophone. Detects the fundamental pitch "
+                    "and shows the strength of each harmonic overtone, giving visual feedback "
+                    "on your tone quality. The saxophone is a conical bore instrument, so it "
+                    "produces both even and odd harmonics (unlike the clarinet, which emphasizes "
+                    "odd harmonics). The Toner analyzes up to 12 harmonics of whatever note "
+                    "you're playing.")
+        self._blank()
+
+        self._h2("Display")
+        self._bullet("Spectrum view: full FFT frequency spectrum with harmonics highlighted "
+                      "in amber and the fundamental in green")
+        self._bullet("Bars view: one bar per harmonic, clean and simple")
+        self._bullet("Scale: Linear (default) shows true amplitude ratios \u2014 a harmonic "
+                      "at half the fundamental's strength shows as half the bar height. "
+                      "dB shows the standard logarithmic audio scale, which compresses "
+                      "differences at the top (half amplitude = 90% bar height in dB).")
+        self._blank()
+
+        self._h2("Saxophone Type")
+        self._body("The SAX selector in the control strip tells the Toner what size "
+                    "saxophone you're playing. This matters because the boundary between "
+                    "\"bright\" and \"dark\" harmonics depends on the instrument's physics.")
+        self._blank()
+        self._body("Every saxophone has a break frequency determined by its tone hole "
+                    "lattice \u2014 the array of open holes acts as a high-pass filter. "
+                    "Below this frequency, the body naturally amplifies harmonics. Above it, "
+                    "they roll off. This is real acoustics, measured by researchers at UNSW "
+                    "and described by Arthur Benade (JASA 1988).")
+        self._blank()
+        self._body("The Toner uses these break frequencies to define what counts as "
+                    "\"bright\" (harmonic energy above the break) versus \"dark\" "
+                    "(energy below the break). A bari's 3rd harmonic at 350 Hz is "
+                    "acoustically \"dark\" while an alto's 3rd harmonic at 1250 Hz "
+                    "is \"bright\" \u2014 and the gauges reflect that correctly when "
+                    "the right sax type is selected.")
+        self._blank()
+        self._body("When you load a profile for capture, the selector automatically "
+                    "updates to match the profile's horn type.")
+        self._blank()
+
+        self._h2("Gauges")
+        self._body("Five VU-style gauges show different aspects of tone quality:")
+        self._bullet("Intonation: flat/sharp meter with cents readout")
+        self._bullet("Dissonant / Resonant: how well the harmonics align to ideal "
+                      "integer ratios of the fundamental. Perfect alignment = resonant. "
+                      "Harmonics that drift from their ideal positions = dissonant.")
+        self._bullet("Pure / Rich: measures both how many harmonics are present and "
+                      "how evenly the energy is spread among them (spectral flatness). "
+                      "A tone with energy concentrated in the fundamental = pure. "
+                      "Energy spread evenly across many harmonics = rich.")
+        self._bullet("Bright: strength of harmonics above the break frequency")
+        self._bullet("Dark: strength of harmonics below the break frequency")
+        self._bullet("FULL lamp: lights up when both bright and dark are strong \u2014 "
+                      "a tone with presence across the full harmonic range")
+        self._blank()
+
+        self._h2("Bias Sliders")
+        self._body("Each descriptor gauge has a small bias slider underneath. These "
+                    "let you offset the needle position to match your perception without "
+                    "affecting the captured data. If richness always reads lower than what "
+                    "you're hearing, nudge the slider right. If brightness seems pegged "
+                    "too high, pull it left.")
+        self._blank()
+        self._body("The bias adjusts only the display \u2014 all captured profile data "
+                    "uses the raw computed values, so your profiles stay comparable "
+                    "even if you change the bias later. Settings are saved between sessions.")
+        self._blank()
+
+        self._h2("Tone Profiles")
+        self._body("A profile is a unique setup: horn + player + mouthpiece + reed. "
+                    "If any variable changes, that's a new profile. This keeps the data "
+                    "clean \u2014 you can compare \"same horn, different mouthpiece\" or "
+                    "\"same player, different horn\" without muddying the results.")
+        self._blank()
+        self._bullet("Click Capture to start. Select or create a profile, then play.")
+        self._bullet("The tool auto-detects steady tones: hold a note for ~1 second and "
+                      "it triggers automatically. After a 1-second settling period, it "
+                      "records and averages 5 seconds of data. No button-pressing while playing.")
+        self._bullet("Move to the next note and it captures again. Play through the "
+                      "horn's range at your own pace.")
+        self._bullet("Capture at least 8 unique notes to build a harmonic fingerprint.")
+        self._bullet("Click Stop when done. Profiles are saved automatically.")
+        self._bullet("Use Edit Notes to annotate profiles with your subjective "
+                      "impressions: \"dark warm horn\", \"bright and edgy\", etc.")
+        self._blank()
+
+        self._h2("Comparison")
+        self._bullet("Compare... opens a multi-select picker with filters for horn type, "
+                      "player, and mouthpiece")
+        self._bullet("Select 2+ profiles for side-by-side analysis: harmonic chart, "
+                      "descriptor table, and auto-generated text analysis")
+        self._bullet("Toggle between Horn Average (overall fingerprint across all "
+                      "captured notes) and Per-Note (compare a specific note like "
+                      "middle D across different horns)")
+        self._bullet("\"Overlay on Spectrum\" loads one profile as a blue ghost behind "
+                      "the live display for real-time A/B comparison while playing")
+        self._blank()
+
+        self._h2("File Menu")
+        self._bullet("Export Profiles: save all profiles to a JSON file for sharing or backup")
+        self._bullet("Import Profiles: merge profiles from a file into your library")
+        self._blank()
+
+        self._body("The toner activates automatically when you switch to the Toner tab "
+                    "and stops when you leave it.")
+        self._blank()
+
+    def _section_import_export(self):
+        self._h2("Import / Export & Sharing")
+        self._body("Each data tab supports importing and exporting so you can share "
+                    "data with colleagues or back up your measurements:")
+        self._bullet("Pad Presets: File > Export/Import Pad Presets to share saved pad size lists")
+        self._bullet("Key Heights: File > Export/Import Key Heights to share measurement sets")
+        self._bullet("Screw Specs: File > Export/Import Screw Specs to share thread data")
+        self._bullet("Tone Profiles: File > Export/Import Tone Profiles")
+        self._bullet("All Settings: File > Import Settings from Folder copies all config "
+                      "files from another installation")
+        self._body("Exported files are standard JSON and can be emailed or shared via any method.")
+        self._blank()
+
+    def _section_padmaking_guide(self):
         self._h2("Learn to Make Pads")
         self._body("If you somehow got this program and missed the guide that started it all, "
                     "here's the complete how-to on making saxophone pads:")

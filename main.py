@@ -27,6 +27,7 @@ from ui_dialogs import (
 from library_features import LibraryFeaturesMixin
 from tooling_tab import ToolingTabMixin
 from tuner_tab import TunerTabMixin
+from toner_tab import TonerTabMixin
 
 # ==========================================
 # MAIN APP CLASS
@@ -34,7 +35,7 @@ from tuner_tab import TunerTabMixin
 
 IS_MACOS = sys.platform == 'darwin'
 
-class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
+class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, TonerTabMixin):
     def __init__(self, root):
         self.root = root
         self.root.title("Stohrer Sax Shop Companion")
@@ -70,6 +71,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
 
         # --- Tuner Tab Init ---
         self._init_tuner_state()
+
+        # --- Toner Tab Init ---
+        self._init_toner_state()
 
         # --- Screw Specs Init ---
         if not os.path.exists(SCREW_SPECS_FILE):
@@ -109,9 +113,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
         # Save tooling tab settings
         self._update_tooling_settings()
 
-        # Stop tuner and save tuner settings
+        # Stop tuner/toner and save settings
         self._tuner_stop()
         self._tuner_save_settings()
+        self._toner_stop()
+        self._toner_save_settings()
 
         save_settings(self.settings)
         self.root.destroy()
@@ -246,8 +252,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
         self.tuner_menu.add_cascade(label="Options", menu=tuner_options_menu)
         tuner_options_menu.add_command(label="Settings...", command=self._tuner_open_settings)
 
+        # --- Toner Menu ---
+        self.toner_menu = tk.Menu(self.root)
+
+        toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
+        self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
+        toner_file_menu.add_command(label="Export Profiles...", command=self._toner_export_profiles)
+        toner_file_menu.add_command(label="Import Profiles...", command=self._toner_import_profiles)
+
         # --- Add Help menu to all tab menus ---
-        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu):
+        for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
             help_menu = tk.Menu(menu, tearoff=0)
             menu.add_cascade(label="Help", menu=help_menu)
             help_menu.add_command(label="User Guide...", command=self.open_user_guide)
@@ -268,12 +282,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
             self.root.config(menu=self.tooling_menu)
         elif current_tab == 5:
             self.root.config(menu=self.tuner_menu)
+        elif current_tab == 6:
+            self.root.config(menu=self.toner_menu)
 
-        # Start/stop tuner when switching tabs
+        # Start/stop tuner and toner when switching tabs
         if current_tab == 5:
+            self._toner_stop()
             self._tuner_start()
+        elif current_tab == 6:
+            self._tuner_stop()
+            self._toner_start()
         else:
             self._tuner_stop()
+            self._toner_stop()
 
     def create_widgets(self):
         self.notebook = ttk.Notebook(self.root)
@@ -306,6 +327,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
         self.tuner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
         self.notebook.add(self.tuner_tab_frame, text='Tuner')
         self.create_tuner_tab(self.tuner_tab_frame)
+
+        # --- Create Tab 7: Toner ---
+        self.toner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
+        self.notebook.add(self.toner_tab_frame, text='Toner')
+        self.create_toner_tab(self.toner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
@@ -1616,7 +1642,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
 
     def open_user_guide(self):
-        UserGuideWindow(self.root)
+        current_tab = self.notebook.index(self.notebook.select())
+        tab_sections = {
+            0: "pad_generator",
+            1: "key_heights",
+            2: "serial_lookup",
+            3: "screw_specs",
+            4: "tooling",
+            5: "tuner",
+            6: "toner",
+        }
+        section = tab_sections.get(current_tab, None)
+        UserGuideWindow(self.root, section=section)
 
     def open_about(self):
         AboutDialog(self.root)

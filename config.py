@@ -108,6 +108,7 @@ PAD_PRESET_FILE = os.path.join(_CONFIG_DIR, "pad_presets.json")
 KEY_PRESET_FILE = os.path.join(_CONFIG_DIR, "key_height_library.json")
 SETTINGS_FILE = os.path.join(_CONFIG_DIR, "app_settings.json")
 SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
+TONE_PROFILES_FILE = os.path.join(_CONFIG_DIR, "tone_profiles.json")
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"
@@ -267,6 +268,18 @@ DEFAULT_SETTINGS = {
         "ring_brightness": 100,      # Per-ring brightness effect 0-100 (0=uniform, 100=full)
         "overall_brightness": 80,    # Overall brightness 0-100
         "faceplate_color": "#1A1A1A",  # Background/faceplate color
+    },
+
+    # TONER SETTINGS (Tone Analyzer)
+    "toner_settings": {
+        "reference_pitch": 440.0,
+        "sensitivity": 50,
+        "fps": "30",
+        "view_mode": "spectrum",  # "spectrum" or "bars"
+        "scale_mode": "linear",   # "linear" or "db"
+        "gauge_bias": {"resonance": 0, "richness": 0, "brightness": 0, "darkness": 0},
+        "sax_type": "Alto",
+        "concert_pitch": False,
     },
 
     # TOOLING SETTINGS (Die Inserts & Die Holders)

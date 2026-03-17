@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Stohrer Sax Shop Companion is a cross-platform desktop GUI application for saxophone repair technicians. It provides SVG generation for laser-cutting pad materials and reference databases for key heights, serial numbers, and screw specifications.
+Stohrer Sax Shop Companion is a cross-platform desktop GUI application for saxophone repair technicians. It provides SVG/G-code generation for laser-cutting pad materials, reference databases for key heights, serial numbers, and screw specifications, a tooling tab for die inserts and holders, a chromatic strobe tuner, and a harmonic tone analyzer.
 
 ## Running the Application
 
@@ -16,7 +16,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-The external dependency is `svgwrite`. The GUI uses Python's built-in `tkinter`. Requires Python 3.11+.
+External dependencies: `svgwrite`, `numpy`, `sounddevice` (tuner/toner). The GUI uses Python's built-in `tkinter`. Requires Python 3.11+.
 
 There is no automated test suite. Changes are verified by running the application manually.
 
@@ -85,24 +85,31 @@ The app stores settings and presets in platform-appropriate locations:
 
 ```
 main.py                 → Entry point, PadSVGGeneratorApp class, tab creation
-    ↓ inherits
+    ↓ inherits (multiple mixins)
 library_features.py     → LibraryFeaturesMixin (Key Heights, Serial Lookup, Screw Specs tabs)
+tooling_tab.py          → ToolingTabMixin (Die Inserts & Die Holders tab)
+tuner_tab.py            → TunerTabMixin (Chromatic strobe tuner tab, StrobeWheel class)
+tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no tkinter)
+toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, profile system, comparison)
+toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, profile storage, no tkinter)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow)
+ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 build.py               → Cross-platform PyInstaller build script
 ```
 
 ### Key Design Patterns
 
-**Mixin Inheritance**: `PadSVGGeneratorApp` inherits from `LibraryFeaturesMixin` to gain database tab functionality without polluting the main module.
+**Mixin Inheritance**: `PadSVGGeneratorApp` inherits from `LibraryFeaturesMixin`, `ToolingTabMixin`, `TunerTabMixin`, and `TonerTabMixin`. Each mixin adds one or more tabs without polluting the main module.
 
 **Pure Logic Separation**: `svg_engine.py` and `gcode_engine.py` contain no tkinter code, making them testable independently. All SVG/G-code generation math (star paths, nesting algorithm, sizing calculations) lives here.
 
 **Tab-Specific Menus**: The app swaps menu bars when tabs change (`on_tab_changed` in main.py).
+
+**Tab-Aware User Guide**: `UserGuideWindow` accepts an optional `section` parameter. When opened via Help > User Guide, it shows only the content relevant to the current tab. A "Show Full Guide" button expands to the complete guide. Content is split into `_section_*()` methods in ui_dialogs.py. When adding a new tab, add a corresponding section method and wire it into `_insert_content()` and the `tab_sections` dict in `open_user_guide()`.
 
 **Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs.py handles platform-specific scroll behavior (Windows/macOS/Linux).
 
@@ -143,6 +150,24 @@ build.py               → Cross-platform PyInstaller build script
 - "Eject SD card after G-code export" checkbox (Windows only, below Generate buttons): auto-ejects removable drives after G-code generation. Uses `GetDriveTypeW` to detect removable drives; silently skips non-removable destinations.
 - File → Send G-code to SD Card: guided workflow that copies a .gcode file, optionally clears old files, and ejects (Windows only via PowerShell COM object).
 
+**Strobe Tuner**: 12-wheel chromatic tuner modeled after the Peterson Stroboconn. Architecture:
+- `tuner_engine.py`: Pure audio/math — FFT-based pitch detection, per-pitch-class phase tracking, per-ring (octave) magnitude extraction. `TunerEngine` manages the sounddevice input stream; `TunerResult` holds magnitudes, phase offsets, ring magnitudes, and cents errors for all 12 pitch classes. `ReferencePlayer` outputs reference tones.
+- `tuner_tab.py`: All tkinter UI — `StrobeWheel` class renders one disc (annular sector polygons with wedge mask), `TunerTabMixin` builds the tab with 3-column control panel (graphic EQ sliders | flat/pilot/sharp indicator | vintage backlit VU meter). The VU needle has damped movement (lerp toward target each frame). Theme walker is bypassed via `_skip_theme` and `_dark_canvas` flags on all dark widgets.
+- The tuner auto-starts/stops when switching tabs (`_tuner_start`/`_tuner_stop` called from `on_tab_changed` in main.py).
+- Transposition support: wheel labels and VU readout both apply the shift from TRANSPOSITION_SHIFTS, with octave correction when the shift wraps past C.
+
+**Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
+- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with sub-harmonic verification and temporal hysteresis, harmonic extraction up to 12th harmonic, descriptor computation (resonance, richness, brightness, darkness, fullness). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
+- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Auto-capture system uses a state machine (`listening` → `delay` → `recording` → `cooldown`) that detects stable tones and records 5-second averages without button presses. Profile management, comparison tool with multi-select and filtering, import/export.
+- The toner auto-starts/stops when switching tabs, same as the tuner.
+- Descriptors use Benade's spectral break frequency (measured by Benade/Wolfe, JASA 1988, UNSW) to define the boundary between "bright" and "dark" harmonics. Break frequencies adapt to sax type: soprano 1300 Hz, alto 837 Hz, tenor 618 Hz, bari 450 Hz. The SAX selector in the control strip sets this.
+- Bias sliders on each gauge offset the display without affecting captured data. Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
+- Richness uses spectral flatness (geometric mean / arithmetic mean of harmonic amplitudes) combined with a coverage factor, not a simple count.
+
+**Audio Stream Health**: Both `tuner_engine.py` and `toner_engine.py` include stream health monitoring. The `AudioRingBuffer` tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
+
+**Tooling Tab**: Accordion-style UI with die insert and die holder SVG/G-code generation. Small dies ≤39.5mm (50mm OD), large ≥40mm (70mm OD). Die holders 85mm OD, 4-layer stack. Canvas widgets need explicit handling in the resonance theme walker.
+
 ### Settings Backward Compatibility
 
 `load_settings()` in config.py does a two-level deep merge: top-level keys merge with defaults, and nested dicts (like `gcode_settings.felt`) also merge key-by-key. This means adding new keys to `DEFAULT_SETTINGS` works automatically for existing users — their old config file loads, and new keys get default values filled in. When adding new settings:
@@ -162,6 +187,21 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `pad_presets.json` - Saved pad size lists
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
+- `tone_profiles.json` - Tone analyzer profiles (nested library format, same as presets)
+
+### Tone Profile Data Model
+
+Profiles use nested library format: `{library_name: {profile_name: profile_data}}`. Each profile is a fixed setup (horn + player + mouthpiece + reed). Changing any variable means creating a new profile.
+
+A profile contains sessions (date + captures). Each capture is a 5-second average for one note, storing `harmonics_db` (list of dB values relative to fundamental, index 0 = fundamental), `descriptors` (computed resonance/richness/brightness/darkness/fullness), and metadata.
+
+`compute_fingerprint()` in `toner_engine.py` aggregates all sessions into an overall average and per-note breakdown. The `per_note` dict maps note names to averaged harmonic data, enabling note-by-note comparison across horns.
+
+Flat legacy format (profiles at top level without library wrapper) is auto-migrated on load.
+
+### Toner Calibration
+
+Profile notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated profiles, extracts keywords, compares them against computed descriptors, and reports alignment. This helps identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
 
 ## Web Data Sync ("Import Matt's")
 
