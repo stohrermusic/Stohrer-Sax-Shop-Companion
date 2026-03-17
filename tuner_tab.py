@@ -1,10 +1,9 @@
 """
-Strobe Tuner tab mixin for Stohrer Sax Shop Companion.
+Tuner tab mixin for Stohrer Sax Shop Companion.
 
-Renders a 12-wheel chromatic strobe tuner modeled after the Peterson
-Stroboconn 6T-5. Each wheel shows 7 concentric rings of alternating
-colored/dark segments visible through a wedge-shaped cutout. Phase
-tracking from the audio engine drives the stroboscopic rotation effect.
+12-wheel chromatic strobe tuner modeled after the Peterson Stroboconn 6T-5.
+Concentric rings, wedge cutouts, phase tracking, with an analog VU meter
+showing the detected fundamental pitch.
 
 Requires: numpy, sounddevice (graceful fallback if unavailable)
 """
@@ -17,7 +16,6 @@ import sys
 IS_MACOS = sys.platform == 'darwin'
 
 try:
-    import numpy as np
     from tuner_engine import (
         TunerEngine, ReferencePlayer, AUDIO_AVAILABLE,
         PITCH_CLASSES, MIN_OCTAVE, MAX_OCTAVE,
@@ -33,7 +31,7 @@ except ImportError:
 # CONSTANTS
 # ============================================
 
-DARK_BG = "#1A1A1A"
+DEFAULT_FACEPLATE = "#1A1A1A"
 WHEEL_BG = "#0D0D0D"
 DIM_MULTIPLIER = 0.2      # Inactive wheel brightness
 LABEL_COLOR = "#888888"
@@ -110,17 +108,20 @@ def _annular_sector_points(cx, cy, r_inner, r_outer, angle_start, angle_end, ste
 class StrobeWheel:
     """One of the 12 strobe disc wheels."""
 
-    def __init__(self, canvas, cx, cy, radius, stripe_color, direction="up"):
+    def __init__(self, canvas, cx, cy, radius, stripe_color, faceplate_color,
+                 direction="up"):
         """Create a strobe wheel.
 
         Args:
             direction: "up" = wedge opens upward (top row), "down" = opens downward (bottom row)
+            faceplate_color: Background color for mask areas
         """
         self.canvas = canvas
         self.cx = cx
         self.cy = cy
         self.radius = radius
         self.stripe_color = stripe_color
+        self.faceplate_color = faceplate_color
         self.direction = direction
         self._brightness = 0.0       # 0.0 = dark, 1.0 = full brightness
         self._last_ring_fills = None  # Cache to avoid redundant itemconfigure calls
@@ -185,12 +186,7 @@ class StrobeWheel:
             self._segments.append(ring_segs)
 
     def _create_mask(self):
-        """Create wedge-shaped mask matching the Stroboconn cutout.
-
-        The visible area is a sector of the disc from the first ring outward.
-        Top row wheels open upward, bottom row wheels open downward —
-        both pointing away from the label band in the center.
-        """
+        """Create wedge-shaped mask matching the Stroboconn cutout."""
         cx, cy = self.cx, self.cy
         r = self.radius
         mr = r + 8  # Mask extends slightly beyond disc edge
@@ -212,7 +208,7 @@ class StrobeWheel:
             points.append(cy - mr * math.sin(rad))
 
         self._mask_id = self.canvas.create_polygon(
-            points, fill=DARK_BG, outline='', width=0
+            points, fill=self.faceplate_color, outline='', width=0
         )
 
         # Inner mask: covers the center gap (no rings visible there)
@@ -223,7 +219,7 @@ class StrobeWheel:
             inner_pts.append(cx + inner_r * math.cos(a))
             inner_pts.append(cy - inner_r * math.sin(a))
         self._inner_mask = self.canvas.create_polygon(
-            inner_pts, fill=DARK_BG, outline='', width=0
+            inner_pts, fill=self.faceplate_color, outline='', width=0
         )
 
     def set_label(self, text):
@@ -239,30 +235,38 @@ class StrobeWheel:
             for poly_id, _, _, _ in ring_segs:
                 self.canvas.itemconfigure(poly_id, fill=fill)
 
-    def update(self, phase_offset, magnitude, ring_magnitudes=None):
+    def update(self, phase_offset, magnitude, ring_magnitudes=None,
+               ring_brightness_pct=100, overall_brightness_pct=80):
         """Update wheel for one animation frame.
 
         Args:
             phase_offset: Rotation angle in degrees (from engine phase tracking)
             magnitude: Overall signal strength 0.0-1.0 (drives label brightness)
             ring_magnitudes: Optional list of per-ring magnitudes (0.0-1.0).
-                If provided, each ring gets independent brightness matching
-                the real Stroboconn stroboscopic effect where the played
-                octave's ring appears bright while others are dim.
+            ring_brightness_pct: 0-100, how much per-ring effect to apply
+                (0=uniform brightness, 100=full per-ring independent brightness)
+            overall_brightness_pct: 0-100, scales the overall brightness ceiling
         """
+        overall_scale = overall_brightness_pct / 100.0
+
         # Compute overall brightness for label
         brightness = min(1.0, magnitude ** 0.6) if magnitude > 0.05 else 0.0
 
         # Per-ring brightness from real spectral data
-        if ring_magnitudes:
+        ring_mix = ring_brightness_pct / 100.0  # 0.0 = uniform, 1.0 = full per-ring
+        if ring_magnitudes and ring_mix > 0.0:
             ring_fills = []
+            uniform_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
             for ring_idx in range(NUM_RINGS):
                 rm = min(1.0, ring_magnitudes[ring_idx])
                 rb = min(1.0, rm ** 0.6) if rm > 0.05 else 0.0
-                rf = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
-                ring_fills.append(_scale_color(self.stripe_color, rf))
+                per_ring_factor = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
+                # Blend between uniform and per-ring based on ring_mix
+                blended = uniform_factor * (1.0 - ring_mix) + per_ring_factor * ring_mix
+                ring_fills.append(_scale_color(self.stripe_color, blended * overall_scale))
         else:
             fill_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
+            fill_factor *= overall_scale
             ring_fills = [_scale_color(self.stripe_color, fill_factor)] * NUM_RINGS
 
         # Update fill colors per ring (only if changed)
@@ -306,7 +310,7 @@ class StrobeWheel:
 # ============================================
 
 class TunerTabMixin:
-    """Mixin class that adds the Strobe Tuner tab to the main application."""
+    """Mixin class that adds the Tuner tab to the main application."""
 
     def _init_tuner_state(self):
         """Initialize tuner state. Called from __init__."""
@@ -317,125 +321,198 @@ class TunerTabMixin:
         self._tuner_anim_id = None
 
     def create_tuner_tab(self, parent):
-        """Build the Strobe Tuner tab UI."""
+        """Build the Tuner tab UI."""
         if not _TUNER_IMPORTS_OK or not AUDIO_AVAILABLE:
             self._create_tuner_fallback(parent)
             return
 
         tuner_settings = self.settings.get("tuner_settings", {})
-        bg = DARK_BG
+
+        # Load settings
+        self._tuner_color = tuner_settings.get("stripe_color", "#00FF00")
+        self._tuner_faceplate_color = tuner_settings.get("faceplate_color", DEFAULT_FACEPLATE)
+        self._tuner_ring_brightness = tuner_settings.get("ring_brightness", 100)
+        self._tuner_overall_brightness = tuner_settings.get("overall_brightness", 80)
+        self._tuner_fps_var = tk.StringVar(
+            value=str(tuner_settings.get("fps", "60")))
+
+        bg = self._tuner_faceplate_color
 
         # --- Main container (skip theme walker — dark display) ---
-        main_frame = tk.Frame(parent, bg=bg)
-        main_frame._skip_theme = True
-        main_frame.pack(fill="both", expand=True)
+        self._tuner_main_frame = tk.Frame(parent, bg=bg)
+        self._tuner_main_frame._skip_theme = True
+        self._tuner_main_frame.pack(fill="both", expand=True)
 
-        # --- Canvas for strobe wheels ---
+        # --- Canvas (strobe wheels) ---
         self._tuner_canvas = tk.Canvas(
-            main_frame, bg=DARK_BG, highlightthickness=0,
+            self._tuner_main_frame, bg=bg, highlightthickness=0,
             borderwidth=0,
         )
         self._tuner_canvas._dark_canvas = True  # Skip theme walker
         self._tuner_canvas.pack(fill="both", expand=True, padx=5, pady=(5, 0))
 
-        # --- Control panel ---
+        # --- Control panel (EQ sliders | flat/pilot/sharp | VU meter) ---
         ctrl_bg = "systemWindowBackgroundColor" if IS_MACOS else "#2A2A2A"
         ctrl_fg = "white" if not IS_MACOS else "systemTextColor"
+        self._tuner_ctrl_bg = ctrl_bg
+        self._tuner_ctrl_fg = ctrl_fg
 
-        ctrl_frame = tk.Frame(main_frame, bg=ctrl_bg, padx=10, pady=8)
-        ctrl_frame.pack(fill="x", padx=5, pady=5)
+        ctrl_frame = tk.Frame(self._tuner_main_frame, bg=ctrl_bg, padx=6, pady=6)
+        ctrl_frame._skip_theme = True
+        ctrl_frame.pack(fill="x", padx=5, pady=(0, 4))
+        ctrl_frame.columnconfigure(0, weight=1)
+        ctrl_frame.columnconfigure(1, weight=1)
+        ctrl_frame.columnconfigure(2, weight=1)
 
-        # Row 1: Transposition + Reference Pitch + Sensitivity
-        row1 = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        row1.pack(fill="x", pady=(0, 4))
+        eq_lbl_font = ("Helvetica", 7)
 
-        tk.Label(row1, text="Instrument in Key of:", bg=ctrl_bg, fg=ctrl_fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 4))
+        # ---- LEFT: Graphic EQ vertical sliders ----
+        eq_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        eq_frame._skip_theme = True
+        eq_frame.grid(row=0, column=0, sticky="ns", padx=(0, 8))
 
-        # Migrate old lowercase keys to new display format
+        def _make_vslider(parent, label, var, lo, hi, col, cmd=None,
+                          resolution=1, value_fmt=None):
+            ch = tk.Frame(parent, bg=ctrl_bg)
+            ch._skip_theme = True
+            ch.grid(row=0, column=col, padx=3, sticky="ns")
+            tk.Label(ch, text=label, bg=ctrl_bg, fg="#888888",
+                     font=eq_lbl_font).pack(pady=(0, 2))
+            tk.Scale(ch, variable=var, from_=hi, to=lo,
+                     orient="vertical", length=90, width=12,
+                     showvalue=False, resolution=resolution,
+                     bg=ctrl_bg, fg=ctrl_fg,
+                     troughcolor="#444444", highlightthickness=0,
+                     command=cmd).pack()
+            if value_fmt:
+                val_lbl = tk.Label(ch, text="", bg=ctrl_bg, fg="#AAAAAA",
+                                   font=eq_lbl_font)
+                val_lbl.pack(pady=(2, 0))
+                def _upd(*_, _l=val_lbl, _f=value_fmt, _v=var):
+                    _l.configure(text=_f(_v.get()))
+                var.trace_add("write", _upd)
+                _upd()
+
+        self._tuner_sens_var = tk.IntVar(
+            value=tuner_settings.get("sensitivity", 50))
+        _make_vslider(eq_frame, "SENS", self._tuner_sens_var, 0, 100, 0,
+                      cmd=self._tuner_on_sensitivity_changed)
+
+        self._tuner_bias_var = tk.IntVar(value=self._tuner_ring_brightness)
+        _make_vslider(eq_frame, "BIAS", self._tuner_bias_var, 0, 100, 1,
+                      cmd=lambda v: setattr(self, '_tuner_ring_brightness', int(v)))
+
+        self._tuner_bright_var = tk.IntVar(value=self._tuner_overall_brightness)
+        _make_vslider(eq_frame, "BRIGHT", self._tuner_bright_var, 10, 150, 2,
+                      cmd=lambda v: setattr(self, '_tuner_overall_brightness', int(v)))
+
+        # A= pitch slider (420–460 Hz)
+        self._tuner_pitch_var = tk.DoubleVar(
+            value=tuner_settings.get("reference_pitch", 440.0))
+        _make_vslider(eq_frame, "A =", self._tuner_pitch_var, 420, 460, 3,
+                      cmd=lambda v: self._tuner_on_pitch_changed(),
+                      resolution=1, value_fmt=lambda v: f"{v:.0f} Hz")
+
+        # Key slider (C / Bb / Eb / F mapped to 0–3)
         _trans_migrate = {"concert": "C", "bb": "Bb", "eb": "Eb", "f": "F"}
         saved_trans = tuner_settings.get("transposition", "C")
         saved_trans = _trans_migrate.get(saved_trans, saved_trans)
         self._tuner_transpose_var = tk.StringVar(value=saved_trans)
-        transpose_combo = ttk.Combobox(
-            row1, textvariable=self._tuner_transpose_var,
-            values=TRANSPOSITION_KEYS,
-            state="readonly", width=4
-        )
-        transpose_combo.pack(side="left", padx=(0, 15))
-        transpose_combo.bind("<<ComboboxSelected>>", lambda e: self._tuner_update_labels())
 
-        tk.Label(row1, text="A =", bg=ctrl_bg, fg=ctrl_fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 2))
+        saved_key_idx = TRANSPOSITION_KEYS.index(saved_trans) if saved_trans in TRANSPOSITION_KEYS else 0
+        self._tuner_key_idx_var = tk.IntVar(value=saved_key_idx)
 
-        self._tuner_pitch_var = tk.StringVar(
-            value=str(tuner_settings.get("reference_pitch", 440.0)))
-        pitch_spin = tk.Spinbox(
-            row1, textvariable=self._tuner_pitch_var,
-            from_=400.0, to=480.0, increment=0.1,
-            width=6, font=("Helvetica", 10),
-            command=self._tuner_on_pitch_changed
-        )
-        pitch_spin.pack(side="left", padx=(0, 4))
-        tk.Label(row1, text="Hz", bg=ctrl_bg, fg=ctrl_fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 15))
+        def _on_key_slider(v):
+            key = TRANSPOSITION_KEYS[int(float(v))]
+            self._tuner_transpose_var.set(key)
+            self._tuner_update_labels()
 
-        tk.Label(row1, text="Sensitivity:", bg=ctrl_bg, fg=ctrl_fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 4))
+        _make_vslider(eq_frame, "KEY", self._tuner_key_idx_var, 0, 3, 4,
+                      cmd=_on_key_slider,
+                      value_fmt=lambda v: TRANSPOSITION_KEYS[int(v)])
 
-        self._tuner_sens_var = tk.IntVar(
-            value=tuner_settings.get("sensitivity", 50))
-        sens_scale = tk.Scale(
-            row1, variable=self._tuner_sens_var,
-            from_=0, to=100, orient="horizontal",
-            length=120, showvalue=False,
-            bg=ctrl_bg, fg=ctrl_fg, troughcolor="#444444",
-            highlightthickness=0,
-            command=self._tuner_on_sensitivity_changed
-        )
-        sens_scale.pack(side="left", padx=(0, 15))
-
-        # Settings initialized here, configured via Options > Settings dialog
-        self._tuner_color = tuner_settings.get("stripe_color", "#00FF00")
-        self._tuner_fps_var = tk.StringVar(
-            value=str(tuner_settings.get("fps", "60")))
-
-        # Row 2: Reference tone
-        row2 = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        row2.pack(fill="x")
-
-        tk.Label(row2, text="Reference:", bg=ctrl_bg, fg=ctrl_fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 4))
-
+        # ---- CENTER: Experimental / flat-pilot-sharp / ref button ----
         self._tuner_ref_notes = _build_ref_notes(440.0)
-        note_names = [n for n, _ in self._tuner_ref_notes]
         self._tuner_ref_note_var = tk.StringVar(value="A4")
-        ref_combo = ttk.Combobox(
-            row2, textvariable=self._tuner_ref_note_var,
-            values=note_names, state="readonly", width=5
-        )
-        ref_combo.pack(side="left", padx=(0, 8))
-
         self._tuner_waveform_var = tk.StringVar(
             value=tuner_settings.get("waveform", "pure"))
-        tk.Radiobutton(
-            row2, text="Pure", variable=self._tuner_waveform_var,
-            value="pure", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 10)
-        ).pack(side="left", padx=(0, 2))
-        tk.Radiobutton(
-            row2, text="Rich", variable=self._tuner_waveform_var,
-            value="rich", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 10)
-        ).pack(side="left", padx=(0, 10))
+
+        center_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        center_frame._skip_theme = True
+        center_frame.grid(row=0, column=1, padx=10, sticky="ns")
+
+        # Use grid inside center_frame so everything shares a single center axis
+        center_frame.columnconfigure(0, weight=1)
+        row = 0
+
+        script_font = self._tuner_get_script_font(11)
+        tk.Label(center_frame, text="Experimental", bg=ctrl_bg, fg="#666666",
+                 font=script_font).grid(row=row, column=0, pady=(0, 4))
+        row += 1
+
+        indicator_frame = tk.Frame(center_frame, bg=ctrl_bg)
+        indicator_frame._skip_theme = True
+        indicator_frame.grid(row=row, column=0)
+        row += 1
+
+        tk.Label(indicator_frame, text=" \u2190 flat", bg=ctrl_bg, fg="#888888",
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 6))
+
+        pilot_cv = tk.Canvas(indicator_frame, width=30, height=30,
+                             bg=ctrl_bg, highlightthickness=0, bd=0)
+        pilot_cv._skip_theme = True
+        pilot_cv.pack(side="left")
+        self._tuner_pilot_canvas = pilot_cv
+        pcx, pcy, pr = 15, 15, 8
+        self._tuner_pilot_glow = pilot_cv.create_oval(
+            pcx - pr - 4, pcy - pr - 4, pcx + pr + 4, pcy + pr + 4,
+            fill="#1A0A00", outline="", width=0)
+        self._tuner_pilot_id = pilot_cv.create_oval(
+            pcx - pr, pcy - pr, pcx + pr, pcy + pr,
+            fill="#331100", outline="#444444", width=1)
+
+        tk.Label(indicator_frame, text="sharp \u2192", bg=ctrl_bg, fg="#888888",
+                 font=("Helvetica", 10)).pack(side="left", padx=(6, 0))
+
+        tk.Label(center_frame, text="MOTOR PILOT", bg=ctrl_bg, fg="#555555",
+                 font=("Helvetica", 7)).grid(row=row, column=0)
+        row += 1
 
         self._tuner_play_btn = tk.Button(
-            row2, text="▶ Play", command=self._tuner_toggle_ref_tone,
-            font=("Helvetica", 10), width=8
-        )
-        self._tuner_play_btn.pack(side="left")
+            center_frame, text="\u25b6",
+            command=self._tuner_toggle_ref_tone,
+            font=("Helvetica", 9), width=3)
+        self._tuner_play_btn.grid(row=row, column=0, pady=(4, 0))
+        row += 1
+        tk.Label(center_frame, text="ref.", bg=ctrl_bg, fg="#888888",
+                 font=("Helvetica", 7)).grid(row=row, column=0)
+
+        # ---- RIGHT: VU meter (centered in its column) ----
+        vu_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        vu_frame._skip_theme = True
+        vu_frame.grid(row=0, column=2, sticky="ns", padx=8)
+
+        self._vu_canvas = tk.Canvas(
+            vu_frame, width=200, height=120,
+            bg=ctrl_bg, highlightthickness=0, bd=0)
+        self._vu_canvas._skip_theme = True
+        self._vu_canvas.pack()
+
+        # Note/cents readout below meter
+        readout = tk.Frame(vu_frame, bg=ctrl_bg)
+        readout._skip_theme = True
+        readout.pack(pady=(2, 0))
+        self._vu_note_label = tk.Label(
+            readout, text="", bg=ctrl_bg, fg="#AAAAAA",
+            font=("Helvetica", 11, "bold"), width=4, anchor="e")
+        self._vu_note_label.pack(side="left", padx=(0, 4))
+        self._vu_cents_label = tk.Label(
+            readout, text="", bg=ctrl_bg, fg="#AAAAAA",
+            font=("Helvetica", 10), width=8, anchor="w")
+        self._vu_cents_label.pack(side="left")
+
+        self._vu_smooth_cents = 0.0  # for needle damping
+        self._tuner_build_vu()
 
         # --- Initialize engine and player ---
         self._tuner_engine = TunerEngine()
@@ -454,12 +531,12 @@ class TunerTabMixin:
 
     def _create_tuner_fallback(self, parent):
         """Show a message when audio libraries are not available."""
-        bg = DARK_BG
+        bg = DEFAULT_FACEPLATE
         frame = tk.Frame(parent, bg=bg)
         frame.pack(fill="both", expand=True)
         frame._dark_canvas = True
 
-        msg = ("Strobe Tuner requires numpy and sounddevice.\n\n"
+        msg = ("Tuner requires numpy and sounddevice.\n\n"
                "Install them with:\n"
                "  pip install numpy sounddevice\n\n"
                "Then restart the application.")
@@ -471,63 +548,51 @@ class TunerTabMixin:
     # ------------------------------------------------------------------
 
     def _tuner_build_wheels(self):
-        """Create the 12 strobe wheels in piano keyboard layout.
-
-        Matches the Stroboconn: naturals (C,D,E,F,G,A,B) on the bottom row,
-        accidentals (C#,D#,F#,G#,A#) on the top row, staggered like piano keys.
-        Decorative strip at bottom with "Stohrer" script, motor pilot, FLAT/SHARP.
-        """
+        """Create the 12 strobe wheels in piano keyboard layout."""
         canvas = self._tuner_canvas
         canvas.delete("all")
+
+        bg = self._tuner_faceplate_color
+        canvas.configure(bg=bg)
 
         w = canvas.winfo_width()
         h = canvas.winfo_height()
         if w < 100 or h < 100:
             return
 
-        # Reserve space for decorative strip at bottom
-        deco_h = 40
-        wheel_h = h - deco_h
+        wheel_h = h
 
         # Piano keyboard layout
-        # Naturals: bottom row, 7 evenly spaced columns
-        # Accidentals: top row, positioned between naturals (like black keys)
         naturals = [(0, 0), (2, 1), (4, 2), (5, 3), (7, 4), (9, 5), (11, 6)]
         accidentals = [(1, 0.5), (3, 1.5), (6, 3.5), (8, 4.5), (10, 5.5)]
 
         col_w = w / 7
-        margin_x = col_w * 0.08  # Small left/right margin
+        margin_x = col_w * 0.08
 
-        # Row layout: top row, gap, bottom row
-        label_gap = 28  # vertical space between rows for labels
+        # Row layout: top row overlapping bottom row (like real Stroboconn)
+        label_gap = 18
         row_h = (wheel_h - label_gap) / 2
         top_cy = row_h * 0.50
         bottom_cy = row_h + label_gap + row_h * 0.50
 
-        # Wheel radius — fit to cell
-        radius = min(col_w * 0.40, row_h * 0.44)
+        radius = min(col_w * 0.48, row_h * 0.55)
 
-        # Build position map: pitch_class -> (cx, cy)
         positions = {}
         for pc, col in naturals:
             positions[pc] = (margin_x + col_w * (col + 0.5), bottom_cy)
         for pc, col in accidentals:
             positions[pc] = (margin_x + col_w * (col + 0.5), top_cy)
 
-        # Pitch classes in the top row (accidentals) vs bottom row (naturals)
-        top_pcs = {1, 3, 6, 8, 10}  # C#, D#, F#, G#, A#
+        top_pcs = {1, 3, 6, 8, 10}
 
-        # Create wheels in pitch class order (0-11) so engine indices match
-        label_offset = 6  # pixels past the wedge apex
+        label_offset = 6
         self._tuner_wheels = []
         for pc in range(12):
             cx, cy = positions[pc]
             direction = "up" if pc in top_pcs else "down"
-            wheel = StrobeWheel(canvas, cx, cy, radius, self._tuner_color, direction)
+            wheel = StrobeWheel(canvas, cx, cy, radius, self._tuner_color,
+                                self._tuner_faceplate_color, direction)
             self._tuner_wheels.append(wheel)
-            # Position label at wedge apex:
-            #   Accidentals (top row, wedge up): apex at cy+radius, label just below
-            #   Naturals (bottom row, wedge down): apex at cy-radius, label just above
             if pc in top_pcs:
                 lbl_y = cy + radius + label_offset
             else:
@@ -535,63 +600,11 @@ class TunerTabMixin:
             canvas.coords(wheel._label_id, cx, lbl_y)
 
         self._tuner_update_labels()
-
-        # --- Decorative strip at bottom ---
-        deco_top = wheel_h
-        deco_cy = deco_top + deco_h * 0.5
-
-        # Subtle top border
-        canvas.create_line(10, deco_top, w - 10, deco_top, fill="#333333", width=1)
-
-        # "Stohrer" in script font
-        script_font = self._tuner_get_script_font(18)
-        canvas.create_text(
-            w * 0.14, deco_cy,
-            text="Stohrer", fill="#CCCCCC",
-            font=script_font, anchor="center"
-        )
-
-        # "FLAT  ←     →  SHARP"
-        canvas.create_text(
-            w * 0.46, deco_cy,
-            text="FLAT  \u2190       \u2192  SHARP", fill="#777777",
-            font=("Helvetica", 9), anchor="center"
-        )
-
-        # Motor pilot
-        pilot_cx = w * 0.68
-        pilot_cy = deco_cy
-        pilot_r = 7
-        glow_r = pilot_r + 4
-
-        # Glow halo (behind pilot)
-        self._tuner_pilot_glow = canvas.create_oval(
-            pilot_cx - glow_r, pilot_cy - glow_r,
-            pilot_cx + glow_r, pilot_cy + glow_r,
-            fill="#1A0A00", outline="", width=0
-        )
-        # Pilot circle
-        self._tuner_pilot_id = canvas.create_oval(
-            pilot_cx - pilot_r, pilot_cy - pilot_r,
-            pilot_cx + pilot_r, pilot_cy + pilot_r,
-            fill="#331100", outline="#444444", width=1
-        )
-        # "MOTOR" / "PILOT" labels
-        canvas.create_text(
-            pilot_cx - pilot_r - 6, pilot_cy,
-            text="MOTOR", fill="#555555",
-            font=("Helvetica", 7), anchor="e"
-        )
-        canvas.create_text(
-            pilot_cx + pilot_r + 6, pilot_cy,
-            text="PILOT", fill="#555555",
-            font=("Helvetica", 7), anchor="w"
-        )
-
-        # Set pilot state
-        self._tuner_set_pilot(getattr(self, '_tuner_running', False))
-
         self._tuner_wheels_built = True
+
+    # ------------------------------------------------------------------
+    # SHARED HELPERS
+    # ------------------------------------------------------------------
 
     def _tuner_get_script_font(self, size=18):
         """Find a script/cursive font with fallback."""
@@ -603,17 +616,187 @@ class TunerTabMixin:
                 return (name, size, "bold")
         return ("Georgia", size, "bold italic")
 
+    def _tuner_build_vu(self):
+        """Draw a vintage backlit VU meter on self._vu_canvas."""
+        cv = self._vu_canvas
+        cv.delete("all")
+
+        cv_w, cv_h = 200, 120
+        vu_cx = cv_w // 2
+        vu_cy = cv_h - 10
+        vu_r = 80
+        arc_start = 155.0
+        arc_end = 25.0
+
+        # --- Backlit amber panel ---
+        amber = "#D4920A"
+        border_dark = "#3A3A3A"
+        border_mid = "#555555"
+
+        # Outer bezel
+        cv.create_rectangle(2, 2, cv_w - 2, cv_h - 2,
+                            fill=border_dark, outline=border_mid, width=1)
+        # Inner glowing panel
+        cv.create_rectangle(6, 6, cv_w - 6, cv_h - 6,
+                            fill=amber, outline="#B87D08", width=1)
+
+        # --- Tick marks (dark on amber) ---
+        tick_color = "#2A1A00"
+        for i in range(21):
+            cents = -50 + i * 5
+            frac = (cents + 50) / 100.0
+            angle_deg = arc_start + (arc_end - arc_start) * frac
+            angle_rad = math.radians(angle_deg)
+
+            if cents == 0:
+                tick_len, tick_w = 14, 2
+            elif abs(cents) % 10 == 0:
+                tick_len, tick_w = 10, 1
+            else:
+                tick_len, tick_w = 5, 1
+
+            x_o = vu_cx + vu_r * math.cos(angle_rad)
+            y_o = vu_cy - vu_r * math.sin(angle_rad)
+            x_i = vu_cx + (vu_r - tick_len) * math.cos(angle_rad)
+            y_i = vu_cy - (vu_r - tick_len) * math.sin(angle_rad)
+            cv.create_line(x_i, y_i, x_o, y_o, fill=tick_color, width=tick_w)
+
+        # --- Scale arc line ---
+        arc_points = []
+        for i in range(51):
+            frac = i / 50.0
+            angle_deg = arc_start + (arc_end - arc_start) * frac
+            angle_rad = math.radians(angle_deg)
+            arc_points.extend([
+                vu_cx + vu_r * math.cos(angle_rad),
+                vu_cy - vu_r * math.sin(angle_rad),
+            ])
+        cv.create_line(*arc_points, fill=tick_color, width=1, smooth=True)
+
+        # --- Scale labels: -50 ... 0 ... +50 cents ---
+        label_r = vu_r + 11
+        label_font = ("Helvetica", 7)
+        for cents, label in [
+            (-50, "50"), (-30, "30"), (-10, "10"),
+            (0, "0"), (10, "10"), (30, "30"), (50, "50"),
+        ]:
+            frac = (cents + 50) / 100.0
+            angle_deg = arc_start + (arc_end - arc_start) * frac
+            angle_rad = math.radians(angle_deg)
+            lx = vu_cx + label_r * math.cos(angle_rad)
+            ly = vu_cy - label_r * math.sin(angle_rad)
+            color = "#1B5E00" if cents == 0 else tick_color
+            cv.create_text(lx, ly, text=label, fill=color,
+                           font=label_font, anchor="center")
+
+        # Flat/sharp indicators at extremes
+        for cents, label in [(-50, "\u2013"), (50, "+")]:
+            frac = (cents + 50) / 100.0
+            angle_deg = arc_start + (arc_end - arc_start) * frac
+            angle_rad = math.radians(angle_deg)
+            lx = vu_cx + (label_r + 10) * math.cos(angle_rad)
+            ly = vu_cy - (label_r + 10) * math.sin(angle_rad)
+            cv.create_text(lx, ly, text=label, fill=tick_color,
+                           font=("Helvetica", 9, "bold"), anchor="center")
+
+        # --- Needle (heavier, with shadow) ---
+        needle_len = vu_r - 16
+        center_angle = math.radians((arc_start + arc_end) / 2)
+        nx = vu_cx + needle_len * math.cos(center_angle)
+        ny = vu_cy - needle_len * math.sin(center_angle)
+        # Shadow
+        self._vu_shadow_id = cv.create_line(
+            vu_cx + 1, vu_cy + 1, nx + 1, ny + 1,
+            fill="#8A6500", width=3, capstyle="round")
+        self._vu_needle_id = cv.create_line(
+            vu_cx, vu_cy, nx, ny, fill="#1A1200", width=3, capstyle="round")
+
+        # Pivot (dark circle)
+        cv.create_oval(vu_cx - 5, vu_cy - 5, vu_cx + 5, vu_cy + 5,
+                       fill="#2A1A00", outline="#1A1200", width=1)
+
+        # Store geometry for animation
+        self._vu_cx = vu_cx
+        self._vu_cy = vu_cy
+        self._vu_needle_len = needle_len
+        self._vu_arc_start = arc_start
+        self._vu_arc_end = arc_end
+
     def _tuner_set_pilot(self, active):
         """Set motor pilot glow state (orange when engine is running)."""
         if not hasattr(self, '_tuner_pilot_id'):
             return
-        canvas = self._tuner_canvas
+        canvas = self._tuner_pilot_canvas
         if active:
             canvas.itemconfigure(self._tuner_pilot_id, fill="#FF8800")
             canvas.itemconfigure(self._tuner_pilot_glow, fill="#442200")
         else:
             canvas.itemconfigure(self._tuner_pilot_id, fill="#331100")
             canvas.itemconfigure(self._tuner_pilot_glow, fill="#1A0A00")
+
+    def _vu_update(self, result):
+        """Update the analog VU meter with detected pitch."""
+        if not hasattr(self, '_vu_needle_id'):
+            return
+
+        canvas = self._vu_canvas
+        shift = TRANSPOSITION_SHIFTS.get(self._tuner_transpose_var.get(), 0)
+
+        # Find dominant pitch class
+        best_pc = -1
+        best_mag = 0.0
+        for pc in range(12):
+            if result.magnitudes[pc] > best_mag:
+                best_mag = result.magnitudes[pc]
+                best_pc = pc
+
+        target_cents = 0.0
+        if best_pc < 0 or best_mag < 0.08:
+            # No signal — park needle at center, clear readout
+            self._vu_note_label.configure(text="")
+            self._vu_cents_label.configure(text="", fg="#AAAAAA")
+        else:
+            target_cents = result.cents_errors[best_pc]
+            display_pc = (best_pc + shift) % 12
+            note_name = PITCH_CLASSES[display_pc]
+
+            # Find dominant octave
+            best_oct = 4
+            best_ring_mag = 0.0
+            for ring_idx in range(NUM_RINGS):
+                rm = result.ring_magnitudes[best_pc][ring_idx]
+                if rm > best_ring_mag:
+                    best_ring_mag = rm
+                    best_oct = MIN_OCTAVE + ring_idx
+
+            # Adjust octave when transposition wraps past C
+            if best_pc + shift >= 12:
+                best_oct += 1
+
+            self._vu_note_label.configure(text=f"{note_name}{best_oct}")
+
+            if abs(target_cents) < 1.0:
+                self._vu_cents_label.configure(text="IN TUNE", fg="#00CC00")
+            elif target_cents > 0:
+                self._vu_cents_label.configure(
+                    text=f"+{target_cents:.0f}\u00a2", fg="#AAAAAA")
+            else:
+                self._vu_cents_label.configure(
+                    text=f"{target_cents:.0f}\u00a2", fg="#AAAAAA")
+
+        # Damped needle — lerp toward target (weighted, not instant)
+        damping = 0.18
+        self._vu_smooth_cents += (target_cents - self._vu_smooth_cents) * damping
+
+        clamped = max(-50.0, min(50.0, self._vu_smooth_cents))
+        frac = (clamped + 50.0) / 100.0
+        angle_deg = self._vu_arc_start + (self._vu_arc_end - self._vu_arc_start) * frac
+        angle_rad = math.radians(angle_deg)
+        nx = self._vu_cx + self._vu_needle_len * math.cos(angle_rad)
+        ny = self._vu_cy - self._vu_needle_len * math.sin(angle_rad)
+        canvas.coords(self._vu_shadow_id,
+                      self._vu_cx + 1, self._vu_cy + 1, nx + 1, ny + 1)
+        canvas.coords(self._vu_needle_id, self._vu_cx, self._vu_cy, nx, ny)
 
     def _tuner_on_canvas_resize(self, event):
         """Rebuild wheels when canvas size changes."""
@@ -641,7 +824,6 @@ class TunerTabMixin:
             hz = float(self._tuner_pitch_var.get())
             if self._tuner_engine:
                 self._tuner_engine.set_reference_pitch(hz)
-                # Rebuild reference note list
                 self._tuner_ref_notes = _build_ref_notes(hz)
         except ValueError:
             pass
@@ -652,9 +834,9 @@ class TunerTabMixin:
             self._tuner_engine.set_sensitivity(self._tuner_sens_var.get())
 
     def _tuner_open_settings(self):
-        """Open tuner settings dialog (backlight color, FPS)."""
+        """Open tuner settings dialog."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("Strobe Tuner Settings")
+        dlg.title("Tuner Settings")
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -664,10 +846,10 @@ class TunerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        # Backlight color
+        # --- Stripe/Backlight color ---
         color_row = tk.Frame(frame, bg=bg)
         color_row.pack(fill="x", pady=(0, 10))
-        tk.Label(color_row, text="Backlight Color:", bg=bg, fg=fg,
+        tk.Label(color_row, text="Stripe Color:", bg=bg, fg=fg,
                  font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
         color_swatch = tk.Button(
             color_row, text="  ", bg=self._tuner_color, width=4,
@@ -675,10 +857,10 @@ class TunerTabMixin:
         )
         color_swatch.pack(side="left")
 
-        def pick_color():
+        def pick_stripe_color():
             c = colorchooser.askcolor(
                 initialcolor=self._tuner_color,
-                title="Choose Backlight Color", parent=dlg
+                title="Choose Stripe Color", parent=dlg
             )
             if c[1]:
                 self._tuner_color = c[1]
@@ -686,9 +868,63 @@ class TunerTabMixin:
                 for wheel in self._tuner_wheels:
                     wheel.set_color(self._tuner_color)
 
-        color_swatch.configure(command=pick_color)
+        color_swatch.configure(command=pick_stripe_color)
 
-        # FPS
+        # --- Faceplate color ---
+        fp_row = tk.Frame(frame, bg=bg)
+        fp_row.pack(fill="x", pady=(0, 10))
+        tk.Label(fp_row, text="Faceplate Color:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        fp_swatch = tk.Button(
+            fp_row, text="  ", bg=self._tuner_faceplate_color, width=4,
+            relief="raised", bd=1
+        )
+        fp_swatch.pack(side="left")
+
+        def pick_faceplate_color():
+            c = colorchooser.askcolor(
+                initialcolor=self._tuner_faceplate_color,
+                title="Choose Faceplate Color", parent=dlg
+            )
+            if c[1]:
+                self._tuner_faceplate_color = c[1]
+                fp_swatch.configure(bg=self._tuner_faceplate_color)
+                # Rebuild wheels to apply new faceplate color
+                self._tuner_wheels_built = False
+                self._tuner_build_wheels()
+
+        fp_swatch.configure(command=pick_faceplate_color)
+
+        # --- Reference tone note ---
+        ref_row = tk.Frame(frame, bg=bg)
+        ref_row.pack(fill="x", pady=(0, 10))
+        tk.Label(ref_row, text="Reference Note:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        note_names = [n for n, _ in self._tuner_ref_notes]
+        ttk.Combobox(
+            ref_row, textvariable=self._tuner_ref_note_var,
+            values=note_names, state="readonly", width=5
+        ).pack(side="left")
+
+        # --- Waveform ---
+        wf_row = tk.Frame(frame, bg=bg)
+        wf_row.pack(fill="x", pady=(0, 10))
+        tk.Label(wf_row, text="Waveform:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        tk.Radiobutton(
+            wf_row, text="Pure", variable=self._tuner_waveform_var,
+            value="pure", bg=bg, fg=fg,
+            selectcolor=bg, activebackground=bg,
+            font=("Helvetica", 10)
+        ).pack(side="left", padx=(0, 4))
+        tk.Radiobutton(
+            wf_row, text="Rich", variable=self._tuner_waveform_var,
+            value="rich", bg=bg, fg=fg,
+            selectcolor=bg, activebackground=bg,
+            font=("Helvetica", 10)
+        ).pack(side="left")
+
+        # --- FPS ---
         fps_row = tk.Frame(frame, bg=bg)
         fps_row.pack(fill="x", pady=(0, 10))
         tk.Label(fps_row, text="Frame Rate:", bg=bg, fg=fg,
@@ -709,7 +945,7 @@ class TunerTabMixin:
         """Toggle reference tone playback."""
         if self._tuner_player and self._tuner_player.is_playing:
             self._tuner_player.stop()
-            self._tuner_play_btn.configure(text="▶ Play")
+            self._tuner_play_btn.configure(text="\u25b6")
         else:
             # Find frequency for selected note
             note_name = self._tuner_ref_note_var.get()
@@ -721,7 +957,7 @@ class TunerTabMixin:
             waveform = self._tuner_waveform_var.get()
             if self._tuner_player:
                 self._tuner_player.play(freq, waveform)
-                self._tuner_play_btn.configure(text="■ Stop")
+                self._tuner_play_btn.configure(text="\u25a0 Stop")
 
     # ------------------------------------------------------------------
     # ANIMATION LOOP
@@ -737,7 +973,6 @@ class TunerTabMixin:
 
         success, err = self._tuner_engine.start()
         if not success:
-            # Show error briefly on canvas
             if hasattr(self, '_tuner_canvas'):
                 self._tuner_canvas.create_text(
                     self._tuner_canvas.winfo_width() / 2,
@@ -769,25 +1004,31 @@ class TunerTabMixin:
         if self._tuner_player and self._tuner_player.is_playing:
             self._tuner_player.stop()
             if hasattr(self, '_tuner_play_btn'):
-                self._tuner_play_btn.configure(text="▶ Play")
+                self._tuner_play_btn.configure(text="\u25b6")
 
     def _tuner_animate(self):
-        """One animation frame. Schedules itself at ~60fps."""
+        """One animation frame — update strobe wheels and VU meter."""
         if not self._tuner_running:
             return
 
         if self._tuner_engine and self._tuner_engine.is_running:
             result = self._tuner_engine.analyze()
-            # Sensitivity acts as a gain control (like the Stroboconn's CONTROL knob)
-            # Low sensitivity = need loud signal to light up wheels
-            # High sensitivity = quiet signals still register
-            sens = self._tuner_sens_var.get() / 100.0  # 0.0 to 1.0
-            gain = 0.2 + sens * 4.8  # 0.2x to 5.0x
-            for i, wheel in enumerate(self._tuner_wheels):
-                mag = min(1.0, result.magnitudes[i] * gain)
-                # Apply gain to per-ring magnitudes too
-                ring_mags = [min(1.0, rm * gain) for rm in result.ring_magnitudes[i]]
-                wheel.update(result.phase_offsets[i], mag, ring_mags)
+
+            if self._tuner_wheels:
+                sens = self._tuner_sens_var.get() / 100.0
+                gain = 0.2 + sens * 4.8
+                for i, wheel in enumerate(self._tuner_wheels):
+                    mag = min(1.0, result.magnitudes[i] * gain)
+                    ring_mags = [min(1.0, rm * gain)
+                                 for rm in result.ring_magnitudes[i]]
+                    wheel.update(
+                        result.phase_offsets[i],
+                        mag,
+                        ring_magnitudes=ring_mags,
+                        ring_brightness_pct=self._tuner_ring_brightness,
+                        overall_brightness_pct=self._tuner_overall_brightness,
+                    )
+                self._vu_update(result)
 
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
         self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
@@ -805,4 +1046,7 @@ class TunerTabMixin:
             "sensitivity": self._tuner_sens_var.get() if hasattr(self, '_tuner_sens_var') else 50,
             "waveform": self._tuner_waveform_var.get() if hasattr(self, '_tuner_waveform_var') else "pure",
             "fps": self._tuner_fps_var.get() if hasattr(self, '_tuner_fps_var') else "60",
+            "ring_brightness": self._tuner_ring_brightness if hasattr(self, '_tuner_ring_brightness') else 100,
+            "overall_brightness": self._tuner_overall_brightness if hasattr(self, '_tuner_overall_brightness') else 80,
+            "faceplate_color": self._tuner_faceplate_color if hasattr(self, '_tuner_faceplate_color') else DEFAULT_FACEPLATE,
         }

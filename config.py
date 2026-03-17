@@ -256,7 +256,7 @@ DEFAULT_SETTINGS = {
         },
     },
 
-    # TUNER SETTINGS (Strobe Tuner)
+    # TUNER SETTINGS
     "tuner_settings": {
         "stripe_color": "#00FF00",
         "reference_pitch": 440.0,
@@ -264,6 +264,9 @@ DEFAULT_SETTINGS = {
         "sensitivity": 50,           # 0-100
         "waveform": "pure",          # pure or rich
         "fps": "60",                 # 60, 90, or 120
+        "ring_brightness": 100,      # Per-ring brightness effect 0-100 (0=uniform, 100=full)
+        "overall_brightness": 80,    # Overall brightness 0-100
+        "faceplate_color": "#1A1A1A",  # Background/faceplate color
     },
 
     # TOOLING SETTINGS (Die Inserts & Die Holders)

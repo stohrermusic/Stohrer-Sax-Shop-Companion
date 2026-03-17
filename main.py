@@ -302,9 +302,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin):
         self.notebook.add(self.tooling_tab_frame, text='Tooling')
         self.create_tooling_tab(self.tooling_tab_frame)
 
-        # --- Create Tab 6: Strobe Tuner ---
+        # --- Create Tab 6: Tuner ---
         self.tuner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.tuner_tab_frame, text='Strobe Tuner')
+        self.notebook.add(self.tuner_tab_frame, text='Tuner')
         self.create_tuner_tab(self.tuner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
