@@ -16,6 +16,7 @@ Requires: numpy, sounddevice (graceful fallback if unavailable)
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import math
+import os
 import sys
 import time
 
@@ -25,9 +26,10 @@ try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
         CAPTURE_DELAY_S, CAPTURE_DURATION_S, MIN_PROFILE_NOTES, SAX_TYPES,
-        SAX_TRANSPOSITIONS, DEFAULT_LIBRARY, average_captures,
-        compute_fingerprint, load_tone_profiles, save_tone_profiles,
-        flatten_profiles,
+        SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
+        DEFAULT_LIBRARY, average_captures, compute_fingerprint,
+        load_tone_profiles, save_tone_profiles, flatten_profiles,
+        analyze_audio_file,
     )
     _TONER_IMPORTS_OK = True
 except ImportError:
@@ -130,8 +132,11 @@ class TonerTabMixin:
         self._toner_stable_note = ""        # Note currently being held steady
         self._toner_stable_count = 0        # Consecutive frames of same note
         self._toner_comparison = None       # Fingerprint dict for ghost overlay
-        # How many consecutive frames of same note to trigger auto-capture (~1s at 30fps)
-        self._toner_stable_threshold = 25
+        self._toner_capture_mode = "structured"  # "structured" or "free"
+        # Structured: ~1s stability, 1s delay, 5s recording
+        # Free: ~0.5s stability, continuous micro-captures
+        self._toner_stable_threshold = 25  # Updated per mode
+        self._toner_free_accumulator = []  # For free mode: frames of current stable note
 
     def create_toner_tab(self, parent):
         """Build the Toner tab UI."""
@@ -444,11 +449,22 @@ class TonerTabMixin:
                   font=("Helvetica", 9),
                   command=self._toner_open_profile_dialog).pack(side="left", padx=(0, 4))
 
+        # Capture mode selector
+        self._toner_mode_var = tk.StringVar(value="structured")
+        mode_combo = ttk.Combobox(
+            prof_frame, textvariable=self._toner_mode_var,
+            values=["structured", "free"], state="readonly", width=9)
+        mode_combo.pack(side="left", padx=(0, 2))
+
         self._toner_capture_btn = tk.Button(
             prof_frame, text="Capture",
             font=("Helvetica", 9),
             command=self._toner_toggle_capture)
         self._toner_capture_btn.pack(side="left", padx=(0, 4))
+
+        tk.Button(prof_frame, text="Import File...",
+                  font=("Helvetica", 9),
+                  command=self._toner_import_audio_file).pack(side="left", padx=(0, 4))
 
         tk.Button(prof_frame, text="Compare...",
                   font=("Helvetica", 9),
@@ -1246,15 +1262,25 @@ class TonerTabMixin:
 
     def _toner_begin_listening(self):
         """Enter listening mode (called after session is ready)."""
-        self._toner_capture_state = 'listening'
+        self._toner_capture_mode = self._toner_mode_var.get()
+
+        if self._toner_capture_mode == "free":
+            self._toner_stable_threshold = FREE_STABLE_FRAMES
+            self._toner_capture_state = 'free_listening'
+            self._toner_free_accumulator = []
+            label_text = "Free mode \u2014 play anything..."
+        else:
+            self._toner_stable_threshold = 25
+            self._toner_capture_state = 'listening'
+            label_text = "Listening... play a steady note"
+
         self._toner_stable_note = ""
         self._toner_stable_count = 0
         self._toner_capture_btn.configure(text="Stop")
 
         self._toner_capture_frame.pack(fill="x", padx=5,
             before=self._toner_main_frame.winfo_children()[-1])
-        self._toner_capture_label.configure(
-            text="Listening... play a steady note")
+        self._toner_capture_label.configure(text=label_text)
         self._toner_capture_progress.configure(text="")
 
     def _toner_capture_setup_flow(self):
@@ -1483,9 +1509,14 @@ class TonerTabMixin:
         self._toner_begin_listening()
 
     def _toner_stop_capture(self):
-        """Stop capture mode entirely."""
+        """Stop capture mode entirely. Saves any pending free-mode data."""
+        # Save any accumulated free-mode frames before stopping
+        if self._toner_capture_mode == 'free' and self._toner_free_accumulator:
+            self._toner_free_save_micro_capture()
+
         self._toner_capture_state = None
         self._toner_capture_frames = []
+        self._toner_free_accumulator = []
         self._toner_stable_note = ""
         self._toner_stable_count = 0
         self._toner_capture_frame.pack_forget()
@@ -1588,18 +1619,126 @@ class TonerTabMixin:
         # --- COOLDOWN: brief pause before next auto-capture ---
         if state == 'cooldown':
             elapsed = time.time() - self._toner_capture_start
-            # Wait for note change or silence before listening again
+            next_state = ('free_listening'
+                          if self._toner_capture_mode == 'free' else 'listening')
+            next_label = ("Free mode \u2014 play anything..."
+                          if self._toner_capture_mode == 'free'
+                          else "Listening... play the next note")
             if not note or note != self._toner_capture_note or elapsed > 2.0:
-                self._toner_capture_state = 'listening'
+                self._toner_capture_state = next_state
                 self._toner_stable_note = ""
                 self._toner_stable_count = 0
-                self._toner_capture_label.configure(
-                    text="Listening... play the next note")
+                self._toner_free_accumulator = []
+                self._toner_capture_label.configure(text=next_label)
                 self._toner_capture_progress.configure(text="")
             else:
                 self._toner_capture_label.configure(
                     text=f"Captured {self._toner_capture_note} \u2713  change to next note...")
             return
+
+        # --- FREE LISTENING: continuous micro-capture mode ---
+        if state == 'free_listening':
+            # Accumulate frames while note is stable
+            if note and result.harmonics:
+                if note == self._toner_stable_note:
+                    self._toner_stable_count += 1
+                    self._toner_free_accumulator.append({
+                        'note': result.fundamental_note,
+                        'freq': result.fundamental_freq,
+                        'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                        'descriptors': dict(result.descriptors),
+                    })
+                else:
+                    # Note changed — save accumulated if enough, start new
+                    self._toner_free_save_micro_capture()
+                    self._toner_stable_note = note
+                    self._toner_stable_count = 1
+                    self._toner_free_accumulator = [{
+                        'note': result.fundamental_note,
+                        'freq': result.fundamental_freq,
+                        'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                        'descriptors': dict(result.descriptors),
+                    }]
+            else:
+                # Silence — save what we have
+                self._toner_free_save_micro_capture()
+                self._toner_stable_note = ""
+                self._toner_stable_count = 0
+                self._toner_free_accumulator = []
+
+            # Count unique notes captured so far
+            notes_so_far = set()
+            if self._toner_active_session:
+                for cap in self._toner_active_session.get('captures', []):
+                    notes_so_far.add(cap.get('note', ''))
+
+            if self._toner_stable_note:
+                self._toner_capture_label.configure(
+                    text=f"Free: {self._toner_stable_note} "
+                         f"({self._toner_stable_count} frames)")
+            else:
+                self._toner_capture_label.configure(
+                    text="Free mode \u2014 play anything...")
+            self._toner_capture_progress.configure(
+                text=f"({len(notes_so_far)} notes captured)")
+            return
+
+    def _toner_free_save_micro_capture(self):
+        """Save accumulated free-mode frames as a micro-capture (if enough)."""
+        frames = self._toner_free_accumulator
+        if len(frames) < FREE_MIN_FRAMES:
+            return
+
+        from collections import Counter
+        note_counts = Counter(f['note'] for f in frames)
+        dominant_note = note_counts.most_common(1)[0][0]
+        note_frames = [f for f in frames if f['note'] == dominant_note]
+
+        if len(note_frames) < FREE_MIN_FRAMES:
+            return
+
+        averaged = average_captures(note_frames)
+        avg_freq = sum(f['freq'] for f in note_frames) / len(note_frames)
+
+        capture_entry = {
+            'note': dominant_note,
+            'fundamental_freq': round(avg_freq, 2),
+            'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
+            'descriptors': {k: round(v, 3) for k, v in averaged['descriptors'].items()},
+            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+            'n_frames': len(note_frames),
+            'method': 'free',
+        }
+
+        if self._toner_active_session is not None:
+            self._toner_active_session['captures'].append(capture_entry)
+            self._toner_save_active_session()
+
+    def _toner_save_active_session(self):
+        """Save the active session to the active profile."""
+        lib = self._toner_active_library
+        prof_name = self._toner_active_profile
+        if not lib or not prof_name:
+            return
+        if lib not in self._toner_profiles:
+            return
+        lib_profiles = self._toner_profiles[lib]
+        if prof_name not in lib_profiles:
+            return
+
+        profile = lib_profiles[prof_name]
+        sessions = profile.setdefault('sessions', [])
+        session_date = self._toner_active_session.get('date', '')
+        found = False
+        for s in sessions:
+            if s.get('date') == session_date:
+                s['captures'] = self._toner_active_session['captures']
+                found = True
+                break
+        if not found:
+            sessions.append(self._toner_active_session)
+
+        save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
 
     def _toner_finish_capture(self):
         """Finish a capture — average frames, save, and go to cooldown."""
@@ -1640,30 +1779,11 @@ class TonerTabMixin:
             'descriptors': {k: round(v, 3) for k, v in averaged['descriptors'].items()},
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'n_frames': len(note_frames),
+            'method': 'structured',
         }
 
-        # Save to active session
         self._toner_active_session['captures'].append(capture_entry)
-
-        # Save session to profile (nested library structure)
-        lib = self._toner_active_library
-        prof_name = self._toner_active_profile
-        if lib and prof_name and lib in self._toner_profiles:
-            lib_profiles = self._toner_profiles[lib]
-            if prof_name in lib_profiles:
-                profile = lib_profiles[prof_name]
-                sessions = profile.setdefault('sessions', [])
-                session_date = self._toner_active_session['date']
-                found = False
-                for s in sessions:
-                    if s.get('date') == session_date:
-                        s['captures'] = self._toner_active_session['captures']
-                        found = True
-                        break
-                if not found:
-                    sessions.append(self._toner_active_session)
-
-                save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+        self._toner_save_active_session()
 
         # Count progress (non-blocking — just update the status bar)
         notes_so_far = set()
@@ -2232,6 +2352,77 @@ class TonerTabMixin:
     # ------------------------------------------------------------------
     # IMPORT / EXPORT
     # ------------------------------------------------------------------
+
+    def _toner_import_audio_file(self):
+        """Import an audio file (WAV), analyze it, and add captures to active profile."""
+        if not self._toner_active_session:
+            # Need a profile first
+            if not self._toner_profiles or not any(
+                isinstance(v, dict) and v for v in self._toner_profiles.values()
+            ):
+                messagebox.showinfo("No Profile",
+                    "Create a tone profile first, then import audio files.")
+                return
+            self._toner_capture_setup_flow()
+            return
+
+        from tkinter import filedialog
+
+        filepath = filedialog.askopenfilename(
+            title="Import Audio File",
+            filetypes=(("WAV files", "*.wav"), ("All files", "*.*"))
+        )
+        if not filepath:
+            return
+
+        if not self._toner_engine:
+            messagebox.showerror("Error", "Toner engine not available.")
+            return
+
+        # Show progress
+        self._toner_capture_frame.pack(fill="x", padx=5,
+            before=self._toner_main_frame.winfo_children()[-1])
+        self._toner_capture_label.configure(
+            text=f"Analyzing {os.path.basename(filepath)}...")
+        self._toner_capture_progress.configure(text="")
+        self.root.update_idletasks()
+
+        try:
+            captures = analyze_audio_file(filepath, self._toner_engine)
+        except Exception as e:
+            self._toner_capture_frame.pack_forget()
+            messagebox.showerror("Import Error", f"Could not analyze file:\n{e}")
+            return
+
+        self._toner_capture_frame.pack_forget()
+
+        if not captures:
+            messagebox.showinfo("No Data",
+                "No stable note segments found in the file.\n"
+                "The file may be too short, too quiet, or contain no "
+                "sustained tones.")
+            return
+
+        # Add timestamps and save
+        import os
+        filename = os.path.basename(filepath)
+        for cap in captures:
+            cap['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
+            cap['source_file'] = filename
+
+        self._toner_active_session['captures'].extend(captures)
+        self._toner_save_active_session()
+
+        # Report
+        notes = set(c['note'] for c in captures)
+        total_notes = set()
+        for cap in self._toner_active_session['captures']:
+            total_notes.add(cap.get('note', ''))
+
+        messagebox.showinfo("File Imported",
+            f"Extracted {len(captures)} note segments from '{filename}'.\n"
+            f"Notes found: {', '.join(sorted(notes))}\n\n"
+            f"Profile now has {len(total_notes)} unique notes total.")
 
     def _toner_export_profiles(self):
         """Export tone profiles to a JSON file."""

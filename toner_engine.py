@@ -633,9 +633,16 @@ class TonerEngine:
 # Minimum unique notes to consider a profile "complete"
 MIN_PROFILE_NOTES = 8
 
-# Capture timing
+# Capture timing — structured mode
 CAPTURE_DELAY_S = 1.0     # Seconds to skip at start (attack transient)
 CAPTURE_DURATION_S = 5.0  # Seconds to average
+
+# Free mode: shorter stability requirement, no fixed recording period
+FREE_STABLE_FRAMES = 15   # ~0.5s at 30fps to consider a note "stable"
+FREE_MIN_FRAMES = 10      # Minimum frames to keep a micro-capture
+
+# File import: analysis hop size
+FILE_HOP_SAMPLES = 1024   # Advance this many samples between analyses
 
 SAX_TYPES = ["Sopranino", "Soprano", "F Mezzo", "Alto",
              "C Melody", "Tenor", "Baritone", "Bass"]
@@ -755,6 +762,116 @@ def compute_fingerprint(sessions):
         'capture_count': len(all_captures),
         'per_note': per_note_avg,
     }
+
+
+CAPTURE_METHODS = ["structured", "free", "file"]
+
+
+def analyze_audio_file(filepath, engine):
+    """Analyze an audio file offline. Returns list of capture dicts.
+
+    Loads the file, slides a window through it, detects stable note
+    segments, and extracts averaged captures — same data as live capture.
+
+    Supports WAV files (via stdlib wave module). For other formats,
+    the file must first be converted to WAV.
+
+    Args:
+        filepath: Path to a WAV audio file
+        engine: A TonerEngine instance (configured with sax type, ref pitch, etc.)
+
+    Returns:
+        list of capture dicts (same format as session captures)
+    """
+    import wave
+    import struct
+
+    # Load WAV file
+    with wave.open(filepath, 'rb') as wf:
+        n_channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        framerate = wf.getframerate()
+        n_frames = wf.getnframes()
+        raw = wf.readframes(n_frames)
+
+    # Convert to float32 mono
+    if sampwidth == 2:
+        samples = np.array(struct.unpack(f'<{n_frames * n_channels}h', raw),
+                          dtype=np.float32) / 32768.0
+    elif sampwidth == 4:
+        samples = np.array(struct.unpack(f'<{n_frames * n_channels}i', raw),
+                          dtype=np.float32) / 2147483648.0
+    elif sampwidth == 1:
+        samples = np.array(struct.unpack(f'{n_frames * n_channels}B', raw),
+                          dtype=np.float32) / 128.0 - 1.0
+    else:
+        return []
+
+    # Mix to mono if stereo
+    if n_channels > 1:
+        samples = samples.reshape(-1, n_channels).mean(axis=1)
+
+    # Resample if needed (simple decimation/interpolation)
+    if framerate != SAMPLE_RATE:
+        duration = len(samples) / framerate
+        target_len = int(duration * SAMPLE_RATE)
+        indices = np.linspace(0, len(samples) - 1, target_len)
+        samples = np.interp(indices, np.arange(len(samples)), samples).astype(np.float32)
+
+    # Slide through the file, analyzing every hop
+    results = []  # list of (note_name, result)
+    hop = FILE_HOP_SAMPLES
+    for start in range(0, len(samples) - FFT_SIZE, hop):
+        chunk = samples[start:start + FFT_SIZE]
+        if len(chunk) < FFT_SIZE:
+            break
+
+        # Pad to buffer size if needed (analyze_buffer expects >= FFT_SIZE)
+        r = engine.analyze_buffer(chunk)
+        if r.fundamental_freq > 0 and r.harmonics:
+            results.append((r.fundamental_note, r))
+
+    if not results:
+        return []
+
+    # Detect stable segments and build captures
+    captures = []
+    segment_start = 0
+    current_note = results[0][0]
+
+    for i in range(1, len(results)):
+        note = results[i][0]
+        if note != current_note or i == len(results) - 1:
+            # Segment ended
+            segment = results[segment_start:i]
+            if len(segment) >= FREE_MIN_FRAMES:
+                # Build a capture from this segment
+                frames = []
+                for _, r in segment:
+                    frames.append({
+                        'note': r.fundamental_note,
+                        'freq': r.fundamental_freq,
+                        'harmonics_db': [h.magnitude_db for h in r.harmonics],
+                        'descriptors': dict(r.descriptors),
+                    })
+
+                avg = average_captures(frames)
+                if avg:
+                    avg_freq = sum(f['freq'] for f in frames) / len(frames)
+                    captures.append({
+                        'note': current_note,
+                        'fundamental_freq': round(avg_freq, 2),
+                        'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
+                        'descriptors': {k: round(v, 3) for k, v in avg['descriptors'].items()},
+                        'timestamp': '',  # Filled by caller
+                        'n_frames': len(frames),
+                        'method': 'file',
+                    })
+
+            current_note = note
+            segment_start = i
+
+    return captures
 
 
 DEFAULT_LIBRARY = "My Profiles"
