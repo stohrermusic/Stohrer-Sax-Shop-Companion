@@ -64,6 +64,27 @@ GAUGE_ARC_START = 155.0
 GAUGE_ARC_END = 25.0
 
 
+def _note_sort_key(note_name):
+    """Return a numeric sort key for a note name like 'C#4'.
+
+    Returns MIDI-like number: C4=60, A4=69, etc.
+    """
+    if not note_name or len(note_name) < 2:
+        return 0
+    pc_order = {'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+                'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11}
+    try:
+        if '#' in note_name:
+            pc = note_name[:-1]
+            octave = int(note_name[-1])
+        else:
+            pc = note_name[:-1]
+            octave = int(note_name[-1])
+        return (octave + 1) * 12 + pc_order.get(pc, 0)
+    except (ValueError, KeyError):
+        return 0
+
+
 def _format_profile_info(p):
     """Format a profile dict into a readable info string."""
     info = f"{p.get('horn_make', '')} {p.get('horn_model', '')}".strip()
@@ -1527,7 +1548,7 @@ class TonerTabMixin:
         self._toner_begin_listening()
 
     def _toner_stop_capture(self):
-        """Stop capture mode entirely. Saves any pending free-mode data."""
+        """Stop capture mode. Saves pending data, shows coverage summary."""
         # Save any accumulated free-mode frames before stopping
         if self._toner_capture_mode == 'free' and self._toner_free_accumulator:
             self._toner_free_save_micro_capture()
@@ -1540,6 +1561,150 @@ class TonerTabMixin:
         self._toner_capture_frame.pack_forget()
         if hasattr(self, '_toner_capture_btn'):
             self._toner_capture_btn.configure(text="Capture")
+
+        # Show coverage summary if we have captures
+        if (self._toner_active_session and
+                self._toner_active_session.get('captures')):
+            self._toner_show_coverage_summary()
+
+    def _toner_show_coverage_summary(self):
+        """Show a coverage summary with note distribution and resume option."""
+        session = self._toner_active_session
+        if not session:
+            return
+
+        captures = session.get('captures', [])
+        if not captures:
+            return
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Capture Summary")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        prof_name = self._toner_active_profile or "?"
+        tk.Label(frame, text=f"Session: {prof_name}", bg=bg, fg=fg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+
+        # Count captures per note
+        from collections import Counter
+        note_counts = Counter(c.get('note', '') for c in captures)
+        total = len(captures)
+        unique = len(note_counts)
+
+        tk.Label(frame, text=f"{total} captures across {unique} unique notes",
+                 bg=bg, fg=fg, font=("Helvetica", 10)).pack(pady=(0, 10))
+
+        # Build note distribution chart
+        chart_cv = tk.Canvas(frame, bg="white", highlightthickness=1,
+                              highlightbackground="#CCCCCC",
+                              width=500, height=180)
+        chart_cv.pack(pady=(0, 10))
+
+        # Sort notes chromatically
+        all_notes = sorted(note_counts.keys(),
+                          key=lambda n: _note_sort_key(n))
+
+        if all_notes:
+            margin_l, margin_b, margin_t, margin_r = 35, 25, 10, 10
+            cw = 500 - margin_l - margin_r
+            ch = 180 - margin_t - margin_b
+            max_count = max(note_counts.values())
+            bar_w = max(4, min(20, cw / len(all_notes) - 2))
+            total_bar_w = (bar_w + 2) * len(all_notes)
+            start_x = margin_l + (cw - total_bar_w) / 2
+
+            # Y axis
+            for i in range(max_count + 1):
+                y = margin_t + ch - (i / max(1, max_count)) * ch
+                chart_cv.create_line(margin_l - 3, y, margin_l, y,
+                                      fill="#888888")
+                if i % max(1, max_count // 4) == 0 or i == max_count:
+                    chart_cv.create_text(margin_l - 5, y, text=str(i),
+                                          fill="#888888",
+                                          font=("Helvetica", 7), anchor="e")
+
+            # Bars
+            # Color by register: low=blue, mid=green, high=orange
+            for i, note in enumerate(all_notes):
+                count = note_counts[note]
+                x = start_x + i * (bar_w + 2)
+                bar_h = (count / max(1, max_count)) * ch
+
+                # Register coloring
+                key = _note_sort_key(note)
+                if key < 48:    # Below C4
+                    color = "#4477CC"
+                elif key < 72:  # C4 to B5
+                    color = "#44AA44"
+                else:           # C6+
+                    color = "#CC7744"
+
+                chart_cv.create_rectangle(
+                    x, margin_t + ch - bar_h,
+                    x + bar_w, margin_t + ch,
+                    fill=color, outline="")
+
+                # Note label (rotated text not supported, so abbreviated)
+                if len(all_notes) <= 24 or i % 2 == 0:
+                    chart_cv.create_text(
+                        x + bar_w / 2, margin_t + ch + 10,
+                        text=note, fill="#444444",
+                        font=("Helvetica", 6), angle=45 if len(all_notes) > 12 else 0)
+
+            # Legend
+            legend_y = margin_t + 5
+            for label, color in [("Low", "#4477CC"), ("Mid", "#44AA44"), ("High", "#CC7744")]:
+                chart_cv.create_rectangle(margin_l + 5, legend_y,
+                                           margin_l + 15, legend_y + 8,
+                                           fill=color, outline="")
+                chart_cv.create_text(margin_l + 18, legend_y + 4, text=label,
+                                      fill="#444444", font=("Helvetica", 7),
+                                      anchor="w")
+                legend_y += 12
+
+        # Coverage assessment
+        assessment = []
+        low_count = sum(1 for n in note_counts if _note_sort_key(n) < 48)
+        mid_count = sum(1 for n in note_counts if 48 <= _note_sort_key(n) < 72)
+        high_count = sum(1 for n in note_counts if _note_sort_key(n) >= 72)
+
+        if low_count == 0:
+            assessment.append("No low register notes captured")
+        if mid_count == 0:
+            assessment.append("No mid register notes captured")
+        if high_count == 0:
+            assessment.append("No high register notes captured")
+        if unique < MIN_PROFILE_NOTES:
+            assessment.append(f"Need {MIN_PROFILE_NOTES - unique} more unique "
+                            f"notes for fingerprint")
+
+        if assessment:
+            gaps = "\n".join(assessment)
+            tk.Label(frame, text=gaps, bg=bg, fg="#884400",
+                     font=("Helvetica", 9), justify="left").pack(pady=(0, 8))
+        else:
+            tk.Label(frame, text="Good coverage across registers!",
+                     bg=bg, fg="#006600",
+                     font=("Helvetica", 9)).pack(pady=(0, 8))
+
+        # Buttons
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x")
+
+        def resume():
+            dlg.destroy()
+            self._toner_begin_listening()
+
+        tk.Button(btn_frame, text="Resume Capturing",
+                  command=resume).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Done",
+                  command=dlg.destroy).pack(side="left")
 
     def _toner_cancel_capture(self):
         """Cancel button handler."""
