@@ -18,7 +18,6 @@ import time
 import json
 import os
 from collections import namedtuple
-from datetime import datetime
 
 try:
     import numpy as np
@@ -164,7 +163,6 @@ class TonerEngine:
         self._running = False
         self._window = None
         self._last_fundamental = 0.0  # For temporal smoothing
-        self._last_callback_time = 0.0  # Track audio callback health
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
         self._break_freq = DEFAULT_BREAK_FREQ  # Benade spectral break frequency
@@ -234,7 +232,6 @@ class TonerEngine:
     def _audio_callback(self, indata, frames, time_info, status):
         if self._ring_buffer is not None:
             self._ring_buffer.write(indata[:, 0])
-            self._last_callback_time = time.perf_counter()
 
     def analyze(self):
         """Analyze current audio buffer. Returns TonerResult.
@@ -572,21 +569,6 @@ class TonerEngine:
         # --- Brightness & Darkness using Benade break frequency ---
         # Harmonics with frequency above f_b contribute to brightness.
         # Harmonics with frequency at or below f_b contribute to darkness.
-        # This adapts automatically to sax type: a bari's H4 at 464 Hz
-        # is "below break" (dark), but an alto's H4 at 1760 Hz is "above
-        # break" (bright). The physics determines the boundary.
-        upper_energy = 0.0
-        lower_energy = 0.0
-        total_energy = 0.0
-        for h in harmonics:
-            freq = f0 * h.harmonic_number
-            linear_mag = 10.0 ** (h.magnitude_db / 20.0)
-            total_energy += linear_mag
-            if freq > f_b:
-                upper_energy += linear_mag
-            else:
-                lower_energy += linear_mag
-
         # Brightness/darkness: ratio of harmonic energy above/below break.
         # The fundamental always counts toward darkness (it IS the body of
         # the sound, always at or below the break for normal sax range).
