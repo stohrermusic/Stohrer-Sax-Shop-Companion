@@ -721,12 +721,15 @@ def average_captures(captures):
 def compute_fingerprint(sessions):
     """Compute an aggregate harmonic fingerprint from all sessions in a profile.
 
-    Averages the per-note captures across all sessions to produce a single
-    harmonic signature and descriptor summary for the horn.
+    First averages captures within each note, then averages across notes
+    with equal weight per note. This prevents low notes (which tend toward
+    darkness) from diluting high-note brightness or vice versa — each
+    note's descriptors are computed correctly for its own frequency first,
+    then the horn-level summary gives each note equal say.
 
     Returns dict with:
         'harmonics_db': averaged harmonic dB curve across all notes
-        'descriptors': averaged descriptor values
+        'descriptors': averaged descriptor values (equal weight per note)
         'note_count': total unique notes
         'capture_count': total captures
         'per_note': dict of note_name -> averaged capture for that note
@@ -747,17 +750,31 @@ def compute_fingerprint(sessions):
                 per_note[note] = []
             per_note[note].append(entry)
 
-    # Average per-note
+    # Average per-note first
     per_note_avg = {}
     for note, caps in per_note.items():
         per_note_avg[note] = average_captures(caps)
 
-    # Overall average
+    # Horn-level descriptors: average the per-note descriptors (equal weight per note)
+    # This is more meaningful than averaging all raw captures, because each note's
+    # brightness/darkness is computed at its own frequency relative to the break.
+    desc_keys = ['resonance', 'richness', 'brightness', 'darkness', 'fullness']
+    if per_note_avg:
+        horn_descriptors = {}
+        for key in desc_keys:
+            values = [pn['descriptors'].get(key, 0.0) for pn in per_note_avg.values()
+                      if pn and pn.get('descriptors')]
+            horn_descriptors[key] = sum(values) / len(values) if values else 0.0
+    else:
+        horn_descriptors = {k: 0.0 for k in desc_keys}
+
+    # Horn-level harmonics: still average all captures (harmonic dB is relative
+    # to each note's own fundamental, so averaging is reasonable)
     overall = average_captures(all_captures) if all_captures else None
 
     return {
         'harmonics_db': overall['harmonics_db'] if overall else [],
-        'descriptors': overall['descriptors'] if overall else {},
+        'descriptors': horn_descriptors,
         'note_count': len(per_note),
         'capture_count': len(all_captures),
         'per_note': per_note_avg,
@@ -767,7 +784,7 @@ def compute_fingerprint(sessions):
 CAPTURE_METHODS = ["structured", "free", "file"]
 
 
-def analyze_audio_file(filepath, engine):
+def analyze_audio_file(filepath, engine, progress_cb=None):
     """Analyze an audio file offline. Returns list of capture dicts.
 
     Loads the file, slides a window through it, detects stable note
@@ -779,6 +796,7 @@ def analyze_audio_file(filepath, engine):
     Args:
         filepath: Path to a WAV audio file
         engine: A TonerEngine instance (configured with sax type, ref pitch, etc.)
+        progress_cb: Optional callback(current, total) called periodically
 
     Returns:
         list of capture dicts (same format as session captures)
@@ -821,15 +839,20 @@ def analyze_audio_file(filepath, engine):
     # Slide through the file, analyzing every hop
     results = []  # list of (note_name, result)
     hop = FILE_HOP_SAMPLES
+    total_windows = max(1, (len(samples) - FFT_SIZE) // hop)
+    window_i = 0
     for start in range(0, len(samples) - FFT_SIZE, hop):
         chunk = samples[start:start + FFT_SIZE]
         if len(chunk) < FFT_SIZE:
             break
 
-        # Pad to buffer size if needed (analyze_buffer expects >= FFT_SIZE)
         r = engine.analyze_buffer(chunk)
         if r.fundamental_freq > 0 and r.harmonics:
             results.append((r.fundamental_note, r))
+
+        window_i += 1
+        if progress_cb and window_i % 200 == 0:
+            progress_cb(window_i, total_windows)
 
     if not results:
         return []

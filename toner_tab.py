@@ -2631,8 +2631,14 @@ class TonerTabMixin:
         self._toner_capture_progress.configure(text="")
         self.root.update_idletasks()
 
+        def on_progress(current, total):
+            pct = current * 100 // total
+            self._toner_capture_progress.configure(text=f"{pct}%")
+            self.root.update_idletasks()
+
         try:
-            captures = analyze_audio_file(filepath, self._toner_engine)
+            captures = analyze_audio_file(filepath, self._toner_engine,
+                                          progress_cb=on_progress)
         except Exception as e:
             self._toner_capture_frame.pack_forget()
             messagebox.showerror("Import Error", f"Could not analyze file:\n{e}")
