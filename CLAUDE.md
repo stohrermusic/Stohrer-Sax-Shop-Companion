@@ -163,6 +163,10 @@ build.py               → Cross-platform PyInstaller build script
 - Descriptors use Benade's spectral break frequency (measured by Benade/Wolfe, JASA 1988, UNSW) to define the boundary between "bright" and "dark" harmonics. Break frequencies adapt to sax type: soprano 1300 Hz, alto 837 Hz, tenor 618 Hz, bari 450 Hz. The SAX selector in the control strip sets this.
 - Bias sliders on each gauge offset the display without affecting captured data. Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
 - Richness uses spectral flatness (geometric mean / arithmetic mean of harmonic amplitudes) combined with a coverage factor, not a simple count.
+- Three capture modes: "structured" (hold notes, 5s recording), "free" (0.5s stability, continuous micro-captures while playing naturally), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
+- Auto-transposition: SAX selector sets both the break frequency and the displayed note names. Written pitch is shown by default (alto shows A4 when concert C4 is played). "Concert" checkbox overrides to concert pitch.
+- Coverage summary dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
+- `compute_fingerprint()` averages descriptors per-note first (equal weight per note), then across notes. This prevents register skew — a profile with mostly high-note captures won't read artificially bright.
 
 **Audio Stream Health**: Both `tuner_engine.py` and `toner_engine.py` include stream health monitoring. The `AudioRingBuffer` tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
 
@@ -193,7 +197,7 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 
 Profiles use nested library format: `{library_name: {profile_name: profile_data}}`. Each profile is a fixed setup (horn + player + mouthpiece + reed). Changing any variable means creating a new profile.
 
-A profile contains sessions (date + captures). Each capture is a 5-second average for one note, storing `harmonics_db` (list of dB values relative to fundamental, index 0 = fundamental), `descriptors` (computed resonance/richness/brightness/darkness/fullness), and metadata.
+A profile contains sessions (date + captures). Each capture stores `harmonics_db` (list of dB values relative to fundamental, index 0 = fundamental), `descriptors` (computed resonance/richness/brightness/darkness/fullness), `method` ("structured", "free", or "file"), `n_frames`, and metadata. Harmonics below -60 dB are filtered out as noise floor.
 
 `compute_fingerprint()` in `toner_engine.py` aggregates all sessions into an overall average and per-note breakdown. The `per_note` dict maps note names to averaged harmonic data, enabling note-by-note comparison across horns.
 
@@ -201,7 +205,9 @@ Flat legacy format (profiles at top level without library wrapper) is auto-migra
 
 ### Toner Calibration
 
-Profile notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated profiles, extracts keywords, compares them against computed descriptors, and reports alignment. This helps identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
+Profile notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated profiles, extracts keywords, compares them against computed descriptors, and reports alignment. The `tools/analyze_horn_spread.py` script computes statistical spread of descriptors across all profiles — min/max/mean/stddev per descriptor, per-note variation, gauge scaling suggestions, and grouping analysis by horn type and manufacturer. Both tools help identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
+
+**Descriptor calibration status**: The descriptor formulas are functional but not yet calibrated against real-world data. The break frequencies are from published measurements (Benade/Wolfe) but the scaling constants are educated guesses. Pending: import a large set of recordings (same player, different horns) to establish per-note baselines and empirical descriptor ranges. The goal is gauges that show "brighter than typical for this note on this horn type" rather than raw energy ratios.
 
 ## Web Data Sync ("Import Matt's")
 
