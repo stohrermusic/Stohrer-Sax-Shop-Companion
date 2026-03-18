@@ -81,16 +81,34 @@ def _format_profile_info(p):
     if parts:
         info += f"\nSetup: {', '.join(parts)}"
     sessions = p.get('sessions', [])
-    total_caps = sum(len(s.get('captures', [])) for s in sessions)
+    total_caps = 0
     notes = set()
+    method_counts = {}
     for s in sessions:
         for c in s.get('captures', []):
+            total_caps += 1
             notes.add(c.get('note', ''))
+            m = c.get('method', 'structured')
+            method_counts[m] = method_counts.get(m, 0) + 1
     info += f"\n{len(sessions)} sessions, {total_caps} captures, {len(notes)} unique notes"
     if 0 < len(notes) < MIN_PROFILE_NOTES:
         info += f" (need {MIN_PROFILE_NOTES - len(notes)} more)"
     elif len(notes) >= MIN_PROFILE_NOTES:
         info += " \u2713"
+    if method_counts:
+        method_parts = []
+        for m in ['structured', 'free', 'file']:
+            if m in method_counts:
+                method_parts.append(f"{method_counts[m]} {m}")
+        info += f"\nCaptures by method: {', '.join(method_parts)}"
+    if total_caps > 0:
+        total_frames = sum(c.get('n_frames', 0)
+                          for s in sessions for c in s.get('captures', []))
+        if total_frames > 0:
+            # Each frame is ~33ms at 30fps
+            avg_frames = total_frames / total_caps
+            avg_duration = avg_frames * 0.033
+            info += f"\nAvg capture: {avg_frames:.0f} frames ({avg_duration:.1f}s)"
     if sessions:
         info += f"\nLast session: {sessions[-1].get('date', '?')}"
     if p.get('notes'):
@@ -2354,36 +2372,262 @@ class TonerTabMixin:
     # ------------------------------------------------------------------
 
     def _toner_import_audio_file(self):
-        """Import an audio file (WAV), analyze it, and add captures to active profile."""
-        if not self._toner_active_session:
-            # Need a profile first
-            if not self._toner_profiles or not any(
-                isinstance(v, dict) and v for v in self._toner_profiles.values()
-            ):
-                messagebox.showinfo("No Profile",
-                    "Create a tone profile first, then import audio files.")
-                return
-            self._toner_capture_setup_flow()
-            return
-
+        """Import an audio file (WAV) — full guided flow with profile setup."""
         from tkinter import filedialog
-
-        filepath = filedialog.askopenfilename(
-            title="Import Audio File",
-            filetypes=(("WAV files", "*.wav"), ("All files", "*.*"))
-        )
-        if not filepath:
-            return
 
         if not self._toner_engine:
             messagebox.showerror("Error", "Toner engine not available.")
             return
 
+        # Step 1: Select the audio file first
+        filepath = filedialog.askopenfilename(
+            title="Select Audio File to Analyze",
+            filetypes=(("WAV files", "*.wav"), ("All files", "*.*"))
+        )
+        if not filepath:
+            return
+
+        filename = os.path.basename(filepath)
+
+        # Step 2: Profile setup dialog (create or select, with source info)
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Import Audio File")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text=f"Import: {filename}", bg=bg, fg=fg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+        tk.Label(frame, text="Select a profile for this recording, or create one.\n"
+                 "Add notes about the source (who, when, where recorded).",
+                 bg=bg, fg=fg, font=("Helvetica", 9),
+                 justify="left").pack(pady=(0, 10))
+
+        # Profile selector
+        all_profiles = []
+        for lib_name, lib_profiles in self._toner_profiles.items():
+            if not isinstance(lib_profiles, dict):
+                continue
+            for prof_name in lib_profiles:
+                all_profiles.append((lib_name, prof_name))
+
+        profile_frame = tk.Frame(frame, bg=bg)
+        profile_frame.pack(fill="x", pady=(0, 5))
+
+        use_existing = tk.BooleanVar(value=bool(all_profiles))
+
+        if all_profiles:
+            tk.Radiobutton(profile_frame, text="Existing profile:",
+                           variable=use_existing, value=True,
+                           bg=bg, fg=fg, font=("Helvetica", 10)).pack(
+                               anchor="w")
+            profile_var = tk.StringVar(
+                value=f"[{all_profiles[0][0]}] {all_profiles[0][1]}" if all_profiles else "")
+            profile_list = [f"[{lib}] {name}" for lib, name in all_profiles]
+            prof_combo = ttk.Combobox(profile_frame, textvariable=profile_var,
+                                      values=profile_list, state="readonly",
+                                      width=40)
+            prof_combo.pack(anchor="w", padx=(20, 0), pady=(0, 5))
+
+        tk.Radiobutton(profile_frame, text="Create new profile...",
+                       variable=use_existing, value=False,
+                       bg=bg, fg=fg, font=("Helvetica", 10)).pack(anchor="w")
+
+        # Source notes
+        tk.Label(frame, text="Source notes:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(anchor="w", pady=(5, 2))
+        source_notes_var = tk.StringVar(value=f"Imported from {filename}")
+        tk.Entry(frame, textvariable=source_notes_var, width=45).pack(
+            fill="x", pady=(0, 10))
+
+        result_holder = [None]  # [filepath] if confirmed
+
+        def do_import():
+            source_notes = source_notes_var.get().strip()
+
+            if use_existing.get() and all_profiles:
+                # Use selected profile
+                sel_text = profile_var.get()
+                selected = None
+                for lib, name in all_profiles:
+                    if f"[{lib}] {name}" == sel_text:
+                        selected = (lib, name)
+                        break
+                if not selected:
+                    messagebox.showinfo("Select Profile",
+                        "Select a profile from the list.", parent=dlg)
+                    return
+
+                self._toner_active_library = selected[0]
+                self._toner_active_profile = selected[1]
+
+                # Sync sax type
+                prof = self._toner_profiles[selected[0]][selected[1]]
+                sax_type = prof.get('horn_type', '')
+                if sax_type and self._toner_engine:
+                    self._toner_engine.set_sax_type(sax_type)
+                    if hasattr(self, '_toner_sax_var'):
+                        self._toner_sax_var.set(sax_type)
+
+                # Create a file import session
+                self._toner_active_session = {
+                    'date': time.strftime("%Y-%m-%d %H:%M"),
+                    'captures': [],
+                    'source_notes': source_notes,
+                    'method': 'file',
+                }
+
+                dlg.destroy()
+                self._toner_do_file_import(filepath, source_notes)
+            else:
+                # Need to create new profile first
+                dlg.destroy()
+                # Store filepath for after profile creation
+                self._toner_pending_file_import = (filepath, source_notes)
+                self._toner_new_profile_flow_then_import()
+
+        btn_row = tk.Frame(frame, bg=bg)
+        btn_row.pack(fill="x", pady=(5, 0))
+        tk.Button(btn_row, text="Import && Analyze",
+                  command=do_import).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text="Cancel",
+                  command=dlg.destroy).pack(side="left")
+
+    def _toner_new_profile_flow_then_import(self):
+        """Create a new profile, then import the pending file."""
+        # Reuse the existing new profile flow but override the callback
+        dlg = tk.Toplevel(self.root)
+        dlg.title("New Tone Profile")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Create Tone Profile for Audio Import", bg=bg, fg=fg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
+        tk.Label(frame, text="Describe the horn and setup heard in the recording.",
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(pady=(0, 10))
+
+        fields = {}
+
+        def add_field(label, key, default="", widget_type="entry"):
+            row = tk.Frame(frame, bg=bg)
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=label, bg=bg, fg=fg, width=14,
+                     anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+            if widget_type == "combo":
+                var = tk.StringVar(value=default)
+                ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
+                             state="readonly", width=20).pack(
+                    side="left", fill="x", expand=True)
+                fields[key] = var
+            else:
+                var = tk.StringVar(value=default)
+                tk.Entry(row, textvariable=var, width=25).pack(
+                    side="left", fill="x", expand=True)
+                fields[key] = var
+
+        # Library selector
+        lib_row = tk.Frame(frame, bg=bg)
+        lib_row.pack(fill="x", pady=2)
+        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        existing_libs = [k for k in self._toner_profiles.keys()
+                        if isinstance(self._toner_profiles[k], dict)]
+        if not existing_libs:
+            existing_libs = [DEFAULT_LIBRARY]
+        lib_var = tk.StringVar(value=existing_libs[0])
+        ttk.Combobox(lib_row, textvariable=lib_var,
+                      values=existing_libs, width=20).pack(
+            side="left", fill="x", expand=True)
+
+        add_field("Profile Name:", "name")
+        add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
+        add_field("Make:", "horn_make")
+        add_field("Model:", "horn_model")
+        add_field("Serial #:", "serial")
+        add_field("Player:", "player")
+        add_field("Mouthpiece:", "mouthpiece")
+        add_field("Reed:", "reed")
+        add_field("Notes:", "notes")
+
+        def save_and_import():
+            name = fields["name"].get().strip()
+            lib = lib_var.get().strip() or DEFAULT_LIBRARY
+            if not name:
+                messagebox.showwarning("Name Required",
+                    "Please enter a profile name.", parent=dlg)
+                return
+
+            if lib not in self._toner_profiles:
+                self._toner_profiles[lib] = {}
+            if name in self._toner_profiles[lib]:
+                messagebox.showwarning("Duplicate",
+                    f"'{name}' already exists in '{lib}'.", parent=dlg)
+                return
+
+            self._toner_profiles[lib][name] = {
+                'horn_type': fields["horn_type"].get(),
+                'horn_make': fields["horn_make"].get().strip(),
+                'horn_model': fields["horn_model"].get().strip(),
+                'serial': fields["serial"].get().strip(),
+                'player': fields["player"].get().strip(),
+                'mouthpiece': fields["mouthpiece"].get().strip(),
+                'reed': fields["reed"].get().strip(),
+                'notes': fields["notes"].get().strip(),
+                'created': time.strftime("%Y-%m-%d"),
+                'sessions': [],
+            }
+            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+            self._toner_active_library = lib
+            self._toner_active_profile = name
+
+            # Set sax type
+            sax_type = fields["horn_type"].get()
+            if self._toner_engine and sax_type:
+                self._toner_engine.set_sax_type(sax_type)
+                if hasattr(self, '_toner_sax_var'):
+                    self._toner_sax_var.set(sax_type)
+
+            dlg.destroy()
+
+            # Now do the file import
+            if hasattr(self, '_toner_pending_file_import'):
+                filepath, source_notes = self._toner_pending_file_import
+                del self._toner_pending_file_import
+                self._toner_active_session = {
+                    'date': time.strftime("%Y-%m-%d %H:%M"),
+                    'captures': [],
+                    'source_notes': source_notes,
+                    'method': 'file',
+                }
+                self._toner_do_file_import(filepath, source_notes)
+
+        btn_row = tk.Frame(frame, bg=bg)
+        btn_row.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_row, text="Create && Import",
+                  command=save_and_import).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text="Cancel",
+                  command=dlg.destroy).pack(side="left")
+
+    def _toner_do_file_import(self, filepath, source_notes=""):
+        """Actually run the file analysis and save captures."""
+        filename = os.path.basename(filepath)
+
         # Show progress
         self._toner_capture_frame.pack(fill="x", padx=5,
             before=self._toner_main_frame.winfo_children()[-1])
         self._toner_capture_label.configure(
-            text=f"Analyzing {os.path.basename(filepath)}...")
+            text=f"Analyzing {filename}...")
         self._toner_capture_progress.configure(text="")
         self.root.update_idletasks()
 
@@ -2403,17 +2647,15 @@ class TonerTabMixin:
                 "sustained tones.")
             return
 
-        # Add timestamps and save
-        import os
-        filename = os.path.basename(filepath)
         for cap in captures:
             cap['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
             cap['source_file'] = filename
+            if source_notes:
+                cap['source_notes'] = source_notes
 
         self._toner_active_session['captures'].extend(captures)
         self._toner_save_active_session()
 
-        # Report
         notes = set(c['note'] for c in captures)
         total_notes = set()
         for cap in self._toner_active_session['captures']:
