@@ -257,8 +257,11 @@ class TonerTabMixin:
             sl = tk.Scale(parent, variable=self._toner_bias_vars[key],
                           from_=50, to=-50, orient="vertical",
                           length=80, width=8, showvalue=False,
-                          bg=bg, fg="#888888", troughcolor="#333333",
-                          highlightthickness=0)
+                          bg="#B0B0B0", fg="#888888",
+                          activebackground="#D0D0D0",
+                          troughcolor="#333333", highlightthickness=0,
+                          sliderrelief="raised", sliderlength=14,
+                          borderwidth=2)
             sl.grid(row=row, column=0, padx=(0, 2), sticky="ns")
 
         # --- Row 0: Intonation gauge + note display ---
@@ -407,8 +410,10 @@ class TonerTabMixin:
             value=toner_settings.get("sensitivity", 50))
         tk.Scale(sens_frame, variable=self._toner_sens_var,
                  from_=0, to=100, orient="horizontal", length=80, width=12,
-                 showvalue=False, bg=ctrl_bg, fg=ctrl_fg,
+                 showvalue=False, bg="#B0B0B0", fg=ctrl_fg,
+                 activebackground="#D0D0D0",
                  troughcolor="#444444", highlightthickness=0,
+                 sliderrelief="raised", sliderlength=18, borderwidth=2,
                  command=self._toner_on_sensitivity_changed).pack(side="left")
 
         # A= reference pitch

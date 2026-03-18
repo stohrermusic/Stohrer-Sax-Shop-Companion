@@ -381,8 +381,10 @@ class TunerTabMixin:
             tk.Scale(ch, variable=var, from_=hi, to=lo,
                      orient="vertical", length=90, width=12,
                      showvalue=False, resolution=resolution,
-                     bg=ctrl_bg, fg=ctrl_fg,
+                     bg="#B0B0B0", fg=ctrl_fg, activebackground="#D0D0D0",
                      troughcolor="#444444", highlightthickness=0,
+                     sliderrelief="raised", sliderlength=18,
+                     borderwidth=2,
                      command=cmd).pack()
             if value_fmt:
                 val_lbl = tk.Label(ch, text="", bg=ctrl_bg, fg="#AAAAAA",
