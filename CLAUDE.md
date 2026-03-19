@@ -159,13 +159,13 @@ build.py               → Cross-platform PyInstaller build script
 - Transposition support: wheel labels and VU readout both apply the shift from TRANSPOSITION_SHIFTS, with octave correction when the shift wraps past C.
 
 **Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
-- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with sub-harmonic verification and temporal hysteresis, harmonic extraction up to 12th harmonic, descriptor computation (resonance, richness, brightness, darkness, fullness). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
+- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 12th harmonic (noise floor cutoff at -60 dB), descriptor computation (resonance, richness, brightness, darkness, fullness). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
 - `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Auto-capture system uses a state machine (`listening` → `delay` → `recording` → `cooldown`) that detects stable tones and records 5-second averages without button presses. Profile management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Descriptors use Benade's spectral break frequency (measured by Benade/Wolfe, JASA 1988, UNSW) to define the boundary between "bright" and "dark" harmonics. Break frequencies adapt to sax type: soprano 1300 Hz, alto 837 Hz, tenor 618 Hz, bari 450 Hz. The SAX selector in the control strip sets this.
 - Bias sliders on each gauge offset the display without affecting captured data. Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
 - Richness uses spectral flatness (geometric mean / arithmetic mean of harmonic amplitudes) combined with a coverage factor, not a simple count.
-- Three capture modes: "structured" (hold notes, 5s recording), "free" (0.5s stability, continuous micro-captures while playing naturally), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
+- Four capture modes: "structured" (hold notes, 5s recording), "free" (0.5s stability, continuous micro-captures while playing naturally), "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
 - Auto-transposition: SAX selector sets both the break frequency and the displayed note names. Written pitch is shown by default (alto shows A4 when concert C4 is played). "Concert" checkbox overrides to concert pitch.
 - Coverage summary dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
 - `compute_fingerprint()` averages descriptors per-note first (equal weight per note), then across notes. This prevents register skew — a profile with mostly high-note captures won't read artificially bright.
@@ -209,7 +209,11 @@ Flat legacy format (profiles at top level without library wrapper) is auto-migra
 
 Profile notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated profiles, extracts keywords, compares them against computed descriptors, and reports alignment. The `tools/analyze_horn_spread.py` script computes statistical spread of descriptors across all profiles — min/max/mean/stddev per descriptor, per-note variation, gauge scaling suggestions, and grouping analysis by horn type and manufacturer. Both tools help identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
 
-**Descriptor calibration status**: The descriptor formulas are functional but not yet calibrated against real-world data. The break frequencies are from published measurements (Benade/Wolfe) but the scaling constants are educated guesses. Pending: import a large set of recordings (same player, different horns) to establish per-note baselines and empirical descriptor ranges. The goal is gauges that show "brighter than typical for this note on this horn type" rather than raw energy ratios.
+**Descriptor calibration status**: Resonance is rescaled to the 85-100% raw range (gauge 0% = 85% raw = 7.5 cents mean deviation, gauge 100% = perfect). Brightness/darkness use pure energy ratios relative to break frequency with fundamental always counting as dark. Richness uses spectral flatness. All are functional but tuning continues against real calibration data. `tools/profile_report.py` generates a detailed single-profile report (setup, descriptors, per-note breakdown, harmonic chart, notable findings).
+
+**Settings persistence pattern**: Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in config.py. The `load_settings()` merge only preserves keys that exist in the defaults — runtime-only keys get silently dropped on next load. When adding a new setting, always add it to `DEFAULT_SETTINGS` first.
+
+**macOS build**: `build.py` patches Info.plist after PyInstaller to add `NSMicrophoneUsageDescription`. Without this, macOS silently denies mic access to the tuner and toner.
 
 ## Web Data Sync ("Import Matt's")
 
@@ -218,7 +222,7 @@ The app can fetch reference data from https://www.stohrermusic.com:
 - **Screw Specs**: File > "Import Matt's Specs" fetches `/data/screw_specs.json` and imports each model with a "(Matt's)" suffix to avoid overwriting local entries.
 - **Key Heights**: File > "Import Matt's Key Heights" fetches `/data/key_height_library.json` and imports all presets into a dedicated "Matt's Library".
 
-Both use `urllib.request` (stdlib) with a 10-second timeout. The JSON formats on the website match the app's internal format exactly, so no conversion is needed.
+All use `urllib.request` (stdlib) with a 10-second timeout and `get_ssl_context()` from config.py for macOS SSL compatibility (tries certifi, then system certs, then unverified fallback). The JSON formats on the website match the app's internal format exactly, so no conversion is needed.
 
 When adding new data to the website, update the JSON files in `C:\code\stohrermusic\static\data\` and push to deploy. App users can then re-import to get the latest.
 
