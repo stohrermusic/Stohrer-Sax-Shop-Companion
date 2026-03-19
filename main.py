@@ -730,17 +730,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     # --- Edge Bias Methods ---
 
-    def _set_edge_bias(self, direction):
-        """Set the edge bias direction and update button display."""
-        self.edge_bias_var.set(direction)
-        self.settings["edge_bias"] = direction
-        self._update_edge_bias_display()
-
     def _toggle_center_bias(self):
-        """Toggle center button between 'off' and 'center'.
+        """Handle center button clicks.
 
-        First click from any other direction → off (original linear scan).
-        Second click → center (radial from middle).
+        If already on off or center: toggle between them.
+        If on a directional bias: switch to whatever center was last
+        (off or ctr), defaulting to off.
         """
         current = self.edge_bias_var.get()
         if current == "off":
@@ -748,21 +743,29 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         elif current == "center":
             self._set_edge_bias("off")
         else:
-            # Coming from a directional bias — go to off first
-            self._set_edge_bias("off")
+            # Coming from a direction — activate center at its last state
+            last_center = getattr(self, '_last_center_mode', 'off')
+            self._set_edge_bias(last_center)
+
+    def _set_edge_bias(self, direction):
+        """Set the edge bias direction and update button display."""
+        # Remember center mode state so it persists when switching away
+        if direction in ("off", "center"):
+            self._last_center_mode = direction
+        self.edge_bias_var.set(direction)
+        self.settings["edge_bias"] = direction
+        self._update_edge_bias_display()
 
     def _update_edge_bias_display(self):
         """Highlight the active edge bias button."""
         active = self.edge_bias_var.get()
         default_bg = self._edge_bias_default_bg
 
-        # Update center button label
+        # Center button label shows its internal state (off/ctr)
         center_btn = self._edge_bias_buttons.get("center")
         if center_btn:
-            if active == "off":
-                center_btn.configure(text="off")
-            else:
-                center_btn.configure(text="ctr")
+            last_center = getattr(self, '_last_center_mode', 'off')
+            center_btn.configure(text="off" if last_center == "off" else "ctr")
 
         for direction, btn in self._edge_bias_buttons.items():
             # "off" highlights the center button
