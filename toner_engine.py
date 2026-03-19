@@ -163,6 +163,35 @@ class TonerResult:
 # TONER ENGINE
 # ============================================
 
+# Keywords that identify built-in/laptop mics (case-insensitive)
+_BUILTIN_MIC_KEYWORDS = [
+    'built-in', 'internal', 'microphone array', 'realtek',
+    'integrated', 'laptop', 'webcam',
+]
+
+
+def check_mic_quality():
+    """Check if the default input device looks like a built-in mic.
+
+    Returns:
+        (is_builtin, device_name) — is_builtin is True if the default
+        input device name matches known built-in mic patterns.
+    """
+    if not AUDIO_AVAILABLE:
+        return False, "unknown"
+    try:
+        default_input = sd.default.device[0]
+        if default_input is None or default_input < 0:
+            return False, "unknown"
+        info = sd.query_devices(default_input)
+        name = info.get('name', '')
+        name_lower = name.lower()
+        is_builtin = any(kw in name_lower for kw in _BUILTIN_MIC_KEYWORDS)
+        return is_builtin, name
+    except Exception:
+        return False, "unknown"
+
+
 class TonerEngine:
     """Audio capture and tone analysis engine."""
 
@@ -177,6 +206,21 @@ class TonerEngine:
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
         self._break_freq = DEFAULT_BREAK_FREQ  # Benade spectral break frequency
+        self._mic_quality_warned = False  # Only warn once per session
+        self._spectral_check_frames = 0  # Count frames for spectral quality check
+        self._low_energy_frames = 0  # Frames where low freqs are suspiciously weak
+
+    def check_spectral_quality(self):
+        """Check if the mic shows poor low-frequency response.
+
+        Returns True if the mic appears to have low-freq rolloff
+        (likely a built-in/laptop mic). Only meaningful after ~30
+        frames of real audio have been analyzed.
+        """
+        if self._spectral_check_frames < 20:
+            return False  # Not enough data yet
+        # If >60% of frames show weak low-frequency energy, flag it
+        return self._low_energy_frames > self._spectral_check_frames * 0.6
 
     def set_break_frequency(self, hz):
         """Set the Benade break frequency for brightness/darkness calculation."""
@@ -340,6 +384,20 @@ class TonerEngine:
             return result
 
         result.fundamental_freq = f0
+
+        # --- Spectral quality check (first 30 frames with audio) ---
+        # If low frequencies (<300 Hz) are consistently much weaker than
+        # mid frequencies (500-2000 Hz), the mic probably has low-freq rolloff.
+        if not self._mic_quality_warned and self._spectral_check_frames < 30:
+            self._spectral_check_frames += 1
+            low_bin = int(300 / bin_freq)
+            mid_lo = int(500 / bin_freq)
+            mid_hi = int(2000 / bin_freq)
+            if low_bin > 0 and mid_hi < len(mags):
+                low_energy = float(np.mean(mags[1:low_bin]))
+                mid_energy = float(np.mean(mags[mid_lo:mid_hi]))
+                if mid_energy > 0 and low_energy < mid_energy * 0.05:
+                    self._low_energy_frames += 1
 
         # Map to note name and cents
         note_name, cents = self._freq_to_note(f0)

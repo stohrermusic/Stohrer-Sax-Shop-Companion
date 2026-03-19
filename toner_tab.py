@@ -30,7 +30,7 @@ try:
         CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         load_tone_profiles, save_tone_profiles, flatten_profiles,
-        analyze_audio_file,
+        analyze_audio_file, check_mic_quality,
     )
     _TONER_IMPORTS_OK = True
 except ImportError:
@@ -2824,6 +2824,20 @@ class TonerTabMixin:
         if not self._toner_bars_built:
             self._toner_build_spectrum_bars()
 
+        # Check for built-in mic on first start
+        if not getattr(self, '_toner_mic_checked', False):
+            self._toner_mic_checked = True
+            is_builtin, dev_name = check_mic_quality()
+            if is_builtin:
+                messagebox.showwarning("Microphone Notice",
+                    f"Your input device appears to be a built-in microphone "
+                    f"(\"{dev_name}\").\n\n"
+                    "Built-in mics often have poor low-frequency response, "
+                    "which can cause inaccurate readings \u2014 especially "
+                    "in the low register.\n\n"
+                    "For best results, use a condenser mic such as the "
+                    "Audio-Technica AT2020 USB.")
+
         success, err = self._toner_engine.start()
         if not success:
             if hasattr(self, '_toner_spectrum_canvas'):
@@ -2859,6 +2873,17 @@ class TonerTabMixin:
 
         if self._toner_engine and self._toner_engine.is_running:
             result = self._toner_engine.analyze()
+
+            # One-time spectral quality check after enough audio
+            if (not self._toner_engine._mic_quality_warned and
+                    self._toner_engine._spectral_check_frames >= 25):
+                if self._toner_engine.check_spectral_quality():
+                    self._toner_engine._mic_quality_warned = True
+                    messagebox.showwarning("Microphone Quality",
+                        "Your microphone appears to have poor low-frequency "
+                        "response. Low register readings may be inaccurate.\n\n"
+                        "For best results, use a condenser mic such as the "
+                        "Audio-Technica AT2020 USB.")
 
             # Update spectrum
             self._toner_render_spectrum(result)
