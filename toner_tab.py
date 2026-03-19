@@ -25,7 +25,7 @@ IS_MACOS = sys.platform == 'darwin'
 try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
-        CAPTURE_DELAY_S, CAPTURE_DURATION_S, MIN_PROFILE_NOTES, SAX_TYPES,
+        CAPTURE_DELAY_S, STRUCTURED_DURATION_S, MIN_PROFILE_NOTES, SAX_TYPES,
         SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
         ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
@@ -172,10 +172,9 @@ class TonerTabMixin:
         self._toner_stable_note = ""        # Note currently being held steady
         self._toner_stable_count = 0        # Consecutive frames of same note
         self._toner_comparison = None       # Fingerprint dict for ghost overlay
-        self._toner_capture_mode = "structured"  # "structured", "free", or "calibration"
-        # Structured: ~1s stability, 1s delay, 5s recording
-        # Free: ~0.5s stability, continuous micro-captures
-        # Calibration: guided chromatic scale, 5s per note, trust the player
+        self._toner_capture_mode = "free"  # "free" or "calibration"
+        # Free: ~0.5s stability, continuous micro-captures, attack skip
+        # Calibration: guided chromatic scale, 5s per note, 1s settle
         self._toner_stable_threshold = 25  # Updated per mode
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
         self._toner_cal_index = 0          # Current note index in calibration sequence
@@ -498,10 +497,10 @@ class TonerTabMixin:
                   command=self._toner_open_profile_dialog).pack(side="left", padx=(0, 4))
 
         # Capture mode selector
-        self._toner_mode_var = tk.StringVar(value="structured")
+        self._toner_mode_var = tk.StringVar(value="free")
         mode_combo = ttk.Combobox(
             prof_frame, textvariable=self._toner_mode_var,
-            values=["structured", "free", "calibration"], state="readonly", width=9)
+            values=["free", "calibration"], state="readonly", width=9)
         mode_combo.pack(side="left", padx=(0, 2))
 
         self._toner_capture_btn = tk.Button(
@@ -1566,12 +1565,7 @@ class TonerTabMixin:
         """Enter listening mode (called after session is ready)."""
         self._toner_capture_mode = self._toner_mode_var.get()
 
-        if self._toner_capture_mode == "free":
-            self._toner_stable_threshold = FREE_STABLE_FRAMES
-            self._toner_capture_state = 'free_listening'
-            self._toner_free_accumulator = []
-            label_text = "Free mode \u2014 play anything..."
-        elif self._toner_capture_mode == "calibration":
+        if self._toner_capture_mode == "calibration":
             self._toner_cal_index = 0
             self._toner_cal_recording = False
             self._toner_capture_frames = []
@@ -1579,9 +1573,11 @@ class TonerTabMixin:
             self._toner_capture_state = 'calibration'
             label_text = f"Play {CALIBRATION_NOTES[0]} (1/{len(CALIBRATION_NOTES)})"
         else:
-            self._toner_stable_threshold = 25
-            self._toner_capture_state = 'listening'
-            label_text = "Listening... play a steady note"
+            # Free mode: continuous auto-captures
+            self._toner_stable_threshold = FREE_STABLE_FRAMES
+            self._toner_capture_state = 'free_listening'
+            self._toner_free_accumulator = []
+            label_text = "Play anything..."
 
         self._toner_stable_note = ""
         self._toner_stable_count = 0
@@ -2001,101 +1997,15 @@ class TonerTabMixin:
 
         note = result.fundamental_note if result.fundamental_freq > 0 else ""
 
-        # --- LISTENING: detect stable tone ---
-        if state == 'listening':
-            if note and note == self._toner_stable_note:
-                self._toner_stable_count += 1
-            elif note:
-                self._toner_stable_note = note
-                self._toner_stable_count = 1
-            else:
-                self._toner_stable_note = ""
-                self._toner_stable_count = 0
-
-            if self._toner_stable_count > 0:
-                # Show what we're hearing
-                needed = self._toner_stable_threshold - self._toner_stable_count
-                if needed > 0:
-                    self._toner_capture_label.configure(
-                        text=f"Hearing {self._toner_stable_note}... hold steady")
-                else:
-                    self._toner_capture_label.configure(
-                        text=f"Locking {self._toner_stable_note}...")
-            else:
-                self._toner_capture_label.configure(
-                    text="Listening... play a steady note")
-
-            # Trigger when stable long enough
-            if self._toner_stable_count >= self._toner_stable_threshold:
-                self._toner_capture_state = 'delay'
-                self._toner_capture_start = time.time()
-                self._toner_capture_note = self._toner_stable_note
-                self._toner_capture_label.configure(
-                    text=f"Settling {self._toner_capture_note}...")
-            return
-
-        # --- DELAY: settling period ---
-        if state == 'delay':
-            elapsed = time.time() - self._toner_capture_start
-            remaining = CAPTURE_DELAY_S - elapsed
-
-            # If the player stopped or changed notes during delay, abort back to listening
-            if not note or note != self._toner_capture_note:
-                self._toner_capture_state = 'listening'
-                self._toner_stable_note = ""
-                self._toner_stable_count = 0
-                self._toner_capture_label.configure(
-                    text="Listening... play a steady note")
-                return
-
-            if remaining > 0:
-                self._toner_capture_label.configure(
-                    text=f"Settling {self._toner_capture_note}... {remaining:.1f}s")
-                return
-
-            # Start recording
-            self._toner_capture_state = 'recording'
-            self._toner_capture_start = time.time()
-            self._toner_capture_frames = []
-            return
-
-        # --- RECORDING: collecting frames ---
-        if state == 'recording':
-            elapsed = time.time() - self._toner_capture_start
-
-            if result.fundamental_freq > 0 and result.harmonics:
-                self._toner_capture_frames.append({
-                    'note': result.fundamental_note,
-                    'freq': result.fundamental_freq,
-                    'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                    'descriptors': dict(result.descriptors),
-                })
-
-            remaining = CAPTURE_DURATION_S - elapsed
-            n_frames = len(self._toner_capture_frames)
-            self._toner_capture_label.configure(
-                text=f"Recording {self._toner_capture_note}... {remaining:.1f}s")
-            self._toner_capture_progress.configure(
-                text=f"({n_frames} frames)")
-
-            if remaining <= 0:
-                self._toner_finish_capture()
-            return
-
-        # --- COOLDOWN: brief pause before next auto-capture ---
+        # --- COOLDOWN: brief pause before next auto-capture (free mode) ---
         if state == 'cooldown':
             elapsed = time.time() - self._toner_capture_start
-            next_state = ('free_listening'
-                          if self._toner_capture_mode == 'free' else 'listening')
-            next_label = ("Free mode \u2014 play anything..."
-                          if self._toner_capture_mode == 'free'
-                          else "Listening... play the next note")
             if not note or note != self._toner_capture_note or elapsed > 2.0:
-                self._toner_capture_state = next_state
+                self._toner_capture_state = 'free_listening'
                 self._toner_stable_note = ""
                 self._toner_stable_count = 0
                 self._toner_free_accumulator = []
-                self._toner_capture_label.configure(text=next_label)
+                self._toner_capture_label.configure(text="Play anything...")
                 self._toner_capture_progress.configure(text="")
             else:
                 self._toner_capture_label.configure(
@@ -2301,76 +2211,6 @@ class TonerTabMixin:
             sessions.append(self._toner_active_session)
 
         save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
-
-    def _toner_finish_capture(self):
-        """Finish a capture — average frames, save, and go to cooldown."""
-        frames = self._toner_capture_frames
-
-        if not frames or len(frames) < 3:
-            # Not enough data — go back to listening silently
-            self._toner_capture_state = 'listening'
-            self._toner_stable_note = ""
-            self._toner_stable_count = 0
-            self._toner_capture_label.configure(
-                text="Capture skipped (unstable). Play the next note...")
-            return
-
-        # Find the most common note
-        from collections import Counter
-        note_counts = Counter(f['note'] for f in frames)
-        dominant_note = note_counts.most_common(1)[0][0]
-
-        # Filter to only frames matching the dominant note
-        note_frames = [f for f in frames if f['note'] == dominant_note]
-        if len(note_frames) < 3:
-            self._toner_capture_state = 'listening'
-            self._toner_stable_note = ""
-            self._toner_stable_count = 0
-            self._toner_capture_label.configure(
-                text="Capture skipped (inconsistent). Play the next note...")
-            return
-
-        # Average
-        averaged = average_captures(note_frames)
-        avg_freq = sum(f['freq'] for f in note_frames) / len(note_frames)
-
-        capture_entry = {
-            'note': dominant_note,
-            'fundamental_freq': round(avg_freq, 2),
-            'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
-            'descriptors': {k: round(v, 3) for k, v in averaged['descriptors'].items()},
-            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
-            'n_frames': len(note_frames),
-            'method': 'structured',
-        }
-
-        self._toner_active_session['captures'].append(capture_entry)
-        self._toner_save_active_session()
-
-        # Count progress (non-blocking — just update the status bar)
-        notes_so_far = set()
-        for cap in self._toner_active_session['captures']:
-            notes_so_far.add(cap['note'])
-
-        n_notes = len(notes_so_far)
-        desc = averaged['descriptors']
-        status = f"Captured {dominant_note} \u2713  ({n_notes} notes"
-        if n_notes < MIN_PROFILE_NOTES:
-            status += f", need {MIN_PROFILE_NOTES - n_notes} more"
-        else:
-            status += ", fingerprint ready!"
-        status += ")"
-
-        self._toner_capture_label.configure(text=status)
-        self._toner_capture_progress.configure(
-            text=f"R:{desc.get('resonance',0):.0%} "
-                 f"Rich:{desc.get('richness',0):.0%} "
-                 f"Br:{desc.get('brightness',0):.0%} "
-                 f"Dk:{desc.get('darkness',0):.0%}")
-
-        # Enter cooldown — wait for note change before next capture
-        self._toner_capture_state = 'cooldown'
-        self._toner_capture_start = time.time()
 
     # ------------------------------------------------------------------
     # COMPARISON

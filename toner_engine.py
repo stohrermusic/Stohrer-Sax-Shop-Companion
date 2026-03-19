@@ -713,9 +713,8 @@ MIN_PROFILE_NOTES = 8
 # (Saldanha & Corso 1964, Caetano et al., PMC 6166322)
 ATTACK_SKIP_FRAMES = 3    # ~100ms at 30fps — skip these after note onset
 
-# Capture timing — structured mode
-CAPTURE_DELAY_S = 1.0     # Seconds to skip at start (includes attack)
-CAPTURE_DURATION_S = 5.0  # Seconds to average
+# Capture timing
+CAPTURE_DELAY_S = 1.0     # Seconds settle for calibration mode
 
 # Free mode: shorter stability requirement, no fixed recording period
 FREE_STABLE_FRAMES = 15   # ~0.5s at 30fps to consider a note "stable"
