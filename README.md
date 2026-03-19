@@ -1,6 +1,6 @@
 # Stohrer Sax Shop Companion
 
-A cross-platform desktop app for saxophone repair technicians. Generates SVG and G-code files for laser-cutting pad materials and provides reference databases for key heights, serial numbers, and screw specifications.
+A cross-platform desktop app for saxophone repair technicians. Generates SVG and G-code files for laser-cutting pad materials, provides reference databases for key heights, serial numbers, and screw specifications, and includes tooling generation, a chromatic strobe tuner, and a harmonic tone analyzer.
 
 ## Features
 
@@ -16,6 +16,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - **Air assist toggles** (M8/M9) per layer
 - **Cut grouping**: "by layer" or "by pad" ordering
 - **Max fill mode**: use `18.0 x max` to fill remaining space with a pad size
+- **Edge bias**: d-pad control to direct circle packing toward a specific edge or corner
 
 ### Custom Polygon Shapes
 - Draw irregular shapes for leather skins and scrap pieces (up to 8 points)
@@ -51,8 +52,41 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - **Import Matt's Specs** — download reference data from the [Screw Specs Library](https://www.stohrermusic.com/articles/screw-specs-library/)
 - Import/export for sharing specs
 
+### Tooling — Die Inserts & Die Holders
+- Generate SVG/G-code for laser-cut **acrylic pad die inserts** (small: 50mm OD, large: 70mm OD)
+- **Die holders**: 85mm OD, 4-layer stack with magnet and alignment holes
+- Enter individual sizes, ranges, or generate full sets
+- **Kerf test pattern** — calibrate your laser's kerf width with a simple cut-and-measure workflow
+- Scrap mode for spreading dies across multiple sheets of acrylic
+
+### Chromatic Strobe Tuner (Experimental)
+- 12-wheel strobe tuner modeled after the **Peterson Stroboconn 6T-5**
+- Per-ring octave brightness from real spectral data
+- Transposition support (Concert, Bb, Eb, F)
+- Reference tone player (pure or rich)
+- Analog VU meter with damped needle
+- Configurable stripe color, faceplate color, frame rate
+
+### Harmonic Tone Analyzer (Experimental)
+- Real-time **harmonic spectrum analyzer** for saxophone
+- Detects fundamental pitch, extracts up to 12 harmonics
+- **Spectrum view** (full FFT) and **Bars view** (per-harmonic), with linear or dB scale
+- Five VU-style gauges: intonation, resonance, richness, brightness, darkness
+- Brightness/darkness uses **Benade break frequencies** adapted per saxophone type
+- **Tone profiles**: capture harmonic fingerprints of individual horns
+  - Three capture modes: structured (held notes), free (natural playing), file import (WAV)
+  - Profiles are a fixed setup: horn + player + mouthpiece + reed
+  - Organized into libraries with import/export
+- **Comparison tool**: multi-select profiles, filter by type/player/mouthpiece, side-by-side analysis with per-note and horn-average views
+- Auto-transposition by saxophone type with concert pitch toggle
+- Bias sliders for subjective gauge calibration
+
+### Feature Set
+- **File > Feature Set** — choose which tabs to show
+- Experimental features (Tuner, Toner) hidden by default; opt in when ready
+
 ### Cross-Platform
-- Runs on **Windows**, **macOS** (universal binary: Intel + Apple Silicon), and **Linux**
+- Runs on **Windows**, **macOS**, and **Linux**
 - **macOS dark mode** support — uses native system colors
 - Platform-appropriate config storage with automatic migration
 - **Import Settings from Folder** for moving between machines
