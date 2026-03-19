@@ -2838,7 +2838,8 @@ class TonerTabMixin:
                     "For best results, use a condenser mic such as the "
                     "Audio-Technica AT2020 USB.")
 
-        success, err = self._toner_engine.start()
+        device = self.settings.get("audio_input_device")
+        success, err = self._toner_engine.start(device=device)
         if not success:
             if hasattr(self, '_toner_spectrum_canvas'):
                 self._toner_spectrum_canvas.create_text(

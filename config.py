@@ -41,6 +41,19 @@ def get_ssl_context():
 # ==========================================
 
 APP_NAME = "StohrerSaxShopCompanion"
+
+
+def get_input_devices():
+    """Return list of (device_index, device_name) for audio input devices."""
+    try:
+        import sounddevice as sd
+        devices = []
+        for i, d in enumerate(sd.query_devices()):
+            if d['max_input_channels'] > 0:
+                devices.append((i, d['name']))
+        return devices
+    except Exception:
+        return []
 APP_VERSION = "1.9"
 APP_BUILD_DATE = "2026-03-19"
 
@@ -344,6 +357,9 @@ DEFAULT_SETTINGS = {
     "seen_polygon_tutorial": False,
     "seen_sdcard_tutorial": False,
     "seen_kerf_test_tutorial": False,
+
+    # AUDIO INPUT
+    "audio_input_device": None,  # None = system default, or device index
 
     # TONER ACCESS
     "toner_unlocked": False,

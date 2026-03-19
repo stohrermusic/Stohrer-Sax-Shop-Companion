@@ -14,7 +14,7 @@ from config import (
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE,
     DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files,
-    get_ssl_context
+    get_ssl_context, get_input_devices
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
 from gcode_engine import generate_gcode, generate_gcode_from_placed
@@ -260,6 +260,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tuner_options_menu = tk.Menu(self.tuner_menu, tearoff=0)
         self.tuner_menu.add_cascade(label="Options", menu=tuner_options_menu)
         tuner_options_menu.add_command(label="Settings...", command=self._tuner_open_settings)
+        tuner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
 
         # --- Toner Menu ---
         self.toner_menu = tk.Menu(self.root)
@@ -268,6 +269,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
         toner_file_menu.add_command(label="Export Profiles...", command=self._toner_export_profiles)
         toner_file_menu.add_command(label="Import Profiles...", command=self._toner_import_profiles)
+
+        toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
+        self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
+        toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
 
         # --- Add Help menu to all tab menus ---
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
@@ -1790,6 +1795,81 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
+
+    def _open_input_device_dialog(self):
+        """Open a dialog to select the audio input device."""
+        devices = get_input_devices()
+        if not devices:
+            messagebox.showinfo("No Devices", "No audio input devices found.")
+            return
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Input Device")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = self.root.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Select audio input device:", bg=bg,
+                 font=("Helvetica", 10)).pack(pady=(0, 8))
+
+        current_dev = self.settings.get("audio_input_device")
+        dev_names = ["System Default"] + [name for _, name in devices]
+        dev_indices = [None] + [idx for idx, _ in devices]
+
+        mic_var = tk.StringVar(value="System Default")
+        if current_dev is not None:
+            for idx, name in devices:
+                if idx == current_dev:
+                    mic_var.set(name)
+                    break
+
+        listbox = tk.Listbox(frame, height=min(10, len(dev_names)),
+                              width=45, font=("Helvetica", 10))
+        listbox.pack(pady=(0, 10))
+        for name in dev_names:
+            listbox.insert(tk.END, name)
+
+        # Select current device
+        current_idx = 0
+        if current_dev is not None:
+            for i, (idx, _) in enumerate(devices):
+                if idx == current_dev:
+                    current_idx = i + 1
+                    break
+        listbox.selection_set(current_idx)
+        listbox.see(current_idx)
+
+        def apply():
+            sel = listbox.curselection()
+            if not sel:
+                return
+            dev_idx = dev_indices[sel[0]]
+            self.settings["audio_input_device"] = dev_idx
+            save_settings(self.settings)
+
+            # Restart active audio engine with new device
+            if hasattr(self, '_tuner_engine') and self._tuner_engine and self._tuner_engine.is_running:
+                self._tuner_stop()
+                self._tuner_start()
+            if hasattr(self, '_toner_engine') and self._toner_engine and self._toner_engine.is_running:
+                self._toner_stop()
+                self._toner_start()
+
+            dlg.destroy()
+            dev_name = dev_names[sel[0]]
+            messagebox.showinfo("Input Device",
+                f"Audio input set to: {dev_name}")
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x")
+        tk.Button(btn_frame, text="Apply", command=apply).pack(
+            side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+            side="left")
 
     def _open_feature_set(self):
         """Open the Feature Set dialog to show/hide tabs."""
