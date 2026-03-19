@@ -2176,6 +2176,17 @@ class UserGuideWindow(tk.Toplevel):
                     "you're playing.")
         self._blank()
 
+        self._h2("Microphone")
+        self._body("A quality microphone is essential for accurate readings. Laptop and "
+                    "built-in mics roll off low frequencies and add noise, which causes "
+                    "the pitch detector to misidentify notes \u2014 especially in the low "
+                    "register. A condenser mic or USB mic designed for music will give "
+                    "dramatically better results.")
+        self._bullet("Recommended: Audio-Technica AT2020 USB (no audio interface needed)")
+        self._bullet("Any condenser mic through an audio interface will also work well")
+        self._bullet("Laptop/built-in mics are not recommended for tone analysis")
+        self._blank()
+
         self._h2("Display")
         self._bullet("Spectrum view: full FFT frequency spectrum with harmonics highlighted "
                       "in amber and the fundamental in green")
