@@ -2008,6 +2008,21 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("The setting is saved and persists between sessions")
         self._blank()
 
+        self._h2("Nesting Preview")
+        self._body("Check \"Preview before saving\" to see how your pads will be "
+                    "arranged on the sheet before any files are written.")
+        self._bullet("Preview works with one material at a time \u2014 select a single "
+                      "material to use it")
+        self._bullet("The preview shows the sheet boundary with circles at their "
+                      "nested positions, labeled with pad sizes, and a material "
+                      "usage percentage")
+        self._bullet("Click Save Files to proceed to file generation")
+        self._bullet("Click Adjust to go back and change edge bias, sheet dimensions, "
+                      "custom polygon shape, or pad sizes/quantities, then generate again")
+        self._bullet("Useful for testing different edge bias directions or sheet sizes "
+                      "without wasting time opening output files")
+        self._blank()
+
         self._h2("SD Card & Eject")
         self._body("Two ways to get G-code onto an SD card:")
         self._bullet("Eject checkbox (below Generate buttons): check \"Eject SD card after "
@@ -2379,17 +2394,37 @@ class NestingPreviewWindow(tk.Toplevel):
 
         self.result = None
 
-        # First-run tutorial (tracked as attribute on parent)
-        if not getattr(parent, '_seen_preview_tutorial', False):
-            parent._seen_preview_tutorial = True
+        # First-run tutorial (persisted in settings via parent app)
+        app = getattr(parent, 'settings', None) if not isinstance(parent, dict) else None
+        if app is None:
+            # Try to get settings from the root app
+            try:
+                app = parent.master.settings if hasattr(parent, 'master') else None
+            except Exception:
+                app = None
+
+        # Use a simple attribute check — the actual persistence happens
+        # via the seen_preview_tutorial setting
+        show_tutorial = False
+        try:
+            if hasattr(parent, 'settings') and not parent.settings.get("seen_preview_tutorial"):
+                show_tutorial = True
+                parent.settings["seen_preview_tutorial"] = True
+                save_settings(parent.settings)
+        except Exception:
+            pass
+
+        if show_tutorial:
             messagebox.showinfo("Nesting Preview",
-                "This preview shows how your pads will be arranged on the sheet.\n\n"
-                "If the layout looks good, click Save to generate the files.\n\n"
+                "This preview shows how your pads will be arranged "
+                "on the sheet before files are generated.\n\n"
+                "If the layout looks good, click Save to write the files.\n\n"
                 "If not, click Adjust to go back and change:\n"
                 "  \u2022 Edge bias (pack toward a different edge)\n"
-                "  \u2022 Sheet dimensions (bigger/smaller sheet)\n"
+                "  \u2022 Sheet dimensions\n"
                 "  \u2022 Custom polygon shape\n"
-                "  \u2022 Pad sizes or quantities",
+                "  \u2022 Pad sizes or quantities\n\n"
+                "Preview works with one material at a time.",
                 parent=self)
 
         self._placements = placements

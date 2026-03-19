@@ -1101,6 +1101,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 return
 
             use_preview = self.preview_var.get()
+
+            # Preview requires single material
+            if use_preview and len(selected_materials) > 1:
+                messagebox.showinfo("Preview",
+                    "Preview works with one material at a time.\n"
+                    "Please select a single material to preview its layout.")
+                return
+
             save_dir = None
 
             # Process each material (with optional per-material preview)
@@ -1260,6 +1268,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 return
 
             use_preview = self.preview_var.get()
+
+            if use_preview and len(supported_materials) > 1:
+                messagebox.showinfo("Preview",
+                    "Preview works with one material at a time.\n"
+                    "Please select a single material to preview its layout.")
+                return
             save_dir = None
 
             # Process each material with optional per-material preview
