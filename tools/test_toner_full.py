@@ -23,7 +23,7 @@ import numpy as np
 from toner_engine import (
     TonerEngine, TonerResult, HarmonicInfo,
     SAMPLE_RATE, FFT_SIZE, MAX_HARMONICS, MIN_PROFILE_NOTES,
-    CAPTURE_DELAY_S, CAPTURE_DURATION_S, DEFAULT_LIBRARY,
+    CAPTURE_DELAY_S, DEFAULT_LIBRARY,
     average_captures, compute_fingerprint,
     load_tone_profiles, save_tone_profiles, flatten_profiles,
 )
