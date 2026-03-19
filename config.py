@@ -348,6 +348,13 @@ DEFAULT_SETTINGS = {
     # TONER ACCESS
     "toner_unlocked": False,
 
+    # NESTING PREVIEW
+    "show_preview": False,
+
+    # LAST USED LIBRARIES
+    "last_pad_library": "My Presets",
+    "last_key_library": "My Presets",
+
     # VISIBLE TABS (Feature Set)
     "visible_tabs": {
         "Key Height Library": True,
