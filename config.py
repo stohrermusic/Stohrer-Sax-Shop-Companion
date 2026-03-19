@@ -313,6 +313,16 @@ DEFAULT_SETTINGS = {
     "seen_sdcard_tutorial": False,
     "seen_kerf_test_tutorial": False,
 
+    # VISIBLE TABS (Feature Set)
+    "visible_tabs": {
+        "Key Height Library": True,
+        "Serial Lookup": True,
+        "Screw Specs": True,
+        "Tooling": True,
+        "Tuner": True,
+        "Toner": True,
+    },
+
     "key_layout": {
         "show_serial": False,
         "large_notes": False,

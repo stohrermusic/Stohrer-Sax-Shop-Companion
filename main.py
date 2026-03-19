@@ -196,6 +196,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Send G-code to SD Card...", command=self.on_send_to_sd_card)
         pad_file_menu.add_separator()
+        pad_file_menu.add_command(label="Feature Set...", command=self._open_feature_set)
+        pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Exit", command=self.on_exit)
 
         pad_options_menu = tk.Menu(self.pad_menu, tearoff=0)
@@ -269,27 +271,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             help_menu.add_command(label="About", command=self.open_about)
 
     def on_tab_changed(self, event):
-        current_tab = self.notebook.index(self.notebook.select())
-        if current_tab == 0:
-            self.root.config(menu=self.pad_menu)
-        elif current_tab == 1:
-            self.root.config(menu=self.key_menu)
-        elif current_tab == 2:
-            self.root.config(menu=self.serial_menu)
-        elif current_tab == 3:
-            self.root.config(menu=self.screw_menu)
-        elif current_tab == 4:
-            self.root.config(menu=self.tooling_menu)
-        elif current_tab == 5:
-            self.root.config(menu=self.tuner_menu)
-        elif current_tab == 6:
-            self.root.config(menu=self.toner_menu)
+        selected = self.notebook.select()
 
-        # Start/stop tuner and toner when switching tabs
-        if current_tab == 5:
+        # Look up menu for the selected tab
+        menu = self._tab_menus.get(selected)
+        if menu:
+            self.root.config(menu=menu)
+
+        # Start/stop audio tabs
+        if selected == str(self.tuner_tab_frame):
             self._toner_stop()
             self._tuner_start()
-        elif current_tab == 6:
+        elif selected == str(self.toner_tab_frame):
             self._tuner_stop()
             self._toner_start()
         else:
@@ -335,14 +328,39 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
-        
+
+        # Build tab → menu mapping (uses widget string IDs)
+        self._tab_menus = {
+            str(self.pad_tab): self.pad_menu,
+            str(self.key_tab): self.key_menu,
+            str(self.serial_tab): self.serial_menu,
+            str(self.screw_tab): self.screw_menu,
+            str(self.tooling_tab_frame): self.tooling_menu,
+            str(self.tuner_tab_frame): self.tuner_menu,
+            str(self.toner_tab_frame): self.toner_menu,
+        }
+
+        # Hide tabs based on Feature Set settings
+        visible = self.settings.get("visible_tabs", {})
+        tab_visibility = {
+            self.key_tab: visible.get("Key Height Library", True),
+            self.serial_tab: visible.get("Serial Lookup", True),
+            self.screw_tab: visible.get("Screw Specs", True),
+            self.tooling_tab_frame: visible.get("Tooling", True),
+            self.tuner_tab_frame: visible.get("Tuner", True),
+            self.toner_tab_frame: visible.get("Toner", True),
+        }
+        for tab_frame, is_visible in tab_visibility.items():
+            if not is_visible:
+                self.notebook.hide(tab_frame)
+
         # Apply theme colors to the new notebook tabs
         style = ttk.Style()
         style.configure('App.TFrame', background=self.root.cget('bg'))
         style.map('TNotebook.Tab', background=[('selected', self.default_bg), ('!selected', self.default_bg)], foreground=[('selected', 'black')])
         style.configure('TNotebook', background=self.root.cget('bg'))
-        
-        self.apply_resonance_theme() 
+
+        self.apply_resonance_theme()
 
     # ------------------------------------------------------------------
     # TAB 1: PAD GENERATOR LOGIC
@@ -1641,18 +1659,84 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
 
+    def _open_feature_set(self):
+        """Open the Feature Set dialog to show/hide tabs."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Feature Set")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = self.root.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Feature Set", bg=bg,
+                 font=("Helvetica", 14, "bold")).pack(pady=(0, 5))
+        tk.Label(frame, text="Choose which tabs to show.\n"
+                 "Pad SVG Generator is always available.",
+                 bg=bg, font=("Helvetica", 9)).pack(pady=(0, 10))
+
+        # Pad Generator — always on, shown as disabled checkbox
+        tk.Checkbutton(frame, text="Pad SVG Generator", bg=bg,
+                       font=("Helvetica", 10), state="disabled",
+                       variable=tk.BooleanVar(value=True)).pack(anchor="w")
+
+        visible = self.settings.get("visible_tabs", {})
+
+        main_tabs = [
+            "Key Height Library",
+            "Serial Lookup",
+            "Screw Specs",
+            "Tooling",
+        ]
+        experimental_tabs = [
+            "Tuner",
+            "Toner",
+        ]
+
+        check_vars = {}
+        for name in main_tabs:
+            var = tk.BooleanVar(value=visible.get(name, True))
+            tk.Checkbutton(frame, text=name, variable=var, bg=bg,
+                           font=("Helvetica", 10)).pack(anchor="w")
+            check_vars[name] = var
+
+        tk.Label(frame, text="\nExperimental", bg=bg,
+                 font=("Helvetica", 11, "bold")).pack(anchor="w")
+        for name in experimental_tabs:
+            var = tk.BooleanVar(value=visible.get(name, True))
+            tk.Checkbutton(frame, text=name, variable=var, bg=bg,
+                           font=("Helvetica", 10)).pack(anchor="w")
+            check_vars[name] = var
+
+        def apply():
+            new_visible = {name: var.get() for name, var in check_vars.items()}
+            self.settings["visible_tabs"] = new_visible
+            save_settings(self.settings)
+            dlg.destroy()
+            messagebox.showinfo("Feature Set",
+                "Changes will take effect next time you open the app.")
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_frame, text="Apply", command=apply).pack(
+            side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+            side="left")
+
     def open_user_guide(self):
-        current_tab = self.notebook.index(self.notebook.select())
+        selected = self.notebook.select()
         tab_sections = {
-            0: "pad_generator",
-            1: "key_heights",
-            2: "serial_lookup",
-            3: "screw_specs",
-            4: "tooling",
-            5: "tuner",
-            6: "toner",
+            str(self.pad_tab): "pad_generator",
+            str(self.key_tab): "key_heights",
+            str(self.serial_tab): "serial_lookup",
+            str(self.screw_tab): "screw_specs",
+            str(self.tooling_tab_frame): "tooling",
+            str(self.tuner_tab_frame): "tuner",
+            str(self.toner_tab_frame): "toner",
         }
-        section = tab_sections.get(current_tab, None)
+        section = tab_sections.get(selected, None)
         UserGuideWindow(self.root, section=section)
 
     def open_about(self):
