@@ -374,7 +374,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def create_pad_generator_tab(self, parent):
         tk.Label(parent, text="Enter pad sizes (e.g. 42.0x3):", bg=self.root.cget('bg')).pack(pady=5)
-        self.pad_entry = tk.Text(parent, height=10)
+        self.pad_entry = tk.Text(parent, height=10, undo=True, maxundo=-1)
         self.pad_entry.pack(fill="x", padx=10)
 
         # Row 1: Library and preset dropdowns
@@ -1462,6 +1462,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if not messagebox.askyesno("Overwrite", f"A set named '{name}' already exists in this library. Overwrite it?"):
                     return
                 _, existing_notes = self._get_pad_preset_data(self.pad_presets[active_library][name])
+
+            # Check for duplicate pad lists across all libraries
+            new_lines = sorted(line.strip() for line in text_data.strip().splitlines() if line.strip())
+            for lib, presets in self.pad_presets.items():
+                for pname, pdata in presets.items():
+                    if lib == active_library and pname == name:
+                        continue  # Skip self when overwriting
+                    existing_pads, _ = self._get_pad_preset_data(pdata)
+                    existing_lines = sorted(line.strip() for line in existing_pads.strip().splitlines() if line.strip())
+                    if new_lines == existing_lines:
+                        if not messagebox.askyesno("Duplicate Detected",
+                                f"This pad list is identical to '{pname}' "
+                                f"in '{lib}'.\n\nSave anyway?"):
+                            return
 
             self.pad_presets[active_library][name] = {"pads": text_data, "notes": existing_notes}
 
