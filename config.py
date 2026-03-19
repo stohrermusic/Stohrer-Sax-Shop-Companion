@@ -44,13 +44,50 @@ APP_NAME = "StohrerSaxShopCompanion"
 
 
 def get_input_devices():
-    """Return list of (device_index, device_name) for audio input devices."""
+    """Return list of (device_index, device_name) for usable audio input devices.
+
+    Filters out:
+    - Bluetooth headsets (too low sample rate for audio analysis)
+    - Windows sound mapper duplicates
+    - Devices that can't do 44100 Hz
+    """
     try:
         import sounddevice as sd
         devices = []
+        seen_names = set()
         for i, d in enumerate(sd.query_devices()):
-            if d['max_input_channels'] > 0:
-                devices.append((i, d['name']))
+            if d['max_input_channels'] <= 0:
+                continue
+
+            name = d['name']
+            name_lower = name.lower()
+
+            # Skip Bluetooth headsets (HSP/HFP = 16kHz, useless for analysis)
+            if 'bluetooth' in name_lower or 'hands-free' in name_lower:
+                continue
+            if 'bthhfenum' in name_lower:
+                continue
+
+            # Skip Windows sound mapper duplicates
+            if 'sound mapper' in name_lower:
+                continue
+            if 'primary sound' in name_lower:
+                continue
+
+            # Skip if sample rate too low
+            if d.get('default_samplerate', 0) < 44100:
+                continue
+
+            # Deduplicate (same device from different host APIs)
+            # Normalize by taking just the meaningful part of the name
+            clean_name = name.strip()
+            # Windows often appends truncated driver names — dedupe on first 30 chars
+            dedup_key = clean_name[:30].strip()
+            if dedup_key in seen_names:
+                continue
+            seen_names.add(dedup_key)
+
+            devices.append((i, clean_name))
         return devices
     except Exception:
         return []
