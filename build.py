@@ -87,6 +87,36 @@ def create_dmg():
         return False
 
 
+def _patch_macos_plist():
+    """Add microphone permission to the macOS app bundle's Info.plist.
+
+    macOS silently denies microphone access to apps that don't declare
+    NSMicrophoneUsageDescription in their Info.plist. Without this,
+    the tuner and toner tabs can't access the mic.
+    """
+    import plistlib
+
+    plist_path = f"dist/{APP_NAME}.app/Contents/Info.plist"
+    if not os.path.exists(plist_path):
+        print(f"Warning: {plist_path} not found, skipping plist patch")
+        return
+
+    print("Patching Info.plist with microphone permission...")
+
+    with open(plist_path, 'rb') as f:
+        plist = plistlib.load(f)
+
+    plist['NSMicrophoneUsageDescription'] = (
+        'The tuner and tone analyzer need microphone access '
+        'to detect pitch and analyze harmonics.'
+    )
+
+    with open(plist_path, 'wb') as f:
+        plistlib.dump(plist, f)
+
+    print("  Added NSMicrophoneUsageDescription to Info.plist")
+
+
 def build():
     """Build the application for the current platform."""
     platform = get_platform_name()
@@ -139,6 +169,7 @@ def build():
             print(f"  Executable: dist/{APP_NAME}.exe")
         elif sys.platform == 'darwin':
             print(f"  App Bundle: dist/{APP_NAME}.app")
+            _patch_macos_plist()
         else:
             print(f"  Executable: dist/{APP_NAME}")
     else:
