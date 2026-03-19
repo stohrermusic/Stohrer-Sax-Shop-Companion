@@ -1212,6 +1212,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     f"Try a larger scrap piece.")
                 return
 
+            # Preview before saving
+            if self.preview_var.get():
+                preview = NestingPreviewWindow(
+                    self.root, {material: placed}, mat_w, mat_h,
+                    polygon=mat_polygon)
+                if preview.result != "save":
+                    return
+
             # Generate filename with scrap number
             self.scrap_session['scrap_count'] += 1
             scrap_num = self.scrap_session['scrap_count']
@@ -1405,6 +1413,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     f"Smallest remaining pad: {min_pad_size}mm\n"
                     f"Try a larger scrap piece.")
                 return
+
+            # Preview before saving
+            if self.preview_var.get():
+                preview = NestingPreviewWindow(
+                    self.root, {material: placed}, mat_w, mat_h,
+                    polygon=mat_polygon)
+                if preview.result != "save":
+                    return
 
             # Generate filename with scrap number
             self.scrap_session['scrap_count'] += 1
