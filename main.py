@@ -1707,6 +1707,22 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         def apply():
             new_visible = {name: var.get() for name, var in check_vars.items()}
+
+            # Toner requires password if not previously unlocked
+            if new_visible.get("Toner") and not self.settings.get("toner_unlocked"):
+                pw = simpledialog.askstring("Toner Access",
+                    "The Toner is in early development.\n"
+                    "Enter the access code to enable it:",
+                    show="*", parent=dlg)
+                if pw != "iunderstand":
+                    if pw is not None:  # None = cancelled
+                        messagebox.showinfo("Access Denied",
+                            "That's not the right code.", parent=dlg)
+                    new_visible["Toner"] = False
+                    check_vars["Toner"].set(False)
+                    return
+                self.settings["toner_unlocked"] = True
+
             self.settings["visible_tabs"] = new_visible
             save_settings(self.settings)
             dlg.destroy()
