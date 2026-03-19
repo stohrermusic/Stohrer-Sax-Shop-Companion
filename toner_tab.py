@@ -2953,29 +2953,103 @@ class TonerTabMixin:
             f"Profile now has {len(total_notes)} unique notes total.")
 
     def _toner_export_profiles(self):
-        """Export tone profiles to a JSON file."""
+        """Export selected tone profiles to a JSON file."""
         from tkinter import filedialog
-        if not self._toner_profiles:
+
+        # Build list of all profiles
+        all_profiles = []
+        for lib_name, lib_profiles in self._toner_profiles.items():
+            if not isinstance(lib_profiles, dict):
+                continue
+            for prof_name, prof_data in lib_profiles.items():
+                all_profiles.append((lib_name, prof_name, prof_data))
+
+        if not all_profiles:
             messagebox.showinfo("Nothing to Export", "No tone profiles to export.")
             return
 
-        filepath = filedialog.asksaveasfilename(
-            title="Export Tone Profiles",
-            defaultextension=".json",
-            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
-            initialfile="tone_profiles_export.json"
-        )
-        if not filepath:
-            return
+        # Selection dialog
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Export Tone Profiles")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
 
-        try:
-            import json
-            with open(filepath, 'w') as f:
-                json.dump(self._toner_profiles, f, indent=2)
-            messagebox.showinfo("Export Successful",
-                f"Exported tone profiles to:\n{filepath}")
-        except Exception as e:
-            messagebox.showerror("Export Error", f"Could not export:\n{e}")
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Select profiles to export:", bg=bg, fg=fg,
+                 font=("Helvetica", 10)).pack(pady=(0, 5))
+
+        # Checkboxes
+        list_frame = tk.Frame(frame, bg=bg)
+        list_frame.pack(fill="both", expand=True, pady=(0, 10))
+
+        check_vars = []
+        for lib_name, prof_name, prof_data in all_profiles:
+            sessions = prof_data.get('sessions', [])
+            caps = sum(len(s.get('captures', [])) for s in sessions)
+            var = tk.BooleanVar(value=True)
+            tk.Checkbutton(list_frame,
+                text=f"[{lib_name}] {prof_name} ({caps} captures)",
+                variable=var, bg=bg, font=("Helvetica", 9),
+                anchor="w").pack(fill="x")
+            check_vars.append(var)
+
+        # Select all / none
+        sel_frame = tk.Frame(frame, bg=bg)
+        sel_frame.pack(fill="x", pady=(0, 10))
+        tk.Button(sel_frame, text="All", font=("Helvetica", 8),
+                  command=lambda: [v.set(True) for v in check_vars]).pack(
+                      side="left", padx=(0, 5))
+        tk.Button(sel_frame, text="None", font=("Helvetica", 8),
+                  command=lambda: [v.set(False) for v in check_vars]).pack(
+                      side="left")
+
+        def do_export():
+            # Build export data from selected profiles
+            export = {}
+            count = 0
+            for (lib, name, data), var in zip(all_profiles, check_vars):
+                if var.get():
+                    if lib not in export:
+                        export[lib] = {}
+                    export[lib][name] = data
+                    count += 1
+
+            if not export:
+                messagebox.showinfo("Nothing Selected",
+                    "Select at least one profile to export.", parent=dlg)
+                return
+
+            dlg.destroy()
+
+            filepath = filedialog.asksaveasfilename(
+                title="Export Tone Profiles",
+                defaultextension=".json",
+                filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+                initialfile="tone_profiles_export.json"
+            )
+            if not filepath:
+                return
+
+            try:
+                import json
+                with open(filepath, 'w') as f:
+                    json.dump(export, f, indent=2)
+                messagebox.showinfo("Export Successful",
+                    f"Exported {count} profiles to:\n{filepath}")
+            except Exception as e:
+                messagebox.showerror("Export Error", f"Could not export:\n{e}")
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x")
+        tk.Button(btn_frame, text="Export", command=do_export).pack(
+            side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+            side="left")
 
     def _toner_import_profiles(self):
         """Import tone profiles from a JSON file, merging into existing libraries."""
