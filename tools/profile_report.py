@@ -200,6 +200,16 @@ def report(profile_name, profile_data):
     else:
         print("  No notable findings.")
 
+    print(f"\n{'=' * 65}")
+    print("NOTE")
+    print(f"{'=' * 65}\n")
+    print("  Room acoustics, microphone frequency response, and mic placement")
+    print("  all affect these readings. Anomalies that appear on a single")
+    print("  profile may be artifacts of the recording environment rather than")
+    print("  the horn. Patterns that repeat across multiple profiles recorded")
+    print("  in the same room likely reflect the room or mic, not the horns.")
+    print("  Compare profiles recorded in different environments to distinguish")
+    print("  horn character from room character.")
     print()
 
 

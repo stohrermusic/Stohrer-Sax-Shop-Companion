@@ -2185,6 +2185,10 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Recommended: Audio-Technica AT2020 USB (no audio interface needed)")
         self._bullet("Any condenser mic through an audio interface will also work well")
         self._bullet("Laptop/built-in mics are not recommended for tone analysis")
+        self._bullet("Room acoustics and mic placement affect readings. Anomalies "
+                      "that appear on every horn in the same room are likely the room, "
+                      "not the horns. Compare across different environments to "
+                      "separate horn character from room character.")
         self._blank()
 
         self._h2("Display")
