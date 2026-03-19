@@ -13,7 +13,8 @@ from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE,
     DEFAULT_SETTINGS,
-    find_config_files_in_directory, import_config_files
+    find_config_files_in_directory, import_config_files,
+    get_ssl_context
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
 from gcode_engine import generate_gcode, generate_gcode_from_placed
@@ -1706,7 +1707,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         try:
             req = urllib.request.Request(MATTS_PADS_URL, headers={"User-Agent": "StohrerSaxShopCompanion"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10, context=get_ssl_context()) as resp:
                 web_data = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             messagebox.showerror("Connection Error",

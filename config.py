@@ -2,7 +2,39 @@ import os
 import sys
 import json
 import shutil
+import ssl
 from tkinter import messagebox
+
+
+def get_ssl_context():
+    """Get an SSL context that works on macOS (and everywhere else).
+
+    macOS Python often can't find system certificates. This tries:
+    1. certifi package (if installed)
+    2. Default system context
+    3. Unverified fallback (last resort)
+    """
+    # Try certifi first (most reliable on macOS)
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+
+    # Try default context
+    ctx = ssl.create_default_context()
+    try:
+        # Test if it can actually verify
+        ctx.load_default_certs()
+        return ctx
+    except Exception:
+        pass
+
+    # Fallback: unverified (still encrypted, just no cert check)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 # ==========================================
 # PLATFORM-SPECIFIC CONFIG DIRECTORY

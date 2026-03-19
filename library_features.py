@@ -5,7 +5,7 @@ import os
 
 from config import (
     ALL_KEY_HEIGHT_FIELDS, SCREW_SPECS_FILE, KEY_PRESET_FILE,
-    save_presets, DEFAULT_SETTINGS
+    save_presets, DEFAULT_SETTINGS, get_ssl_context
 )
 from ui_dialogs import (
     ImportPresetsWindow, ExportPresetsWindow, ImportTargetWindow, 
@@ -397,7 +397,7 @@ class LibraryFeaturesMixin:
 
         try:
             req = urllib.request.Request(MATTS_KEYS_URL, headers={"User-Agent": "StohrerSaxShopCompanion"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10, context=get_ssl_context()) as resp:
                 web_data = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             messagebox.showerror("Connection Error",
@@ -720,7 +720,7 @@ class LibraryFeaturesMixin:
 
         try:
             req = urllib.request.Request(MATTS_SPECS_URL, headers={"User-Agent": "StohrerSaxShopCompanion"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10, context=get_ssl_context()) as resp:
                 web_data = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             messagebox.showerror("Connection Error",
