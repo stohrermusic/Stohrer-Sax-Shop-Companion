@@ -137,13 +137,19 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
         for _ in range(qty):
             discs.append((pad_size, diameter))
 
-    discs.sort(key=lambda x: -x[1])  # Largest first
     placed = []
     fixed_total = len(discs)
     fixed_placed = 0
 
     # Edge bias scan direction
     edge_bias = settings.get("edge_bias", "center")
+
+    # Corner bias: smallest first (small discs nestle into corners efficiently).
+    # All others: largest first (standard greedy circle packing).
+    if edge_bias in ("nw", "ne", "sw", "se"):
+        discs.sort(key=lambda x: x[1])
+    else:
+        discs.sort(key=lambda x: -x[1])
     scan_y_reversed = edge_bias in ("s", "se", "sw")
     scan_x_reversed = edge_bias in ("e", "ne", "se")
     is_corner = edge_bias in ("ne", "nw", "se", "sw")
