@@ -144,21 +144,47 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
 
     # Edge bias scan direction
     edge_bias = settings.get("edge_bias", "center")
-    # Determine scan directions: bias south means start from bottom, east from right, etc.
     scan_y_reversed = edge_bias in ("s", "se", "sw")
     scan_x_reversed = edge_bias in ("e", "ne", "se")
-
-    # Determine scan priority: horizontal biases scan columns first,
-    # vertical/diagonal biases scan rows first.
-    # This ensures "left" bias fills left-to-right (column by column)
-    # and "top" bias fills top-to-bottom (row by row).
-    # Pure horizontal biases scan columns first. Corners and vertical
-    # biases scan rows first (corners get their horizontal component
-    # from the reversed scan direction within each row).
+    is_corner = edge_bias in ("ne", "nw", "se", "sw")
     x_primary = edge_bias in ("w", "e")
+
+    # Corner targets for distance-based placement
+    _corner_targets = {
+        "nw": (0, 0),
+        "ne": (width_mm, 0),
+        "sw": (0, height_mm),
+        "se": (width_mm, height_mm),
+    }
 
     def _scan_place(dia, r_val, placed_list):
         """Scan the sheet for a valid placement respecting edge bias direction."""
+
+        if is_corner:
+            # Corner bias: find the closest valid position to the corner.
+            # Radiates outward from the corner like a quarter-disc.
+            target_x, target_y = _corner_targets[edge_bias]
+            best_pos = None
+            best_dist = float('inf')
+
+            y = spacing_mm
+            while y + dia + spacing_mm <= height_mm:
+                x = spacing_mm
+                while x + dia + spacing_mm <= width_mm:
+                    cx, cy = x + r_val, y + r_val
+                    dist = math.sqrt((cx - target_x) ** 2 + (cy - target_y) ** 2)
+                    if dist < best_dist:
+                        is_collision = any(
+                            (cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2
+                            for _, px, py, pr in placed_list)
+                        if not is_collision:
+                            best_dist = dist
+                            best_pos = (cx, cy)
+                    x += 1
+                y += 1
+            return best_pos
+
+        # Cardinal directions: linear scan
         if scan_y_reversed:
             y_start = height_mm - spacing_mm - dia
             y_ok = lambda yv: yv >= spacing_mm
@@ -178,7 +204,6 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
             x_step = 1
 
         if x_primary:
-            # Scan X as outer loop (column by column) for left/right bias
             x = x_start
             while x_ok(x):
                 y = y_start
@@ -190,7 +215,6 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
                     y += y_step
                 x += x_step
         else:
-            # Scan Y as outer loop (row by row) for top/bottom/diagonal/center bias
             y = y_start
             while y_ok(y):
                 x = x_start
