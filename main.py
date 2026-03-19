@@ -15,14 +15,14 @@ from config import (
     DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files
 )
-from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed
+from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
 from gcode_engine import generate_gcode, generate_gcode_from_placed
 from ui_dialogs import (
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, WebImportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
-    UserGuideWindow, AboutDialog, PadNotesWindow
+    UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow
 )
 from library_features import LibraryFeaturesMixin
 from tooling_tab import ToolingTabMixin
@@ -565,12 +565,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Button(generate_frame, text="Generate SVG", command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
         tk.Button(generate_frame, text="Generate G-code", command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
 
-        # Eject SD card checkbox below generate buttons (Windows only)
+        # Options below generate buttons
+        options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
+        options_frame.pack(pady=(0, 10))
+
+        self.preview_var = tk.BooleanVar(value=self.settings.get("show_preview", False))
+        tk.Checkbutton(options_frame, text="Preview before saving",
+                       variable=self.preview_var, bg=self.root.cget('bg'),
+                       command=lambda: self._save_checkbox("show_preview", self.preview_var)
+                       ).pack(side="left", padx=(0, 15))
+
         self.eject_sd_var = tk.BooleanVar(value=self.settings.get("eject_sd_after_gcode", False))
         if sys.platform == 'win32':
-            tk.Checkbutton(parent, text="Eject SD card after G-code export",
+            tk.Checkbutton(options_frame, text="Eject SD card after G-code export",
                            variable=self.eject_sd_var, bg=self.root.cget('bg'),
-                           command=self._on_eject_sd_changed).pack(pady=(0, 10))
+                           command=self._on_eject_sd_changed).pack(side="left")
 
     def toggle_custom_hole_entry(self):
         if self.hole_var.get() == "Custom":
@@ -1086,33 +1095,52 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             width_mm, height_mm = params['width_mm'], params['height_mm']
             card_paper_dims = params['card_paper_dims']
 
-            # Validate all materials fit
+            # Nest all materials and validate fit
+            all_placements = {}
+            first_mat_dims = (width_mm, height_mm, None)
             for material, var in self.material_vars.items():
                 if var.get():
                     mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
-                    if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                    placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                    # Check fit: count fixed-qty pads expected vs placed
+                    expected = sum(p['qty'] for p in pads if p['qty'] != 'max')
+                    actual = sum(1 for ps, _, _, _ in placed
+                                if any(p['size'] == ps and p['qty'] != 'max' for p in pads))
+                    if actual < expected:
                         size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
                         messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
                         return
+                    all_placements[material] = placed
+                    if first_mat_dims[2] is None and mat_polygon is None:
+                        first_mat_dims = (mat_w, mat_h, mat_polygon)
+                    elif mat_polygon:
+                        first_mat_dims = (mat_w, mat_h, mat_polygon)
+
+            if not all_placements:
+                messagebox.showwarning("No Materials Selected", "Please select at least one material.")
+                return
+
+            # Preview
+            if self.preview_var.get():
+                preview_w, preview_h, preview_poly = first_mat_dims
+                preview = NestingPreviewWindow(
+                    self.root, all_placements, preview_w, preview_h,
+                    polygon=preview_poly)
+                if preview.result != "save":
+                    return  # User clicked Adjust
 
             save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
             if not save_dir:
                 return
             self.settings["last_output_dir"] = save_dir
 
-            files_generated = False
-            for material, var in self.material_vars.items():
-                if var.get():
-                    mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
-                    filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                    generate_svg(pads, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
-                    files_generated = True
+            for material, placed in all_placements.items():
+                mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+                filename = os.path.join(save_dir, f"{base}_{material}.svg")
+                generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
 
-            if files_generated:
-                save_settings(self.settings)
-                messagebox.showinfo("Done", "SVG files generated successfully.")
-            else:
-                messagebox.showwarning("No Materials Selected", "Please select at least one material.")
+            save_settings(self.settings)
+            messagebox.showinfo("Done", "SVG files generated successfully.")
 
         except Exception as e:
             print(f"An error occurred during SVG generation: {e}")
@@ -1236,12 +1264,32 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showwarning("No Materials Selected", "Please select at least one material (G-code not supported for Exact Size).")
                 return
 
-            # Validate all materials fit
+            # Nest all materials and validate fit
+            all_placements = {}
+            first_mat_dims = (width_mm, height_mm, None)
             for material in supported_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
-                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                expected = sum(p['qty'] for p in pads if p['qty'] != 'max')
+                actual = sum(1 for ps, _, _, _ in placed
+                            if any(p['size'] == ps and p['qty'] != 'max' for p in pads))
+                if actual < expected:
                     size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
                     messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
+                    return
+                all_placements[material] = placed
+                if first_mat_dims[2] is None and mat_polygon is None:
+                    first_mat_dims = (mat_w, mat_h, mat_polygon)
+                elif mat_polygon:
+                    first_mat_dims = (mat_w, mat_h, mat_polygon)
+
+            # Preview
+            if self.preview_var.get():
+                preview_w, preview_h, preview_poly = first_mat_dims
+                preview = NestingPreviewWindow(
+                    self.root, all_placements, preview_w, preview_h,
+                    polygon=preview_poly)
+                if preview.result != "save":
                     return
 
             save_dir = filedialog.askdirectory(title="Select Folder to Save G-code", initialdir=self.settings.get("last_output_dir", ""))
@@ -1265,10 +1313,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             working_popup.update()
 
             try:
-                for material in supported_materials:
+                for material, placed in all_placements.items():
                     mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
                     filename = os.path.join(save_dir, f"{base}_{material}.gcode")
-                    generate_gcode(pads, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                    generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
             finally:
                 working_popup.destroy()
 
@@ -1772,6 +1820,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def open_about(self):
         AboutDialog(self.root)
+
+    def _save_checkbox(self, key, var):
+        """Save a checkbox setting."""
+        self.settings[key] = var.get()
+        save_settings(self.settings)
 
     def _on_eject_sd_changed(self):
         """Persist the eject SD card checkbox state."""

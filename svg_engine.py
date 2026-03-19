@@ -721,6 +721,16 @@ def _create_svg_drawing(filename, width_mm, height_mm, settings):
     return dwg, compatibility_mode, stroke_w
 
 
+def nest_pads(pads, material, width_mm, height_mm, settings, polygon=None):
+    """Run the nesting algorithm and return placed disc positions.
+
+    Returns list of (pad_size, cx, cy, r) tuples. Used by the preview
+    window to show the layout before committing to file generation.
+    """
+    placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
+    return placed
+
+
 def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
     placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
     dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)

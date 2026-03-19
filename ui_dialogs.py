@@ -2341,3 +2341,206 @@ class PadNotesWindow(tk.Toplevel):
     def on_close(self):
         self.result = None
         self.destroy()
+
+
+# Material colors for preview
+_PREVIEW_COLORS = {
+    'felt': '#4488CC',
+    'card': '#CC8844',
+    'leather': '#886633',
+    'exact_size': '#66AA66',
+}
+
+
+class NestingPreviewWindow(tk.Toplevel):
+    """Preview window showing the nested pad layout before file generation.
+
+    Shows the sheet boundary (or polygon) with circles at their nested
+    positions. User can proceed to save or go back to adjust settings.
+
+    Result:
+        self.result = "save" if user clicks Save, None if Adjust/close.
+    """
+
+    def __init__(self, parent, placements, width_mm, height_mm, polygon=None):
+        """
+        Args:
+            parent: Parent tk widget
+            placements: dict of {material: [(pad_size, cx, cy, r), ...]}
+            width_mm: Sheet width in mm
+            height_mm: Sheet height in mm
+            polygon: Optional list of (x, y) polygon points in mm
+        """
+        super().__init__(parent)
+        self.title("Nesting Preview")
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+
+        # First-run tutorial (tracked as attribute on parent)
+        if not getattr(parent, '_seen_preview_tutorial', False):
+            parent._seen_preview_tutorial = True
+            messagebox.showinfo("Nesting Preview",
+                "This preview shows how your pads will be arranged on the sheet.\n\n"
+                "If the layout looks good, click Save to generate the files.\n\n"
+                "If not, click Adjust to go back and change:\n"
+                "  \u2022 Edge bias (pack toward a different edge)\n"
+                "  \u2022 Sheet dimensions (bigger/smaller sheet)\n"
+                "  \u2022 Custom polygon shape\n"
+                "  \u2022 Pad sizes or quantities",
+                parent=self)
+
+        self._placements = placements
+        self._width_mm = width_mm
+        self._height_mm = height_mm
+        self._polygon = polygon
+
+        # Canvas
+        self._canvas = tk.Canvas(self, bg="white", highlightthickness=1,
+                                  highlightbackground="#999999")
+        self._canvas.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        self._canvas.bind("<Configure>", self._on_resize)
+
+        # Info bar
+        total_pads = sum(len(p) for p in placements.values())
+        materials = ", ".join(placements.keys())
+        info_text = f"{total_pads} pads on {width_mm:.0f} x {height_mm:.0f} mm"
+        if polygon:
+            info_text += " (custom shape)"
+        info_text += f"  |  Materials: {materials}"
+
+        tk.Label(self, text=info_text, bg=DIALOG_BG,
+                 font=("Helvetica", 9)).pack(pady=(0, 5))
+
+        # Legend
+        legend_frame = tk.Frame(self, bg=DIALOG_BG)
+        legend_frame.pack(pady=(0, 5))
+        for mat, color in _PREVIEW_COLORS.items():
+            if mat in placements:
+                tk.Label(legend_frame, text="\u25cf", fg=color, bg=DIALOG_BG,
+                         font=("Helvetica", 12)).pack(side="left")
+                tk.Label(legend_frame, text=mat, bg=DIALOG_BG,
+                         font=("Helvetica", 9)).pack(side="left", padx=(0, 10))
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=(0, 10))
+        tk.Button(btn_frame, text="Save Files", command=self._on_save,
+                  font=("Helvetica", 10, "bold"), width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Adjust", command=self._on_adjust,
+                  font=("Helvetica", 10), width=12).pack(side="left", padx=5)
+
+        # Size the window
+        self.geometry("700x550")
+        self.minsize(400, 300)
+
+        self.protocol("WM_DELETE_WINDOW", self._on_adjust)
+        self.wait_window(self)
+
+    def _on_save(self):
+        self.result = "save"
+        self.destroy()
+
+    def _on_adjust(self):
+        self.result = None
+        self.destroy()
+
+    def _on_resize(self, event=None):
+        self._draw()
+
+    def _draw(self):
+        cv = self._canvas
+        cv.delete("all")
+
+        cw = cv.winfo_width()
+        ch = cv.winfo_height()
+        if cw < 20 or ch < 20:
+            return
+
+        margin = 20
+        draw_w = cw - 2 * margin
+        draw_h = ch - 2 * margin
+
+        # Scale to fit sheet in canvas, maintaining aspect ratio
+        sheet_w = self._width_mm
+        sheet_h = self._height_mm
+        scale_x = draw_w / sheet_w if sheet_w > 0 else 1
+        scale_y = draw_h / sheet_h if sheet_h > 0 else 1
+        scale = min(scale_x, scale_y)
+
+        # Center the sheet in the canvas
+        offset_x = margin + (draw_w - sheet_w * scale) / 2
+        offset_y = margin + (draw_h - sheet_h * scale) / 2
+
+        # Draw sheet boundary
+        if self._polygon:
+            pts = []
+            for px, py in self._polygon:
+                pts.extend([offset_x + px * scale, offset_y + py * scale])
+            cv.create_polygon(pts, fill="#F8F8F0", outline="#888888", width=2)
+        else:
+            cv.create_rectangle(
+                offset_x, offset_y,
+                offset_x + sheet_w * scale,
+                offset_y + sheet_h * scale,
+                fill="#F8F8F0", outline="#888888", width=2)
+
+        # Draw pads
+        for material, placed in self._placements.items():
+            color = _PREVIEW_COLORS.get(material, '#888888')
+            # Lighter fill
+            fill = self._lighten(color, 0.7)
+
+            for pad_size, cx, cy, r in placed:
+                sx = offset_x + cx * scale
+                sy = offset_y + cy * scale
+                sr = r * scale
+
+                cv.create_oval(sx - sr, sy - sr, sx + sr, sy + sr,
+                               fill=fill, outline=color, width=1)
+
+                # Label with pad size (skip if too small to read)
+                if sr > 12:
+                    # Font size proportional to circle radius
+                    font_size = max(6, min(11, int(sr * 0.5)))
+                    cv.create_text(sx, sy, text=f"{pad_size:.1f}",
+                                   fill=color, font=("Helvetica", font_size))
+
+        # Usage percentage
+        sheet_area = sheet_w * sheet_h
+        if self._polygon:
+            # Approximate polygon area via shoelace
+            pts = self._polygon
+            n = len(pts)
+            area = 0
+            for i in range(n):
+                j = (i + 1) % n
+                area += pts[i][0] * pts[j][1]
+                area -= pts[j][0] * pts[i][1]
+            sheet_area = abs(area) / 2
+
+        pad_area = 0
+        for placed in self._placements.values():
+            for _, _, _, r in placed:
+                pad_area += 3.14159 * r * r
+
+        if sheet_area > 0:
+            usage_pct = pad_area / sheet_area * 100
+            cv.create_text(cw - margin, ch - 5,
+                           text=f"{usage_pct:.0f}% used",
+                           fill="#666666", font=("Helvetica", 9),
+                           anchor="se")
+
+    @staticmethod
+    def _lighten(hex_color, factor):
+        """Lighten a hex color toward white."""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        r = int(r + (255 - r) * factor)
+        g = int(g + (255 - g) * factor)
+        b = int(b + (255 - b) * factor)
+        return f"#{r:02x}{g:02x}{b:02x}"
