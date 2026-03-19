@@ -1169,17 +1169,65 @@ class TonerTabMixin:
             return
         lib_name, prof_name = key
         profile = self._toner_profiles[lib_name][prof_name]
+        self._toner_notes_dialog(prof_name, profile)
+
+    def _toner_notes_dialog(self, prof_name, profile, prompt_text=None):
+        """Open a multi-line notes editor for a profile."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Notes \u2014 {prof_name}")
+        dlg.resizable(True, True)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
+        frame.pack(fill="both", expand=True)
+
+        if prompt_text:
+            tk.Label(frame, text=prompt_text, bg=bg,
+                     font=("Helvetica", 10), wraplength=400,
+                     justify="left").pack(pady=(0, 8))
+
+        tk.Label(frame, text=f"Notes for \"{prof_name}\":", bg=bg,
+                 font=("Helvetica", 10)).pack(anchor="w", pady=(0, 4))
+
+        text_frame = tk.Frame(frame)
+        text_frame.pack(fill="both", expand=True)
+
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        notes_text = tk.Text(text_frame, height=8, width=50,
+                              font=("Helvetica", 10), wrap="word",
+                              yscrollcommand=scrollbar.set)
+        notes_text.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=notes_text.yview)
 
         current = profile.get('notes', '')
-        new_notes = simpledialog.askstring(
-            "Edit Notes",
-            f"Notes for: {prof_name}",
-            initialvalue=current,
-            parent=self.root)
-        if new_notes is not None:  # None = cancelled, "" = cleared intentionally
+        notes_text.insert("1.0", current)
+        notes_text.focus_set()
+
+        def save():
+            new_notes = notes_text.get("1.0", tk.END).strip()
             profile['notes'] = new_notes
             save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
-            self._toner_on_profile_selected()  # Refresh info display
+            # Refresh info display if profile dialog is open
+            if hasattr(self, '_prof_info_label'):
+                try:
+                    self._toner_on_profile_selected()
+                except Exception:
+                    pass
+            dlg.destroy()
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x", pady=(8, 0))
+        tk.Button(btn_frame, text="Save", command=save, width=10).pack(
+            side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy,
+                  width=10).pack(side="left")
+
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        dlg.minsize(400, 250)
 
     def _toner_new_profile(self, parent_dlg):
         """Create a new horn profile via guided dialog."""
@@ -1717,10 +1765,23 @@ class TonerTabMixin:
             dlg.destroy()
             self._toner_begin_listening()
 
+        def done_with_notes():
+            dlg.destroy()
+            # Prompt for notes after session
+            lib = self._toner_active_library
+            prof_name = self._toner_active_profile
+            if lib and prof_name and lib in self._toner_profiles:
+                profile = self._toner_profiles[lib].get(prof_name)
+                if profile:
+                    self._toner_notes_dialog(prof_name, profile,
+                        prompt_text="How did this horn sound to you? "
+                        "Add your impressions \u2014 bright, dark, rich, "
+                        "stuffy, free-blowing, anything you noticed.")
+
         tk.Button(btn_frame, text="Resume Capturing",
                   command=resume).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Done",
-                  command=dlg.destroy).pack(side="left")
+                  command=done_with_notes).pack(side="left")
 
     def _toner_cancel_capture(self):
         """Cancel button handler."""
