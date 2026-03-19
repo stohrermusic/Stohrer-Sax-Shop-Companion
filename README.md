@@ -57,7 +57,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner (Experimental)
-- 12-wheel strobe tuner modeled after the Peterson Stroboconn 6T-5
+- 12-wheel stroboscopic tuner
 - Per-ring octave brightness from real spectral data
 - Transposition support (Concert, Bb, Eb, F)
 - Reference tone player, analog VU meter, configurable colors and frame rate
