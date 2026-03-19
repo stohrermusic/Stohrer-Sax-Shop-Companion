@@ -345,6 +345,9 @@ DEFAULT_SETTINGS = {
     "seen_sdcard_tutorial": False,
     "seen_kerf_test_tutorial": False,
 
+    # TONER ACCESS
+    "toner_unlocked": False,
+
     # VISIBLE TABS (Feature Set)
     "visible_tabs": {
         "Key Height Library": True,
