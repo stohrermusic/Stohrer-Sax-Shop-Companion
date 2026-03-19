@@ -509,9 +509,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             "sw": "\u2199", "s": "\u2193", "se": "\u2198",
         }
         for direction, (row, col) in dpad_positions.items():
-            btn = tk.Button(bias_frame, text=dpad_labels[direction], width=2, height=1,
-                           font=("Helvetica", 8), relief="raised",
-                           command=lambda d=direction: self._set_edge_bias(d))
+            if direction == "center":
+                # Center button toggles between "center" and "off"
+                btn = tk.Button(bias_frame, text="ctr", width=2, height=1,
+                               font=("Helvetica", 8), relief="raised",
+                               command=self._toggle_center_bias)
+            else:
+                btn = tk.Button(bias_frame, text=dpad_labels[direction], width=2, height=1,
+                               font=("Helvetica", 8), relief="raised",
+                               command=lambda d=direction: self._set_edge_bias(d))
             btn.grid(row=row, column=col, padx=1, pady=1)
             self._edge_bias_buttons[direction] = btn
         self._update_edge_bias_display()
@@ -730,12 +736,38 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.settings["edge_bias"] = direction
         self._update_edge_bias_display()
 
+    def _toggle_center_bias(self):
+        """Toggle center button between 'off' and 'center'.
+
+        First click from any other direction → off (original linear scan).
+        Second click → center (radial from middle).
+        """
+        current = self.edge_bias_var.get()
+        if current == "off":
+            self._set_edge_bias("center")
+        elif current == "center":
+            self._set_edge_bias("off")
+        else:
+            # Coming from a directional bias — go to off first
+            self._set_edge_bias("off")
+
     def _update_edge_bias_display(self):
         """Highlight the active edge bias button."""
         active = self.edge_bias_var.get()
         default_bg = self._edge_bias_default_bg
+
+        # Update center button label
+        center_btn = self._edge_bias_buttons.get("center")
+        if center_btn:
+            if active == "off":
+                center_btn.configure(text="off")
+            else:
+                center_btn.configure(text="ctr")
+
         for direction, btn in self._edge_bias_buttons.items():
-            if direction == active:
+            # "off" highlights the center button
+            is_active = (direction == active) or (direction == "center" and active == "off")
+            if is_active:
                 if IS_MACOS:
                     btn.configure(relief="sunken")
                 else:
