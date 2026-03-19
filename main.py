@@ -202,8 +202,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Import Settings from Folder...", command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
-        pad_file_menu.add_command(label="Send G-code to SD Card...", command=self.on_send_to_sd_card)
-        pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Feature Set...", command=self._open_feature_set)
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label="Exit", command=self.on_exit)
