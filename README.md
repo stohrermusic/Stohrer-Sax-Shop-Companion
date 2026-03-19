@@ -92,6 +92,12 @@ Download the latest release for your platform from the [Releases](https://github
 
 **macOS users**: The app is not signed with an Apple Developer certificate, so macOS will block it on first launch. To open it, right-click (or Control-click) the app and select **Open**, then click **Open** in the dialog. You only need to do this once — after that it launches normally.
 
+If the DMG shows as "damaged," open Terminal and run:
+```
+xattr -cr ~/Downloads/StohrerSaxShopCompanion.dmg
+```
+Then open the DMG again. This strips the quarantine flag that macOS adds to downloaded files.
+
 ### From Source
 ```bash
 pip install -r requirements.txt
