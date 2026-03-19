@@ -1173,6 +1173,12 @@ class TonerTabMixin:
         lib_name, prof_name = key
         profile = self._toner_profiles[lib_name][prof_name]
 
+        # Release the profile dialog's grab so the report is interactive
+        try:
+            self._prof_listbox.winfo_toplevel().grab_release()
+        except Exception:
+            pass
+
         sessions = profile.get('sessions', [])
         fp = compute_fingerprint(sessions)
         if fp['capture_count'] == 0:
