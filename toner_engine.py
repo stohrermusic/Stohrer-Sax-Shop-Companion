@@ -48,6 +48,17 @@ MIN_FUNDAMENTAL_HZ = 80.0
 # Maximum fundamental frequency (altissimo range ~ 1500 Hz)
 MAX_FUNDAMENTAL_HZ = 2000.0
 
+# Calibration capture: written chromatic scale Bb3 to F6
+# These are WRITTEN pitches — the transposition to concert pitch
+# happens using SAX_TRANSPOSITIONS when computing expected frequencies.
+CALIBRATION_NOTES = [
+    'A#3', 'B3',
+    'C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4',
+    'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5', 'A#5', 'B5',
+    'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6',
+]
+CALIBRATION_DURATION_S = 5.0  # Seconds per note
+
 
 # ============================================
 # AUDIO RING BUFFER (independent copy from tuner_engine)

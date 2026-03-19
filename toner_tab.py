@@ -27,6 +27,7 @@ try:
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
         CAPTURE_DELAY_S, CAPTURE_DURATION_S, MIN_PROFILE_NOTES, SAX_TYPES,
         SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
+        CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         load_tone_profiles, save_tone_profiles, flatten_profiles,
         analyze_audio_file,
@@ -171,11 +172,14 @@ class TonerTabMixin:
         self._toner_stable_note = ""        # Note currently being held steady
         self._toner_stable_count = 0        # Consecutive frames of same note
         self._toner_comparison = None       # Fingerprint dict for ghost overlay
-        self._toner_capture_mode = "structured"  # "structured" or "free"
+        self._toner_capture_mode = "structured"  # "structured", "free", or "calibration"
         # Structured: ~1s stability, 1s delay, 5s recording
         # Free: ~0.5s stability, continuous micro-captures
+        # Calibration: guided chromatic scale, 5s per note, trust the player
         self._toner_stable_threshold = 25  # Updated per mode
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
+        self._toner_cal_index = 0          # Current note index in calibration sequence
+        self._toner_cal_recording = False  # Whether we're actively recording in calibration
 
     def create_toner_tab(self, parent):
         """Build the Toner tab UI."""
@@ -497,7 +501,7 @@ class TonerTabMixin:
         self._toner_mode_var = tk.StringVar(value="structured")
         mode_combo = ttk.Combobox(
             prof_frame, textvariable=self._toner_mode_var,
-            values=["structured", "free"], state="readonly", width=9)
+            values=["structured", "free", "calibration"], state="readonly", width=9)
         mode_combo.pack(side="left", padx=(0, 2))
 
         self._toner_capture_btn = tk.Button(
@@ -1313,6 +1317,14 @@ class TonerTabMixin:
             self._toner_capture_state = 'free_listening'
             self._toner_free_accumulator = []
             label_text = "Free mode \u2014 play anything..."
+        elif self._toner_capture_mode == "calibration":
+            self._toner_cal_index = 0
+            self._toner_cal_recording = False
+            self._toner_capture_frames = []
+            self._toner_capture_start = 0.0
+            self._toner_capture_state = 'calibration'
+            note = self._toner_transpose_note(CALIBRATION_NOTES[0])
+            label_text = f"Calibration: play {note}..."
         else:
             self._toner_stable_threshold = 25
             self._toner_capture_state = 'listening'
@@ -1869,6 +1881,97 @@ class TonerTabMixin:
                     text="Free mode \u2014 play anything...")
             self._toner_capture_progress.configure(
                 text=f"({len(notes_so_far)} notes captured)")
+            return
+
+        # --- CALIBRATION: guided note-by-note capture ---
+        if state == 'calibration':
+            if self._toner_cal_index >= len(CALIBRATION_NOTES):
+                # All notes done
+                self._toner_stop_capture()
+                messagebox.showinfo("Calibration Complete",
+                    f"Calibration capture finished!\n"
+                    f"{len(CALIBRATION_NOTES)} notes recorded.")
+                return
+
+            expected_written = CALIBRATION_NOTES[self._toner_cal_index]
+            display_note = self._toner_transpose_note(expected_written)
+            has_signal = result.fundamental_freq > 0 and result.harmonics
+
+            if not self._toner_cal_recording:
+                # Waiting for player to start this note
+                if has_signal:
+                    # Sound detected — start recording
+                    self._toner_cal_recording = True
+                    self._toner_capture_start = time.time()
+                    self._toner_capture_frames = []
+                    self._toner_capture_label.configure(
+                        text=f"Recording {display_note}...")
+                else:
+                    note_num = self._toner_cal_index + 1
+                    total = len(CALIBRATION_NOTES)
+                    self._toner_capture_label.configure(
+                        text=f"Play {display_note} ({note_num}/{total})")
+                    self._toner_capture_progress.configure(text="waiting...")
+                return
+
+            # Recording this note
+            elapsed = time.time() - self._toner_capture_start
+
+            if has_signal:
+                self._toner_capture_frames.append({
+                    'note': expected_written,  # Trust the guide, not the detector
+                    'detected_note': result.fundamental_note,  # What detector saw
+                    'freq': result.fundamental_freq,
+                    'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                    'descriptors': dict(result.descriptors),
+                })
+
+            remaining = CALIBRATION_DURATION_S - elapsed
+            n_frames = len(self._toner_capture_frames)
+            self._toner_capture_label.configure(
+                text=f"Recording {display_note}... {remaining:.1f}s")
+            self._toner_capture_progress.configure(
+                text=f"({n_frames} frames)")
+
+            if remaining <= 0:
+                # Save this note's capture
+                if self._toner_capture_frames:
+                    averaged = average_captures(self._toner_capture_frames)
+                    avg_freq = sum(f['freq'] for f in self._toner_capture_frames) / len(self._toner_capture_frames)
+
+                    # Check what the detector thought vs what we asked for
+                    from collections import Counter
+                    detected = Counter(f['detected_note'] for f in self._toner_capture_frames)
+                    top_detected = detected.most_common(1)[0][0] if detected else "?"
+
+                    capture_entry = {
+                        'note': expected_written,
+                        'detected_as': top_detected,
+                        'fundamental_freq': round(avg_freq, 2),
+                        'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
+                        'descriptors': {k: round(v, 3) for k, v in averaged['descriptors'].items()},
+                        'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+                        'n_frames': len(self._toner_capture_frames),
+                        'method': 'calibration',
+                    }
+
+                    if self._toner_active_session is not None:
+                        self._toner_active_session['captures'].append(capture_entry)
+                        self._toner_save_active_session()
+
+                # Move to next note
+                self._toner_cal_index += 1
+                self._toner_cal_recording = False
+                self._toner_capture_frames = []
+
+                if self._toner_cal_index < len(CALIBRATION_NOTES):
+                    next_note = self._toner_transpose_note(
+                        CALIBRATION_NOTES[self._toner_cal_index])
+                    note_num = self._toner_cal_index + 1
+                    total = len(CALIBRATION_NOTES)
+                    self._toner_capture_label.configure(
+                        text=f"Play {next_note} ({note_num}/{total})")
+                    self._toner_capture_progress.configure(text="waiting...")
             return
 
     def _toner_free_save_micro_capture(self):
