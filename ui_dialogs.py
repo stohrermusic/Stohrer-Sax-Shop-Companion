@@ -2567,7 +2567,7 @@ class NestingPreviewWindow(tk.Toplevel):
         # Update info label
         self._info_label.configure(
             text=f"{len(placed)} pads ({material}) on "
-                 f"{width_mm:.0f} x {height_mm:.0f} mm"
+                 f"{sheet_w:.0f} x {sheet_h:.0f} mm"
                  f"{' (custom shape)' if self._polygon else ''}")
 
     @staticmethod
