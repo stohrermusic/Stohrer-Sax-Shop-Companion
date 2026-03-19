@@ -319,8 +319,8 @@ DEFAULT_SETTINGS = {
         "Serial Lookup": True,
         "Screw Specs": True,
         "Tooling": True,
-        "Tuner": True,
-        "Toner": True,
+        "Tuner": False,
+        "Toner": False,
     },
 
     "key_layout": {

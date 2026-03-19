@@ -1697,7 +1697,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                            font=("Helvetica", 10)).pack(anchor="w")
             check_vars[name] = var
 
-        tk.Label(frame, text="\nExperimental", bg=bg,
+        tk.Label(frame, text="\nExperimental / In Progress", bg=bg,
                  font=("Helvetica", 11, "bold")).pack(anchor="w")
         for name in experimental_tabs:
             var = tk.BooleanVar(value=visible.get(name, True))
