@@ -2161,6 +2161,16 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Overall Brightness: master brightness for the strobe disc segments")
         self._blank()
 
+        self._h2("Microphone")
+        self._body("The tuner analyzes audio from your microphone. A quality mic "
+                    "makes a significant difference in accuracy, especially for "
+                    "low notes where the fundamental frequency may be weak.")
+        self._bullet("Recommended: Audio-Technica AT2020 USB (no audio interface needed)")
+        self._bullet("Any condenser mic through an audio interface will also work well")
+        self._bullet("Laptop/built-in mics work for basic tuning but may struggle "
+                      "with low register notes")
+        self._blank()
+
         self._body("The tuner activates automatically when you switch to the Tuner tab "
                     "and stops when you leave it, so there is no CPU or audio usage when "
                     "you are on other tabs.")

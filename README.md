@@ -64,6 +64,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Per-ring octave brightness from real spectral data
 - Transposition support (Concert, Bb, Eb, F)
 - Reference tone player, analog VU meter, configurable colors and frame rate
+- A quality microphone is recommended (e.g. Audio-Technica AT2020 USB)
 
 ### Harmonic Tone Analyzer (Experimental)
 - Real-time harmonic spectrum analyzer for saxophone
@@ -72,11 +73,12 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Five VU-style gauges: intonation, resonance, richness, brightness, darkness
 - Brightness/darkness adapted per saxophone type using Benade break frequencies
 - Tone profiles: capture harmonic fingerprints of individual horns
-  - Three capture modes: structured (held notes), free (natural playing), file import (WAV)
+  - Four capture modes: structured, free, calibration (guided chromatic scale), file import (WAV)
   - Profiles are a fixed setup: horn + player + mouthpiece + reed
   - Organized into libraries with import/export
 - Comparison tool with filtering, per-note and horn-average views
 - Auto-transposition by saxophone type with concert pitch toggle
+- A quality microphone is essential — laptop mics are not recommended for tone analysis
 
 ### General
 - Feature Set (File > Feature Set) — choose which tabs to show
