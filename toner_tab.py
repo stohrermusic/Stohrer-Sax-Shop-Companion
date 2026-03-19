@@ -1111,6 +1111,9 @@ class TonerTabMixin:
         tk.Button(btn_frame, text="New Profile...",
                   command=lambda: self._toner_new_profile(dlg)).pack(
                       side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Report",
+                  command=self._toner_show_profile_report).pack(
+                      side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Edit Notes...",
                   command=self._toner_edit_profile_notes).pack(
                       side="left", padx=(0, 5))
@@ -1158,6 +1161,203 @@ class TonerTabMixin:
         lib_name, prof_name = key
         profile = self._toner_profiles[lib_name][prof_name]
         self._prof_info_label.configure(text=_format_profile_info(profile))
+
+    def _toner_show_profile_report(self):
+        """Show a single-profile report window."""
+        sel = self._prof_listbox.curselection()
+        if not sel:
+            return
+        key = self._prof_list_keys[sel[0]]
+        if key is None:
+            return
+        lib_name, prof_name = key
+        profile = self._toner_profiles[lib_name][prof_name]
+
+        sessions = profile.get('sessions', [])
+        fp = compute_fingerprint(sessions)
+        if fp['capture_count'] == 0:
+            messagebox.showinfo("No Data",
+                "This profile has no captures yet.")
+            return
+
+        from toner_engine import BREAK_FREQUENCIES
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(f"Report \u2014 {prof_name}")
+        dlg.geometry("650x550")
+        dlg.transient(self.root)
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+
+        main = tk.Frame(dlg, bg=bg)
+        main.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # --- Header ---
+        horn_type = profile.get('horn_type', '?')
+        break_freq = BREAK_FREQUENCIES.get(horn_type, 750)
+        header = f"{profile.get('horn_make', '')} {profile.get('horn_model', '')}".strip()
+        if profile.get('serial'):
+            header += f"  (s/n {profile['serial']})"
+        tk.Label(main, text=header, bg=bg, fg=fg,
+                 font=("Helvetica", 13, "bold")).pack(anchor="w")
+
+        setup_parts = [horn_type]
+        if profile.get('player'):
+            setup_parts.append(profile['player'])
+        if profile.get('mouthpiece'):
+            setup_parts.append(profile['mouthpiece'])
+        if profile.get('reed'):
+            setup_parts.append(profile['reed'])
+        tk.Label(main, text=" | ".join(setup_parts), bg=bg, fg=fg,
+                 font=("Helvetica", 9)).pack(anchor="w")
+
+        tk.Label(main, text=f"{fp['capture_count']} captures, "
+                 f"{fp['note_count']} notes  |  break freq: {break_freq} Hz",
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 8))
+
+        # --- Descriptors ---
+        desc_frame = tk.LabelFrame(main, text="Tone Character", bg=bg, fg=fg,
+                                    font=("Helvetica", 10, "bold"))
+        desc_frame.pack(fill="x", pady=(0, 8))
+
+        d = fp.get('descriptors', {})
+        desc_row = tk.Frame(desc_frame, bg=bg)
+        desc_row.pack(fill="x", padx=10, pady=8)
+
+        for label, key in [("Resonance", "resonance"), ("Richness", "richness"),
+                           ("Brightness", "brightness"), ("Darkness", "darkness"),
+                           ("Fullness", "fullness")]:
+            val = d.get(key, 0)
+            col = tk.Frame(desc_row, bg=bg)
+            col.pack(side="left", expand=True)
+            tk.Label(col, text=f"{val:.0%}", bg=bg, fg=fg,
+                     font=("Helvetica", 16, "bold")).pack()
+            tk.Label(col, text=label, bg=bg, fg=fg,
+                     font=("Helvetica", 8)).pack()
+
+        # --- Harmonic chart ---
+        chart_frame = tk.LabelFrame(main, text="Harmonic Profile (average)",
+                                     bg=bg, fg=fg,
+                                     font=("Helvetica", 10, "bold"))
+        chart_frame.pack(fill="both", expand=True, pady=(0, 8))
+
+        chart_cv = tk.Canvas(chart_frame, bg="white", highlightthickness=0,
+                              height=150)
+        chart_cv.pack(fill="both", expand=True, padx=5, pady=5)
+
+        chart_colors = ["#2196F3"]
+
+        def draw_chart(event=None):
+            chart_cv.delete("all")
+            w = chart_cv.winfo_width()
+            h = chart_cv.winfo_height()
+            if w < 50 or h < 50:
+                return
+
+            hdb = fp.get('harmonics_db', [])
+            if not hdb:
+                return
+
+            margin_l, margin_r, margin_t, margin_b = 40, 10, 10, 25
+            cw = w - margin_l - margin_r
+            ch = h - margin_t - margin_b
+            db_min, db_max = -60.0, 5.0
+            max_h = len(hdb)
+
+            # Grid
+            for db in range(-60, 6, 10):
+                y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
+                chart_cv.create_line(margin_l, y, w - margin_r, y,
+                                      fill="#DDDDDD", width=1)
+                chart_cv.create_text(margin_l - 4, y, text=f"{db}",
+                                      fill="#888888", font=("Helvetica", 7),
+                                      anchor="e")
+
+            # Zero line
+            y0 = margin_t + ch * (1.0 - (0 - db_min) / (db_max - db_min))
+            chart_cv.create_line(margin_l, y0, w - margin_r, y0,
+                                  fill="#AAAAAA", width=1, dash=(4, 2))
+
+            for hi in range(max_h):
+                x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
+                chart_cv.create_text(x, h - 5, text=f"H{hi+1}",
+                                      fill="#888888", font=("Helvetica", 7))
+
+            # Plot
+            color = "#2196F3"
+            points = []
+            for hi, db in enumerate(hdb):
+                x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
+                clamped = max(db_min, min(db_max, db))
+                y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
+                points.extend([x, y])
+
+            if len(points) >= 4:
+                chart_cv.create_line(*points, fill=color, width=2, smooth=True)
+                for j in range(0, len(points), 2):
+                    chart_cv.create_oval(
+                        points[j] - 4, points[j + 1] - 4,
+                        points[j] + 4, points[j + 1] + 4,
+                        fill=color, outline="")
+
+        chart_cv.bind("<Configure>", draw_chart)
+
+        # --- Per-note table ---
+        per_note = fp.get('per_note', {})
+        if per_note:
+            table_frame = tk.LabelFrame(main, text="Per-Note Descriptors",
+                                         bg=bg, fg=fg,
+                                         font=("Helvetica", 10, "bold"))
+            table_frame.pack(fill="x", pady=(0, 8))
+
+            # Scrollable
+            table_cv = tk.Canvas(table_frame, bg=bg, highlightthickness=0,
+                                  height=120)
+            table_sb = tk.Scrollbar(table_frame, orient="vertical",
+                                     command=table_cv.yview)
+            table_inner = tk.Frame(table_cv, bg=bg)
+
+            table_inner.bind("<Configure>",
+                lambda e: table_cv.configure(scrollregion=table_cv.bbox("all")))
+            table_cv.create_window((0, 0), window=table_inner, anchor="nw")
+            table_cv.configure(yscrollcommand=table_sb.set)
+
+            table_cv.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+            table_sb.pack(side="right", fill="y")
+
+            # Header
+            hdr = tk.Frame(table_inner, bg=bg)
+            hdr.pack(fill="x")
+            for text, w in [("Note", 6), ("Res", 5), ("Rich", 5),
+                            ("Bri", 5), ("Drk", 5), ("Full", 5)]:
+                tk.Label(hdr, text=text, width=w, bg=bg, fg=fg,
+                         font=("Helvetica", 8, "bold")).pack(side="left")
+
+            sorted_notes = sorted(per_note.keys(), key=_note_sort_key)
+            for note in sorted_notes:
+                pn = per_note[note]
+                nd = pn.get('descriptors', {})
+                row = tk.Frame(table_inner, bg=bg)
+                row.pack(fill="x")
+                tk.Label(row, text=note, width=6, bg=bg, fg=fg,
+                         font=("Helvetica", 8)).pack(side="left")
+                for key in ['resonance', 'richness', 'brightness',
+                           'darkness', 'fullness']:
+                    val = nd.get(key, 0)
+                    tk.Label(row, text=f"{val:.0%}", width=5, bg=bg, fg=fg,
+                             font=("Helvetica", 8)).pack(side="left")
+
+        # Notes
+        if profile.get('notes'):
+            notes_frame = tk.LabelFrame(main, text="Notes", bg=bg, fg=fg,
+                                         font=("Helvetica", 10, "bold"))
+            notes_frame.pack(fill="x", pady=(0, 8))
+            tk.Label(notes_frame, text=profile['notes'], bg=bg, fg=fg,
+                     font=("Helvetica", 9), wraplength=600,
+                     justify="left").pack(padx=10, pady=5, anchor="w")
+
+        tk.Button(main, text="Close", command=dlg.destroy).pack(pady=(5, 0))
 
     def _toner_edit_profile_notes(self):
         """Edit the notes field of the selected profile."""
