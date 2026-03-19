@@ -361,18 +361,16 @@ class TonerEngine:
         return result
 
     def _detect_fundamental(self, mags, bin_freq):
-        """Detect fundamental frequency using peak-picking with sub-harmonic check
-        and temporal hysteresis.
+        """Detect fundamental frequency using peak-picking with harmonic
+        series verification.
 
         Strategy:
         1. Find the strongest spectral peak in the valid range
-        2. Check if sub-harmonics (f/2, f/3, f/4) have significant energy,
-           which would indicate the strong peak is actually a harmonic
-        3. Apply hysteresis: if the new detection is an octave jump from
-           the previous frame, require stronger evidence
-
-        This handles both pure tones (single peak = fundamental) and
-        saxophone signals (strong upper harmonics don't fool it).
+        2. Check if sub-harmonics (f/2, f/3) could be the real fundamental
+           by verifying they have their OWN harmonic series
+        3. A sub-harmonic is only accepted if multiple of its harmonics
+           (2f, 3f, 4f) also have peaks — not just the sub-harmonic alone
+        4. Apply temporal hysteresis for stability
         """
         min_bin = max(1, int(MIN_FUNDAMENTAL_HZ / bin_freq))
         max_bin = min(len(mags) - 2, int(MAX_FUNDAMENTAL_HZ / bin_freq))
@@ -388,33 +386,49 @@ class TonerEngine:
         if strongest_mag <= 0:
             return 0.0
 
-        # Sub-harmonic threshold: 15% of strongest peak.
-        # Higher than before (was 8%) to avoid false octave drops from
-        # spectral leakage or room resonance.
-        sub_threshold = strongest_mag * 0.15
+        # Noise floor for peak detection
+        noise_floor = float(np.median(mags[min_bin:max_bin])) if max_bin > min_bin else 0.0
 
-        # Check sub-harmonics: could the strongest peak be harmonic 2, 3, or 4
-        # of a lower fundamental?
+        # Check sub-harmonics: could the strongest peak be harmonic 2 or 3
+        # of a lower fundamental? Only accept if the sub-harmonic has its
+        # own harmonic series (multiple peaks at 2x, 3x, 4x).
         candidate_bin = strongest_bin
-        for divisor in [2, 3, 4]:
+        for divisor in [2, 3]:
             sub_bin = int(round(strongest_bin / divisor))
             if sub_bin < min_bin:
                 continue
 
-            # Look for a peak near the sub-harmonic position
+            # Find peak near sub-harmonic position
             lo = max(1, sub_bin - 2)
             hi = min(len(mags) - 2, sub_bin + 2)
             local_peak = lo + int(np.argmax(mags[lo:hi + 1]))
             local_mag = float(mags[local_peak])
 
-            if local_mag > sub_threshold:
-                # Verify this is a real peak: must be clearly above its
-                # surroundings, not just a spectral leakage bump
-                left_mag = float(mags[max(0, local_peak - 4)])
-                right_mag = float(mags[min(len(mags) - 1, local_peak + 4)])
-                if local_mag > left_mag * 1.5 and local_mag > right_mag * 1.5:
-                    candidate_bin = local_peak
-                    break
+            # Sub-harmonic must be a real peak (above noise, above neighbors)
+            if local_mag < noise_floor * 3.0:
+                continue
+            left_mag = float(mags[max(0, local_peak - 4)])
+            right_mag = float(mags[min(len(mags) - 1, local_peak + 4)])
+            if not (local_mag > left_mag * 1.5 and local_mag > right_mag * 1.5):
+                continue
+
+            # Verify harmonic series: check that multiples 2x, 3x, 4x of the
+            # sub-harmonic also have peaks. Need at least 2 out of 3.
+            sub_freq = local_peak * bin_freq
+            harmonics_found = 0
+            for mult in [2, 3, 4]:
+                h_bin = int(round(local_peak * mult))
+                if h_bin >= len(mags) - 1:
+                    continue
+                h_lo = max(1, h_bin - 3)
+                h_hi = min(len(mags) - 2, h_bin + 3)
+                h_peak_mag = float(np.max(mags[h_lo:h_hi + 1]))
+                if h_peak_mag > noise_floor * 3.0:
+                    harmonics_found += 1
+
+            if harmonics_found >= 2:
+                candidate_bin = local_peak
+                break
 
         # Parabolic interpolation on the candidate
         if 0 < candidate_bin < len(mags) - 1:
