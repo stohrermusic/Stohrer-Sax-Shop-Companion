@@ -68,24 +68,28 @@ class ConfirmationDialog(tk.Toplevel):
     def __init__(self, parent, title, message):
         super().__init__(parent)
         self.title(title)
-        self.geometry("450x150")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
+        self.minsize(450, 150)
 
         self.result = False
         self.dont_show_again = tk.BooleanVar()
 
         tk.Label(self, text=message, wraplength=430, bg=DIALOG_BG, justify="left").pack(padx=10, pady=10)
-        
+
         checkbox_frame = tk.Frame(self, bg=DIALOG_BG)
         checkbox_frame.pack(pady=5)
         tk.Checkbutton(checkbox_frame, text="Don't show this message again", variable=self.dont_show_again, bg=DIALOG_BG).pack()
-        
+
         button_frame = tk.Frame(self, bg=DIALOG_BG)
         button_frame.pack(pady=10)
         tk.Button(button_frame, text="Yes, Proceed", command=self.on_yes).pack(side="left", padx=10)
         tk.Button(button_frame, text="No, Cancel", command=self.on_no).pack(side="left", padx=10)
+
+        # Let the window size itself to fit the content
+        self.update_idletasks()
+        self.geometry("")
 
         self.protocol("WM_DELETE_WINDOW", self.on_no)
         self.wait_window(self)
