@@ -348,10 +348,17 @@ class LibraryFeaturesMixin:
         self.key_preset_menu['values'] = preset_list
         self.key_preset_menu.set("Load Key Set")
 
+        # Remember last used library
+        self.settings["last_key_library"] = lib_name
+
     def update_key_library_dropdown(self):
         lib_names = ["All Libraries"] + sorted(self.key_presets.keys())
         self.key_library_dropdown['values'] = lib_names
-        self.key_library_var.set("All Libraries")
+        last_lib = self.settings.get("last_key_library", "All Libraries")
+        if last_lib in lib_names:
+            self.key_library_var.set(last_lib)
+        else:
+            self.key_library_var.set("All Libraries")
         self.on_key_library_selected()
     
     def on_import_key_sets(self):
