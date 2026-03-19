@@ -564,10 +564,17 @@ class TonerEngine:
         f_b = self._break_freq
 
         # --- Resonance: how well harmonics align to ideal positions ---
+        # Scaled for saxophone reality: even a mediocre horn is within
+        # a few cents. The gauge maps 85-100% of the raw resonance score
+        # to the full 0-100% range. Most horns read upper half (as they
+        # should), great horns peg right, genuinely bad bores read low.
+        # Raw 85% (7.5 cents mean dev) = gauge 0%, raw 100% = gauge 100%.
         deviations = [abs(h.cents_deviation) for h in harmonics if h.harmonic_number > 1]
         if deviations:
             mean_dev = sum(deviations) / len(deviations)
-            resonance = max(0.0, min(1.0, 1.0 - mean_dev / 50.0))
+            raw = max(0.0, min(1.0, 1.0 - mean_dev / 50.0))
+            # Rescale 0.85-1.0 to 0.0-1.0
+            resonance = max(0.0, min(1.0, (raw - 0.85) / 0.15))
         else:
             resonance = 0.5
 
