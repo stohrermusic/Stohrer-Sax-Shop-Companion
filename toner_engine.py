@@ -705,8 +705,16 @@ class TonerEngine:
 # Minimum unique notes to consider a profile "complete"
 MIN_PROFILE_NOTES = 8
 
+# Attack transient skip — applied to ALL capture modes.
+# Saxophone attacks are 40-120ms depending on articulation. The attack
+# contains non-harmonic broadband energy that doesn't represent the
+# horn's sustained tone character. Research confirms the sustained
+# portion is the stable harmonic fingerprint we want to measure.
+# (Saldanha & Corso 1964, Caetano et al., PMC 6166322)
+ATTACK_SKIP_FRAMES = 3    # ~100ms at 30fps — skip these after note onset
+
 # Capture timing — structured mode
-CAPTURE_DELAY_S = 1.0     # Seconds to skip at start (attack transient)
+CAPTURE_DELAY_S = 1.0     # Seconds to skip at start (includes attack)
 CAPTURE_DURATION_S = 5.0  # Seconds to average
 
 # Free mode: shorter stability requirement, no fixed recording period
@@ -937,8 +945,10 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     for i in range(1, len(results)):
         note = results[i][0]
         if note != current_note or i == len(results) - 1:
-            # Segment ended
+            # Segment ended — skip attack transient at start
             segment = results[segment_start:i]
+            if len(segment) > ATTACK_SKIP_FRAMES:
+                segment = segment[ATTACK_SKIP_FRAMES:]  # Skip attack
             if len(segment) >= FREE_MIN_FRAMES:
                 # Build a capture from this segment
                 frames = []

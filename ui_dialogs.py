@@ -2285,6 +2285,10 @@ class UserGuideWindow(tk.Toplevel):
                       "records and averages 5 seconds of data. No button-pressing while playing.")
         self._bullet("Move to the next note and it captures again. Play through the "
                       "horn's range at your own pace.")
+        self._bullet("The first ~100ms of each note is automatically skipped. "
+                      "The attack transient contains non-harmonic energy from "
+                      "tonguing that doesn't represent the horn's sustained tone "
+                      "character. All capture modes apply this skip.")
         self._bullet("Capture at least 8 unique notes to build a harmonic fingerprint.")
         self._bullet("Click Stop when done. Profiles are saved automatically.")
         self._bullet("Use Edit Notes to annotate profiles with your subjective "

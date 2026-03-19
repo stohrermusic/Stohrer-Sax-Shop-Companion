@@ -27,7 +27,7 @@ try:
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
         CAPTURE_DELAY_S, CAPTURE_DURATION_S, MIN_PROFILE_NOTES, SAX_TYPES,
         SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
-        CALIBRATION_NOTES, CALIBRATION_DURATION_S,
+        ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         load_tone_profiles, save_tone_profiles, flatten_profiles,
         analyze_audio_file, check_mic_quality,
@@ -2104,27 +2104,24 @@ class TonerTabMixin:
 
         # --- FREE LISTENING: continuous micro-capture mode ---
         if state == 'free_listening':
-            # Accumulate frames while note is stable
+            # Accumulate frames while note is stable (skip attack transient)
             if note and result.harmonics:
                 if note == self._toner_stable_note:
                     self._toner_stable_count += 1
-                    self._toner_free_accumulator.append({
-                        'note': result.fundamental_note,
-                        'freq': result.fundamental_freq,
-                        'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                        'descriptors': dict(result.descriptors),
-                    })
+                    # Skip first few frames (attack transient ~100ms)
+                    if self._toner_stable_count > ATTACK_SKIP_FRAMES:
+                        self._toner_free_accumulator.append({
+                            'note': result.fundamental_note,
+                            'freq': result.fundamental_freq,
+                            'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                            'descriptors': dict(result.descriptors),
+                        })
                 else:
                     # Note changed — save accumulated if enough, start new
                     self._toner_free_save_micro_capture()
                     self._toner_stable_note = note
                     self._toner_stable_count = 1
-                    self._toner_free_accumulator = [{
-                        'note': result.fundamental_note,
-                        'freq': result.fundamental_freq,
-                        'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                        'descriptors': dict(result.descriptors),
-                    }]
+                    self._toner_free_accumulator = []
             else:
                 # Silence — save what we have
                 self._toner_free_save_micro_capture()
@@ -2178,10 +2175,10 @@ class TonerTabMixin:
                     self._toner_capture_progress.configure(text="waiting...")
                 return
 
-            # Recording this note
+            # Recording this note (skip attack transient ~100ms)
             elapsed = time.time() - self._toner_capture_start
 
-            if has_signal:
+            if has_signal and elapsed > 0.1:
                 self._toner_capture_frames.append({
                     'note': display_note,
                     'detected_note': result.fundamental_note,
