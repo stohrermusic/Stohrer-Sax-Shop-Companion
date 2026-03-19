@@ -9,8 +9,8 @@ from tkinter import messagebox
 # ==========================================
 
 APP_NAME = "StohrerSaxShopCompanion"
-APP_VERSION = "1.61"
-APP_BUILD_DATE = "2026-02-16"
+APP_VERSION = "1.9"
+APP_BUILD_DATE = "2026-03-19"
 
 def get_config_dir():
     """

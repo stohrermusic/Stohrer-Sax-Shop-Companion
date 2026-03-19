@@ -161,9 +161,9 @@ print(f"  Bright tone: brightness={r.descriptors['brightness']:.2f} darkness={r.
 test("Bright tone reads as bright", r.descriptors['brightness'] > 0.3,
      f"got {r.descriptors['brightness']:.2f}")
 
-# Dark tone: strong lower, weak upper
+# Dark tone: low fundamental so harmonics stay below break frequency (~750 Hz)
 amps_dark = {1: 1.0, 2: 0.8, 3: 0.5, 4: 0.3, 5: 0.05, 6: 0.02}
-audio = make_audio(440.0, amps_dark)
+audio = make_audio(200.0, amps_dark)
 r = engine.analyze_buffer(audio)
 print(f"  Dark tone: brightness={r.descriptors['brightness']:.2f} darkness={r.descriptors['darkness']:.2f}")
 test("Dark tone reads as dark", r.descriptors['darkness'] > r.descriptors['brightness'],
