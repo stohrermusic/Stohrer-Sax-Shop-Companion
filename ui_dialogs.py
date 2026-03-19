@@ -2396,6 +2396,22 @@ class NestingPreviewWindow(tk.Toplevel):
         self._width_mm = width_mm
         self._height_mm = height_mm
         self._polygon = polygon
+        self._materials = list(placements.keys())
+
+        # Material selector (if multiple materials)
+        if len(self._materials) > 1:
+            sel_frame = tk.Frame(self, bg=DIALOG_BG)
+            sel_frame.pack(pady=(10, 0))
+            tk.Label(sel_frame, text="Material:", bg=DIALOG_BG,
+                     font=("Helvetica", 10)).pack(side="left", padx=(0, 5))
+            self._mat_var = tk.StringVar(value=self._materials[0])
+            mat_combo = ttk.Combobox(
+                sel_frame, textvariable=self._mat_var,
+                values=self._materials, state="readonly", width=12)
+            mat_combo.pack(side="left")
+            mat_combo.bind("<<ComboboxSelected>>", lambda e: self._draw())
+        else:
+            self._mat_var = tk.StringVar(value=self._materials[0])
 
         # Canvas
         self._canvas = tk.Canvas(self, bg="white", highlightthickness=1,
@@ -2403,26 +2419,10 @@ class NestingPreviewWindow(tk.Toplevel):
         self._canvas.pack(fill="both", expand=True, padx=10, pady=(10, 5))
         self._canvas.bind("<Configure>", self._on_resize)
 
-        # Info bar
-        total_pads = sum(len(p) for p in placements.values())
-        materials = ", ".join(placements.keys())
-        info_text = f"{total_pads} pads on {width_mm:.0f} x {height_mm:.0f} mm"
-        if polygon:
-            info_text += " (custom shape)"
-        info_text += f"  |  Materials: {materials}"
-
-        tk.Label(self, text=info_text, bg=DIALOG_BG,
-                 font=("Helvetica", 9)).pack(pady=(0, 5))
-
-        # Legend
-        legend_frame = tk.Frame(self, bg=DIALOG_BG)
-        legend_frame.pack(pady=(0, 5))
-        for mat, color in _PREVIEW_COLORS.items():
-            if mat in placements:
-                tk.Label(legend_frame, text="\u25cf", fg=color, bg=DIALOG_BG,
-                         font=("Helvetica", 12)).pack(side="left")
-                tk.Label(legend_frame, text=mat, bg=DIALOG_BG,
-                         font=("Helvetica", 9)).pack(side="left", padx=(0, 10))
+        # Info label (updated per material)
+        self._info_label = tk.Label(self, text="", bg=DIALOG_BG,
+                                     font=("Helvetica", 9))
+        self._info_label.pack(pady=(0, 5))
 
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
@@ -2487,31 +2487,29 @@ class NestingPreviewWindow(tk.Toplevel):
                 offset_y + sheet_h * scale,
                 fill="#F8F8F0", outline="#888888", width=2)
 
-        # Draw pads
-        for material, placed in self._placements.items():
-            color = _PREVIEW_COLORS.get(material, '#888888')
-            # Lighter fill
-            fill = self._lighten(color, 0.7)
+        # Draw pads for selected material only
+        material = self._mat_var.get()
+        placed = self._placements.get(material, [])
+        color = _PREVIEW_COLORS.get(material, '#888888')
+        fill = self._lighten(color, 0.7)
 
-            for pad_size, cx, cy, r in placed:
-                sx = offset_x + cx * scale
-                sy = offset_y + cy * scale
-                sr = r * scale
+        for pad_size, cx, cy, r in placed:
+            sx = offset_x + cx * scale
+            sy = offset_y + cy * scale
+            sr = r * scale
 
-                cv.create_oval(sx - sr, sy - sr, sx + sr, sy + sr,
-                               fill=fill, outline=color, width=1)
+            cv.create_oval(sx - sr, sy - sr, sx + sr, sy + sr,
+                           fill=fill, outline=color, width=1)
 
-                # Label with pad size (skip if too small to read)
-                if sr > 12:
-                    # Font size proportional to circle radius
-                    font_size = max(6, min(11, int(sr * 0.5)))
-                    cv.create_text(sx, sy, text=f"{pad_size:.1f}",
-                                   fill=color, font=("Helvetica", font_size))
+            # Label with pad size (skip if too small to read)
+            if sr > 12:
+                font_size = max(6, min(11, int(sr * 0.5)))
+                cv.create_text(sx, sy, text=f"{pad_size:.1f}",
+                               fill=color, font=("Helvetica", font_size))
 
-        # Usage percentage
+        # Usage percentage for this material
         sheet_area = sheet_w * sheet_h
         if self._polygon:
-            # Approximate polygon area via shoelace
             pts = self._polygon
             n = len(pts)
             area = 0
@@ -2521,17 +2519,19 @@ class NestingPreviewWindow(tk.Toplevel):
                 area -= pts[j][0] * pts[i][1]
             sheet_area = abs(area) / 2
 
-        pad_area = 0
-        for placed in self._placements.values():
-            for _, _, _, r in placed:
-                pad_area += 3.14159 * r * r
+        pad_area = sum(3.14159 * r * r for _, _, _, r in placed)
+        usage_pct = pad_area / sheet_area * 100 if sheet_area > 0 else 0
 
-        if sheet_area > 0:
-            usage_pct = pad_area / sheet_area * 100
-            cv.create_text(cw - margin, ch - 5,
-                           text=f"{usage_pct:.0f}% used",
-                           fill="#666666", font=("Helvetica", 9),
-                           anchor="se")
+        cv.create_text(cw - margin, ch - 5,
+                       text=f"{usage_pct:.0f}% used",
+                       fill="#666666", font=("Helvetica", 9),
+                       anchor="se")
+
+        # Update info label
+        self._info_label.configure(
+            text=f"{len(placed)} pads ({material}) on "
+                 f"{width_mm:.0f} x {height_mm:.0f} mm"
+                 f"{' (custom shape)' if self._polygon else ''}")
 
     @staticmethod
     def _lighten(hex_color, factor):
