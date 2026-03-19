@@ -1999,7 +1999,11 @@ class UserGuideWindow(tk.Toplevel):
                     "scrap pieces where some edges are cleaner than others.")
         self._bullet("Click an arrow to bias packing toward that edge or corner")
         self._bullet("Click the center dot to return to default behavior (no bias)")
-        self._bullet("For rectangular sheets, the algorithm scans from the biased edge inward")
+        self._bullet("Cardinal directions (N, S, E, W) scan from that edge inward, "
+                      "filling row by row or column by column")
+        self._bullet("Corner directions (NW, NE, SW, SE) radiate outward from the corner "
+                      "\u2014 small pads nestle into the corner first, larger ones fan out "
+                      "behind them in a wedge pattern")
         self._bullet("For custom polygon shapes, positions closer to the biased edge or "
                       "corner are scored more favorably")
         self._bullet("Example: a triangular scrap with two clean edges forming a right angle "
@@ -2013,25 +2017,23 @@ class UserGuideWindow(tk.Toplevel):
                     "arranged on the sheet before any files are written.")
         self._bullet("Preview works with one material at a time \u2014 select a single "
                       "material to use it")
-        self._bullet("The preview shows the sheet boundary with circles at their "
-                      "nested positions, labeled with pad sizes, and a material "
-                      "usage percentage")
+        self._bullet("The preview shows the sheet boundary (or custom polygon) with "
+                      "circles at their nested positions, labeled with pad sizes, and "
+                      "a material usage percentage")
         self._bullet("Click Save Files to proceed to file generation")
         self._bullet("Click Adjust to go back and change edge bias, sheet dimensions, "
                       "custom polygon shape, or pad sizes/quantities, then generate again")
-        self._bullet("Useful for testing different edge bias directions or sheet sizes "
-                      "without wasting time opening output files")
+        self._bullet("Works in scrap mode too \u2014 preview each scrap piece before "
+                      "committing. Combine with edge bias and custom polygon shapes "
+                      "to optimize irregular scrap pieces.")
         self._blank()
 
         self._h2("SD Card & Eject")
-        self._body("Two ways to get G-code onto an SD card:")
-        self._bullet("Eject checkbox (below Generate buttons): check \"Eject SD card after "
-                      "G-code export\" and the app will automatically eject the SD card after "
-                      "generating. If the destination isn't a removable drive, nothing extra "
-                      "happens. (Windows only)")
-        self._bullet("File > Send G-code to SD Card: a guided workflow that selects a "
-                      "previously-generated .gcode file, copies it to the SD card, optionally "
-                      "clears old files, and ejects.")
+        self._body("Check \"Eject SD card after G-code export\" below the Generate buttons. "
+                    "When generating G-code to a removable drive (USB/SD card), the app "
+                    "will automatically eject it when done so you can safely remove it. "
+                    "If the destination isn't a removable drive, nothing extra happens. "
+                    "(Windows only)")
         self._blank()
 
     def _section_key_heights(self):

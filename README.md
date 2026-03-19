@@ -14,9 +14,12 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 #### Nesting & Layout
 - Smart circle-packing algorithm to maximize material usage
 - Edge bias d-pad to direct packing toward a specific edge or corner
+  - Cardinal directions scan from the edge inward
+  - Corner directions radiate outward — small pads nestle in the corner, larger ones fan out
 - Nesting preview — see the layout before generating, adjust and retry
 - Custom polygon shapes for irregular leather skins and scrap pieces
 - Scrap mode — place pads across multiple pieces, tracking remaining between sheets
+  - Preview, edge bias, and custom polygons all work together in scrap mode
 - Max fill mode — use `18.0 x max` to fill remaining space with a size
 
 #### Engraving
