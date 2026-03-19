@@ -1503,10 +1503,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def update_pad_library_dropdown(self):
         lib_names = ["All Libraries"] + sorted(self.pad_presets.keys())
         self.pad_library_dropdown['values'] = lib_names
-        # Restore last used library, or default to All Libraries
-        last_lib = self.settings.get("last_pad_library", "All Libraries")
-        if last_lib in lib_names:
-            self.pad_library_var.set(last_lib)
+        # Default to My Presets if it exists, otherwise All Libraries
+        if "My Presets" in lib_names:
+            self.pad_library_var.set("My Presets")
         else:
             self.pad_library_var.set("All Libraries")
         self.on_pad_library_selected()

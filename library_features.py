@@ -354,9 +354,8 @@ class LibraryFeaturesMixin:
     def update_key_library_dropdown(self):
         lib_names = ["All Libraries"] + sorted(self.key_presets.keys())
         self.key_library_dropdown['values'] = lib_names
-        last_lib = self.settings.get("last_key_library", "All Libraries")
-        if last_lib in lib_names:
-            self.key_library_var.set(last_lib)
+        if "My Presets" in lib_names:
+            self.key_library_var.set("My Presets")
         else:
             self.key_library_var.set("All Libraries")
         self.on_key_library_selected()
