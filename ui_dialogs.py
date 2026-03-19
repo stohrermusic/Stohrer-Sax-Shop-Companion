@@ -2165,10 +2165,16 @@ class UserGuideWindow(tk.Toplevel):
         self._body("The tuner analyzes audio from your microphone. A quality mic "
                     "makes a significant difference in accuracy, especially for "
                     "low notes where the fundamental frequency may be weak.")
+        self._bullet("The mic needs to capture the full frequency range of the "
+                      "saxophone (down to ~100 Hz for baritone). This requires a "
+                      "sample rate of at least 44.1 kHz and a flat low-frequency response.")
         self._bullet("Recommended: Audio-Technica AT2020 USB (no audio interface needed)")
         self._bullet("Any condenser mic through an audio interface will also work well")
         self._bullet("Laptop/built-in mics work for basic tuning but may struggle "
                       "with low register notes")
+        self._bullet("Bluetooth headset mics do not work \u2014 their sample rate "
+                      "is too low (16 kHz) for harmonic analysis")
+        self._bullet("Select your mic via Options > Input Device")
         self._blank()
 
         self._body("The tuner activates automatically when you switch to the Tuner tab "
@@ -2192,9 +2198,15 @@ class UserGuideWindow(tk.Toplevel):
                     "the pitch detector to misidentify notes \u2014 especially in the low "
                     "register. A condenser mic or USB mic designed for music will give "
                     "dramatically better results.")
+        self._bullet("The mic needs a flat frequency response down to at least 100 Hz "
+                      "and a sample rate of 44.1 kHz or higher. Without this, low "
+                      "register fundamentals are inaudible to the analyzer.")
         self._bullet("Recommended: Audio-Technica AT2020 USB (no audio interface needed)")
         self._bullet("Any condenser mic through an audio interface will also work well")
         self._bullet("Laptop/built-in mics are not recommended for tone analysis")
+        self._bullet("Bluetooth headset mics do not work \u2014 their sample rate "
+                      "is too low (16 kHz) for harmonic analysis")
+        self._bullet("Select your mic via Options > Input Device")
         self._bullet("Room acoustics and mic placement affect readings. Anomalies "
                       "that appear on every horn in the same room are likely the room, "
                       "not the horns. Compare across different environments to "

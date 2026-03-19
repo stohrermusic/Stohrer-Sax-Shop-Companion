@@ -1814,7 +1814,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         frame.pack(fill="both", expand=True)
 
         tk.Label(frame, text="Select audio input device:", bg=bg,
-                 font=("Helvetica", 10)).pack(pady=(0, 8))
+                 font=("Helvetica", 10)).pack(pady=(0, 4))
+        tk.Label(frame, text="Showing devices with 44.1 kHz+ sample rate.\n"
+                 "Bluetooth headsets are excluded (sample rate too low).",
+                 bg=bg, fg="#666666", font=("Helvetica", 8)).pack(pady=(0, 8))
 
         current_dev = self.settings.get("audio_input_device")
         dev_names = ["System Default"] + [name for _, name in devices]
