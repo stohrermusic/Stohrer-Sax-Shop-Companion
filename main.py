@@ -1095,47 +1095,42 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             width_mm, height_mm = params['width_mm'], params['height_mm']
             card_paper_dims = params['card_paper_dims']
 
-            # Nest all materials and validate fit
-            all_placements = {}
-            first_mat_dims = (width_mm, height_mm, None)
-            for material, var in self.material_vars.items():
-                if var.get():
-                    mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
-                    placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
-                    # Check fit: count fixed-qty pads expected vs placed
-                    expected = sum(p['qty'] for p in pads if p['qty'] != 'max')
-                    actual = sum(1 for ps, _, _, _ in placed
-                                if any(p['size'] == ps and p['qty'] != 'max' for p in pads))
-                    if actual < expected:
-                        size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
-                        messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
-                        return
-                    all_placements[material] = placed
-                    if first_mat_dims[2] is None and mat_polygon is None:
-                        first_mat_dims = (mat_w, mat_h, mat_polygon)
-                    elif mat_polygon:
-                        first_mat_dims = (mat_w, mat_h, mat_polygon)
-
-            if not all_placements:
+            selected_materials = [m for m, var in self.material_vars.items() if var.get()]
+            if not selected_materials:
                 messagebox.showwarning("No Materials Selected", "Please select at least one material.")
                 return
 
-            # Preview
-            if self.preview_var.get():
-                preview_w, preview_h, preview_poly = first_mat_dims
-                preview = NestingPreviewWindow(
-                    self.root, all_placements, preview_w, preview_h,
-                    polygon=preview_poly)
-                if preview.result != "save":
-                    return  # User clicked Adjust
+            use_preview = self.preview_var.get()
+            save_dir = None
 
-            save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
-            if not save_dir:
-                return
-            self.settings["last_output_dir"] = save_dir
-
-            for material, placed in all_placements.items():
+            # Process each material (with optional per-material preview)
+            for material in selected_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+
+                # Nest (may re-run if user adjusts and retries)
+                placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+
+                # Validate fit
+                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                    size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
+                    messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
+                    return
+
+                # Preview this material
+                if use_preview:
+                    preview = NestingPreviewWindow(
+                        self.root, {material: placed}, mat_w, mat_h,
+                        polygon=mat_polygon)
+                    if preview.result != "save":
+                        return  # User clicked Adjust — go back for this material
+
+                # Ask for save directory once (on first material)
+                if save_dir is None:
+                    save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
+                    if not save_dir:
+                        return
+                    self.settings["last_output_dir"] = save_dir
+
                 filename = os.path.join(save_dir, f"{base}_{material}.svg")
                 generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
 
@@ -1264,38 +1259,35 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showwarning("No Materials Selected", "Please select at least one material (G-code not supported for Exact Size).")
                 return
 
-            # Nest all materials and validate fit
-            all_placements = {}
-            first_mat_dims = (width_mm, height_mm, None)
+            use_preview = self.preview_var.get()
+            save_dir = None
+
+            # Process each material with optional per-material preview
+            all_placed = {}
             for material in supported_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+
                 placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
-                expected = sum(p['qty'] for p in pads if p['qty'] != 'max')
-                actual = sum(1 for ps, _, _, _ in placed
-                            if any(p['size'] == ps and p['qty'] != 'max' for p in pads))
-                if actual < expected:
+
+                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
                     size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
                     messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
                     return
-                all_placements[material] = placed
-                if first_mat_dims[2] is None and mat_polygon is None:
-                    first_mat_dims = (mat_w, mat_h, mat_polygon)
-                elif mat_polygon:
-                    first_mat_dims = (mat_w, mat_h, mat_polygon)
 
-            # Preview
-            if self.preview_var.get():
-                preview_w, preview_h, preview_poly = first_mat_dims
-                preview = NestingPreviewWindow(
-                    self.root, all_placements, preview_w, preview_h,
-                    polygon=preview_poly)
-                if preview.result != "save":
+                if use_preview:
+                    preview = NestingPreviewWindow(
+                        self.root, {material: placed}, mat_w, mat_h,
+                        polygon=mat_polygon)
+                    if preview.result != "save":
+                        return
+
+                all_placed[material] = (placed, mat_w, mat_h, mat_polygon)
+
+            if save_dir is None:
+                save_dir = filedialog.askdirectory(title="Select Folder to Save G-code", initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
                     return
-
-            save_dir = filedialog.askdirectory(title="Select Folder to Save G-code", initialdir=self.settings.get("last_output_dir", ""))
-            if not save_dir:
-                return
-            self.settings["last_output_dir"] = save_dir
+                self.settings["last_output_dir"] = save_dir
 
             # Show working indicator
             working_popup = tk.Toplevel(self.root)
@@ -1313,8 +1305,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             working_popup.update()
 
             try:
-                for material, placed in all_placements.items():
-                    mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
+                for material, (placed, mat_w, mat_h, mat_polygon) in all_placed.items():
                     filename = os.path.join(save_dir, f"{base}_{material}.gcode")
                     generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
             finally:
