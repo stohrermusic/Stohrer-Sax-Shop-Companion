@@ -152,11 +152,12 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
         discs.sort(key=lambda x: -x[1])
     scan_y_reversed = edge_bias in ("s", "se", "sw")
     scan_x_reversed = edge_bias in ("e", "ne", "se")
-    is_corner = edge_bias in ("ne", "nw", "se", "sw")
+    is_radial = edge_bias in ("center", "ne", "nw", "se", "sw")
     x_primary = edge_bias in ("w", "e")
 
-    # Corner targets for distance-based placement
-    _corner_targets = {
+    # Radial targets for distance-based placement
+    _radial_targets = {
+        "center": (width_mm / 2, height_mm / 2),
         "nw": (0, 0),
         "ne": (width_mm, 0),
         "sw": (0, height_mm),
@@ -166,10 +167,10 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     def _scan_place(dia, r_val, placed_list):
         """Scan the sheet for a valid placement respecting edge bias direction."""
 
-        if is_corner:
-            # Corner bias: find the closest valid position to the corner.
-            # Radiates outward from the corner like a quarter-disc.
-            target_x, target_y = _corner_targets[edge_bias]
+        if is_radial:
+            # Radial bias: find the closest valid position to the target point.
+            # Center radiates outward from the middle; corners from their corner.
+            target_x, target_y = _radial_targets[edge_bias]
             best_pos = None
             best_dist = float('inf')
 
