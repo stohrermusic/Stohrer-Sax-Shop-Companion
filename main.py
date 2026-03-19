@@ -1674,13 +1674,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Label(frame, text="Feature Set", bg=bg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 5))
         tk.Label(frame, text="Choose which tabs to show.\n"
-                 "Pad SVG Generator is always available.",
+                 "The SVG Generator is always on.",
                  bg=bg, font=("Helvetica", 9)).pack(pady=(0, 10))
-
-        # Pad Generator — always on, shown as disabled checkbox
-        tk.Checkbutton(frame, text="Pad SVG Generator", bg=bg,
-                       font=("Helvetica", 10), state="disabled",
-                       variable=tk.BooleanVar(value=True)).pack(anchor="w")
 
         visible = self.settings.get("visible_tabs", {})
 
