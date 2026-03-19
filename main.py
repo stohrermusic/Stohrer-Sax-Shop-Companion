@@ -50,6 +50,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.root.configure(bg=self.default_bg)
 
         self.settings = load_settings()
+
+        # Ensure Toner is hidden unless explicitly unlocked
+        if not self.settings.get("toner_unlocked"):
+            visible = self.settings.get("visible_tabs", {})
+            if visible.get("Toner"):
+                visible["Toner"] = False
+                save_settings(self.settings)
+
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
         self.custom_polygon = None  # For custom shape nesting
