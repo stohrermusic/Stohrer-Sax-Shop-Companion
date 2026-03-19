@@ -148,34 +148,59 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     scan_y_reversed = edge_bias in ("s", "se", "sw")
     scan_x_reversed = edge_bias in ("e", "ne", "se")
 
+    # Determine scan priority: horizontal biases scan columns first,
+    # vertical/diagonal biases scan rows first.
+    # This ensures "left" bias fills left-to-right (column by column)
+    # and "top" bias fills top-to-bottom (row by row).
+    # Pure horizontal biases scan columns first. Corners and vertical
+    # biases scan rows first (corners get their horizontal component
+    # from the reversed scan direction within each row).
+    x_primary = edge_bias in ("w", "e")
+
     def _scan_place(dia, r_val, placed_list):
         """Scan the sheet for a valid placement respecting edge bias direction."""
         if scan_y_reversed:
-            y = height_mm - spacing_mm - dia
-            y_end = lambda yv: yv >= spacing_mm
+            y_start = height_mm - spacing_mm - dia
+            y_ok = lambda yv: yv >= spacing_mm
             y_step = -1
         else:
-            y = spacing_mm
-            y_end = lambda yv: yv + dia + spacing_mm <= height_mm
+            y_start = spacing_mm
+            y_ok = lambda yv: yv + dia + spacing_mm <= height_mm
             y_step = 1
 
-        while y_end(y):
-            if scan_x_reversed:
-                x = width_mm - spacing_mm - dia
-                x_end = lambda xv: xv >= spacing_mm
-                x_step = -1
-            else:
-                x = spacing_mm
-                x_end = lambda xv: xv + dia + spacing_mm <= width_mm
-                x_step = 1
+        if scan_x_reversed:
+            x_start = width_mm - spacing_mm - dia
+            x_ok = lambda xv: xv >= spacing_mm
+            x_step = -1
+        else:
+            x_start = spacing_mm
+            x_ok = lambda xv: xv + dia + spacing_mm <= width_mm
+            x_step = 1
 
-            while x_end(x):
-                cx, cy = x + r_val, y + r_val
-                is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
-                if not is_collision:
-                    return (cx, cy)
+        if x_primary:
+            # Scan X as outer loop (column by column) for left/right bias
+            x = x_start
+            while x_ok(x):
+                y = y_start
+                while y_ok(y):
+                    cx, cy = x + r_val, y + r_val
+                    is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
+                    if not is_collision:
+                        return (cx, cy)
+                    y += y_step
                 x += x_step
-            y += y_step
+        else:
+            # Scan Y as outer loop (row by row) for top/bottom/diagonal/center bias
+            y = y_start
+            while y_ok(y):
+                x = x_start
+                while x_ok(x):
+                    cx, cy = x + r_val, y + r_val
+                    is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
+                    if not is_collision:
+                        return (cx, cy)
+                    x += x_step
+                y += y_step
         return None
 
     # Place fixed pads
