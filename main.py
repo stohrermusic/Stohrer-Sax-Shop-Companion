@@ -289,6 +289,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         menu = self._tab_menus.get(selected)
         if menu:
             self.root.config(menu=menu)
+            # Force menu bar refresh — works around tkinter bug where
+            # the menu bar disappears in fullscreen/maximized mode
+            self.root.update_idletasks()
 
         # Start/stop audio tabs
         if selected == str(self.tuner_tab_frame):
@@ -1560,8 +1563,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def on_save_pad_preset(self):
         active_library = self.pad_library_var.get()
         if not active_library or active_library == "All Libraries":
-            messagebox.showwarning("Save Error", "Please select a specific library to save to.")
-            return
+            # No library selected — ask for one or create "My Presets"
+            lib_name = simpledialog.askstring("Library Name",
+                "Enter a library name to save to:",
+                initialvalue="My Presets")
+            if not lib_name:
+                return
+            active_library = lib_name.strip()
+            if not active_library:
+                return
+            if active_library not in self.pad_presets:
+                self.pad_presets[active_library] = {}
+            self.update_pad_library_dropdown()
+            self.pad_library_var.set(active_library)
+            self.on_pad_library_selected()
 
         name = simpledialog.askstring("Save Pad Preset", "Enter a name for this preset:")
         if name:
