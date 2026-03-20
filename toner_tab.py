@@ -1502,7 +1502,14 @@ class TonerTabMixin:
         add_field("Player:", "player")
         add_field("Mouthpiece:", "mouthpiece")
         add_field("Reed:", "reed")
-        add_field("Notes:", "notes")
+
+        # Notes — multi-line
+        notes_row = tk.Frame(frame, bg=bg)
+        notes_row.pack(fill="x", pady=2)
+        tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
+        notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
+        notes_text.pack(side="left", fill="x", expand=True)
 
         def save():
             name = fields["name"].get().strip()
@@ -1528,7 +1535,7 @@ class TonerTabMixin:
                 'player': fields["player"].get().strip(),
                 'mouthpiece': fields["mouthpiece"].get().strip(),
                 'reed': fields["reed"].get().strip(),
-                'notes': fields["notes"].get().strip(),
+                'notes': notes_text.get("1.0", tk.END).strip(),
                 'created': time.strftime("%Y-%m-%d"),
                 'sessions': [],
             }
@@ -1773,7 +1780,14 @@ class TonerTabMixin:
         add_field("Player:", "player")
         add_field("Mouthpiece:", "mouthpiece")
         add_field("Reed:", "reed")
-        add_field("Notes:", "notes")
+
+        # Notes — multi-line
+        notes_row = tk.Frame(frame, bg=bg)
+        notes_row.pack(fill="x", pady=2)
+        tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
+        notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
+        notes_text.pack(side="left", fill="x", expand=True)
 
         def save_and_start():
             name = fields["name"].get().strip()
@@ -1802,7 +1816,7 @@ class TonerTabMixin:
                 'player': fields["player"].get().strip(),
                 'mouthpiece': fields["mouthpiece"].get().strip(),
                 'reed': fields["reed"].get().strip(),
-                'notes': fields["notes"].get().strip(),
+                'notes': notes_text.get("1.0", tk.END).strip(),
                 'created': time.strftime("%Y-%m-%d"),
                 'sessions': [],
             }
@@ -3099,7 +3113,14 @@ class TonerTabMixin:
         add_field("Player:", "player")
         add_field("Mouthpiece:", "mouthpiece")
         add_field("Reed:", "reed")
-        add_field("Notes:", "notes")
+
+        # Notes — multi-line
+        notes_row = tk.Frame(frame, bg=bg)
+        notes_row.pack(fill="x", pady=2)
+        tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
+        notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
+        notes_text.pack(side="left", fill="x", expand=True)
 
         def save_and_import():
             name = fields["name"].get().strip()
@@ -3124,7 +3145,7 @@ class TonerTabMixin:
                 'player': fields["player"].get().strip(),
                 'mouthpiece': fields["mouthpiece"].get().strip(),
                 'reed': fields["reed"].get().strip(),
-                'notes': fields["notes"].get().strip(),
+                'notes': notes_text.get("1.0", tk.END).strip(),
                 'created': time.strftime("%Y-%m-%d"),
                 'sessions': [],
             }
