@@ -43,6 +43,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install system audio libraries (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
       - name: Install dependencies (full)
         if: matrix.full_build
         run: |
