@@ -104,6 +104,12 @@ xattr -cr ~/Downloads/StohrerSaxShopCompanion-macOS.zip
 ```
 Then unzip and open again. This strips the quarantine flag that macOS adds to downloaded files.
 
+**Linux users**: The tuner and toner require PortAudio. Install it with:
+```
+sudo apt install libportaudio2
+```
+The app works without it, but the audio tabs will be unavailable.
+
 ### From Source
 ```bash
 pip install -r requirements.txt
