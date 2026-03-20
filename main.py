@@ -273,6 +273,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
         toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
+        toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
 
         # --- Add Help menu to all tab menus ---
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
@@ -1888,6 +1889,102 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
             side="left")
+
+    def _open_capture_threshold(self):
+        """Open capture threshold dialog with live level meter."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Capture Threshold")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = self.root.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Set the minimum signal level to trigger capture.\n"
+                 "Raise the threshold if chair noises or breathing\n"
+                 "trigger false captures.",
+                 bg=bg, font=("Helvetica", 9), justify="left").pack(pady=(0, 10))
+
+        # Live level meter
+        meter_frame = tk.Frame(frame, bg=bg)
+        meter_frame.pack(fill="x", pady=(0, 10))
+
+        tk.Label(meter_frame, text="Current level:", bg=bg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
+
+        level_cv = tk.Canvas(meter_frame, bg="#333333", highlightthickness=1,
+                              highlightbackground="#888888",
+                              width=200, height=16)
+        level_cv.pack(side="left")
+        level_bar = level_cv.create_rectangle(0, 0, 0, 16, fill="#44AA44", outline="")
+        level_text = level_cv.create_text(100, 8, text="", fill="white",
+                                           font=("Helvetica", 7))
+
+        # Threshold slider
+        slider_frame = tk.Frame(frame, bg=bg)
+        slider_frame.pack(fill="x", pady=(0, 10))
+
+        tk.Label(slider_frame, text="Threshold:", bg=bg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
+
+        threshold_var = tk.IntVar(value=self.settings.get("capture_threshold", 50))
+        threshold_slider = tk.Scale(slider_frame, variable=threshold_var,
+                                     from_=0, to=100, orient="horizontal",
+                                     length=200, width=12, showvalue=True,
+                                     bg=bg, highlightthickness=0)
+        threshold_slider.pack(side="left")
+
+        # Threshold line on the meter
+        threshold_line = level_cv.create_line(0, 0, 0, 16, fill="#FF4444", width=2)
+
+        # Animation loop for live level
+        running = [True]
+
+        def update_meter():
+            if not running[0]:
+                return
+            # Read signal level from toner engine
+            level = 0.0
+            if hasattr(self, '_toner_engine') and self._toner_engine and self._toner_engine.is_running:
+                result = self._toner_engine.analyze()
+                level = result.signal_level
+
+            # Update bar
+            bar_w = int(level * 200)
+            color = "#44AA44" if level < threshold_var.get() / 100.0 else "#FF8800"
+            level_cv.coords(level_bar, 0, 0, bar_w, 16)
+            level_cv.itemconfigure(level_bar, fill=color)
+            level_cv.itemconfigure(level_text, text=f"{level:.0%}")
+
+            # Update threshold line position
+            thresh_x = int(threshold_var.get() / 100.0 * 200)
+            level_cv.coords(threshold_line, thresh_x, 0, thresh_x, 16)
+
+            dlg.after(50, update_meter)
+
+        update_meter()
+
+        def apply():
+            running[0] = False
+            self.settings["capture_threshold"] = threshold_var.get()
+            if hasattr(self, '_toner_engine') and self._toner_engine:
+                self._toner_engine.set_sensitivity(100 - threshold_var.get())
+            save_settings(self.settings)
+            dlg.destroy()
+
+        def on_close():
+            running[0] = False
+            dlg.destroy()
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x")
+        tk.Button(btn_frame, text="Apply", command=apply).pack(
+            side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=on_close).pack(side="left")
+
+        dlg.protocol("WM_DELETE_WINDOW", on_close)
 
     def _open_feature_set(self):
         """Open the Feature Set dialog to show/hide tabs."""

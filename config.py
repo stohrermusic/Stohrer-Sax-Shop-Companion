@@ -397,6 +397,7 @@ DEFAULT_SETTINGS = {
 
     # AUDIO INPUT
     "audio_input_device": None,  # None = system default, or device index
+    "capture_threshold": 50,     # 0-100, how loud a signal must be to trigger capture
 
     # TONER ACCESS
     "toner_unlocked": False,
