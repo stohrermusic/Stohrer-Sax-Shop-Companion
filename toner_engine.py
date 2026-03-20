@@ -23,7 +23,7 @@ try:
     import numpy as np
     import sounddevice as sd
     AUDIO_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     AUDIO_AVAILABLE = False
     np = None
     sd = None
