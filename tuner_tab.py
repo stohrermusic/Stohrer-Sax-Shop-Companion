@@ -538,10 +538,11 @@ class TunerTabMixin:
         frame.pack(fill="both", expand=True)
         frame._dark_canvas = True
 
-        msg = ("Tuner requires numpy and sounddevice.\n\n"
-               "Install them with:\n"
-               "  pip install numpy sounddevice\n\n"
-               "Then restart the application.")
+        msg = ("The Strobe Tuner is not available on this system.\n\n"
+               "On Mac, this feature requires Apple Silicon (M1 or newer).\n"
+               "On Windows and Linux, it should work automatically \u2014\n"
+               "if you see this message, try reinstalling the app.\n\n"
+               "All other features work normally.")
         tk.Label(frame, text=msg, bg=bg, fg="#AAAAAA",
                  font=("Helvetica", 12), justify="center").pack(expand=True)
 

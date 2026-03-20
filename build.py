@@ -147,13 +147,20 @@ def build():
         if os.path.exists(icon_path):
             cmd.extend(['--icon', icon_path])
 
-    # Hidden imports for optional audio dependencies (strobe tuner)
-    cmd.extend([
-        '--hidden-import', 'numpy',
-        '--hidden-import', 'sounddevice',
-        '--hidden-import', '_sounddevice_data',
-        '--collect-data', 'sounddevice',
-    ])
+    # Hidden imports for optional audio dependencies (tuner/toner)
+    # Only include if numpy/sounddevice are installed (not present in legacy Mac build)
+    try:
+        import numpy
+        import sounddevice
+        cmd.extend([
+            '--hidden-import', 'numpy',
+            '--hidden-import', 'sounddevice',
+            '--hidden-import', '_sounddevice_data',
+            '--collect-data', 'sounddevice',
+        ])
+        print("  Audio libraries found — including tuner/toner support")
+    except ImportError:
+        print("  Audio libraries not found — building without tuner/toner")
 
     # Add the main script
     cmd.append(MAIN_SCRIPT)
