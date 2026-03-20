@@ -175,6 +175,8 @@ class TonerTabMixin:
         self._toner_capture_mode = "free"  # "free" or "calibration"
         # Free: ~0.5s stability, continuous micro-captures, attack skip
         # Calibration: guided chromatic scale, 5s per note, 1s settle
+        self._toner_paused = False         # Pause state
+        self._toner_paused_state = None    # State to resume to
         self._toner_stable_threshold = 25  # Updated per mode
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
         self._toner_cal_index = 0          # Current note index in calibration sequence
@@ -364,6 +366,11 @@ class TonerTabMixin:
             self._toner_capture_frame, text="Cancel", font=("Helvetica", 9),
             command=self._toner_cancel_capture)
         self._toner_capture_cancel_btn.pack(side="right", padx=10, pady=4)
+
+        self._toner_pause_btn = tk.Button(
+            self._toner_capture_frame, text="Pause", font=("Helvetica", 9),
+            command=self._toner_toggle_pause)
+        self._toner_pause_btn.pack(side="right", padx=(0, 5), pady=4)
 
         # --- Bottom: controls ---
         ctrl_bg = "systemWindowBackgroundColor" if IS_MACOS else CTRL_BG
@@ -1876,10 +1883,14 @@ class TonerTabMixin:
         self._toner_free_accumulator = []
         self._toner_stable_note = ""
         self._toner_stable_count = 0
+        self._toner_paused = False
+        self._toner_paused_state = None
         self._toner_capture_frame.pack_forget()
         self._toner_update_cal_prompt("")
         if hasattr(self, '_toner_capture_btn'):
             self._toner_capture_btn.configure(text="Capture")
+        if hasattr(self, '_toner_pause_btn'):
+            self._toner_pause_btn.configure(text="Pause")
 
         # Show coverage summary if we have captures
         if (self._toner_active_session and
@@ -2038,6 +2049,23 @@ class TonerTabMixin:
         tk.Button(btn_frame, text="Done",
                   command=done_with_notes).pack(side="left")
 
+    def _toner_toggle_pause(self):
+        """Toggle pause during capture."""
+        if self._toner_paused:
+            # Resume
+            self._toner_capture_state = self._toner_paused_state
+            self._toner_paused = False
+            self._toner_pause_btn.configure(text="Pause")
+            self._toner_capture_label.configure(text="Resumed...")
+        else:
+            # Pause
+            self._toner_paused_state = self._toner_capture_state
+            self._toner_capture_state = 'paused'
+            self._toner_paused = True
+            self._toner_pause_btn.configure(text="Resume")
+            self._toner_capture_label.configure(text="Paused")
+            self._toner_update_cal_prompt("PAUSED")
+
     def _toner_cancel_capture(self):
         """Cancel button handler."""
         self._toner_stop_capture()
@@ -2045,7 +2073,7 @@ class TonerTabMixin:
     def _toner_process_capture_frame(self, result):
         """Called each animation frame. Drives the auto-capture state machine."""
         state = self._toner_capture_state
-        if state is None:
+        if state is None or state == 'paused':
             return
 
         note = result.fundamental_note if result.fundamental_freq > 0 else ""
