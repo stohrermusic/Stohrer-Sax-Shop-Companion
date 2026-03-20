@@ -2133,9 +2133,9 @@ class UserGuideWindow(tk.Toplevel):
 
     def _section_tuner(self):
         self._h2("Tuner")
-        self._body("A 12-wheel chromatic strobe tuner modeled after the Peterson Stroboconn 6T-5. "
+        self._body("A 12-wheel chromatic stroboscopic tuner. "
                     "Each wheel shows concentric rings of alternating colored and dark segments "
-                    "visible through a wedge-shaped cutout \u2014 just like the real thing. "
+                    "visible through a wedge-shaped cutout. "
                     "An analog VU meter at the bottom shows the detected fundamental pitch and cents error.")
         self._bullet("When the input pitch matches the reference, the pattern freezes (appears stationary)")
         self._bullet("Sharp: pattern drifts one direction. Flat: drifts the other direction")
