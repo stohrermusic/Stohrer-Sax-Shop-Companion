@@ -394,6 +394,7 @@ DEFAULT_SETTINGS = {
     "seen_polygon_tutorial": False,
     "seen_sdcard_tutorial": False,
     "seen_kerf_test_tutorial": False,
+    "seen_calibration_tutorial": False,
 
     # AUDIO INPUT
     "audio_input_device": None,  # None = system default, or device index

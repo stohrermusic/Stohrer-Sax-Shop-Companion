@@ -1598,6 +1598,26 @@ class TonerTabMixin:
         self._toner_capture_mode = self._toner_mode_var.get()
 
         if self._toner_capture_mode == "calibration":
+            # First-run tutorial
+            if not self.settings.get("seen_calibration_tutorial"):
+                self.settings["seen_calibration_tutorial"] = True
+                save_settings(self.settings)
+                messagebox.showinfo("Calibration Capture",
+                    "Calibration walks through every note in the saxophone's "
+                    "range, one at a time.\n\n"
+                    "How it works:\n"
+                    "  \u2022 A 10-second countdown gives you time to get ready\n"
+                    "  \u2022 A large note name appears on screen\n"
+                    "  \u2022 Play that note and hold it steady\n"
+                    "  \u2022 The app records for 5 seconds, then waits for silence\n"
+                    "  \u2022 Stop playing, and the next note appears\n"
+                    "  \u2022 Work through all 32 notes at your own pace\n\n"
+                    "Tips:\n"
+                    "  \u2022 Use Pause if you need to adjust or take a break\n"
+                    "  \u2022 Play at a comfortable mezzo-forte dynamic\n"
+                    "  \u2022 If the app triggers on chair noise, raise the\n"
+                    "    capture threshold in Options > Capture Threshold")
+
             self._toner_cal_index = 0
             self._toner_cal_recording = False
             self._toner_capture_frames = []
