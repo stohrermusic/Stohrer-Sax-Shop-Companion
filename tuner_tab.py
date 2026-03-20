@@ -538,11 +538,20 @@ class TunerTabMixin:
         frame.pack(fill="both", expand=True)
         frame._dark_canvas = True
 
-        msg = ("The Strobe Tuner is not available on this system.\n\n"
-               "On Mac, this feature requires Apple Silicon (M1 or newer).\n"
-               "On Windows and Linux, it should work automatically \u2014\n"
-               "if you see this message, try reinstalling the app.\n\n"
-               "All other features work normally.")
+        import sys
+        if sys.platform == 'linux':
+            msg = ("The Strobe Tuner requires PortAudio.\n\n"
+                   "Install it with:\n"
+                   "  sudo apt install libportaudio2\n\n"
+                   "Then restart the application.")
+        elif sys.platform == 'darwin':
+            msg = ("The Strobe Tuner is not available on this Mac.\n\n"
+                   "This feature requires Apple Silicon (M1 or newer).\n\n"
+                   "All other features work normally.")
+        else:
+            msg = ("The Strobe Tuner is not available on this system.\n\n"
+                   "If you see this on Windows, try reinstalling the app.\n\n"
+                   "All other features work normally.")
         tk.Label(frame, text=msg, bg=bg, fg="#AAAAAA",
                  font=("Helvetica", 12), justify="center").pack(expand=True)
 

@@ -520,11 +520,20 @@ class TonerTabMixin:
     def _create_toner_fallback(self, parent):
         """Fallback UI when audio libraries are unavailable."""
         bg = self.root.cget('bg')
-        tk.Label(parent, text="The Tone Analyzer is not available on this system.\n\n"
-                 "On Mac, this feature requires Apple Silicon (M1 or newer).\n"
-                 "On Windows and Linux, it should work automatically \u2014\n"
-                 "if you see this message, try reinstalling the app.\n\n"
-                 "All other features work normally.",
+        if sys.platform == 'linux':
+            msg = ("The Tone Analyzer requires PortAudio.\n\n"
+                   "Install it with:\n"
+                   "  sudo apt install libportaudio2\n\n"
+                   "Then restart the application.")
+        elif sys.platform == 'darwin':
+            msg = ("The Tone Analyzer is not available on this Mac.\n\n"
+                   "This feature requires Apple Silicon (M1 or newer).\n\n"
+                   "All other features work normally.")
+        else:
+            msg = ("The Tone Analyzer is not available on this system.\n\n"
+                   "If you see this on Windows, try reinstalling the app.\n\n"
+                   "All other features work normally.")
+        tk.Label(parent, text=msg,
                  bg=bg, fg="gray", font=("Helvetica", 12),
                  justify="center").pack(expand=True)
 
