@@ -92,13 +92,15 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 ### From Release (Recommended)
 Download the latest release for your platform from the [Releases](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases) page.
 
-**macOS users**: The app is not signed with an Apple Developer certificate, so macOS will block it on first launch. To open it, right-click (or Control-click) the app and select **Open**, then click **Open** in the dialog. You only need to do this once — after that it launches normally.
+**macOS users**: Requires Apple Silicon (M1/M2/M3/M4). Intel Macs are not supported — users on older Intel Macs can use [version 1.61](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases/tag/v1.61) or run from source.
 
-If the DMG shows as "damaged," open Terminal and run:
+The app is not signed with an Apple Developer certificate, so macOS will block it on first launch. To open it, right-click (or Control-click) the app and select **Open**, then click **Open** in the dialog. You only need to do this once — after that it launches normally.
+
+If the download shows as "damaged," open Terminal and run:
 ```
-xattr -cr ~/Downloads/StohrerSaxShopCompanion.dmg
+xattr -cr ~/Downloads/StohrerSaxShopCompanion-macOS.zip
 ```
-Then open the DMG again. This strips the quarantine flag that macOS adds to downloaded files.
+Then unzip and open again. This strips the quarantine flag that macOS adds to downloaded files.
 
 ### From Source
 ```bash
