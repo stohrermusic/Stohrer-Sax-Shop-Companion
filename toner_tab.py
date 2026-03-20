@@ -362,11 +362,6 @@ class TonerTabMixin:
             font=("Helvetica", 10))
         self._toner_capture_progress.pack(side="left", padx=5, pady=4)
 
-        self._toner_capture_cancel_btn = tk.Button(
-            self._toner_capture_frame, text="Cancel", font=("Helvetica", 9),
-            command=self._toner_cancel_capture)
-        self._toner_capture_cancel_btn.pack(side="right", padx=10, pady=4)
-
         self._toner_pause_btn = tk.Button(
             self._toner_capture_frame, text="Pause", font=("Helvetica", 9),
             command=self._toner_toggle_pause)
@@ -2044,10 +2039,33 @@ class TonerTabMixin:
                         "Add your impressions \u2014 bright, dark, rich, "
                         "stuffy, free-blowing, anything you noticed.")
 
+        def discard():
+            if messagebox.askyesno("Discard Session",
+                    "Discard all captures from this session?\n\n"
+                    "This cannot be undone.", parent=dlg):
+                # Remove this session's captures from the profile
+                lib = self._toner_active_library
+                prof_name = self._toner_active_profile
+                if lib and prof_name and lib in self._toner_profiles:
+                    profile = self._toner_profiles[lib].get(prof_name)
+                    if profile and self._toner_active_session:
+                        session_date = self._toner_active_session.get('date', '')
+                        sessions = profile.get('sessions', [])
+                        profile['sessions'] = [s for s in sessions
+                                               if s.get('date') != session_date]
+                        save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+                self._toner_active_session = None
+                dlg.destroy()
+
         tk.Button(btn_frame, text="Resume Capturing",
                   command=resume).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Done",
-                  command=done_with_notes).pack(side="left")
+                  command=done_with_notes).pack(side="left", padx=(0, 5))
+
+        # Discard button — far right, separated
+        tk.Button(btn_frame, text="Discard Session", fg="#CC0000",
+                  font=("Helvetica", 8),
+                  command=discard).pack(side="right")
 
     def _toner_toggle_pause(self):
         """Toggle pause during capture."""
