@@ -18,7 +18,7 @@ jobs:
           - os: windows-latest
             artifact_name: StohrerSaxShopCompanion.exe
             asset_name: StohrerSaxShopCompanion-Windows.exe
-          - os: macos-latest
+          - os: macos-13
             artifact_name: StohrerSaxShopCompanion.app
             asset_name: StohrerSaxShopCompanion-macOS.zip
           - os: ubuntu-latest
@@ -40,6 +40,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Set macOS deployment target
+        if: runner.os == 'macOS'
+        run: echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> $GITHUB_ENV
 
       - name: Build with PyInstaller
         run: python build.py
