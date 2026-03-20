@@ -20,7 +20,10 @@ jobs:
             asset_name: StohrerSaxShopCompanion-Windows.exe
           - os: macos-13
             artifact_name: StohrerSaxShopCompanion.app
-            asset_name: StohrerSaxShopCompanion-macOS.zip
+            asset_name: StohrerSaxShopCompanion-macOS-Intel.zip
+          - os: macos-latest
+            artifact_name: StohrerSaxShopCompanion.app
+            asset_name: StohrerSaxShopCompanion-macOS-AppleSilicon.zip
           - os: ubuntu-latest
             artifact_name: StohrerSaxShopCompanion
             asset_name: StohrerSaxShopCompanion-Linux
@@ -59,10 +62,10 @@ jobs:
 
       # macOS: Create zip of .app bundle
       - name: Package macOS app
-        if: matrix.os == 'macos-latest'
+        if: runner.os == 'macOS'
         run: |
           cd dist
-          zip -r StohrerSaxShopCompanion-macOS.zip StohrerSaxShopCompanion.app
+          zip -r ${{ matrix.asset_name }} StohrerSaxShopCompanion.app
 
       # Upload artifacts for all builds
       - name: Upload Windows artifact
@@ -72,12 +75,19 @@ jobs:
           name: StohrerSaxShopCompanion-Windows
           path: dist/StohrerSaxShopCompanion-Windows.exe
 
-      - name: Upload macOS artifact
+      - name: Upload macOS Intel artifact
+        if: matrix.os == 'macos-13'
+        uses: actions/upload-artifact@v4
+        with:
+          name: StohrerSaxShopCompanion-macOS-Intel
+          path: dist/StohrerSaxShopCompanion-macOS-Intel.zip
+
+      - name: Upload macOS Apple Silicon artifact
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: StohrerSaxShopCompanion-macOS
-          path: dist/StohrerSaxShopCompanion-macOS.zip
+          name: StohrerSaxShopCompanion-macOS-AppleSilicon
+          path: dist/StohrerSaxShopCompanion-macOS-AppleSilicon.zip
 
       - name: Upload Linux artifact
         if: matrix.os == 'ubuntu-latest'
