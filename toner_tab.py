@@ -1820,7 +1820,7 @@ class TonerTabMixin:
                     self._toner_engine.set_sax_type(sax_type)
 
         self._toner_active_session = {
-            'date': time.strftime("%Y-%m-%d %H:%M"),
+            'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'captures': [],
         }
         self._toner_begin_listening()
@@ -2199,7 +2199,13 @@ class TonerTabMixin:
             self._toner_save_active_session()
 
     def _toner_save_active_session(self):
-        """Save the active session to the active profile."""
+        """Save the active session to the active profile.
+
+        Saves a deep copy of the session data so that subsequent
+        captures on a different profile don't mutate this profile's
+        stored data through shared references.
+        """
+        import copy
         lib = self._toner_active_library
         prof_name = self._toner_active_profile
         if not lib or not prof_name:
@@ -2213,14 +2219,18 @@ class TonerTabMixin:
         profile = lib_profiles[prof_name]
         sessions = profile.setdefault('sessions', [])
         session_date = self._toner_active_session.get('date', '')
+
+        # Deep copy to prevent shared references between profiles
+        session_copy = copy.deepcopy(self._toner_active_session)
+
         found = False
-        for s in sessions:
+        for i, s in enumerate(sessions):
             if s.get('date') == session_date:
-                s['captures'] = self._toner_active_session['captures']
+                sessions[i] = session_copy
                 found = True
                 break
         if not found:
-            sessions.append(self._toner_active_session)
+            sessions.append(session_copy)
 
         save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
 
