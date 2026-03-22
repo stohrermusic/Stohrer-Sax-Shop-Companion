@@ -376,120 +376,117 @@ class TonerTabMixin:
         ctrl_frame = tk.Frame(self._toner_main_frame, bg=ctrl_bg, padx=6, pady=6)
         ctrl_frame._skip_theme = True
         ctrl_frame.pack(fill="x", padx=5, pady=(0, 4))
+        ctrl_frame.columnconfigure(0, weight=1)
+        ctrl_frame.columnconfigure(1, weight=1)
 
         eq_lbl_font = ("Helvetica", 7)
 
-        # Sax type selector (sets Benade break frequency for descriptors)
-        sax_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        sax_frame._skip_theme = True
-        sax_frame.pack(side="left", padx=(0, 12))
+        # --- Left panel: EQ-style vertical switches ---
+        eq_panel = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        eq_panel._skip_theme = True
+        eq_panel.pack(side="left", padx=(0, 8))
 
-        tk.Label(sax_frame, text="SAX", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(0, 4))
+        def _make_vswitch(parent, label, var, val_top, val_bottom,
+                          lbl_top, lbl_bottom, col, cmd=None):
+            """Create a vertical two-position switch (like a toggle slider)."""
+            ch = tk.Frame(parent, bg=ctrl_bg)
+            ch._skip_theme = True
+            ch.grid(row=0, column=col, padx=4, sticky="ns")
+            tk.Label(ch, text=label, bg=ctrl_bg, fg="#888888",
+                     font=eq_lbl_font).pack(pady=(0, 1))
+            tk.Label(ch, text=lbl_top, bg=ctrl_bg, fg="#AAAAAA",
+                     font=("Helvetica", 6)).pack()
+            # Two-position scale (snap between 0 and 1)
+            int_var = tk.IntVar(value=0 if var.get() == val_top else 1)
+            sl = tk.Scale(ch, variable=int_var, from_=0, to=1,
+                         orient="vertical", length=50, width=12,
+                         showvalue=False, resolution=1,
+                         bg="#B0B0B0", fg="#888888",
+                         activebackground="#D0D0D0",
+                         troughcolor="#444444", highlightthickness=0,
+                         sliderrelief="raised", sliderlength=18,
+                         borderwidth=2)
+            sl.pack()
+            tk.Label(ch, text=lbl_bottom, bg=ctrl_bg, fg="#AAAAAA",
+                     font=("Helvetica", 6)).pack()
+
+            def _on_change(*args):
+                var.set(val_top if int_var.get() == 0 else val_bottom)
+                if cmd:
+                    cmd()
+            int_var.trace_add("write", _on_change)
+
+        _make_vswitch(eq_panel, "VIEW", self._toner_view_var,
+                      "spectrum", "bars", "spct", "bars", 0)
+        _make_vswitch(eq_panel, "SCALE", self._toner_scale_var,
+                      "linear", "db", "lin", "dB", 1)
+        _make_vswitch(eq_panel, "FPS", self._toner_fps_var,
+                      "30", "60", "30", "60", 2)
+
+        # SENS vertical slider (continuous, not a switch)
+        sens_ch = tk.Frame(eq_panel, bg=ctrl_bg)
+        sens_ch._skip_theme = True
+        sens_ch.grid(row=0, column=3, padx=4, sticky="ns")
+        tk.Label(sens_ch, text="SENS", bg=ctrl_bg, fg="#888888",
+                 font=eq_lbl_font).pack(pady=(0, 2))
+        self._toner_sens_var = tk.IntVar(
+            value=toner_settings.get("sensitivity", 50))
+        tk.Scale(sens_ch, variable=self._toner_sens_var, from_=100, to=0,
+                 orient="vertical", length=50, width=12,
+                 showvalue=False, resolution=1,
+                 bg="#B0B0B0", fg="#888888",
+                 activebackground="#D0D0D0",
+                 troughcolor="#444444", highlightthickness=0,
+                 sliderrelief="raised", sliderlength=18, borderwidth=2,
+                 command=self._toner_on_sensitivity_changed).pack()
+
+        # A= pitch slider
+        pitch_ch = tk.Frame(eq_panel, bg=ctrl_bg)
+        pitch_ch._skip_theme = True
+        pitch_ch.grid(row=0, column=4, padx=4, sticky="ns")
+        tk.Label(pitch_ch, text="A =", bg=ctrl_bg, fg="#888888",
+                 font=eq_lbl_font).pack(pady=(0, 2))
+        self._toner_pitch_var = tk.DoubleVar(
+            value=toner_settings.get("reference_pitch", 440.0))
+        tk.Scale(pitch_ch, variable=self._toner_pitch_var, from_=460, to=420,
+                 orient="vertical", length=50, width=12,
+                 showvalue=False, resolution=0.5,
+                 bg="#B0B0B0", fg="#888888",
+                 activebackground="#D0D0D0",
+                 troughcolor="#444444", highlightthickness=0,
+                 sliderrelief="raised", sliderlength=18, borderwidth=2,
+                 command=lambda v: self._toner_on_pitch_changed()).pack()
+        self._toner_pitch_label = tk.Label(pitch_ch, text="440", bg=ctrl_bg,
+                                            fg="#AAAAAA", font=("Helvetica", 6))
+        self._toner_pitch_label.pack()
+        def _update_pitch_label(*args):
+            self._toner_pitch_label.configure(
+                text=f"{self._toner_pitch_var.get():.0f}")
+        self._toner_pitch_var.trace_add("write", _update_pitch_label)
+
+        # SAX type selector
+        sax_ch = tk.Frame(eq_panel, bg=ctrl_bg)
+        sax_ch._skip_theme = True
+        sax_ch.grid(row=0, column=5, padx=4, sticky="ns")
+        tk.Label(sax_ch, text="SAX", bg=ctrl_bg, fg="#888888",
+                 font=eq_lbl_font).pack(pady=(0, 2))
         self._toner_sax_var = tk.StringVar(
             value=toner_settings.get("sax_type", "Alto"))
         sax_combo = ttk.Combobox(
-            sax_frame, textvariable=self._toner_sax_var,
-            values=SAX_TYPES, state="readonly", width=9)
-        sax_combo.pack(side="left")
+            sax_ch, textvariable=self._toner_sax_var,
+            values=SAX_TYPES, state="readonly", width=7)
+        sax_combo.pack()
         sax_combo.bind("<<ComboboxSelected>>", self._toner_on_sax_type_changed)
-        # Apply initial sax type to engine
         if self._toner_engine:
             self._toner_engine.set_sax_type(self._toner_sax_var.get())
 
         # Concert pitch toggle
-        self._toner_concert_btn = tk.Checkbutton(
-            sax_frame, text="Concert", variable=self._toner_concert_pitch,
-            bg=ctrl_bg, fg=ctrl_fg, selectcolor=ctrl_bg,
-            activebackground=ctrl_bg, font=("Helvetica", 8))
-        self._toner_concert_btn.pack(side="left", padx=(4, 0))
+        self._toner_concert_pitch_check = tk.Checkbutton(
+            sax_ch, text="C", variable=self._toner_concert_pitch,
+            bg=ctrl_bg, fg="#AAAAAA", selectcolor=ctrl_bg,
+            activebackground=ctrl_bg, font=("Helvetica", 7))
+        self._toner_concert_pitch_check.pack()
 
-        # Sensitivity slider
-        sens_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        sens_frame._skip_theme = True
-        sens_frame.pack(side="left", padx=(0, 12))
-
-        tk.Label(sens_frame, text="SENS", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(0, 4))
-        self._toner_sens_var = tk.IntVar(
-            value=toner_settings.get("sensitivity", 50))
-        tk.Scale(sens_frame, variable=self._toner_sens_var,
-                 from_=0, to=100, orient="horizontal", length=80, width=12,
-                 showvalue=False, bg="#B0B0B0", fg=ctrl_fg,
-                 activebackground="#D0D0D0",
-                 troughcolor="#444444", highlightthickness=0,
-                 sliderrelief="raised", sliderlength=18, borderwidth=2,
-                 command=self._toner_on_sensitivity_changed).pack(side="left")
-
-        # A= reference pitch
-        pitch_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        pitch_frame._skip_theme = True
-        pitch_frame.pack(side="left", padx=(0, 12))
-
-        tk.Label(pitch_frame, text="A =", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(0, 4))
-        self._toner_pitch_var = tk.DoubleVar(
-            value=toner_settings.get("reference_pitch", 440.0))
-        tk.Spinbox(pitch_frame, textvariable=self._toner_pitch_var,
-                   from_=420, to=460, increment=0.5, width=5,
-                   bg="#333333", fg="white", buttonbackground="#444444",
-                   command=self._toner_on_pitch_changed).pack(side="left")
-        tk.Label(pitch_frame, text="Hz", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(2, 0))
-
-        # View mode toggle
-        view_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        view_frame._skip_theme = True
-        view_frame.pack(side="left", padx=(0, 12))
-
-        tk.Label(view_frame, text="VIEW", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(0, 4))
-        tk.Radiobutton(
-            view_frame, text="Spectrum", variable=self._toner_view_var,
-            value="spectrum", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 9),
-        ).pack(side="left", padx=(0, 4))
-        tk.Radiobutton(
-            view_frame, text="Bars", variable=self._toner_view_var,
-            value="bars", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 9),
-        ).pack(side="left")
-
-        # Scale toggle (Linear / dB)
-        scale_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        scale_frame._skip_theme = True
-        scale_frame.pack(side="left", padx=(0, 12))
-
-        tk.Label(scale_frame, text="SCALE", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(0, 4))
-        tk.Radiobutton(
-            scale_frame, text="Linear", variable=self._toner_scale_var,
-            value="linear", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 9),
-        ).pack(side="left", padx=(0, 4))
-        tk.Radiobutton(
-            scale_frame, text="dB", variable=self._toner_scale_var,
-            value="db", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 9),
-        ).pack(side="left")
-
-        # FPS selector
-        fps_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        fps_frame._skip_theme = True
-        fps_frame.pack(side="left", padx=(0, 12))
-
-        tk.Label(fps_frame, text="FPS", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(side="left", padx=(0, 4))
-        ttk.Combobox(
-            fps_frame, textvariable=self._toner_fps_var,
-            values=["30", "60"], state="readonly", width=3
-        ).pack(side="left")
-
-        # --- Profile controls (right side of control strip) ---
         # --- Capture controls (right side) ---
         cap_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
         cap_frame._skip_theme = True
