@@ -490,40 +490,37 @@ class TonerTabMixin:
         ).pack(side="left")
 
         # --- Profile controls (right side of control strip) ---
-        prof_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        prof_frame._skip_theme = True
-        prof_frame.pack(side="right", padx=(12, 0))
-
-        tk.Button(prof_frame, text="Profile...",
-                  font=("Helvetica", 9),
-                  command=self._toner_open_profile_dialog).pack(side="left", padx=(0, 2))
+        # --- Capture controls (right side) ---
+        cap_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        cap_frame._skip_theme = True
+        cap_frame.pack(side="right", padx=(12, 0))
 
         # Active profile indicator
         self._toner_profile_label = tk.Label(
-            prof_frame, text="", bg=ctrl_bg, fg="#AAAAAA",
+            cap_frame, text="no profile", bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 8))
-        self._toner_profile_label.pack(side="left", padx=(0, 8))
+        self._toner_profile_label.pack(side="left", padx=(0, 4))
+
+        tk.Button(cap_frame, text="Load...",
+                  font=("Helvetica", 9),
+                  command=self._toner_load_profile_quick).pack(side="left", padx=(0, 2))
+
+        tk.Button(cap_frame, text="Unload",
+                  font=("Helvetica", 9),
+                  command=self._toner_unload_profile).pack(side="left", padx=(0, 8))
 
         # Capture mode selector
         self._toner_mode_var = tk.StringVar(value="free")
         mode_combo = ttk.Combobox(
-            prof_frame, textvariable=self._toner_mode_var,
+            cap_frame, textvariable=self._toner_mode_var,
             values=["free", "calibration"], state="readonly", width=9)
         mode_combo.pack(side="left", padx=(0, 2))
 
         self._toner_capture_btn = tk.Button(
-            prof_frame, text="Capture",
+            cap_frame, text="Capture",
             font=("Helvetica", 9),
             command=self._toner_toggle_capture)
-        self._toner_capture_btn.pack(side="left", padx=(0, 4))
-
-        tk.Button(prof_frame, text="Import File...",
-                  font=("Helvetica", 9),
-                  command=self._toner_import_audio_file).pack(side="left", padx=(0, 4))
-
-        tk.Button(prof_frame, text="Compare...",
-                  font=("Helvetica", 9),
-                  command=self._toner_open_compare_dialog).pack(side="left")
+        self._toner_capture_btn.pack(side="left")
 
     def _create_toner_fallback(self, parent):
         """Fallback UI when audio libraries are unavailable."""
@@ -1090,12 +1087,11 @@ class TonerTabMixin:
     # ------------------------------------------------------------------
 
     def _toner_open_profile_dialog(self):
-        """Open the profile management dialog."""
+        """Open the profile management dialog — central hub for all profile operations."""
         dlg = tk.Toplevel(self.root)
         dlg.title("Tone Profiles")
-        dlg.resizable(False, False)
+        dlg.geometry("550x500")
         dlg.transient(self.root)
-        dlg.grab_set()
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
         fg = "black"
@@ -1107,9 +1103,9 @@ class TonerTabMixin:
 
         # Profile list
         list_frame = tk.Frame(frame, bg=bg)
-        list_frame.pack(fill="both", expand=True, pady=(0, 10))
+        list_frame.pack(fill="both", expand=True, pady=(0, 5))
 
-        self._prof_listbox = tk.Listbox(list_frame, width=45, height=10,
+        self._prof_listbox = tk.Listbox(list_frame, width=55, height=12,
                                          font=("Helvetica", 10))
         self._prof_listbox.pack(side="left", fill="both", expand=True)
 
@@ -1120,31 +1116,50 @@ class TonerTabMixin:
         self._toner_refresh_profile_list()
 
         # Info display
-        self._prof_info_label = tk.Label(frame, text="", bg=bg, fg=fg,
+        self._prof_info_label = tk.Label(frame, text="Select a profile to see details.",
+                                          bg=bg, fg=fg,
                                           font=("Helvetica", 9),
-                                          justify="left", anchor="w")
+                                          justify="left", anchor="w",
+                                          wraplength=500)
         self._prof_info_label.pack(fill="x", pady=(0, 10))
 
         self._prof_listbox.bind("<<ListboxSelect>>",
                                 lambda e: self._toner_on_profile_selected())
 
-        # Buttons
-        btn_frame = tk.Frame(frame, bg=bg)
-        btn_frame.pack(fill="x")
+        # --- Action buttons: two rows ---
+        # Row 1: profile operations
+        row1 = tk.Frame(frame, bg=bg)
+        row1.pack(fill="x", pady=(0, 5))
 
-        tk.Button(btn_frame, text="New Profile...",
-                  command=lambda: self._toner_new_profile(dlg)).pack(
+        tk.Button(row1, text="Load for Capture",
+                  command=lambda: self._toner_load_from_dialog(dlg)).pack(
                       side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Report",
+        tk.Button(row1, text="Report",
                   command=self._toner_show_profile_report).pack(
                       side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Edit Notes...",
+        tk.Button(row1, text="Compare...",
+                  command=lambda: [dlg.destroy(),
+                                   self._toner_open_compare_dialog()]).pack(
+                      side="left", padx=(0, 5))
+        tk.Button(row1, text="Edit Notes...",
                   command=self._toner_edit_profile_notes).pack(
                       side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Delete",
+
+        # Row 2: create, import, delete, close
+        row2 = tk.Frame(frame, bg=bg)
+        row2.pack(fill="x")
+
+        tk.Button(row2, text="New Profile...",
+                  command=lambda: self._toner_new_profile(dlg)).pack(
+                      side="left", padx=(0, 5))
+        tk.Button(row2, text="Import Audio File...",
+                  command=lambda: [dlg.destroy(),
+                                   self._toner_import_audio_file()]).pack(
+                      side="left", padx=(0, 5))
+        tk.Button(row2, text="Delete",
                   command=self._toner_delete_profile).pack(
                       side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Close",
+        tk.Button(row2, text="Close",
                   command=dlg.destroy).pack(side="right")
 
     def _toner_refresh_profile_list(self):
@@ -1854,6 +1869,94 @@ class TonerTabMixin:
                   command=save_and_start).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text="Cancel",
                   command=dlg.destroy).pack(side="left")
+
+    def _toner_load_from_dialog(self, dlg):
+        """Load the selected profile from the profile dialog."""
+        sel = self._prof_listbox.curselection()
+        if not sel:
+            messagebox.showinfo("Select Profile", "Select a profile first.")
+            return
+        key = self._prof_list_keys[sel[0]]
+        if key is None:
+            return
+        lib_name, prof_name = key
+        self._toner_active_library = lib_name
+        self._toner_active_profile = prof_name
+        self._toner_active_session = None
+        self._toner_update_profile_label()
+
+        # Sync sax type
+        prof = self._toner_profiles[lib_name][prof_name]
+        sax_type = prof.get('horn_type', '')
+        if sax_type:
+            if hasattr(self, '_toner_sax_var'):
+                self._toner_sax_var.set(sax_type)
+            if self._toner_engine:
+                self._toner_engine.set_sax_type(sax_type)
+        dlg.destroy()
+
+    def _toner_load_profile_quick(self):
+        """Quick profile loader — shows list, loads selected."""
+        all_profiles = []
+        for lib_name, lib_profiles in self._toner_profiles.items():
+            if not isinstance(lib_profiles, dict):
+                continue
+            for prof_name, prof_data in lib_profiles.items():
+                all_profiles.append((lib_name, prof_name, prof_data))
+
+        if not all_profiles:
+            messagebox.showinfo("No Profiles",
+                "No profiles yet. Create one in File > Profiles.")
+            return
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Load Profile")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
+        frame.pack(fill="both", expand=True)
+
+        listbox = tk.Listbox(frame, width=40, height=min(10, len(all_profiles)),
+                              font=("Helvetica", 10))
+        listbox.pack(fill="both", expand=True, pady=(0, 8))
+
+        for lib_name, prof_name, _ in all_profiles:
+            listbox.insert(tk.END, f"[{lib_name}] {prof_name}")
+
+        def load():
+            sel = listbox.curselection()
+            if not sel:
+                return
+            lib_name, prof_name, _ = all_profiles[sel[0]]
+            self._toner_active_library = lib_name
+            self._toner_active_profile = prof_name
+            self._toner_active_session = None
+            self._toner_update_profile_label()
+
+            # Sync sax type
+            prof = self._toner_profiles[lib_name][prof_name]
+            sax_type = prof.get('horn_type', '')
+            if sax_type:
+                if hasattr(self, '_toner_sax_var'):
+                    self._toner_sax_var.set(sax_type)
+                if self._toner_engine:
+                    self._toner_engine.set_sax_type(sax_type)
+            dlg.destroy()
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x")
+        tk.Button(btn_frame, text="Load", command=load).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(side="left")
+
+    def _toner_unload_profile(self):
+        """Unload the active profile."""
+        self._toner_active_library = None
+        self._toner_active_profile = None
+        self._toner_active_session = None
+        self._toner_update_profile_label()
 
     def _toner_signal_above_threshold(self, result):
         """Check if the signal level is above the capture threshold."""

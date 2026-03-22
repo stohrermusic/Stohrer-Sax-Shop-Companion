@@ -267,6 +267,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
+        toner_file_menu.add_command(label="Profiles...", command=self._toner_open_profile_dialog)
+        toner_file_menu.add_separator()
         toner_file_menu.add_command(label="Export Profiles...", command=self._toner_export_profiles)
         toner_file_menu.add_command(label="Import Profiles...", command=self._toner_import_profiles)
 
