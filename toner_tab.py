@@ -420,7 +420,7 @@ class TonerTabMixin:
             command=self._toner_toggle_pause)
         self._toner_pause_btn.pack(side="right", padx=(0, 5), pady=4)
 
-        # --- Bottom: controls ---
+        # --- Bottom: controls (three-column layout) ---
         ctrl_bg = "systemWindowBackgroundColor" if IS_MACOS else CTRL_BG
         ctrl_fg = "white" if not IS_MACOS else "systemTextColor"
         self._toner_ctrl_bg = ctrl_bg
@@ -429,15 +429,8 @@ class TonerTabMixin:
         ctrl_frame = tk.Frame(self._toner_main_frame, bg=ctrl_bg, padx=8, pady=10)
         ctrl_frame._skip_theme = True
         ctrl_frame.pack(fill="x", padx=5, pady=(0, 4))
-        ctrl_frame.columnconfigure(0, weight=1)
-        ctrl_frame.columnconfigure(1, weight=1)
 
         eq_lbl_font = ("Helvetica", 8)
-
-        # --- Left panel: display switches + SENS ---
-        eq_panel = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        eq_panel._skip_theme = True
-        eq_panel.pack(side="left", padx=(0, 12))
 
         def _make_vswitch(parent, label, var, val_top, val_bottom,
                           lbl_top, lbl_bottom, col):
@@ -465,11 +458,16 @@ class TonerTabMixin:
                 var.set(val_top if int_var.get() == 0 else val_bottom)
             int_var.trace_add("write", _on_change)
 
-        _make_vswitch(eq_panel, "VIEW", self._toner_view_var,
+        # ========== LEFT COLUMN: display switches ==========
+        left_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        left_col._skip_theme = True
+        left_col.pack(side="left", padx=(0, 12))
+
+        _make_vswitch(left_col, "VIEW", self._toner_view_var,
                       "spectrum", "bars", "spct", "bars", 0)
-        _make_vswitch(eq_panel, "SCALE", self._toner_scale_var,
+        _make_vswitch(left_col, "SCALE", self._toner_scale_var,
                       "linear", "db", "lin", "dB", 1)
-        _make_vswitch(eq_panel, "FPS", self._toner_fps_var,
+        _make_vswitch(left_col, "FPS", self._toner_fps_var,
                       "30", "60", "30", "60", 2)
 
         # SENS as a two-position switch (high/low)
@@ -482,16 +480,16 @@ class TonerTabMixin:
             self._toner_sens_var.set(75 if sens_str.get() == "high" else 25)
             self._toner_on_sensitivity_changed()
 
-        _make_vswitch(eq_panel, "SENS", sens_str,
+        _make_vswitch(left_col, "SENS", sens_str,
                       "high", "low", "high", "low", 3)
         sens_str.trace_add("write", _sens_from_switch)
 
-        # --- Horizontal sax selector (separate from display switches) ---
-        sax_panel = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        sax_panel._skip_theme = True
-        sax_panel.pack(side="left", padx=(4, 0))
+        # ========== CENTER COLUMN: sax selector ==========
+        center_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        center_col._skip_theme = True
+        center_col.pack(side="left", fill="x", expand=True)
 
-        tk.Label(sax_panel, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
+        tk.Label(center_col, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack()
 
         # Determine visible sax types from settings
@@ -509,9 +507,9 @@ class TonerTabMixin:
             sax_idx_var.set(visible_sax.index(self._toner_sax_var.get()))
 
         self._toner_sax_scale = tk.Scale(
-            sax_panel, variable=sax_idx_var,
+            center_col, variable=sax_idx_var,
             from_=0, to=max(0, len(visible_sax) - 1),
-            orient="horizontal", length=max(100, len(visible_sax) * 28),
+            orient="horizontal", length=max(120, len(visible_sax) * 32),
             width=14, showvalue=False, resolution=1,
             bg="#B0B0B0", fg="#888888", activebackground="#D0D0D0",
             troughcolor="#444444", highlightthickness=0,
@@ -520,11 +518,10 @@ class TonerTabMixin:
         self._toner_sax_idx_var = sax_idx_var
 
         # Labels under the slider
-        lbl_frame = tk.Frame(sax_panel, bg=ctrl_bg)
+        lbl_frame = tk.Frame(center_col, bg=ctrl_bg)
         lbl_frame._skip_theme = True
         lbl_frame.pack(fill="x")
         for i, stype in enumerate(visible_sax):
-            # Abbreviate long names
             abbrev = stype[:3] if len(stype) > 5 else stype
             tk.Label(lbl_frame, text=abbrev, bg=ctrl_bg, fg="#AAAAAA",
                      font=("Helvetica", 6)).pack(side="left", expand=True)
@@ -546,62 +543,80 @@ class TonerTabMixin:
         self._toner_pitch_var = tk.DoubleVar(
             value=toner_settings.get("reference_pitch", 440.0))
 
-        # --- Capture controls (right side) ---
-        cap_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        cap_frame._skip_theme = True
-        cap_frame.pack(side="right", padx=(12, 0))
+        # ========== RIGHT COLUMN: session + capture controls ==========
+        right_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        right_col._skip_theme = True
+        right_col.pack(side="right", padx=(12, 0))
 
-        # Session lamp (amber when session is active)
-        session_frame = tk.Frame(cap_frame, bg=ctrl_bg)
-        session_frame._skip_theme = True
-        session_frame.pack(side="left", padx=(0, 6))
+        # --- Session lamp (larger, amber when active) ---
+        session_row = tk.Frame(right_col, bg=ctrl_bg)
+        session_row._skip_theme = True
+        session_row.pack(pady=(0, 6))
 
         self._toner_session_canvas = tk.Canvas(
-            session_frame, bg=ctrl_bg, highlightthickness=0, width=16, height=16)
+            session_row, bg=ctrl_bg, highlightthickness=0, width=24, height=24)
         self._toner_session_canvas._dark_canvas = True
         self._toner_session_canvas.pack(side="left")
         self._toner_session_glow = self._toner_session_canvas.create_oval(
-            1, 1, 15, 15, fill="#1A150A", outline="")
+            2, 2, 22, 22, fill="#1A150A", outline="")
         self._toner_session_lamp = self._toner_session_canvas.create_oval(
-            3, 3, 13, 13, fill="#332200", outline="#444444", width=1)
+            4, 4, 20, 20, fill="#332200", outline="#444444", width=1)
 
-        tk.Label(session_frame, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
-                 font=("Helvetica", 6, "bold")).pack(side="left", padx=(2, 0))
+        tk.Label(session_row, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
+                 font=("Helvetica", 7, "bold")).pack(side="left", padx=(4, 0))
 
-        # Active profile indicator
+        # --- Profile indicator + Load/Unload toggle ---
+        profile_row = tk.Frame(right_col, bg=ctrl_bg)
+        profile_row._skip_theme = True
+        profile_row.pack(pady=(0, 4))
+
         self._toner_profile_label = tk.Label(
-            cap_frame, text="no profile", bg=ctrl_bg, fg="#666666",
+            profile_row, text="no profile", bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 8))
-        self._toner_profile_label.pack(side="left", padx=(0, 4))
+        self._toner_profile_label.pack(side="left", padx=(0, 6))
 
-        tk.Button(cap_frame, text="Load...",
-                  font=("Helvetica", 9),
-                  command=self._toner_load_profile_quick).pack(side="left", padx=(0, 2))
+        self._toner_load_unload_btn = tk.Button(
+            profile_row, text="Load...",
+            font=("Helvetica", 9),
+            command=self._toner_load_unload_toggle)
+        self._toner_load_unload_btn.pack(side="left")
 
-        tk.Button(cap_frame, text="Unload",
-                  font=("Helvetica", 9),
-                  command=self._toner_unload_profile).pack(side="left", padx=(0, 8))
+        # --- MODE switch + Capture button ---
+        capture_row = tk.Frame(right_col, bg=ctrl_bg)
+        capture_row._skip_theme = True
+        capture_row.pack()
 
-        # Capture mode radio buttons
+        # Mode as a vertical switch (free/calibrated)
         self._toner_mode_var = tk.StringVar(value="free")
-        tk.Radiobutton(
-            cap_frame, text="Free", variable=self._toner_mode_var,
-            value="free", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 9),
-        ).pack(side="left", padx=(0, 2))
-        tk.Radiobutton(
-            cap_frame, text="Calibration", variable=self._toner_mode_var,
-            value="calibration", bg=ctrl_bg, fg=ctrl_fg,
-            selectcolor=ctrl_bg, activebackground=ctrl_bg,
-            font=("Helvetica", 9),
-        ).pack(side="left", padx=(0, 6))
+        mode_ch = tk.Frame(capture_row, bg=ctrl_bg)
+        mode_ch._skip_theme = True
+        mode_ch.pack(side="left", padx=(0, 8))
+        tk.Label(mode_ch, text="MODE", bg=ctrl_bg, fg="#888888",
+                 font=eq_lbl_font).pack(pady=(0, 1))
+        tk.Label(mode_ch, text="free", bg=ctrl_bg, fg="#AAAAAA",
+                 font=("Helvetica", 8), width=5).pack()
+        mode_int = tk.IntVar(value=0)
+        tk.Scale(mode_ch, variable=mode_int, from_=0, to=1,
+                 orient="vertical", length=50, width=14,
+                 showvalue=False, resolution=1,
+                 bg="#B0B0B0", fg="#888888",
+                 activebackground="#D0D0D0",
+                 troughcolor="#444444", highlightthickness=0,
+                 sliderrelief="raised", sliderlength=20,
+                 borderwidth=2).pack()
+        tk.Label(mode_ch, text="cal", bg=ctrl_bg, fg="#AAAAAA",
+                 font=("Helvetica", 8), width=5).pack()
+
+        def _on_mode_change(*args):
+            self._toner_mode_var.set("free" if mode_int.get() == 0
+                                     else "calibration")
+        mode_int.trace_add("write", _on_mode_change)
 
         self._toner_capture_btn = tk.Button(
-            cap_frame, text="Capture",
-            font=("Helvetica", 9, "bold"),
+            capture_row, text="Capture",
+            font=("Helvetica", 10, "bold"),
             command=self._toner_toggle_capture)
-        self._toner_capture_btn.pack(side="left")
+        self._toner_capture_btn.pack(side="left", padx=(0, 4), ipady=4)
 
     def _create_toner_fallback(self, parent):
         """Fallback UI when audio libraries are unavailable."""
@@ -1988,6 +2003,21 @@ class TonerTabMixin:
         self._toner_lock_sax_selector(True)
         dlg.destroy()
 
+    def _toner_load_unload_toggle(self):
+        """Toggle between Load and Unload based on current profile state."""
+        if self._toner_active_profile:
+            self._toner_unload_profile()
+        else:
+            self._toner_load_profile_quick()
+
+    def _toner_update_load_unload_btn(self):
+        """Update the Load/Unload button text based on profile state."""
+        if hasattr(self, '_toner_load_unload_btn'):
+            if self._toner_active_profile:
+                self._toner_load_unload_btn.configure(text="Unload")
+            else:
+                self._toner_load_unload_btn.configure(text="Load...")
+
     def _toner_load_profile_quick(self):
         """Quick profile loader — shows list, loads selected."""
         all_profiles = []
@@ -2077,15 +2107,15 @@ class TonerTabMixin:
                 cv.itemconfigure(self._toner_cal_status, state="hidden")
 
     def _toner_update_profile_label(self):
-        """Update the active profile indicator."""
+        """Update the active profile indicator and Load/Unload button."""
         if hasattr(self, '_toner_profile_label'):
             name = self._toner_active_profile or ""
             if name:
-                # Truncate long names
                 display = name[:PROFILE_NAME_MAX_DISPLAY] + "..." if len(name) > PROFILE_NAME_MAX_DISPLAY else name
                 self._toner_profile_label.configure(text=display, fg="#AAAAAA")
             else:
-                self._toner_profile_label.configure(text="", fg="#AAAAAA")
+                self._toner_profile_label.configure(text="no profile", fg="#666666")
+        self._toner_update_load_unload_btn()
 
     def _toner_start_new_session_and_listen(self):
         """Create a new session for the active profile and begin listening."""
