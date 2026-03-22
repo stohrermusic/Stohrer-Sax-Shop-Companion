@@ -485,11 +485,17 @@ class TonerTabMixin:
         sens_str.trace_add("write", _sens_from_switch)
 
         # ========== CENTER COLUMN: sax selector ==========
+        # Center column expands to push left/right apart and center the selector
         center_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
         center_col._skip_theme = True
-        center_col.pack(side="left", padx=(12, 12))
+        center_col.pack(side="left", fill="x", expand=True)
 
-        tk.Label(center_col, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
+        # Inner frame keeps the selector compact and centered
+        sax_inner = tk.Frame(center_col, bg=ctrl_bg)
+        sax_inner._skip_theme = True
+        sax_inner.pack()  # centered within the expanding column
+
+        tk.Label(sax_inner, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack()
 
         # Determine visible sax types from settings
@@ -507,7 +513,7 @@ class TonerTabMixin:
             sax_idx_var.set(visible_sax.index(self._toner_sax_var.get()))
 
         self._toner_sax_scale = tk.Scale(
-            center_col, variable=sax_idx_var,
+            sax_inner, variable=sax_idx_var,
             from_=0, to=max(0, len(visible_sax) - 1),
             orient="horizontal", length=max(120, len(visible_sax) * 32),
             width=14, showvalue=False, resolution=1,
@@ -518,7 +524,7 @@ class TonerTabMixin:
         self._toner_sax_idx_var = sax_idx_var
 
         # Labels under the slider
-        lbl_frame = tk.Frame(center_col, bg=ctrl_bg)
+        lbl_frame = tk.Frame(sax_inner, bg=ctrl_bg)
         lbl_frame._skip_theme = True
         lbl_frame.pack(fill="x")
         for i, stype in enumerate(visible_sax):
@@ -543,18 +549,14 @@ class TonerTabMixin:
         self._toner_pitch_var = tk.DoubleVar(
             value=toner_settings.get("reference_pitch", 440.0))
 
-        # ========== RIGHT COLUMN: session + capture controls ==========
+        # ========== RIGHT COLUMN: all controls in a horizontal row ==========
         right_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
         right_col._skip_theme = True
         right_col.pack(side="right", padx=(12, 0))
 
-        # --- Session lamp (larger, amber when active) ---
-        session_row = tk.Frame(right_col, bg=ctrl_bg)
-        session_row._skip_theme = True
-        session_row.pack(pady=(0, 6))
-
+        # Session lamp
         self._toner_session_canvas = tk.Canvas(
-            session_row, bg=ctrl_bg, highlightthickness=0, width=24, height=24)
+            right_col, bg=ctrl_bg, highlightthickness=0, width=24, height=24)
         self._toner_session_canvas._dark_canvas = True
         self._toner_session_canvas.pack(side="left")
         self._toner_session_glow = self._toner_session_canvas.create_oval(
@@ -562,39 +564,30 @@ class TonerTabMixin:
         self._toner_session_lamp = self._toner_session_canvas.create_oval(
             4, 4, 20, 20, fill="#332200", outline="#444444", width=1)
 
-        tk.Label(session_row, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
-                 font=("Helvetica", 7, "bold")).pack(side="left", padx=(4, 0))
+        tk.Label(right_col, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
+                 font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 10))
 
-        # --- Profile indicator + Load/Unload toggle ---
-        profile_row = tk.Frame(right_col, bg=ctrl_bg)
-        profile_row._skip_theme = True
-        profile_row.pack(pady=(0, 4))
-
+        # Profile indicator + Load/Unload toggle
         self._toner_profile_label = tk.Label(
-            profile_row, text="no profile", bg=ctrl_bg, fg="#666666",
+            right_col, text="no profile", bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 8))
-        self._toner_profile_label.pack(side="left", padx=(0, 6))
+        self._toner_profile_label.pack(side="left", padx=(0, 4))
 
         self._toner_load_unload_btn = tk.Button(
-            profile_row, text="Load...",
+            right_col, text="Load...",
             font=("Helvetica", 9),
             command=self._toner_load_unload_toggle)
-        self._toner_load_unload_btn.pack(side="left")
+        self._toner_load_unload_btn.pack(side="left", padx=(0, 10))
 
-        # --- MODE switch + Capture button ---
-        capture_row = tk.Frame(right_col, bg=ctrl_bg)
-        capture_row._skip_theme = True
-        capture_row.pack()
-
-        # Mode as a vertical switch (free/calibrated)
+        # MODE switch (free/cal)
         self._toner_mode_var = tk.StringVar(value="free")
-        mode_ch = tk.Frame(capture_row, bg=ctrl_bg)
+        mode_ch = tk.Frame(right_col, bg=ctrl_bg)
         mode_ch._skip_theme = True
         mode_ch.pack(side="left", padx=(0, 8))
         tk.Label(mode_ch, text="MODE", bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack(pady=(0, 1))
         tk.Label(mode_ch, text="free", bg=ctrl_bg, fg="#AAAAAA",
-                 font=("Helvetica", 8), width=5).pack()
+                 font=("Helvetica", 8), width=4).pack()
         mode_int = tk.IntVar(value=0)
         tk.Scale(mode_ch, variable=mode_int, from_=0, to=1,
                  orient="vertical", length=50, width=14,
@@ -605,18 +598,19 @@ class TonerTabMixin:
                  sliderrelief="raised", sliderlength=20,
                  borderwidth=2).pack()
         tk.Label(mode_ch, text="cal", bg=ctrl_bg, fg="#AAAAAA",
-                 font=("Helvetica", 8), width=5).pack()
+                 font=("Helvetica", 8), width=4).pack()
 
         def _on_mode_change(*args):
             self._toner_mode_var.set("free" if mode_int.get() == 0
                                      else "calibration")
         mode_int.trace_add("write", _on_mode_change)
 
+        # Capture button
         self._toner_capture_btn = tk.Button(
-            capture_row, text="Capture",
+            right_col, text="Capture",
             font=("Helvetica", 10, "bold"),
             command=self._toner_toggle_capture)
-        self._toner_capture_btn.pack(side="left", padx=(0, 4), ipady=4)
+        self._toner_capture_btn.pack(side="left", ipady=4)
 
     def _create_toner_fallback(self, parent):
         """Fallback UI when audio libraries are unavailable."""
