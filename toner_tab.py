@@ -1542,6 +1542,8 @@ class TonerTabMixin:
             save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
             self._toner_active_library = lib
             self._toner_active_profile = name
+            self._toner_active_session = None  # Clear old session
+            self._toner_update_profile_label()
             self._toner_refresh_profile_list()
             dlg.destroy()
 
@@ -2062,9 +2064,13 @@ class TonerTabMixin:
 
         def done_with_notes():
             dlg.destroy()
+            # Clear session — it's saved, don't carry it to the next profile
+            session_lib = self._toner_active_library
+            session_prof = self._toner_active_profile
+            self._toner_active_session = None
             # Prompt for notes after session
-            lib = self._toner_active_library
-            prof_name = self._toner_active_profile
+            lib = session_lib
+            prof_name = session_prof
             if lib and prof_name and lib in self._toner_profiles:
                 profile = self._toner_profiles[lib].get(prof_name)
                 if profile:
@@ -3172,6 +3178,8 @@ class TonerTabMixin:
             save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
             self._toner_active_library = lib
             self._toner_active_profile = name
+            self._toner_active_session = None  # Clear old session
+            self._toner_update_profile_label()
 
             # Set sax type
             sax_type = fields["horn_type"].get()
