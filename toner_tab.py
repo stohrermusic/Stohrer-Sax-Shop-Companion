@@ -396,41 +396,37 @@ class TonerTabMixin:
         ctrl_frame.columnconfigure(0, weight=1)
         ctrl_frame.columnconfigure(1, weight=1)
 
-        eq_lbl_font = ("Helvetica", 7)
+        eq_lbl_font = ("Helvetica", 8)
 
-        # --- Left panel: EQ-style vertical switches ---
+        # --- Left panel: display switches + SENS ---
         eq_panel = tk.Frame(ctrl_frame, bg=ctrl_bg)
         eq_panel._skip_theme = True
-        eq_panel.pack(side="left", padx=(0, 8))
+        eq_panel.pack(side="left", padx=(0, 12))
 
         def _make_vswitch(parent, label, var, val_top, val_bottom,
-                          lbl_top, lbl_bottom, col, cmd=None):
-            """Create a vertical two-position switch (like a toggle slider)."""
+                          lbl_top, lbl_bottom, col):
+            """Create a vertical two-position switch."""
             ch = tk.Frame(parent, bg=ctrl_bg)
             ch._skip_theme = True
-            ch.grid(row=0, column=col, padx=4, sticky="ns")
+            ch.grid(row=0, column=col, padx=5, sticky="ns")
             tk.Label(ch, text=label, bg=ctrl_bg, fg="#888888",
                      font=eq_lbl_font).pack(pady=(0, 1))
             tk.Label(ch, text=lbl_top, bg=ctrl_bg, fg="#AAAAAA",
                      font=("Helvetica", 8), width=4).pack()
-            # Two-position scale (snap between 0 and 1)
             int_var = tk.IntVar(value=0 if var.get() == val_top else 1)
-            sl = tk.Scale(ch, variable=int_var, from_=0, to=1,
-                         orient="vertical", length=50, width=14,
-                         showvalue=False, resolution=1,
-                         bg="#B0B0B0", fg="#888888",
-                         activebackground="#D0D0D0",
-                         troughcolor="#444444", highlightthickness=0,
-                         sliderrelief="raised", sliderlength=20,
-                         borderwidth=2)
-            sl.pack()
+            tk.Scale(ch, variable=int_var, from_=0, to=1,
+                     orient="vertical", length=50, width=14,
+                     showvalue=False, resolution=1,
+                     bg="#B0B0B0", fg="#888888",
+                     activebackground="#D0D0D0",
+                     troughcolor="#444444", highlightthickness=0,
+                     sliderrelief="raised", sliderlength=20,
+                     borderwidth=2).pack()
             tk.Label(ch, text=lbl_bottom, bg=ctrl_bg, fg="#AAAAAA",
                      font=("Helvetica", 8), width=4).pack()
 
             def _on_change(*args):
                 var.set(val_top if int_var.get() == 0 else val_bottom)
-                if cmd:
-                    cmd()
             int_var.trace_add("write", _on_change)
 
         _make_vswitch(eq_panel, "VIEW", self._toner_view_var,
@@ -440,69 +436,79 @@ class TonerTabMixin:
         _make_vswitch(eq_panel, "FPS", self._toner_fps_var,
                       "30", "60", "30", "60", 2)
 
-        # SENS vertical slider (continuous, not a switch)
-        sens_ch = tk.Frame(eq_panel, bg=ctrl_bg)
-        sens_ch._skip_theme = True
-        sens_ch.grid(row=0, column=3, padx=4, sticky="ns")
-        tk.Label(sens_ch, text="SENS", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(pady=(0, 2))
+        # SENS as a two-position switch (high/low)
         self._toner_sens_var = tk.IntVar(
             value=toner_settings.get("sensitivity", 50))
-        tk.Scale(sens_ch, variable=self._toner_sens_var, from_=100, to=0,
-                 orient="vertical", length=50, width=12,
-                 showvalue=False, resolution=1,
-                 bg="#B0B0B0", fg="#888888",
-                 activebackground="#D0D0D0",
-                 troughcolor="#444444", highlightthickness=0,
-                 sliderrelief="raised", sliderlength=18, borderwidth=2,
-                 command=self._toner_on_sensitivity_changed).pack()
+        sens_str = tk.StringVar(
+            value="high" if self._toner_sens_var.get() >= 50 else "low")
 
-        # A= pitch slider
-        pitch_ch = tk.Frame(eq_panel, bg=ctrl_bg)
-        pitch_ch._skip_theme = True
-        pitch_ch.grid(row=0, column=4, padx=4, sticky="ns")
-        tk.Label(pitch_ch, text="A =", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(pady=(0, 2))
-        self._toner_pitch_var = tk.DoubleVar(
-            value=toner_settings.get("reference_pitch", 440.0))
-        tk.Scale(pitch_ch, variable=self._toner_pitch_var, from_=460, to=420,
-                 orient="vertical", length=50, width=12,
-                 showvalue=False, resolution=0.5,
-                 bg="#B0B0B0", fg="#888888",
-                 activebackground="#D0D0D0",
-                 troughcolor="#444444", highlightthickness=0,
-                 sliderrelief="raised", sliderlength=18, borderwidth=2,
-                 command=lambda v: self._toner_on_pitch_changed()).pack()
-        self._toner_pitch_label = tk.Label(pitch_ch, text="440", bg=ctrl_bg,
-                                            fg="#AAAAAA", font=("Helvetica", 8))
-        self._toner_pitch_label.pack()
-        def _update_pitch_label(*args):
-            self._toner_pitch_label.configure(
-                text=f"{self._toner_pitch_var.get():.0f}")
-        self._toner_pitch_var.trace_add("write", _update_pitch_label)
+        def _sens_from_switch(*args):
+            self._toner_sens_var.set(75 if sens_str.get() == "high" else 25)
+            self._toner_on_sensitivity_changed()
 
-        # SAX type selector
-        sax_ch = tk.Frame(eq_panel, bg=ctrl_bg)
-        sax_ch._skip_theme = True
-        sax_ch.grid(row=0, column=5, padx=4, sticky="ns")
-        tk.Label(sax_ch, text="SAX", bg=ctrl_bg, fg="#888888",
-                 font=eq_lbl_font).pack(pady=(0, 2))
+        _make_vswitch(eq_panel, "SENS", sens_str,
+                      "high", "low", "high", "low", 3)
+        sens_str.trace_add("write", _sens_from_switch)
+
+        # --- Horizontal sax selector (separate from display switches) ---
+        sax_panel = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        sax_panel._skip_theme = True
+        sax_panel.pack(side="left", padx=(4, 0))
+
+        tk.Label(sax_panel, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
+                 font=eq_lbl_font).pack()
+
+        # Determine visible sax types from settings
+        visible_sax = self.settings.get("visible_sax_types", None)
+        if not visible_sax:
+            visible_sax = SAX_TYPES[:]
+        self._toner_visible_sax = visible_sax
+
         self._toner_sax_var = tk.StringVar(
             value=toner_settings.get("sax_type", "Alto"))
-        sax_combo = ttk.Combobox(
-            sax_ch, textvariable=self._toner_sax_var,
-            values=SAX_TYPES, state="readonly", width=7)
-        sax_combo.pack()
-        sax_combo.bind("<<ComboboxSelected>>", self._toner_on_sax_type_changed)
+
+        # Horizontal scale mapped to sax type index
+        sax_idx_var = tk.IntVar(value=0)
+        if self._toner_sax_var.get() in visible_sax:
+            sax_idx_var.set(visible_sax.index(self._toner_sax_var.get()))
+
+        self._toner_sax_scale = tk.Scale(
+            sax_panel, variable=sax_idx_var,
+            from_=0, to=max(0, len(visible_sax) - 1),
+            orient="horizontal", length=max(100, len(visible_sax) * 28),
+            width=14, showvalue=False, resolution=1,
+            bg="#B0B0B0", fg="#888888", activebackground="#D0D0D0",
+            troughcolor="#444444", highlightthickness=0,
+            sliderrelief="raised", sliderlength=20, borderwidth=2)
+        self._toner_sax_scale.pack()
+        self._toner_sax_idx_var = sax_idx_var
+
+        # Labels under the slider
+        lbl_frame = tk.Frame(sax_panel, bg=ctrl_bg)
+        lbl_frame._skip_theme = True
+        lbl_frame.pack(fill="x")
+        for i, stype in enumerate(visible_sax):
+            # Abbreviate long names
+            abbrev = stype[:3] if len(stype) > 5 else stype
+            tk.Label(lbl_frame, text=abbrev, bg=ctrl_bg, fg="#AAAAAA",
+                     font=("Helvetica", 6)).pack(side="left", expand=True)
+
+        def _on_sax_changed(*args):
+            idx = sax_idx_var.get()
+            if 0 <= idx < len(visible_sax):
+                self._toner_sax_var.set(visible_sax[idx])
+                self._toner_on_sax_type_changed()
+        sax_idx_var.trace_add("write", _on_sax_changed)
+
+        # Lock sax selector when profile is loaded
+        self._toner_sax_scale_widget = self._toner_sax_scale
+
         if self._toner_engine:
             self._toner_engine.set_sax_type(self._toner_sax_var.get())
 
-        # Concert pitch toggle
-        self._toner_concert_pitch_check = tk.Checkbutton(
-            sax_ch, text="C", variable=self._toner_concert_pitch,
-            bg=ctrl_bg, fg="#AAAAAA", selectcolor=ctrl_bg,
-            activebackground=ctrl_bg, font=("Helvetica", 7))
-        self._toner_concert_pitch_check.pack()
+        # A= and concert pitch moved to Options menu — just store vars
+        self._toner_pitch_var = tk.DoubleVar(
+            value=toner_settings.get("reference_pitch", 440.0))
 
         # --- Capture controls (right side) ---
         cap_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
@@ -1064,6 +1070,52 @@ class TonerTabMixin:
     def _toner_on_sax_type_changed(self, event=None):
         if self._toner_engine:
             self._toner_engine.set_sax_type(self._toner_sax_var.get())
+
+    def _toner_lock_sax_selector(self, locked):
+        """Lock or unlock the sax selector (locked when profile is loaded)."""
+        if hasattr(self, '_toner_sax_scale_widget'):
+            state = "disabled" if locked else "normal"
+            self._toner_sax_scale_widget.configure(state=state)
+
+    def _toner_open_pitch_dialog(self):
+        """Open reference pitch (A=) dialog."""
+        result = simpledialog.askfloat("Reference Pitch",
+            "A = ? Hz", initialvalue=self._toner_pitch_var.get(),
+            minvalue=420, maxvalue=460, parent=self.root)
+        if result is not None:
+            self._toner_pitch_var.set(result)
+            self._toner_on_pitch_changed()
+
+    def _toner_open_pitch_display_dialog(self):
+        """Toggle between written and concert pitch display."""
+        current = "concert" if self._toner_concert_pitch.get() else "written"
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Display Pitch")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Note Display", bg=bg, fg=fg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
+
+        var = tk.StringVar(value=current)
+        tk.Radiobutton(frame, text="Written pitch (what the player fingers)",
+                       variable=var, value="written", bg=bg, fg=fg,
+                       font=("Helvetica", 10)).pack(anchor="w")
+        tk.Radiobutton(frame, text="Concert pitch (actual sounding frequency)",
+                       variable=var, value="concert", bg=bg, fg=fg,
+                       font=("Helvetica", 10)).pack(anchor="w")
+
+        def apply():
+            self._toner_concert_pitch.set(var.get() == "concert")
+            dlg.destroy()
+
+        tk.Button(frame, text="OK", command=apply, width=10).pack(pady=(10, 0))
 
     def _toner_transpose_note(self, concert_note):
         """Transpose a concert pitch note name to written pitch for the selected sax.
@@ -1931,14 +1983,17 @@ class TonerTabMixin:
         self._toner_active_session = None
         self._toner_update_profile_label()
 
-        # Sync sax type
+        # Sync sax type and lock selector
         prof = self._toner_profiles[lib_name][prof_name]
         sax_type = prof.get('horn_type', '')
         if sax_type:
-            if hasattr(self, '_toner_sax_var'):
-                self._toner_sax_var.set(sax_type)
+            self._toner_sax_var.set(sax_type)
+            if sax_type in self._toner_visible_sax:
+                self._toner_sax_idx_var.set(
+                    self._toner_visible_sax.index(sax_type))
             if self._toner_engine:
                 self._toner_engine.set_sax_type(sax_type)
+        self._toner_lock_sax_selector(True)
         dlg.destroy()
 
     def _toner_load_profile_quick(self):
@@ -1982,14 +2037,17 @@ class TonerTabMixin:
             self._toner_active_session = None
             self._toner_update_profile_label()
 
-            # Sync sax type
+            # Sync sax type and lock selector
             prof = self._toner_profiles[lib_name][prof_name]
             sax_type = prof.get('horn_type', '')
             if sax_type:
-                if hasattr(self, '_toner_sax_var'):
-                    self._toner_sax_var.set(sax_type)
+                self._toner_sax_var.set(sax_type)
+                if sax_type in self._toner_visible_sax:
+                    self._toner_sax_idx_var.set(
+                        self._toner_visible_sax.index(sax_type))
                 if self._toner_engine:
                     self._toner_engine.set_sax_type(sax_type)
+            self._toner_lock_sax_selector(True)
             dlg.destroy()
 
         btn_frame = tk.Frame(frame, bg=bg)
@@ -2003,6 +2061,7 @@ class TonerTabMixin:
         self._toner_active_profile = None
         self._toner_active_session = None
         self._toner_update_profile_label()
+        self._toner_lock_sax_selector(False)
 
     def _toner_signal_above_threshold(self, result):
         """Check if the signal level is above the capture threshold."""

@@ -400,6 +400,9 @@ DEFAULT_SETTINGS = {
     "audio_input_device": None,  # None = system default, or device index
     "capture_threshold": 50,     # 0-100, how loud a signal must be to trigger capture
 
+    # VISIBLE SAX TYPES (for toner sax selector)
+    "visible_sax_types": None,  # None = all types, or list of type names
+
     # TONER ACCESS
     "toner_unlocked": False,
 
