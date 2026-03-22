@@ -1596,19 +1596,26 @@ class TonerTabMixin:
     # ------------------------------------------------------------------
 
     def _toner_toggle_capture(self):
-        """Toggle capture mode on/off. Guides user through setup if needed."""
+        """Toggle capture mode on/off."""
         if self._toner_capture_state is not None:
             # Stop capturing
             self._toner_stop_capture()
             return
 
-        if not self._toner_active_session:
-            # No active session — walk user through setup
-            self._toner_capture_setup_flow()
+        # Need a profile loaded
+        if not self._toner_active_profile:
+            messagebox.showinfo("No Profile Loaded",
+                "Load a profile first to capture data.\n\n"
+                "Use Load... on the control strip, or\n"
+                "File > Profiles to create and manage profiles.")
+            self._toner_open_profile_dialog()
             return
 
-        # Session exists — start listening
-        self._toner_begin_listening()
+        # Start a new session if needed
+        if not self._toner_active_session:
+            self._toner_start_new_session_and_listen()
+        else:
+            self._toner_begin_listening()
 
     def _toner_begin_listening(self):
         """Enter listening mode (called after session is ready)."""
