@@ -487,7 +487,7 @@ class TonerTabMixin:
         # ========== CENTER COLUMN: sax selector ==========
         center_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
         center_col._skip_theme = True
-        center_col.pack(side="left", fill="x", expand=True)
+        center_col.pack(side="left", padx=(12, 12))
 
         tk.Label(center_col, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack()
