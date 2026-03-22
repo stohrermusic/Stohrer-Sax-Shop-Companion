@@ -60,30 +60,32 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner (Experimental)
-- 12-wheel stroboscopic tuner
+- 12-wheel stroboscopic tuner modeled after the Conn Stroboconn
 - Per-ring octave brightness from real spectral data
+- Graphic EQ gain panel and vintage backlit VU meter with damped needle
 - Transposition support (Concert, Bb, Eb, F)
-- Reference tone player, analog VU meter, configurable colors and frame rate
+- Reference tone player with adjustable pitch
+- Configurable frame rate (60/90/120 fps) and color themes
 - A quality microphone is recommended (e.g. Audio-Technica AT2020 USB)
-- Requires Apple Silicon on Mac (not available on Intel Macs)
 
 ### Harmonic Tone Analyzer (Experimental)
 - Real-time harmonic spectrum analyzer for saxophone
 - Detects fundamental pitch, extracts up to 12 harmonics
-- Spectrum view (full FFT) and Bars view (per-harmonic), with linear or dB scale
+- Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
 - Five VU-style gauges: intonation, resonance, richness, brightness, darkness
-- Brightness/darkness adapted per saxophone type using Benade break frequencies
+- Brightness/darkness adapted per saxophone type using Benade spectral break frequencies
+- Supports all standard saxophone types including baritone
 - Tone profiles: capture harmonic fingerprints of individual horns
-  - Two capture modes: free (natural playing) and calibration (guided chromatic scale), plus file import (WAV)
-  - Profiles are a fixed setup: horn + player + mouthpiece + reed
+  - Free capture (natural playing) and guided calibration modes, plus WAV file import
+  - Profiles stored in concert pitch for cross-instrument comparison
   - Organized into libraries with import/export
 - Comparison tool with filtering, per-note and horn-average views
 - Auto-transposition by saxophone type with concert pitch toggle
-- A quality microphone is essential — laptop mics are not recommended for tone analysis
-- Requires Apple Silicon on Mac (not available on Intel Macs)
+- A quality microphone is essential — laptop mics do not provide reliable results
 
 ### General
 - Feature Set (File > Feature Set) — choose which tabs to show
+- Tab-aware User Guide (Help > User Guide)
 - Runs on Windows, macOS, and Linux
 - macOS dark mode support
 - Platform-appropriate config storage with automatic migration
