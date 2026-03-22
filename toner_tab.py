@@ -271,7 +271,7 @@ class TonerTabMixin:
 
         # --- Row 0: Intonation gauge + note display ---
         self._toner_intonation_canvas = tk.Canvas(
-            gauge_frame, bg=bg, highlightthickness=0, width=220, height=90)
+            gauge_frame, bg=bg, highlightthickness=0, width=240, height=100)
         self._toner_intonation_canvas._dark_canvas = True
         self._toner_intonation_canvas.grid(row=gauge_row, column=1,
                                             pady=(2, 0))
@@ -295,14 +295,21 @@ class TonerTabMixin:
         self._toner_freq_label.pack()
 
         # In-tune lamp (green when within 1 cent)
+        intune_frame = tk.Frame(note_frame, bg=bg)
+        intune_frame._skip_theme = True
+        intune_frame.pack(pady=(4, 0))
+
         self._toner_intune_canvas = tk.Canvas(
-            note_frame, bg=bg, highlightthickness=0, width=20, height=20)
+            intune_frame, bg=bg, highlightthickness=0, width=20, height=20)
         self._toner_intune_canvas._dark_canvas = True
-        self._toner_intune_canvas.pack(pady=(2, 0))
+        self._toner_intune_canvas.pack(side="left")
         self._toner_intune_glow = self._toner_intune_canvas.create_oval(
             2, 2, 18, 18, fill="#0A1A0A", outline="")
         self._toner_intune_lamp = self._toner_intune_canvas.create_oval(
             4, 4, 16, 16, fill="#113311", outline="#444444", width=1)
+
+        tk.Label(intune_frame, text="IN TUNE", bg=bg, fg=LABEL_DIM,
+                 font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 0))
 
         gauge_row += 1
 
@@ -405,7 +412,7 @@ class TonerTabMixin:
             tk.Label(ch, text=label, bg=ctrl_bg, fg="#888888",
                      font=eq_lbl_font).pack(pady=(0, 1))
             tk.Label(ch, text=lbl_top, bg=ctrl_bg, fg="#AAAAAA",
-                     font=("Helvetica", 8)).pack()
+                     font=("Helvetica", 8), width=4).pack()
             # Two-position scale (snap between 0 and 1)
             int_var = tk.IntVar(value=0 if var.get() == val_top else 1)
             sl = tk.Scale(ch, variable=int_var, from_=0, to=1,
@@ -418,7 +425,7 @@ class TonerTabMixin:
                          borderwidth=2)
             sl.pack()
             tk.Label(ch, text=lbl_bottom, bg=ctrl_bg, fg="#AAAAAA",
-                     font=("Helvetica", 8)).pack()
+                     font=("Helvetica", 8), width=4).pack()
 
             def _on_change(*args):
                 var.set(val_top if int_var.get() == 0 else val_bottom)
@@ -563,11 +570,11 @@ class TonerTabMixin:
 
     def _toner_build_gauge(self, cv, left_label, right_label):
         """Draw a VU-style arc gauge and return dict with IDs for animation."""
-        cv_w, cv_h = 220, 90
+        cv_w, cv_h = 240, 100
         cv.configure(width=cv_w, height=cv_h)
         cx = cv_w // 2
         cy = cv_h - 8
-        r = 52
+        r = 65
         arc_start = GAUGE_ARC_START
         arc_end = GAUGE_ARC_END
 
@@ -644,11 +651,11 @@ class TonerTabMixin:
 
     def _toner_build_intonation_gauge(self, cv):
         """Build the intonation VU gauge (±50 cents, same style as tuner VU)."""
-        cv_w, cv_h = 220, 90
+        cv_w, cv_h = 240, 100
         cv.configure(width=cv_w, height=cv_h)
         cx = cv_w // 2
         cy = cv_h - 8
-        r = 52
+        r = 65
         arc_start = GAUGE_ARC_START
         arc_end = GAUGE_ARC_END
 
