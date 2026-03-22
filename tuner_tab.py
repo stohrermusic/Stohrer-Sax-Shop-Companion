@@ -471,6 +471,33 @@ class TunerTabMixin:
                       cmd=_on_key_slider,
                       value_fmt=lambda v: TRANSPOSITION_KEYS[int(v)])
 
+        # FPS 3-position switch (60/90/120)
+        fps_values = ["60", "90", "120"]
+        fps_idx = fps_values.index(self._tuner_fps_var.get()) if self._tuner_fps_var.get() in fps_values else 0
+        fps_idx_var = tk.IntVar(value=fps_idx)
+
+        fps_ch = tk.Frame(eq_frame, bg=ctrl_bg)
+        fps_ch._skip_theme = True
+        fps_ch.grid(row=0, column=5, padx=3, sticky="ns")
+        tk.Label(fps_ch, text="FPS", bg=ctrl_bg, fg="#888888",
+                 font=eq_lbl_font).pack(pady=(0, 2))
+        tk.Scale(fps_ch, variable=fps_idx_var, from_=0, to=2,
+                 orient="vertical", length=90, width=12,
+                 showvalue=False, resolution=1,
+                 bg="#B0B0B0", fg=ctrl_fg, activebackground="#D0D0D0",
+                 troughcolor="#444444", highlightthickness=0,
+                 sliderrelief="raised", sliderlength=18,
+                 borderwidth=2).pack()
+        fps_lbl = tk.Label(fps_ch, text=fps_values[fps_idx], bg=ctrl_bg,
+                           fg="#AAAAAA", font=eq_lbl_font)
+        fps_lbl.pack(pady=(2, 0))
+
+        def _on_fps_slider(*args):
+            idx = fps_idx_var.get()
+            self._tuner_fps_var.set(fps_values[idx])
+            fps_lbl.configure(text=fps_values[idx])
+        fps_idx_var.trace_add("write", _on_fps_slider)
+
         # ---- CENTER: Experimental / flat-pilot-sharp / ref button ----
         self._tuner_ref_notes = _build_ref_notes(440.0)
         self._tuner_ref_note_var = tk.StringVar(value="A4")
@@ -1010,19 +1037,6 @@ class TunerTabMixin:
             selectcolor=bg, activebackground=bg,
             font=("Helvetica", 10)
         ).pack(side="left")
-
-        # --- FPS ---
-        fps_row = tk.Frame(frame, bg=bg)
-        fps_row.pack(fill="x", pady=(0, 10))
-        tk.Label(fps_row, text="Frame Rate:", bg=bg, fg=fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        fps_combo = ttk.Combobox(
-            fps_row, textvariable=self._tuner_fps_var,
-            values=["60", "90", "120"], state="readonly", width=5
-        )
-        fps_combo.pack(side="left")
-        tk.Label(fps_row, text="fps", bg=bg, fg=fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(4, 0))
 
         # Close button
         tk.Button(frame, text="Close", command=dlg.destroy,
