@@ -50,6 +50,20 @@ DISC_BASE_SEGMENTS = 16
 MIN_OCTAVE = 1
 MAX_OCTAVE = 7
 
+# --- Analysis tuning parameters ---
+# Multiplier applied to median spectrum magnitude for adaptive noise floor
+NOISE_FLOOR_MULTIPLIER = 3.0
+# Sensitivity range factor: maps sensitivity 0-100 to threshold scale 1.0-5.0
+SENSITIVITY_RANGE_FACTOR = 0.04
+# Minimum frequency (Hz) to consider in FFT analysis
+MIN_FREQUENCY_HZ = 25
+# Cents error clamp: maximum ±cents before clamping (1 semitone)
+CENTS_CLAMP = 100.0
+# Fraction of max magnitude below which a wheel is considered inactive
+ACTIVE_THRESHOLD = 0.05
+# Consecutive stale audio reads before triggering stream restart (~1s at 60fps)
+STALE_RESTART_THRESHOLD = 60
+
 
 # ============================================
 # ANALYSIS RESULT
@@ -210,7 +224,7 @@ class TunerEngine:
         # Check stream health
         if self._ring_buffer.is_stale():
             self._stale_count += 1
-            if self._stale_count > 60:  # ~1 sec at 60fps
+            if self._stale_count > STALE_RESTART_THRESHOLD:
                 self._stale_count = 0
                 self._restart_stream()
                 return result
@@ -283,8 +297,8 @@ class TunerEngine:
         bin_freq = SAMPLE_RATE / FFT_SIZE  # ~10.77 Hz
 
         # Adaptive noise floor threshold
-        noise_floor = np.median(mags[10:]) * 3.0 if len(mags) > 10 else 0.0
-        sensitivity_scale = 1.0 + (100 - self._sensitivity) * 0.04  # 1.0 to 5.0
+        noise_floor = np.median(mags[10:]) * NOISE_FLOOR_MULTIPLIER if len(mags) > 10 else 0.0
+        sensitivity_scale = 1.0 + (100 - self._sensitivity) * SENSITIVITY_RANGE_FACTOR  # 1.0 to 5.0
         threshold = noise_floor * sensitivity_scale
 
         max_mag = 0.0
@@ -296,7 +310,7 @@ class TunerEngine:
             best_bin = -1
 
             for oct_idx, freq in enumerate(self._freq_table[pc]):
-                if freq < 25 or freq > SAMPLE_RATE / 2:
+                if freq < MIN_FREQUENCY_HZ or freq > SAMPLE_RATE / 2:
                     continue
 
                 bin_idx = int(round(freq / bin_freq))
@@ -340,7 +354,7 @@ class TunerEngine:
 
                 if actual_freq > 0 and ref_freq > 0:
                     cents = 1200.0 * math.log2(actual_freq / ref_freq)
-                    cents = max(-100.0, min(100.0, cents))  # Clamp to ±1 semitone
+                    cents = max(-CENTS_CLAMP, min(CENTS_CLAMP, cents))
                     result.cents_errors[pc] = cents
 
                     # Accumulate phase offset (the strobe rotation)
@@ -357,9 +371,9 @@ class TunerEngine:
                 for r in range(NUM_RINGS):
                     result.ring_magnitudes[pc][r] /= max_mag
 
-        # Determine active wheels (>5% of max magnitude)
+        # Determine active wheels
         for pc in range(12):
-            result.active[pc] = result.magnitudes[pc] > 0.05
+            result.active[pc] = result.magnitudes[pc] > ACTIVE_THRESHOLD
 
         return result
 

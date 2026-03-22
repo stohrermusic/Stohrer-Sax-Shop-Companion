@@ -46,6 +46,35 @@ NUM_RINGS = len(RING_SEGMENTS)
 # Wedge cutout parameters
 WEDGE_ANGLE = 80.0   # Total visible arc in degrees
 
+# --- StrobeWheel rendering ---
+CENTER_GAP_FRACTION = 0.12       # Fraction of radius reserved as center gap
+RING_GAP_FRACTION = 0.05         # Fraction of ring width used as gap between rings
+MASK_EXTEND_PX = 8               # Pixels the mask extends beyond disc edge
+BRIGHTNESS_GAMMA = 0.6           # Gamma curve for magnitude → brightness mapping
+MAGNITUDE_THRESHOLD = 0.05       # Below this magnitude, brightness snaps to zero
+PHASE_CHANGE_THRESHOLD = 0.005   # Degrees — skip redraw below this (sub-pixel)
+LABEL_BRIGHTNESS_MIN = 0.35      # Minimum label brightness when signal detected
+LABEL_BRIGHTNESS_RANGE = 0.65    # Additional brightness scaled by magnitude
+
+# --- VU meter behavior ---
+VU_NEEDLE_DAMPING = 0.18         # Lerp factor per frame (0=frozen, 1=instant)
+VU_SIGNAL_THRESHOLD = 0.08       # Minimum magnitude to register a pitch on VU
+VU_IN_TUNE_CENTS = 1.0           # Cents threshold for "IN TUNE" display
+VU_CENTS_RANGE = 50.0            # Max cents shown on VU scale (symmetric ±)
+VU_ARC_START_DEG = 155.0         # Needle arc start angle (degrees, left side)
+VU_ARC_END_DEG = 25.0            # Needle arc end angle (degrees, right side)
+VU_RADIUS = 80                   # Radius of the VU meter arc
+
+# --- Sensitivity gain mapping ---
+GAIN_MIN = 0.2                   # Gain at sensitivity=0%
+GAIN_RANGE = 4.8                 # Additional gain at sensitivity=100%
+
+# --- Wheel layout ---
+LAYOUT_MARGIN_FRACTION = 0.08    # Horizontal margin as fraction of column width
+LAYOUT_LABEL_GAP = 18            # Vertical pixels between top and bottom wheel rows
+LAYOUT_RADIUS_COL_LIMIT = 0.48   # Max radius as fraction of column width
+LAYOUT_RADIUS_ROW_LIMIT = 0.55   # Max radius as fraction of row height
+
 # Transposition label shifts (concert pitch class 0=C → displayed label)
 TRANSPOSITION_SHIFTS = {
     "C": 0,
@@ -146,12 +175,12 @@ class StrobeWheel:
             self._wedge_center = 270.0
 
         # Ring radii — evenly spaced from center to outer radius
-        gap = radius * 0.12  # Gap at center (first ring starts here)
+        gap = radius * CENTER_GAP_FRACTION  # First ring starts here
         ring_width = (radius - gap) / NUM_RINGS
         self._ring_radii = []
         for i in range(NUM_RINGS):
             r_inner = gap + i * ring_width
-            r_outer = gap + (i + 1) * ring_width - ring_width * 0.05  # Tiny gap between rings
+            r_outer = gap + (i + 1) * ring_width - ring_width * RING_GAP_FRACTION
             self._ring_radii.append((r_inner, r_outer))
 
         # Pre-create segment polygons
@@ -201,7 +230,7 @@ class StrobeWheel:
         """Create wedge-shaped mask matching the Stroboconn cutout."""
         cx, cy = self.cx, self.cy
         r = self.radius
-        mr = r + 8  # Mask extends slightly beyond disc edge
+        mr = r + MASK_EXTEND_PX  # Mask extends slightly beyond disc edge
 
         # Wedge sector: centered on _wedge_center, spanning WEDGE_ANGLE
         wedge_start = self._wedge_center - WEDGE_ANGLE / 2
@@ -262,7 +291,7 @@ class StrobeWheel:
         overall_scale = overall_brightness_pct / 100.0
 
         # Compute overall brightness for label
-        brightness = min(1.0, magnitude ** 0.6) if magnitude > 0.05 else 0.0
+        brightness = min(1.0, magnitude ** BRIGHTNESS_GAMMA) if magnitude > MAGNITUDE_THRESHOLD else 0.0
 
         # Per-ring brightness from real spectral data
         ring_mix = ring_brightness_pct / 100.0  # 0.0 = uniform, 1.0 = full per-ring
@@ -271,7 +300,7 @@ class StrobeWheel:
             uniform_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
             for ring_idx in range(NUM_RINGS):
                 rm = min(1.0, ring_magnitudes[ring_idx])
-                rb = min(1.0, rm ** 0.6) if rm > 0.05 else 0.0
+                rb = min(1.0, rm ** BRIGHTNESS_GAMMA) if rm > MAGNITUDE_THRESHOLD else 0.0
                 per_ring_factor = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
                 # Blend between uniform and per-ring based on ring_mix
                 blended = uniform_factor * (1.0 - ring_mix) + per_ring_factor * ring_mix
@@ -289,7 +318,7 @@ class StrobeWheel:
                 for poly_id, _, _, _ in ring_segs:
                     self.canvas.itemconfigure(poly_id, fill=fill)
             # Label brightness tracks overall magnitude
-            label_color = _scale_color("#FFFFFF", 0.35 + brightness * 0.65)
+            label_color = _scale_color("#FFFFFF", LABEL_BRIGHTNESS_MIN + brightness * LABEL_BRIGHTNESS_RANGE)
             self.canvas.itemconfigure(self._label_id, fill=label_color)
 
         self._brightness = brightness
@@ -297,7 +326,7 @@ class StrobeWheel:
         # Update segment positions (rotate by phase_offset)
         # Skip coordinate recalculation when phase hasn't moved enough to see.
         # 0.005 degrees ≈ 0.09px at 50px radius — sub-pixel, invisible.
-        if abs(phase_offset - self._phase_offset) < 0.005:
+        if abs(phase_offset - self._phase_offset) < PHASE_CHANGE_THRESHOLD:
             return  # No visible change, skip coordinate update
 
         self._phase_offset = phase_offset
@@ -588,15 +617,15 @@ class TunerTabMixin:
         accidentals = [(1, 0.5), (3, 1.5), (6, 3.5), (8, 4.5), (10, 5.5)]
 
         col_w = w / 7
-        margin_x = col_w * 0.08
+        margin_x = col_w * LAYOUT_MARGIN_FRACTION
 
         # Row layout: top row overlapping bottom row (like real Stroboconn)
-        label_gap = 18
+        label_gap = LAYOUT_LABEL_GAP
         row_h = (wheel_h - label_gap) / 2
         top_cy = row_h * 0.50
         bottom_cy = row_h + label_gap + row_h * 0.50
 
-        radius = min(col_w * 0.48, row_h * 0.55)
+        radius = min(col_w * LAYOUT_RADIUS_COL_LIMIT, row_h * LAYOUT_RADIUS_ROW_LIMIT)
 
         positions = {}
         for pc, col in naturals:
@@ -645,9 +674,9 @@ class TunerTabMixin:
         cv_w, cv_h = 200, 120
         vu_cx = cv_w // 2
         vu_cy = cv_h - 10
-        vu_r = 80
-        arc_start = 155.0
-        arc_end = 25.0
+        vu_r = VU_RADIUS
+        arc_start = VU_ARC_START_DEG
+        arc_end = VU_ARC_END_DEG
 
         # --- Backlit amber panel ---
         amber = "#D4920A"
@@ -772,7 +801,7 @@ class TunerTabMixin:
                 best_pc = pc
 
         target_cents = 0.0
-        if best_pc < 0 or best_mag < 0.08:
+        if best_pc < 0 or best_mag < VU_SIGNAL_THRESHOLD:
             # No signal — park needle at center, clear readout
             self._vu_note_label.configure(text="")
             self._vu_cents_label.configure(text="", fg="#AAAAAA")
@@ -796,7 +825,7 @@ class TunerTabMixin:
 
             self._vu_note_label.configure(text=f"{note_name}{best_oct}")
 
-            if abs(target_cents) < 1.0:
+            if abs(target_cents) < VU_IN_TUNE_CENTS:
                 self._vu_cents_label.configure(text="IN TUNE", fg="#00CC00")
             elif target_cents > 0:
                 self._vu_cents_label.configure(
@@ -806,11 +835,10 @@ class TunerTabMixin:
                     text=f"{target_cents:.0f}\u00a2", fg="#AAAAAA")
 
         # Damped needle — lerp toward target (weighted, not instant)
-        damping = 0.18
-        self._vu_smooth_cents += (target_cents - self._vu_smooth_cents) * damping
+        self._vu_smooth_cents += (target_cents - self._vu_smooth_cents) * VU_NEEDLE_DAMPING
 
-        clamped = max(-50.0, min(50.0, self._vu_smooth_cents))
-        frac = (clamped + 50.0) / 100.0
+        clamped = max(-VU_CENTS_RANGE, min(VU_CENTS_RANGE, self._vu_smooth_cents))
+        frac = (clamped + VU_CENTS_RANGE) / (2.0 * VU_CENTS_RANGE)
         angle_deg = self._vu_arc_start + (self._vu_arc_end - self._vu_arc_start) * frac
         angle_rad = math.radians(angle_deg)
         nx = self._vu_cx + self._vu_needle_len * math.cos(angle_rad)
@@ -1089,7 +1117,7 @@ class TunerTabMixin:
 
             if self._tuner_wheels:
                 sens = self._tuner_sens_var.get() / 100.0
-                gain = 0.2 + sens * 4.8
+                gain = GAIN_MIN + sens * GAIN_RANGE
                 for i, wheel in enumerate(self._tuner_wheels):
                     mag = min(1.0, result.magnitudes[i] * gain)
                     ring_mags = [min(1.0, rm * gain)

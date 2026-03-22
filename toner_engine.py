@@ -51,6 +51,67 @@ MIN_FUNDAMENTAL_HZ = 65.0
 # Maximum fundamental frequency (altissimo range ~ 1500 Hz)
 MAX_FUNDAMENTAL_HZ = 2000.0
 
+# --- Fundamental detection tuning parameters ---
+# Noise floor multiplier for sub-harmonic peak threshold (low divisors ≤3)
+SUBHARM_NOISE_MULT_STRICT = 3.0
+# Noise floor multiplier for sub-harmonic peak threshold (high divisors 4-5)
+SUBHARM_NOISE_MULT_RELAXED = 2.0
+# Prominence ratio for sub-harmonic peak vs neighbors (low divisors ≤3)
+SUBHARM_PROMINENCE_STRICT = 1.5
+# Prominence ratio for sub-harmonic peak vs neighbors (high divisors 4-5)
+SUBHARM_PROMINENCE_RELAXED = 1.3
+# Noise floor multiplier for harmonic series verification peaks
+HARMONIC_VERIFY_NOISE_MULT = 3.0
+# Required harmonic matches for low divisors (2-3)
+HARMONIC_MATCHES_LOW = 2
+# Required harmonic matches for high divisors (4-5)
+HARMONIC_MATCHES_HIGH = 3
+# Octave jump hysteresis: new peak must be this much stronger to override previous
+OCTAVE_HYSTERESIS_FACTOR = 1.5
+
+# --- Signal level and sensitivity ---
+# RMS display scaling factor (maps raw RMS to 0-1 signal level indicator)
+RMS_DISPLAY_SCALE = 10.0
+# Base minimum RMS threshold before sensitivity scaling
+RMS_MIN_BASE = 0.002
+# Sensitivity range factor: maps sensitivity 0-100 to threshold scale 1.0-5.0
+TONER_SENSITIVITY_FACTOR = 0.04
+
+# --- Harmonic extraction ---
+# Noise floor cutoff: harmonics weaker than this (dB re: fundamental) are discarded
+HARMONIC_NOISE_FLOOR_DB = -60.0
+# Cents deviation clamp for harmonic position
+HARMONIC_CENTS_CLAMP = 100.0
+
+# --- Descriptor scaling constants ---
+# Resonance: raw score range mapped to gauge (0.85 raw = gauge 0%, 1.0 = gauge 100%)
+RESONANCE_RAW_MIN = 0.85
+RESONANCE_RAW_RANGE = 0.15    # 1.0 - 0.85
+# Resonance: max mean deviation (cents) for raw score calculation
+RESONANCE_MAX_DEVIATION = 50.0
+# Richness significance threshold (dB re: fundamental) for "significant" harmonics
+RICHNESS_SIG_THRESHOLD_DB = -35.0
+# Richness: raw spectral flatness*coverage range mapped to gauge
+RICHNESS_RAW_MIN = 0.50      # Below this = gauge 0%
+RICHNESS_RAW_RANGE = 0.45    # 0.95 - 0.50
+# Fullness: exponent for balance penalty (higher = harsher penalty for imbalance)
+FULLNESS_BALANCE_EXPONENT = 2.0
+# Fullness: weight split between base fullness and energy-dependent component
+FULLNESS_BASE_WEIGHT = 0.6   # Minimum fullness fraction from balance alone
+FULLNESS_ENERGY_WEIGHT = 0.4 # Additional fullness fraction from harmonic energy
+# Fullness: energy factor divisor (non-fund energy / fund energy / this value)
+FULLNESS_ENERGY_DIVISOR = 2.0
+
+# --- Stream health ---
+# Consecutive stale audio reads before triggering stream restart (~1s at 30fps)
+TONER_STALE_RESTART_THRESHOLD = 30
+
+# --- Spectral quality check ---
+# Fraction of frames with weak low-freq energy to flag poor mic quality
+SPECTRAL_QUALITY_THRESHOLD = 0.6
+# Low-freq energy must be below this fraction of mid-freq energy to count as weak
+LOW_FREQ_WEAKNESS_RATIO = 0.05
+
 # Calibration capture: written chromatic scale Bb3 to F6
 # These are WRITTEN pitches — the transposition to concert pitch
 # happens using SAX_TRANSPOSITIONS when computing expected frequencies.
@@ -170,7 +231,7 @@ class TonerEngine:
         if self._spectral_check_frames < 20:
             return False  # Not enough data yet
         # If >60% of frames show weak low-frequency energy, flag it
-        return self._low_energy_frames > self._spectral_check_frames * 0.6
+        return self._low_energy_frames > self._spectral_check_frames * SPECTRAL_QUALITY_THRESHOLD
 
     def set_break_frequency(self, hz):
         """Set the Benade break frequency for brightness/darkness calculation."""
@@ -253,8 +314,7 @@ class TonerEngine:
         # Check stream health: if buffer is stale, the callback may have died
         if self._ring_buffer.is_stale():
             self._stale_count += 1
-            # After ~1 second of stale reads (30 frames at 30fps), restart
-            if self._stale_count > 30:
+            if self._stale_count > TONER_STALE_RESTART_THRESHOLD:
                 self._stale_count = 0
                 self._restart_stream()
                 return result
@@ -303,11 +363,11 @@ class TonerEngine:
 
         # RMS signal level
         rms = float(np.sqrt(np.mean(audio[-FFT_SIZE:] ** 2)))
-        result.signal_level = min(1.0, rms * 10.0)  # Scale for display
+        result.signal_level = min(1.0, rms * RMS_DISPLAY_SCALE)
 
         # Sensitivity threshold
-        sensitivity_scale = 1.0 + (100 - self._sensitivity) * 0.04
-        min_rms = 0.002 * sensitivity_scale
+        sensitivity_scale = 1.0 + (100 - self._sensitivity) * TONER_SENSITIVITY_FACTOR
+        min_rms = RMS_MIN_BASE * sensitivity_scale
         if rms < min_rms:
             return result
 
@@ -349,7 +409,7 @@ class TonerEngine:
             if low_bin > 0 and mid_hi < len(mags):
                 low_energy = float(np.mean(mags[1:low_bin]))
                 mid_energy = float(np.mean(mags[mid_lo:mid_hi]))
-                if mid_energy > 0 and low_energy < mid_energy * 0.05:
+                if mid_energy > 0 and low_energy < mid_energy * LOW_FREQ_WEAKNESS_RATIO:
                     self._low_energy_frames += 1
 
         # Map to note name and cents
@@ -422,12 +482,12 @@ class TonerEngine:
 
             # Sub-harmonic must be above noise floor. For higher divisors
             # the fundamental can be very weak, so relax slightly.
-            noise_thresh = noise_floor * (3.0 if divisor <= 3 else 2.0)
+            noise_thresh = noise_floor * (SUBHARM_NOISE_MULT_STRICT if divisor <= 3 else SUBHARM_NOISE_MULT_RELAXED)
             if local_mag < noise_thresh:
                 continue
             left_mag = float(mags[max(0, local_peak - 4)])
             right_mag = float(mags[min(len(mags) - 1, local_peak + 4)])
-            prominence = 1.5 if divisor <= 3 else 1.3
+            prominence = SUBHARM_PROMINENCE_STRICT if divisor <= 3 else SUBHARM_PROMINENCE_RELAXED
             if not (local_mag > left_mag * prominence
                     and local_mag > right_mag * prominence):
                 continue
@@ -444,10 +504,10 @@ class TonerEngine:
                 h_lo = max(1, h_bin - 3)
                 h_hi = min(len(mags) - 2, h_bin + 3)
                 h_peak_mag = float(np.max(mags[h_lo:h_hi + 1]))
-                if h_peak_mag > noise_floor * 3.0:
+                if h_peak_mag > noise_floor * HARMONIC_VERIFY_NOISE_MULT:
                     harmonics_found += 1
 
-            required = 2 if divisor <= 3 else 3
+            required = HARMONIC_MATCHES_LOW if divisor <= 3 else HARMONIC_MATCHES_HIGH
             if harmonics_found >= required:
                 # Prefer the lowest sub-harmonic (deepest fundamental)
                 if best_candidate is None or local_peak < best_candidate:
@@ -484,7 +544,7 @@ class TonerEngine:
                     prev_mag = float(mags[prev_bin])
                     new_mag = float(mags[candidate_bin])
                     # Stick with previous unless new is clearly stronger
-                    if new_mag < prev_mag * 1.5:
+                    if new_mag < prev_mag * OCTAVE_HYSTERESIS_FACTOR:
                         new_freq = prev
 
         self._last_fundamental = new_freq
@@ -555,13 +615,13 @@ class TonerEngine:
                     mag_db = -80.0
 
             # Skip harmonics buried in the noise floor
-            if n > 1 and mag_db < -60.0:
+            if n > 1 and mag_db < HARMONIC_NOISE_FLOOR_DB:
                 continue
 
             # Cents deviation from ideal harmonic position
             if actual_freq > 0 and expected_freq > 0:
                 cents_dev = 1200.0 * math.log2(actual_freq / expected_freq)
-                cents_dev = max(-100.0, min(100.0, cents_dev))
+                cents_dev = max(-HARMONIC_CENTS_CLAMP, min(HARMONIC_CENTS_CLAMP, cents_dev))
             else:
                 cents_dev = 0.0
 
@@ -598,9 +658,9 @@ class TonerEngine:
         deviations = [abs(h.cents_deviation) for h in harmonics if h.harmonic_number > 1]
         if deviations:
             mean_dev = sum(deviations) / len(deviations)
-            raw = max(0.0, min(1.0, 1.0 - mean_dev / 50.0))
-            # Rescale 0.85-1.0 to 0.0-1.0
-            resonance = max(0.0, min(1.0, (raw - 0.85) / 0.15))
+            raw = max(0.0, min(1.0, 1.0 - mean_dev / RESONANCE_MAX_DEVIATION))
+            # Rescale raw range to 0.0-1.0
+            resonance = max(0.0, min(1.0, (raw - RESONANCE_RAW_MIN) / RESONANCE_RAW_RANGE))
         else:
             resonance = 0.5
 
@@ -609,7 +669,7 @@ class TonerEngine:
         # from ~0.50 (thin/uneven harmonics) to ~0.95 (very even spread).
         # The gauge maps 0.50-0.95 to 0-100%, giving useful range between
         # saxophones rather than pegging near 100% for all of them.
-        sig_threshold_db = -35.0
+        sig_threshold_db = RICHNESS_SIG_THRESHOLD_DB
         upper_harmonics = [h for h in harmonics if h.harmonic_number > 1]
         significant = [h for h in upper_harmonics
                        if h.magnitude_db > sig_threshold_db]
@@ -623,8 +683,8 @@ class TonerEngine:
             flatness = geo_mean / arith_mean if arith_mean > 0 else 0.0
             coverage = len(significant) / max_possible
             raw_richness = flatness * coverage
-            # Rescale 0.50-0.95 to 0.0-1.0 (sax-specific range)
-            richness = max(0.0, min(1.0, (raw_richness - 0.50) / 0.45))
+            # Rescale raw range to 0.0-1.0 (sax-specific range)
+            richness = max(0.0, min(1.0, (raw_richness - RICHNESS_RAW_MIN) / RICHNESS_RAW_RANGE))
         elif len(significant) == 1:
             richness = 0.05
         else:
@@ -670,12 +730,12 @@ class TonerEngine:
         # bright/dark doesn't read as full.
         # Squared to penalize imbalance harder — a 70/30 split reads much
         # lower than 55/45. Calibrated: BA tenor "full" ≈ 50%, SBA "not full" ≈ 38%.
-        balance = (1.0 - abs(brightness - darkness)) ** 2.0
+        balance = (1.0 - abs(brightness - darkness)) ** FULLNESS_BALANCE_EXPONENT
         fund_linear = 10.0 ** (harmonics[0].magnitude_db / 20.0) if harmonics else 0.0
         non_fund_energy = total_energy - fund_linear
         # How much harmonic energy exists relative to fundamental
-        energy_factor = min(1.0, non_fund_energy / max(fund_linear, 1e-10) / 2.0)
-        fullness = balance * (0.6 + 0.4 * energy_factor)
+        energy_factor = min(1.0, non_fund_energy / max(fund_linear, 1e-10) / FULLNESS_ENERGY_DIVISOR)
+        fullness = balance * (FULLNESS_BASE_WEIGHT + FULLNESS_ENERGY_WEIGHT * energy_factor)
 
         return {
             'resonance': resonance,

@@ -62,9 +62,31 @@ FUNDAMENTAL_COLOR = "#00CC66"    # Green for fundamental
 GHOST_COLOR = "#4444AA"          # Blue ghost overlay for comparison
 FRAME_RATES = {"30": 33, "60": 16}
 
-# Gauge arc geometry
+# Gauge arc geometry and dimensions
 GAUGE_ARC_START = 155.0
 GAUGE_ARC_END = 25.0
+GAUGE_WIDTH = 240
+GAUGE_HEIGHT = 100
+GAUGE_ARC_RADIUS = 65
+GAUGE_DESCRIPTOR_NEEDLE_OFFSET = 12   # needle_len = radius - offset
+GAUGE_INTONATION_NEEDLE_OFFSET = 16
+GAUGE_DESCRIPTOR_DAMPING = 0.15       # lerp factor per frame for descriptor needles
+GAUGE_INTONATION_DAMPING = 0.18       # lerp factor per frame for intonation needle
+
+# Animation / display thresholds
+IN_TUNE_CENTS_THRESHOLD = 1.0         # cents — below this, "in tune" lamp lights
+INTONATION_RANGE_CENTS = 50.0         # cents — full deflection of intonation gauge
+SPECTRUM_MAX_FREQ = 8000.0            # Hz — right edge of spectrum display
+FULLNESS_BRIGHTNESS_THRESHOLD = 0.5   # brightness above this to trigger FULL lamp
+FULLNESS_DARKNESS_THRESHOLD = 0.6     # darkness above this to trigger FULL lamp
+SPECTRAL_CHECK_FRAME_COUNT = 25       # frames before mic quality check fires
+FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 fps
+
+# Capture state machine
+CAL_COUNTDOWN_S = 10.0                # seconds of countdown before calibration starts
+CAL_ATTACK_SETTLE_S = 0.1             # seconds of attack transient to skip in calibration
+DEFAULT_STABLE_THRESHOLD = 25         # frames — initial stable-note threshold
+PROFILE_NAME_MAX_DISPLAY = 20         # characters before truncating profile name
 
 
 def _note_sort_key(note_name):
@@ -131,7 +153,7 @@ def _format_profile_info(p):
         if total_frames > 0:
             # Each frame is ~33ms at 30fps
             avg_frames = total_frames / total_caps
-            avg_duration = avg_frames * 0.033
+            avg_duration = avg_frames * FRAME_DURATION_S
             info += f"\nAvg capture: {avg_frames:.0f} frames ({avg_duration:.1f}s)"
     if sessions:
         info += f"\nLast session: {sessions[-1].get('date', '?')}"
@@ -178,7 +200,7 @@ class TonerTabMixin:
         # Calibration: guided chromatic scale, 5s per note, 1s settle
         self._toner_paused = False         # Pause state
         self._toner_paused_state = None    # State to resume to
-        self._toner_stable_threshold = 25  # Updated per mode
+        self._toner_stable_threshold = DEFAULT_STABLE_THRESHOLD  # Updated per mode
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
         self._toner_cal_index = 0          # Current note index in calibration sequence
         self._toner_cal_notes = list(CALIBRATION_NOTES)  # Filtered at calibration start
@@ -590,11 +612,11 @@ class TonerTabMixin:
 
     def _toner_build_gauge(self, cv, left_label, right_label):
         """Draw a VU-style arc gauge and return dict with IDs for animation."""
-        cv_w, cv_h = 240, 100
+        cv_w, cv_h = GAUGE_WIDTH, GAUGE_HEIGHT
         cv.configure(width=cv_w, height=cv_h)
         cx = cv_w // 2
         cy = cv_h - 8
-        r = 65
+        r = GAUGE_ARC_RADIUS
         arc_start = GAUGE_ARC_START
         arc_end = GAUGE_ARC_END
 
@@ -649,7 +671,7 @@ class TonerTabMixin:
                            text=right_label, fill=tick_color, font=label_font,
                            anchor="w")
 
-        needle_len = r - 12
+        needle_len = r - GAUGE_DESCRIPTOR_NEEDLE_OFFSET
         center_angle = math.radians((arc_start + arc_end) / 2)
         nx = cx + needle_len * math.cos(center_angle)
         ny = cy - needle_len * math.sin(center_angle)
@@ -671,11 +693,11 @@ class TonerTabMixin:
 
     def _toner_build_intonation_gauge(self, cv):
         """Build the intonation VU gauge (±50 cents, same style as tuner VU)."""
-        cv_w, cv_h = 240, 100
+        cv_w, cv_h = GAUGE_WIDTH, GAUGE_HEIGHT
         cv.configure(width=cv_w, height=cv_h)
         cx = cv_w // 2
         cy = cv_h - 8
-        r = 65
+        r = GAUGE_ARC_RADIUS
         arc_start = GAUGE_ARC_START
         arc_end = GAUGE_ARC_END
 
@@ -687,10 +709,12 @@ class TonerTabMixin:
         cv.create_rectangle(5, 5, cv_w - 5, cv_h - 5,
                             fill=AMBER, outline="#B87D08", width=1)
 
-        # Tick marks (21 ticks for -50 to +50 in steps of 5)
+        # Tick marks for -INTONATION_RANGE_CENTS to +INTONATION_RANGE_CENTS in steps of 5
+        half = INTONATION_RANGE_CENTS
+        full = 2 * half
         for i in range(21):
-            cents = -50 + i * 5
-            frac = (cents + 50) / 100.0
+            cents = -half + i * 5
+            frac = (cents + half) / full
             angle_deg = arc_start + (arc_end - arc_start) * frac
             angle_rad = math.radians(angle_deg)
 
@@ -726,7 +750,7 @@ class TonerTabMixin:
             (-50, "50"), (-30, "30"), (-10, "10"),
             (0, "0"), (10, "10"), (30, "30"), (50, "50"),
         ]:
-            frac = (cents + 50) / 100.0
+            frac = (cents + half) / full
             angle_deg = arc_start + (arc_end - arc_start) * frac
             angle_rad = math.radians(angle_deg)
             lx = cx + label_r * math.cos(angle_rad)
@@ -737,7 +761,7 @@ class TonerTabMixin:
 
         # Flat/sharp at extremes
         for cents, label in [(-50, "\u266d"), (50, "\u266f")]:
-            frac = (cents + 50) / 100.0
+            frac = (cents + half) / full
             angle_deg = arc_start + (arc_end - arc_start) * frac
             angle_rad = math.radians(angle_deg)
             lx = cx + (label_r + 10) * math.cos(angle_rad)
@@ -751,7 +775,7 @@ class TonerTabMixin:
             font=("Helvetica", 8), anchor="ne")
 
         # Needle + shadow
-        needle_len = r - 16
+        needle_len = r - GAUGE_INTONATION_NEEDLE_OFFSET
         center_angle = math.radians((arc_start + arc_end) / 2)
         nx = cx + needle_len * math.cos(center_angle)
         ny = cy - needle_len * math.sin(center_angle)
@@ -777,11 +801,11 @@ class TonerTabMixin:
         if not gauge:
             return
 
-        damping = 0.18
+        damping = GAUGE_INTONATION_DAMPING
         self._toner_smooth_cents += (cents - self._toner_smooth_cents) * damping
 
-        clamped = max(-50.0, min(50.0, self._toner_smooth_cents))
-        frac = (clamped + 50.0) / 100.0
+        clamped = max(-INTONATION_RANGE_CENTS, min(INTONATION_RANGE_CENTS, self._toner_smooth_cents))
+        frac = (clamped + INTONATION_RANGE_CENTS) / (2 * INTONATION_RANGE_CENTS)
         angle_deg = gauge['arc_start'] + (gauge['arc_end'] - gauge['arc_start']) * frac
         angle_rad = math.radians(angle_deg)
         nx = gauge['cx'] + gauge['needle_len'] * math.cos(angle_rad)
@@ -794,7 +818,7 @@ class TonerTabMixin:
                   gauge['cx'], gauge['cy'], nx, ny)
 
         # Update cents readout + in-tune lamp
-        in_tune = abs(self._toner_smooth_cents) < 1.0
+        in_tune = abs(self._toner_smooth_cents) < IN_TUNE_CENTS_THRESHOLD
         if hasattr(self, '_toner_intune_lamp'):
             if in_tune:
                 self._toner_intune_canvas.itemconfigure(
@@ -829,7 +853,7 @@ class TonerTabMixin:
         if not gauge:
             return
 
-        damping = 0.15
+        damping = GAUGE_DESCRIPTOR_DAMPING
         self._toner_smooth[key] += (value - self._toner_smooth[key]) * damping
 
         # Apply bias: slider range -50..+50 maps to -0.5..+0.5 offset
@@ -890,8 +914,8 @@ class TonerTabMixin:
 
         # Frequency axis labels
         label_font = ("Helvetica", 7)
-        for freq in [100, 500, 1000, 2000, 4000, 8000]:
-            x = (freq / 8000.0) * w
+        for freq in [100, 500, 1000, 2000, 4000, int(SPECTRUM_MAX_FREQ)]:
+            x = (freq / SPECTRUM_MAX_FREQ) * w
             cv.create_text(x, h - 3, text=f"{freq}" if freq < 1000 else f"{freq // 1000}k",
                            fill="#555555", font=label_font, anchor="s")
             cv.create_line(x, 0, x, h - 12, fill="#333333", width=1, dash=(2, 4))
@@ -998,7 +1022,7 @@ class TonerTabMixin:
                 for m_idx, marker in enumerate(self._toner_harmonic_markers):
                     if m_idx < len(result.harmonics):
                         hi = result.harmonics[m_idx]
-                        freq_frac = hi.expected_freq / 8000.0
+                        freq_frac = hi.expected_freq / SPECTRUM_MAX_FREQ
                         if 0 <= freq_frac <= 1.0:
                             x = freq_frac * w
                             if hi.harmonic_number == 1:
@@ -1073,7 +1097,7 @@ class TonerTabMixin:
         for idx, g in enumerate(self._toner_ghost_markers):
             if idx < len(ghost_db):
                 freq = f0 * (idx + 1)
-                freq_frac = freq / 8000.0
+                freq_frac = freq / SPECTRUM_MAX_FREQ
                 if 0 <= freq_frac <= 1.0:
                     x = freq_frac * w
                     bar_h = self._toner_db_to_height(ghost_db[idx], h - 20, db_range=80.0)
@@ -1771,7 +1795,7 @@ class TonerTabMixin:
             self._toner_capture_frames = []
             self._toner_capture_start = time.time()
             self._toner_capture_state = 'cal_countdown'
-            label_text = "Calibration starting in 10s... get ready"
+            label_text = f"Calibration starting in {CAL_COUNTDOWN_S:.0f}s... get ready"
         else:
             # Free mode: continuous auto-captures
             self._toner_stable_threshold = FREE_STABLE_FRAMES
@@ -2025,7 +2049,7 @@ class TonerTabMixin:
             name = self._toner_active_profile or ""
             if name:
                 # Truncate long names
-                display = name[:20] + "..." if len(name) > 20 else name
+                display = name[:PROFILE_NAME_MAX_DISPLAY] + "..." if len(name) > PROFILE_NAME_MAX_DISPLAY else name
                 self._toner_profile_label.configure(text=display, fg="#AAAAAA")
             else:
                 self._toner_profile_label.configure(text="", fg="#AAAAAA")
@@ -2337,7 +2361,7 @@ class TonerTabMixin:
         # --- CAL COUNTDOWN: 10-second prep before calibration starts ---
         if state == 'cal_countdown':
             elapsed = time.time() - self._toner_capture_start
-            remaining = 10.0 - elapsed
+            remaining = CAL_COUNTDOWN_S - elapsed
             if remaining > 0:
                 self._toner_capture_label.configure(
                     text=f"Calibration starting in {remaining:.0f}s... get ready")
@@ -2393,7 +2417,7 @@ class TonerTabMixin:
             concert_note = reverse_transpose_note(
                 display_note, self._toner_sax_var.get())
 
-            if has_signal and elapsed > 0.1:
+            if has_signal and elapsed > CAL_ATTACK_SETTLE_S:
                 self._toner_capture_frames.append({
                     'note': concert_note,
                     'detected_note': result.fundamental_note,
@@ -3046,7 +3070,7 @@ class TonerTabMixin:
 
             # One-time spectral quality check after enough audio
             if (not self._toner_engine._mic_quality_warned and
-                    self._toner_engine._spectral_check_frames >= 25):
+                    self._toner_engine._spectral_check_frames >= SPECTRAL_CHECK_FRAME_COUNT):
                 if self._toner_engine.check_spectral_quality():
                     self._toner_engine._mic_quality_warned = True
                     messagebox.showwarning("Microphone Quality",
@@ -3078,7 +3102,7 @@ class TonerTabMixin:
             self._toner_update_gauge('brightness', d['brightness'])
             self._toner_update_gauge('darkness', d['darkness'])
 
-            # Fullness lamp — lights when bright > 0.5 AND dark > 0.6
+            # Fullness lamp — lights when bright and dark both exceed thresholds
             # (using the smoothed gauge values which include bias)
             smooth_bright = self._toner_smooth.get('brightness', 0)
             bright_bias = self._toner_bias_vars.get('brightness')
@@ -3086,7 +3110,8 @@ class TonerTabMixin:
             display_bright = smooth_bright + (bright_bias.get() / 100.0 if bright_bias else 0)
             smooth_dark = self._toner_smooth.get('darkness', 0)
             display_dark = smooth_dark + (dark_bias.get() / 100.0 if dark_bias else 0)
-            full_on = display_bright > 0.5 and display_dark > 0.6
+            full_on = (display_bright > FULLNESS_BRIGHTNESS_THRESHOLD and
+                       display_dark > FULLNESS_DARKNESS_THRESHOLD)
 
             if full_on:
                 self._toner_full_canvas.itemconfigure(
