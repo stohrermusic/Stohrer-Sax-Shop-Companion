@@ -24,6 +24,8 @@ except (ImportError, OSError):
     np = None
     sd = None
 
+from audio_utils import AudioRingBuffer  # noqa: E402 — shared with toner_engine
+
 
 # ============================================
 # CONSTANTS
@@ -47,63 +49,6 @@ DISC_BASE_SEGMENTS = 16
 # Octave range for analysis
 MIN_OCTAVE = 1
 MAX_OCTAVE = 7
-
-
-# ============================================
-# AUDIO RING BUFFER
-# ============================================
-
-class AudioRingBuffer:
-    """Thread-safe ring buffer for audio samples."""
-
-    def __init__(self, size):
-        self.buffer = np.zeros(size, dtype=np.float32)
-        self.write_pos = 0
-        self.lock = threading.Lock()
-        self.has_data = False
-        self.write_count = 0         # Increments on each write
-        self.last_read_count = 0     # write_count at last read
-
-    def write(self, data):
-        """Write audio data. Called from audio callback thread."""
-        n = len(data)
-        with self.lock:
-            if n >= len(self.buffer):
-                self.buffer[:] = data[-len(self.buffer):]
-                self.write_pos = 0
-            else:
-                end = self.write_pos + n
-                if end <= len(self.buffer):
-                    self.buffer[self.write_pos:end] = data
-                else:
-                    first = len(self.buffer) - self.write_pos
-                    self.buffer[self.write_pos:] = data[:first]
-                    self.buffer[:n - first] = data[first:]
-                self.write_pos = (self.write_pos + n) % len(self.buffer)
-            self.has_data = True
-            self.write_count += 1
-
-    def read(self):
-        """Read the full buffer in chronological order. Returns None if no data."""
-        with self.lock:
-            if not self.has_data:
-                return None
-            self.last_read_count = self.write_count
-            return np.roll(self.buffer, -self.write_pos).copy()
-
-    def is_stale(self):
-        """True if no new data has been written since last read."""
-        with self.lock:
-            return self.write_count == self.last_read_count
-
-    def clear(self):
-        """Zero out the buffer."""
-        with self.lock:
-            self.buffer[:] = 0
-            self.write_pos = 0
-            self.has_data = False
-            self.write_count = 0
-            self.last_read_count = 0
 
 
 # ============================================
@@ -150,6 +95,7 @@ class TunerEngine:
         self._window = None
         self._last_device = None   # For auto-restart
         self._stale_count = 0      # Consecutive stale reads
+        self.last_error = None     # Set when stream restart fails
         self._build_freq_table()
 
     def _build_freq_table(self):
@@ -205,6 +151,7 @@ class TunerEngine:
         self._last_time = time.perf_counter()
         self._last_device = device
         self._stale_count = 0
+        self.last_error = None
 
         try:
             self._stream = sd.InputStream(
@@ -298,8 +245,10 @@ class TunerEngine:
                 callback=self._audio_callback,
             )
             self._stream.start()
-        except Exception:
+            self.last_error = None
+        except Exception as e:
             self._running = False
+            self.last_error = f"Audio stream lost: {e}"
 
     def analyze_buffer(self, audio):
         """Analyze a raw audio buffer. Used by analyze() and tests.
@@ -355,7 +304,11 @@ class TunerEngine:
                     continue
 
                 # Peak magnitude at this bin and immediate neighbors
-                mag = max(mags[bin_idx - 1], mags[bin_idx], mags[bin_idx + 1])
+                # Find which of the 3 bins has the actual peak for correct
+                # parabolic interpolation later
+                local_mags = [mags[bin_idx - 1], mags[bin_idx], mags[bin_idx + 1]]
+                peak_offset = int(np.argmax(local_mags)) - 1  # -1, 0, or +1
+                mag = local_mags[peak_offset + 1]
 
                 if mag > threshold:
                     total_mag += mag
@@ -363,14 +316,14 @@ class TunerEngine:
                     if mag > best_mag:
                         best_mag = mag
                         best_octave = oct_idx
-                        best_bin = bin_idx
+                        best_bin = bin_idx + peak_offset
 
             result.magnitudes[pc] = total_mag
             if total_mag > max_mag:
                 max_mag = total_mag
 
             # Phase tracking — only for pitch classes with sufficient energy
-            if best_bin > 0 and best_mag > threshold:
+            if best_bin > 0 and best_bin < len(mags) - 1 and best_mag > threshold:
                 # Parabolic interpolation for sub-bin frequency accuracy
                 alpha = float(mags[best_bin - 1])
                 beta = float(mags[best_bin])

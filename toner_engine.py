@@ -1,7 +1,7 @@
 """
 Tone analyzer engine for Stohrer Sax Shop Companion.
 
-Handles audio capture, FFT, fundamental pitch detection (HPS algorithm),
+Handles audio capture, FFT, fundamental pitch detection (peak-picking with harmonic series verification),
 harmonic extraction, and tone descriptor computation. Pure math/audio —
 no tkinter dependency.
 
@@ -28,6 +28,8 @@ except (ImportError, OSError):
     np = None
     sd = None
 
+from audio_utils import AudioRingBuffer  # noqa: E402 — shared with tuner_engine
+
 
 # ============================================
 # CONSTANTS
@@ -43,8 +45,9 @@ SPECTRUM_MAX_HZ = 8000        # Display range for spectrum
 
 PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-# Minimum fundamental frequency (Bb2 on bari sax ~ 116 Hz, allow some margin)
-MIN_FUNDAMENTAL_HZ = 80.0
+# Minimum fundamental frequency. Bari sax written Bb3 = concert Db2 (~69 Hz),
+# so 65 Hz covers all standard saxophone types including baritone.
+MIN_FUNDAMENTAL_HZ = 65.0
 # Maximum fundamental frequency (altissimo range ~ 1500 Hz)
 MAX_FUNDAMENTAL_HZ = 2000.0
 
@@ -58,60 +61,6 @@ CALIBRATION_NOTES = [
     'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6',
 ]
 CALIBRATION_DURATION_S = 5.0  # Seconds per note
-
-
-# ============================================
-# AUDIO RING BUFFER (independent copy from tuner_engine)
-# ============================================
-
-class AudioRingBuffer:
-    """Thread-safe ring buffer for audio samples."""
-
-    def __init__(self, size):
-        self.buffer = np.zeros(size, dtype=np.float32)
-        self.write_pos = 0
-        self.lock = threading.Lock()
-        self.has_data = False
-        self.write_count = 0         # Increments on each write
-        self.last_read_count = 0     # write_count at last read
-
-    def write(self, data):
-        n = len(data)
-        with self.lock:
-            if n >= len(self.buffer):
-                self.buffer[:] = data[-len(self.buffer):]
-                self.write_pos = 0
-            else:
-                end = self.write_pos + n
-                if end <= len(self.buffer):
-                    self.buffer[self.write_pos:end] = data
-                else:
-                    first = len(self.buffer) - self.write_pos
-                    self.buffer[self.write_pos:] = data[:first]
-                    self.buffer[:n - first] = data[first:]
-                self.write_pos = (self.write_pos + n) % len(self.buffer)
-            self.has_data = True
-            self.write_count += 1
-
-    def read(self):
-        with self.lock:
-            if not self.has_data:
-                return None
-            self.last_read_count = self.write_count
-            return np.roll(self.buffer, -self.write_pos).copy()
-
-    def is_stale(self):
-        """True if no new data has been written since last read."""
-        with self.lock:
-            return self.write_count == self.last_read_count
-
-    def clear(self):
-        with self.lock:
-            self.buffer[:] = 0
-            self.write_pos = 0
-            self.has_data = False
-            self.write_count = 0
-            self.last_read_count = 0
 
 
 # ============================================
@@ -205,6 +154,7 @@ class TonerEngine:
         self._last_fundamental = 0.0  # For temporal smoothing
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
+        self.last_error = None     # Set when stream restart fails
         self._break_freq = DEFAULT_BREAK_FREQ  # Benade spectral break frequency
         self._mic_quality_warned = False  # Only warn once per session
         self._spectral_check_frames = 0  # Count frames for spectral quality check
@@ -252,6 +202,7 @@ class TonerEngine:
         self._window = np.hanning(FFT_SIZE).astype(np.float32)
         self._last_device = device
         self._stale_count = 0
+        self.last_error = None
 
         try:
             self._stream = sd.InputStream(
@@ -338,8 +289,10 @@ class TonerEngine:
                 callback=self._audio_callback,
             )
             self._stream.start()
-        except Exception:
+            self.last_error = None
+        except Exception as e:
             self._running = False
+            self.last_error = f"Audio stream lost: {e}"
 
     def analyze_buffer(self, audio):
         """Analyze a raw audio buffer. Used by analyze() and tests."""
@@ -424,11 +377,12 @@ class TonerEngine:
 
         Strategy:
         1. Find the strongest spectral peak in the valid range
-        2. Check if sub-harmonics (f/2, f/3) could be the real fundamental
-           by verifying they have their OWN harmonic series
+        2. Check if sub-harmonics (f/2, f/3, f/4, f/5) could be the real
+           fundamental by verifying they have their OWN harmonic series
         3. A sub-harmonic is only accepted if multiple of its harmonics
-           (2f, 3f, 4f) also have peaks — not just the sub-harmonic alone
-        4. Apply temporal hysteresis for stability
+           also have peaks — not just the sub-harmonic alone
+        4. Pick the lowest verified sub-harmonic (deepest fundamental)
+        5. Apply temporal hysteresis for stability
         """
         min_bin = max(1, int(MIN_FUNDAMENTAL_HZ / bin_freq))
         max_bin = min(len(mags) - 2, int(MAX_FUNDAMENTAL_HZ / bin_freq))
@@ -447,34 +401,43 @@ class TonerEngine:
         # Noise floor for peak detection
         noise_floor = float(np.median(mags[min_bin:max_bin])) if max_bin > min_bin else 0.0
 
-        # Check sub-harmonics: could the strongest peak be harmonic 2 or 3
-        # of a lower fundamental? Only accept if the sub-harmonic has its
-        # own harmonic series (multiple peaks at 2x, 3x, 4x).
+        # Check sub-harmonics: could the strongest peak be harmonic 2-5
+        # of a lower fundamental? This catches sax low register where
+        # harmonics 3-5 are often stronger than the fundamental.
+        # Check all divisors and pick the lowest verified sub-harmonic.
+        best_candidate = None
         candidate_bin = strongest_bin
-        for divisor in [2, 3]:
+        for divisor in [2, 3, 4, 5]:
             sub_bin = int(round(strongest_bin / divisor))
             if sub_bin < min_bin:
                 continue
 
-            # Find peak near sub-harmonic position
-            lo = max(1, sub_bin - 2)
-            hi = min(len(mags) - 2, sub_bin + 2)
+            # Find peak near sub-harmonic position (wider window for
+            # higher divisors where rounding error grows)
+            spread = 2 + (divisor // 3)  # 2 for /2,/3; 3 for /4,/5
+            lo = max(1, sub_bin - spread)
+            hi = min(len(mags) - 2, sub_bin + spread)
             local_peak = lo + int(np.argmax(mags[lo:hi + 1]))
             local_mag = float(mags[local_peak])
 
-            # Sub-harmonic must be a real peak (above noise, above neighbors)
-            if local_mag < noise_floor * 3.0:
+            # Sub-harmonic must be above noise floor. For higher divisors
+            # the fundamental can be very weak, so relax slightly.
+            noise_thresh = noise_floor * (3.0 if divisor <= 3 else 2.0)
+            if local_mag < noise_thresh:
                 continue
             left_mag = float(mags[max(0, local_peak - 4)])
             right_mag = float(mags[min(len(mags) - 1, local_peak + 4)])
-            if not (local_mag > left_mag * 1.5 and local_mag > right_mag * 1.5):
+            prominence = 1.5 if divisor <= 3 else 1.3
+            if not (local_mag > left_mag * prominence
+                    and local_mag > right_mag * prominence):
                 continue
 
-            # Verify harmonic series: check that multiples 2x, 3x, 4x of the
-            # sub-harmonic also have peaks. Need at least 2 out of 3.
-            sub_freq = local_peak * bin_freq
+            # Verify harmonic series: check that multiples of the
+            # sub-harmonic also have peaks. For higher divisors, check
+            # more multiples and require more matches.
             harmonics_found = 0
-            for mult in [2, 3, 4]:
+            check_mults = [2, 3, 4] if divisor <= 3 else [2, 3, 4, 5, 6]
+            for mult in check_mults:
                 h_bin = int(round(local_peak * mult))
                 if h_bin >= len(mags) - 1:
                     continue
@@ -484,9 +447,14 @@ class TonerEngine:
                 if h_peak_mag > noise_floor * 3.0:
                     harmonics_found += 1
 
-            if harmonics_found >= 2:
-                candidate_bin = local_peak
-                break
+            required = 2 if divisor <= 3 else 3
+            if harmonics_found >= required:
+                # Prefer the lowest sub-harmonic (deepest fundamental)
+                if best_candidate is None or local_peak < best_candidate:
+                    best_candidate = local_peak
+
+        if best_candidate is not None:
+            candidate_bin = best_candidate
 
         # Parabolic interpolation on the candidate
         if 0 < candidate_bin < len(mags) - 1:
@@ -637,6 +605,10 @@ class TonerEngine:
             resonance = 0.5
 
         # --- Richness: spectral flatness of significant harmonics ---
+        # Rescaled for sax-vs-sax comparison: raw flatness*coverage ranges
+        # from ~0.50 (thin/uneven harmonics) to ~0.95 (very even spread).
+        # The gauge maps 0.50-0.95 to 0-100%, giving useful range between
+        # saxophones rather than pegging near 100% for all of them.
         sig_threshold_db = -35.0
         upper_harmonics = [h for h in harmonics if h.harmonic_number > 1]
         significant = [h for h in upper_harmonics
@@ -650,9 +622,11 @@ class TonerEngine:
             arith_mean = sum(linear_mags) / len(linear_mags)
             flatness = geo_mean / arith_mean if arith_mean > 0 else 0.0
             coverage = len(significant) / max_possible
-            richness = min(1.0, flatness * coverage * 1.5)
+            raw_richness = flatness * coverage
+            # Rescale 0.50-0.95 to 0.0-1.0 (sax-specific range)
+            richness = max(0.0, min(1.0, (raw_richness - 0.50) / 0.45))
         elif len(significant) == 1:
-            richness = 0.1 * (1 / max_possible)
+            richness = 0.05
         else:
             richness = 0.0
 
@@ -686,8 +660,22 @@ class TonerEngine:
         if total_energy > 0:
             darkness = lower_energy / total_energy
 
-        # --- Fullness: both bright and dark ---
-        fullness = min(1.0, min(brightness, darkness) * 2.5)
+        # --- Fullness: balance of bright and dark energy ---
+        # A "full" tone has strong harmonics on BOTH sides of the break
+        # frequency — neither bright nor dark dominates. A thin or harsh
+        # tone is lopsided toward one side. Peaks at 50/50 bright/dark,
+        # drops toward zero as either side takes over.
+        # Uses 1 - |b - d| rather than min(b,d)*k for a more gradual curve.
+        # Energy weight ensures a thin tone with coincidentally balanced
+        # bright/dark doesn't read as full.
+        # Squared to penalize imbalance harder — a 70/30 split reads much
+        # lower than 55/45. Calibrated: BA tenor "full" ≈ 50%, SBA "not full" ≈ 38%.
+        balance = (1.0 - abs(brightness - darkness)) ** 2.0
+        fund_linear = 10.0 ** (harmonics[0].magnitude_db / 20.0) if harmonics else 0.0
+        non_fund_energy = total_energy - fund_linear
+        # How much harmonic energy exists relative to fundamental
+        energy_factor = min(1.0, non_fund_energy / max(fund_linear, 1e-10) / 2.0)
+        fullness = balance * (0.6 + 0.4 * energy_factor)
 
         return {
             'resonance': resonance,
@@ -745,17 +733,121 @@ BREAK_FREQUENCIES = {
 DEFAULT_BREAK_FREQ = 750  # Fallback (between alto and tenor)
 
 # Transposition: sax type → semitones UP from concert to written pitch.
-# Alto in Eb: concert C4 = written A4, so shift = +9 semitones.
+# Must include octave displacement for correct note names.
+# Soprano in Bb: concert Bb3 = written C4 → shift = +2
+# Alto in Eb: concert Eb3 = written C4 → shift = +9
+# Tenor in Bb: concert Bb2 = written C4 → shift = +14 (octave + major 2nd)
+# Baritone in Eb: concert Eb2 = written C4 → shift = +21 (octave + major 6th)
 SAX_TRANSPOSITIONS = {
-    "Sopranino": 9,    # Eb
-    "Soprano": 2,      # Bb
-    "F Mezzo": 7,      # F
-    "Alto": 9,         # Eb
+    "Sopranino": -3,   # Eb (sounds minor 3rd ABOVE written)
+    "Soprano": 2,      # Bb (sounds major 2nd below)
+    "F Mezzo": 7,      # F (sounds perfect 5th below)
+    "Alto": 9,         # Eb (sounds major 6th below)
     "C Melody": 0,     # C (concert pitch)
-    "Tenor": 2,        # Bb (octave handled by context)
-    "Baritone": 9,     # Eb
-    "Bass": 2,         # Bb
+    "Tenor": 14,       # Bb (sounds major 9th below)
+    "Baritone": 21,    # Eb (sounds major 13th below)
+    "Bass": 26,        # Bb (sounds 2 octaves + major 2nd below)
 }
+
+
+def transpose_note(concert_note, sax_type):
+    """Transpose a concert pitch note name to written pitch for a given sax type.
+
+    Pure function — no UI dependency. Returns the original note if sax_type
+    is unknown or has no transposition.
+    """
+    if not concert_note:
+        return concert_note
+    shift = SAX_TRANSPOSITIONS.get(sax_type, 0)
+    if shift == 0:
+        return concert_note
+    return _shift_note(concert_note, shift)
+
+
+def reverse_transpose_note(written_note, sax_type):
+    """Transpose a written pitch note name back to concert pitch.
+
+    Pure function — inverse of transpose_note().
+    """
+    if not written_note:
+        return written_note
+    shift = SAX_TRANSPOSITIONS.get(sax_type, 0)
+    if shift == 0:
+        return written_note
+    return _shift_note(written_note, -shift)
+
+
+def note_to_freq(note_name, reference_pitch=440.0):
+    """Convert a note name like 'C#4' to its frequency in Hz."""
+    if not note_name:
+        return 0.0
+    if '#' in note_name:
+        pc_name = note_name[:-1]
+    else:
+        pc_name = note_name[:-1]
+    try:
+        octave = int(note_name[-1])
+        pc_idx = PITCH_CLASSES.index(pc_name)
+    except (ValueError, IndexError):
+        return 0.0
+    midi = (octave + 1) * 12 + pc_idx
+    return reference_pitch * 2 ** ((midi - 69) / 12)
+
+
+def _shift_note(note_name, semitones):
+    """Shift a note name by the given number of semitones.
+
+    Internal helper for transpose_note / reverse_transpose_note.
+    """
+    if not note_name or len(note_name) < 2 or not note_name[-1].isdigit():
+        return note_name
+    if '#' in note_name:
+        pc_name = note_name[:-1]
+    else:
+        pc_name = note_name[:-1]
+    try:
+        octave = int(note_name[-1])
+        pc_idx = PITCH_CLASSES.index(pc_name)
+    except (ValueError, IndexError):
+        return note_name
+    new_pc = (pc_idx + semitones) % 12
+    new_octave = octave + ((pc_idx + semitones) // 12)
+    return f"{PITCH_CLASSES[new_pc]}{new_octave}"
+
+
+def migrate_profile_to_concert(profile):
+    """Convert a profile's stored note names from written to concert pitch.
+
+    Uses the profile's horn_type to determine the reverse transposition.
+    Returns a new deep-copied profile with concert pitch note names.
+    Skips profiles already marked with pitch_format='concert'.
+    """
+    import copy
+    profile = copy.deepcopy(profile)
+
+    if profile.get('pitch_format') == 'concert':
+        return profile
+
+    sax_type = profile.get('horn_type', '')
+    if not sax_type:
+        # Can't migrate without knowing the horn type
+        profile['pitch_format'] = 'concert'
+        return profile
+
+    for session in profile.get('sessions', []):
+        if not isinstance(session, dict):
+            continue
+        for cap in session.get('captures', []):
+            if not isinstance(cap, dict):
+                continue
+            note = cap.get('note', '')
+            if note:
+                cap['note'] = reverse_transpose_note(note, sax_type)
+            # detected_as stays as-is (it's metadata about detector accuracy,
+            # compared against the written-pitch calibration prompt)
+
+    profile['pitch_format'] = 'concert'
+    return profile
 
 
 def average_captures(captures):
@@ -860,9 +952,6 @@ def compute_fingerprint(sessions):
     }
 
 
-CAPTURE_METHODS = ["structured", "free", "file"]
-
-
 def analyze_audio_file(filepath, engine, progress_cb=None):
     """Analyze an audio file offline. Returns list of capture dicts.
 
@@ -941,39 +1030,53 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     segment_start = 0
     current_note = results[0][0]
 
+    def _process_segment(seg, seg_note):
+        """Process a completed segment into a capture."""
+        if len(seg) > ATTACK_SKIP_FRAMES:
+            seg = seg[ATTACK_SKIP_FRAMES:]  # Skip attack
+        if len(seg) < FREE_MIN_FRAMES:
+            return None
+        # Build a capture from this segment
+        frames = []
+        for _, r in seg:
+            frames.append({
+                'note': r.fundamental_note,
+                'freq': r.fundamental_freq,
+                'harmonics_db': [h.magnitude_db for h in r.harmonics],
+                'descriptors': dict(r.descriptors),
+            })
+
+        avg = average_captures(frames)
+        if avg:
+            avg_freq = sum(f['freq'] for f in frames) / len(frames)
+            return {
+                'note': seg_note,
+                'fundamental_freq': round(avg_freq, 2),
+                'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
+                'descriptors': {k: round(v, 3) for k, v in avg['descriptors'].items()},
+                'timestamp': '',  # Filled by caller
+                'n_frames': len(frames),
+                'method': 'file',
+            }
+        return None
+
     for i in range(1, len(results)):
         note = results[i][0]
-        if note != current_note or i == len(results) - 1:
-            # Segment ended — skip attack transient at start
+        if note != current_note:
+            # Segment ended
             segment = results[segment_start:i]
-            if len(segment) > ATTACK_SKIP_FRAMES:
-                segment = segment[ATTACK_SKIP_FRAMES:]  # Skip attack
-            if len(segment) >= FREE_MIN_FRAMES:
-                # Build a capture from this segment
-                frames = []
-                for _, r in segment:
-                    frames.append({
-                        'note': r.fundamental_note,
-                        'freq': r.fundamental_freq,
-                        'harmonics_db': [h.magnitude_db for h in r.harmonics],
-                        'descriptors': dict(r.descriptors),
-                    })
-
-                avg = average_captures(frames)
-                if avg:
-                    avg_freq = sum(f['freq'] for f in frames) / len(frames)
-                    captures.append({
-                        'note': current_note,
-                        'fundamental_freq': round(avg_freq, 2),
-                        'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
-                        'descriptors': {k: round(v, 3) for k, v in avg['descriptors'].items()},
-                        'timestamp': '',  # Filled by caller
-                        'n_frames': len(frames),
-                        'method': 'file',
-                    })
+            capture = _process_segment(segment, current_note)
+            if capture:
+                captures.append(capture)
 
             current_note = note
             segment_start = i
+
+    # Process the final segment
+    segment = results[segment_start:]
+    capture = _process_segment(segment, current_note)
+    if capture:
+        captures.append(capture)
 
     return captures
 

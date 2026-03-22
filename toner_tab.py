@@ -25,12 +25,14 @@ IS_MACOS = sys.platform == 'darwin'
 try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
-        CAPTURE_DELAY_S, MIN_PROFILE_NOTES, SAX_TYPES,
+        MIN_PROFILE_NOTES, SAX_TYPES, MIN_FUNDAMENTAL_HZ,
         SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
         ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
-        load_tone_profiles, save_tone_profiles, flatten_profiles,
+        load_tone_profiles, save_tone_profiles,
         analyze_audio_file, check_mic_quality,
+        transpose_note, reverse_transpose_note, note_to_freq,
+        migrate_profile_to_concert,
     )
     _TONER_IMPORTS_OK = True
 except ImportError:
@@ -39,7 +41,7 @@ except ImportError:
     PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 try:
-    from config import TONE_PROFILES_FILE
+    from config import TONE_PROFILES_FILE, save_settings
 except ImportError:
     TONE_PROFILES_FILE = "tone_profiles.json"
 
@@ -164,11 +166,10 @@ class TonerTabMixin:
         self._toner_active_library = None   # Library name
         self._toner_active_profile = None   # Profile name within library
         self._toner_active_session = None   # Current capture session dict
-        # Capture state machine: None, 'listening', 'delay', 'recording', 'cooldown'
+        # Capture state machine: None, 'listening', 'delay', 'recording'
         self._toner_capture_state = None
         self._toner_capture_start = 0.0
         self._toner_capture_frames = []     # Accumulated frames during capture
-        self._toner_capture_note = ""       # Note being captured
         self._toner_stable_note = ""        # Note currently being held steady
         self._toner_stable_count = 0        # Consecutive frames of same note
         self._toner_comparison = None       # Fingerprint dict for ghost overlay
@@ -180,7 +181,9 @@ class TonerTabMixin:
         self._toner_stable_threshold = 25  # Updated per mode
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
         self._toner_cal_index = 0          # Current note index in calibration sequence
+        self._toner_cal_notes = list(CALIBRATION_NOTES)  # Filtered at calibration start
         self._toner_cal_recording = False  # Whether we're actively recording in calibration
+        self._toner_mic_checked = False    # Whether mic availability has been checked
 
     def create_toner_tab(self, parent):
         """Build the Toner tab UI."""
@@ -213,8 +216,19 @@ class TonerTabMixin:
             self._toner_bias_vars[key] = tk.IntVar(
                 value=saved_bias.get(key, 0))
 
-        # Load profiles
+        # Load profiles and auto-migrate any written-pitch profiles to concert
         self._toner_profiles = load_tone_profiles(TONE_PROFILES_FILE)
+        _any_migrated = False
+        for _lib in self._toner_profiles.values():
+            if not isinstance(_lib, dict):
+                continue
+            for _pname in list(_lib):
+                _pdata = _lib[_pname]
+                if isinstance(_pdata, dict) and _pdata.get('pitch_format') != 'concert':
+                    _lib[_pname] = migrate_profile_to_concert(_pdata)
+                    _any_migrated = True
+        if _any_migrated:
+            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
 
         bg = BG_COLOR
 
@@ -887,6 +901,12 @@ class TonerTabMixin:
             10, 10, text="", fill=FUNDAMENTAL_COLOR,
             font=("Helvetica", 16, "bold"), anchor="nw")
 
+        # Pitch mode indicator (e.g. "Written (Tenor)" or "Concert")
+        self._toner_pitch_mode_label = cv.create_text(
+            10, 30, text="", fill="#888888",
+            font=("Helvetica", 8), anchor="nw")
+        self._toner_update_pitch_mode_label()
+
         # Large calibration prompt (visible from across the room)
         self._toner_cal_prompt = cv.create_text(
             0, 0, text="", fill="#FFCC00",
@@ -898,7 +918,7 @@ class TonerTabMixin:
 
         # Comparison label
         self._toner_compare_label = cv.create_text(
-            10, 32, text="", fill=GHOST_COLOR,
+            10, 44, text="", fill=GHOST_COLOR,
             font=("Helvetica", 9), anchor="nw")
 
         self._toner_bars_built = True
@@ -1020,6 +1040,7 @@ class TonerTabMixin:
             return
 
         # Use per-note data if available for current note, else overall
+        # per_note keys are concert pitch, result.fundamental_note is concert pitch
         ghost_db = fp.get('harmonics_db', [])
         note = result.fundamental_note
         if note and 'per_note' in fp and note in fp['per_note']:
@@ -1044,7 +1065,7 @@ class TonerTabMixin:
             return
 
         ghost_db = fp.get('harmonics_db', [])
-        note = result.fundamental_note
+        note = result.fundamental_note  # concert pitch matches per_note keys
         if note and 'per_note' in fp and note in fp['per_note']:
             ghost_db = fp['per_note'][note].get('harmonics_db', ghost_db)
 
@@ -1070,6 +1091,7 @@ class TonerTabMixin:
     def _toner_on_sax_type_changed(self, event=None):
         if self._toner_engine:
             self._toner_engine.set_sax_type(self._toner_sax_var.get())
+        self._toner_update_pitch_mode_label()
 
     def _toner_lock_sax_selector(self, locked):
         """Lock or unlock the sax selector (locked when profile is loaded)."""
@@ -1113,49 +1135,46 @@ class TonerTabMixin:
 
         def apply():
             self._toner_concert_pitch.set(var.get() == "concert")
+            self._toner_update_pitch_mode_label()
             dlg.destroy()
 
         tk.Button(frame, text="OK", command=apply, width=10).pack(pady=(10, 0))
 
     def _toner_transpose_note(self, concert_note):
-        """Transpose a concert pitch note name to written pitch for the selected sax.
+        """Transpose a concert pitch note name to written pitch for display.
 
-        Returns the transposed note name, or the original if concert pitch is on.
+        Returns the original note if concert pitch display is on.
+        Uses the engine's pure transpose_note() function.
         """
         if not concert_note or self._toner_concert_pitch.get():
             return concert_note
+        return transpose_note(concert_note, self._toner_sax_var.get())
 
-        sax_type = self._toner_sax_var.get()
-        shift = SAX_TRANSPOSITIONS.get(sax_type, 0)
-        if shift == 0:
+    def _toner_display_note_for_profile(self, concert_note, profile=None):
+        """Transpose a concert note for display using a profile's horn type.
+
+        Used in reports and comparisons where the active sax selector might
+        not match the profile being viewed.
+        """
+        if not concert_note or self._toner_concert_pitch.get():
             return concert_note
-
-        # Parse note name: e.g. "C#4" -> pc_name="C#", octave=4
-        if len(concert_note) >= 2 and concert_note[-1].isdigit():
-            if len(concert_note) >= 3 and concert_note[-2].isdigit():
-                # Shouldn't happen, but handle e.g. "C10"
-                return concert_note
-            if '#' in concert_note or 'b' in concert_note:
-                pc_name = concert_note[:-1]
-                octave = int(concert_note[-1])
-            else:
-                pc_name = concert_note[:-1]
-                octave = int(concert_note[-1])
+        if profile:
+            sax_type = profile.get('horn_type', self._toner_sax_var.get())
         else:
-            return concert_note
+            sax_type = self._toner_sax_var.get()
+        return transpose_note(concert_note, sax_type)
 
-        # Find pitch class index
-        try:
-            pc_idx = PITCH_CLASSES.index(pc_name)
-        except ValueError:
-            return concert_note
-
-        # Apply transposition
-        new_pc = (pc_idx + shift) % 12
-        # Adjust octave when wrapping past B
-        new_octave = octave + ((pc_idx + shift) // 12)
-
-        return f"{PITCH_CLASSES[new_pc]}{new_octave}"
+    def _toner_update_pitch_mode_label(self):
+        """Update the pitch mode indicator on the spectrum canvas."""
+        if not hasattr(self, '_toner_pitch_mode_label'):
+            return
+        cv = self._toner_spectrum_canvas
+        if self._toner_concert_pitch.get():
+            cv.itemconfigure(self._toner_pitch_mode_label, text="Concert")
+        else:
+            sax = self._toner_sax_var.get()
+            cv.itemconfigure(self._toner_pitch_mode_label,
+                             text=f"Written ({sax})")
 
     def _toner_on_sensitivity_changed(self, value=None):
         if self._toner_engine:
@@ -1171,7 +1190,9 @@ class TonerTabMixin:
 
     def _toner_on_canvas_resize(self, event):
         if event.width > 50 and event.height > 50:
-            self._toner_build_spectrum_bars()
+            if hasattr(self, '_toner_resize_id'):
+                self.root.after_cancel(self._toner_resize_id)
+            self._toner_resize_id = self.root.after(50, self._toner_build_spectrum_bars)
 
     # ------------------------------------------------------------------
     # PROFILE MANAGEMENT
@@ -1382,8 +1403,6 @@ class TonerTabMixin:
                               height=150)
         chart_cv.pack(fill="both", expand=True, padx=5, pady=5)
 
-        chart_colors = ["#2196F3"]
-
         def draw_chart(event=None):
             chart_cv.delete("all")
             w = chart_cv.winfo_width()
@@ -1476,7 +1495,8 @@ class TonerTabMixin:
                 nd = pn.get('descriptors', {})
                 row = tk.Frame(table_inner, bg=bg)
                 row.pack(fill="x")
-                tk.Label(row, text=note, width=6, bg=bg, fg=fg,
+                display_note = self._toner_display_note_for_profile(note, profile)
+                tk.Label(row, text=display_note, width=6, bg=bg, fg=fg,
                          font=("Helvetica", 8)).pack(side="left")
                 for key in ['resonance', 'richness', 'brightness',
                            'darkness', 'fullness']:
@@ -1733,6 +1753,19 @@ class TonerTabMixin:
                     "  \u2022 If the app triggers on chair noise, raise the\n"
                     "    capture threshold in Options > Capture Threshold")
 
+            # Build calibration note list, filtering out notes whose
+            # concert frequency is below the engine's detection floor
+            self._toner_cal_notes = [
+                n for n in CALIBRATION_NOTES
+                if note_to_freq(reverse_transpose_note(n, self._toner_sax_var.get())) >= MIN_FUNDAMENTAL_HZ
+            ]
+            skipped = len(CALIBRATION_NOTES) - len(self._toner_cal_notes)
+            if skipped > 0:
+                messagebox.showinfo("Note Range",
+                    f"{skipped} low notes skipped — below detection range "
+                    f"for {self._toner_sax_var.get()}.\n"
+                    f"Calibration will cover {len(self._toner_cal_notes)} notes.")
+
             self._toner_cal_index = 0
             self._toner_cal_recording = False
             self._toner_capture_frames = []
@@ -1755,104 +1788,6 @@ class TonerTabMixin:
         self._toner_capture_label.configure(text=label_text)
         self._toner_capture_progress.configure(text="")
 
-    def _toner_capture_setup_flow(self):
-        """Guide user to load or create a profile, then start capturing."""
-        dlg = tk.Toplevel(self.root)
-        dlg.title("Start Capture")
-        dlg.resizable(False, False)
-        dlg.transient(self.root)
-        dlg.grab_set()
-
-        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
-        fg = "black"
-        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
-        frame.pack(fill="both", expand=True)
-
-        # Build flat list of (library, profile_name, profile_data)
-        all_profiles = []
-        for lib_name, lib_profiles in self._toner_profiles.items():
-            if not isinstance(lib_profiles, dict):
-                continue
-            for prof_name, prof_data in lib_profiles.items():
-                all_profiles.append((lib_name, prof_name, prof_data))
-
-        if all_profiles:
-            tk.Label(frame, text="Load an existing profile or create a new one.",
-                     bg=bg, fg=fg, font=("Helvetica", 10)).pack(pady=(0, 10))
-
-            list_frame = tk.Frame(frame, bg=bg)
-            list_frame.pack(fill="both", expand=True, pady=(0, 5))
-
-            listbox = tk.Listbox(list_frame, width=50, height=10,
-                                  font=("Helvetica", 10))
-            listbox.pack(side="left", fill="both", expand=True)
-            scrollbar = tk.Scrollbar(list_frame, command=listbox.yview)
-            scrollbar.pack(side="right", fill="y")
-            listbox.config(yscrollcommand=scrollbar.set)
-
-            for lib_name, prof_name, prof in all_profiles:
-                sessions = prof.get('sessions', [])
-                total_caps = sum(len(s.get('captures', [])) for s in sessions)
-                notes = set()
-                for s in sessions:
-                    for c in s.get('captures', []):
-                        notes.add(c.get('note', ''))
-                status = f"{len(notes)} notes" if total_caps > 0 else "empty"
-                if len(notes) >= MIN_PROFILE_NOTES:
-                    status += " \u2713"
-                listbox.insert(tk.END,
-                    f"[{lib_name}] {prof_name}  ({status})")
-
-            info_label = tk.Label(frame, text="", bg=bg, fg=fg,
-                                   font=("Helvetica", 9),
-                                   justify="left", anchor="w", wraplength=380)
-            info_label.pack(fill="x", pady=(0, 8))
-
-            def on_select(event=None):
-                sel = listbox.curselection()
-                if not sel:
-                    return
-                _, _, p = all_profiles[sel[0]]
-                info = _format_profile_info(p)
-                info_label.configure(text=info)
-
-            listbox.bind("<<ListboxSelect>>", on_select)
-
-            def load_profile():
-                sel = listbox.curselection()
-                if not sel:
-                    messagebox.showinfo("Select Profile",
-                        "Select a profile from the list.", parent=dlg)
-                    return
-                lib_name, prof_name, _ = all_profiles[sel[0]]
-                self._toner_active_library = lib_name
-                self._toner_active_profile = prof_name
-                dlg.destroy()
-                self._toner_start_new_session_and_listen()
-
-            btn_frame = tk.Frame(frame, bg=bg)
-            btn_frame.pack(fill="x", pady=(5, 0))
-            tk.Button(btn_frame, text="Load && Capture",
-                      command=load_profile).pack(side="left", padx=(0, 5))
-            tk.Button(btn_frame, text="New Profile...",
-                      command=lambda: [dlg.destroy(),
-                                       self._toner_new_profile_flow()]).pack(
-                          side="left", padx=(0, 5))
-            tk.Button(btn_frame, text="Cancel",
-                      command=dlg.destroy).pack(side="right")
-        else:
-            tk.Label(frame, text="No tone profiles yet.\n\n"
-                     "Create a profile for the horn you want to analyze.",
-                     bg=bg, fg=fg, font=("Helvetica", 10),
-                     justify="left").pack(pady=(0, 10))
-            btn_frame = tk.Frame(frame, bg=bg)
-            btn_frame.pack(fill="x", pady=(5, 0))
-            tk.Button(btn_frame, text="Create Profile...",
-                      command=lambda: [dlg.destroy(),
-                                       self._toner_new_profile_flow()]).pack(
-                          side="left", padx=(0, 5))
-            tk.Button(btn_frame, text="Cancel",
-                      command=dlg.destroy).pack(side="right")
 
     def _toner_new_profile_flow(self):
         """Create a new profile (complete setup identity), then start capturing."""
@@ -2112,6 +2047,7 @@ class TonerTabMixin:
         self._toner_active_session = {
             'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'captures': [],
+            'pitch_format': 'concert',
         }
         self._toner_begin_listening()
 
@@ -2149,6 +2085,12 @@ class TonerTabMixin:
         captures = session.get('captures', [])
         if not captures:
             return
+
+        # Get active profile for note transposition
+        _cov_profile = None
+        if self._toner_active_library and self._toner_active_profile:
+            lib = self._toner_profiles.get(self._toner_active_library, {})
+            _cov_profile = lib.get(self._toner_active_profile)
 
         dlg = tk.Toplevel(self.root)
         dlg.title("Capture Summary")
@@ -2225,9 +2167,11 @@ class TonerTabMixin:
 
                 # Note label (rotated text not supported, so abbreviated)
                 if len(all_notes) <= 24 or i % 2 == 0:
+                    disp_note = self._toner_display_note_for_profile(
+                        note, _cov_profile)
                     chart_cv.create_text(
                         x + bar_w / 2, margin_t + ch + 10,
-                        text=note, fill="#444444",
+                        text=disp_note, fill="#444444",
                         font=("Helvetica", 6), angle=45 if len(all_notes) > 12 else 0)
 
             # Legend
@@ -2336,32 +2280,14 @@ class TonerTabMixin:
             self._toner_capture_label.configure(text="Paused")
             self._toner_update_cal_prompt("PAUSED")
 
-    def _toner_cancel_capture(self):
-        """Cancel button handler."""
-        self._toner_stop_capture()
-
     def _toner_process_capture_frame(self, result):
         """Called each animation frame. Drives the auto-capture state machine."""
         state = self._toner_capture_state
         if state is None or state == 'paused':
             return
 
+        # Store concert pitch (what the mic heard). Transpose only for display.
         note = result.fundamental_note if result.fundamental_freq > 0 else ""
-
-        # --- COOLDOWN: brief pause before next auto-capture (free mode) ---
-        if state == 'cooldown':
-            elapsed = time.time() - self._toner_capture_start
-            if not note or note != self._toner_capture_note or elapsed > 2.0:
-                self._toner_capture_state = 'free_listening'
-                self._toner_stable_note = ""
-                self._toner_stable_count = 0
-                self._toner_free_accumulator = []
-                self._toner_capture_label.configure(text="Play anything...")
-                self._toner_capture_progress.configure(text="")
-            else:
-                self._toner_capture_label.configure(
-                    text=f"Captured {self._toner_capture_note} \u2713  change to next note...")
-            return
 
         # --- FREE LISTENING: continuous micro-capture mode ---
         if state == 'free_listening':
@@ -2372,7 +2298,7 @@ class TonerTabMixin:
                     # Skip first few frames (attack transient ~100ms)
                     if self._toner_stable_count > ATTACK_SKIP_FRAMES:
                         self._toner_free_accumulator.append({
-                            'note': result.fundamental_note,
+                            'note': note,  # concert pitch (raw from engine)
                             'freq': result.fundamental_freq,
                             'harmonics_db': [h.magnitude_db for h in result.harmonics],
                             'descriptors': dict(result.descriptors),
@@ -2397,8 +2323,9 @@ class TonerTabMixin:
                     notes_so_far.add(cap.get('note', ''))
 
             if self._toner_stable_note:
+                disp = self._toner_transpose_note(self._toner_stable_note)
                 self._toner_capture_label.configure(
-                    text=f"Free: {self._toner_stable_note} "
+                    text=f"Free: {disp} "
                          f"({self._toner_stable_count} frames)")
             else:
                 self._toner_capture_label.configure(
@@ -2418,27 +2345,29 @@ class TonerTabMixin:
                 return
             # Countdown done — start calibration
             self._toner_capture_state = 'calibration'
-            first_note = CALIBRATION_NOTES[0]
+            cal_notes = self._toner_cal_notes
+            first_note = cal_notes[0]
             self._toner_capture_label.configure(
-                text=f"Play {first_note} (1/{len(CALIBRATION_NOTES)})")
+                text=f"Play {first_note} (1/{len(cal_notes)})")
             self._toner_capture_progress.configure(text="waiting...")
             self._toner_update_cal_prompt(first_note)
             return
 
         # --- CALIBRATION: guided note-by-note capture ---
         if state == 'calibration':
-            if self._toner_cal_index >= len(CALIBRATION_NOTES):
+            cal_notes = self._toner_cal_notes
+            if self._toner_cal_index >= len(cal_notes):
                 self._toner_update_cal_prompt("")
                 self._toner_stop_capture()
                 messagebox.showinfo("Calibration Complete",
                     f"Calibration capture finished!\n"
-                    f"{len(CALIBRATION_NOTES)} notes recorded.")
+                    f"{len(cal_notes)} notes recorded.")
                 return
 
             # Notes are already in written pitch — display directly
-            display_note = CALIBRATION_NOTES[self._toner_cal_index]
+            display_note = cal_notes[self._toner_cal_index]
             note_num = self._toner_cal_index + 1
-            total = len(CALIBRATION_NOTES)
+            total = len(cal_notes)
             has_signal = self._toner_signal_above_threshold(result)
 
             if not self._toner_cal_recording:
@@ -2460,9 +2389,13 @@ class TonerTabMixin:
             # Recording this note (skip attack transient ~100ms)
             elapsed = time.time() - self._toner_capture_start
 
+            # Concert note for this calibration step (written note reverse-transposed)
+            concert_note = reverse_transpose_note(
+                display_note, self._toner_sax_var.get())
+
             if has_signal and elapsed > 0.1:
                 self._toner_capture_frames.append({
-                    'note': display_note,
+                    'note': concert_note,
                     'detected_note': result.fundamental_note,
                     'freq': result.fundamental_freq,
                     'harmonics_db': [h.magnitude_db for h in result.harmonics],
@@ -2484,11 +2417,14 @@ class TonerTabMixin:
                     avg_freq = sum(f['freq'] for f in self._toner_capture_frames) / len(self._toner_capture_frames)
 
                     from collections import Counter
-                    detected = Counter(f['detected_note'] for f in self._toner_capture_frames)
+                    detected = Counter(
+                        self._toner_transpose_note(f['detected_note'])
+                        for f in self._toner_capture_frames)
                     top_detected = detected.most_common(1)[0][0] if detected else "?"
 
                     capture_entry = {
-                        'note': display_note,
+                        'note': concert_note,  # concert pitch (storage)
+                        'written_note': display_note,  # written pitch (for reference)
                         'detected_as': top_detected,
                         'fundamental_freq': round(avg_freq, 2),
                         'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
@@ -2520,10 +2456,11 @@ class TonerTabMixin:
                 self._toner_cal_index += 1
                 self._toner_capture_state = 'calibration'
 
-                if self._toner_cal_index < len(CALIBRATION_NOTES):
-                    next_note = CALIBRATION_NOTES[self._toner_cal_index]
+                cal_notes = self._toner_cal_notes
+                if self._toner_cal_index < len(cal_notes):
+                    next_note = cal_notes[self._toner_cal_index]
                     note_num = self._toner_cal_index + 1
-                    total = len(CALIBRATION_NOTES)
+                    total = len(cal_notes)
                     self._toner_capture_label.configure(
                         text=f"Play {next_note} ({note_num}/{total})")
                     self._toner_capture_progress.configure(text="waiting...")
@@ -3094,8 +3031,18 @@ class TonerTabMixin:
         if not self._toner_running:
             return
 
+        # Check if the engine died with an error
+        if self._toner_engine and self._toner_engine.last_error:
+            self._toner_show_stream_error(self._toner_engine.last_error)
+            return
+
         if self._toner_engine and self._toner_engine.is_running:
             result = self._toner_engine.analyze()
+
+            # Re-check after analyze() — stream may have just died
+            if self._toner_engine.last_error:
+                self._toner_show_stream_error(self._toner_engine.last_error)
+                return
 
             # One-time spectral quality check after enough audio
             if (not self._toner_engine._mic_quality_warned and
@@ -3157,6 +3104,29 @@ class TonerTabMixin:
 
         interval = FRAME_RATES.get(self._toner_fps_var.get(), 33)
         self._toner_anim_id = self.root.after(interval, self._toner_animate)
+
+    def _toner_show_stream_error(self, error_msg):
+        """Show audio stream error on the spectrum canvas with a retry option."""
+        self._toner_running = False
+        if hasattr(self, '_toner_spectrum_canvas'):
+            c = self._toner_spectrum_canvas
+            cx = c.winfo_width() / 2
+            cy = c.winfo_height() / 2
+            c.delete("error")
+            c.create_text(cx, cy - 15, text=error_msg,
+                          fill="#FF4444", font=("Helvetica", 12),
+                          tags="error")
+            c.create_text(cx, cy + 15, text="Click here to retry",
+                          fill="#4488FF", font=("Helvetica", 11, "underline"),
+                          tags=("error", "error_retry"))
+            c.tag_bind("error_retry", "<Button-1>",
+                       lambda e: self._toner_retry())
+
+    def _toner_retry(self):
+        """Retry starting the toner after a stream error."""
+        if self._toner_engine:
+            self._toner_engine.last_error = None
+        self._toner_start()
 
     # ------------------------------------------------------------------
     # SETTINGS SAVE/RESTORE
@@ -3458,6 +3428,7 @@ class TonerTabMixin:
             return
 
         for cap in captures:
+            # Engine returns concert pitch — store as-is
             cap['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
             cap['source_file'] = filename
             if source_notes:
@@ -3471,9 +3442,12 @@ class TonerTabMixin:
         for cap in self._toner_active_session['captures']:
             total_notes.add(cap.get('note', ''))
 
+        # Transpose note names for display
+        display_notes = sorted(
+            self._toner_transpose_note(n) for n in notes)
         messagebox.showinfo("File Imported",
             f"Extracted {len(captures)} note segments from '{filename}'.\n"
-            f"Notes found: {', '.join(sorted(notes))}\n\n"
+            f"Notes found: {', '.join(display_notes)}\n\n"
             f"Profile now has {len(total_notes)} unique notes total.")
 
     def _toner_export_profiles(self):
@@ -3625,6 +3599,15 @@ class TonerTabMixin:
                         if session.get('date') not in existing_dates:
                             existing.setdefault('sessions', []).append(session)
                             count += 1
+
+        # Auto-migrate any imported profiles from written to concert pitch
+        for _lib in self._toner_profiles.values():
+            if not isinstance(_lib, dict):
+                continue
+            for _pname in list(_lib):
+                _pdata = _lib[_pname]
+                if isinstance(_pdata, dict) and _pdata.get('pitch_format') != 'concert':
+                    _lib[_pname] = migrate_profile_to_concert(_pdata)
 
         save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
         messagebox.showinfo("Import Complete",

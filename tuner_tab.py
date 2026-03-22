@@ -11,6 +11,7 @@ Requires: numpy, sounddevice (graceful fallback if unavailable)
 import tkinter as tk
 from tkinter import ttk, colorchooser
 import math
+import functools
 import sys
 
 IS_MACOS = sys.platform == 'darwin'
@@ -70,13 +71,24 @@ def _build_ref_notes(ref_pitch=440.0):
 # HELPER: dim a hex color
 # ============================================
 
-def _scale_color(hex_color, factor):
-    """Return hex_color scaled by factor (0.0 = black, 1.0 = full brightness)."""
+@functools.lru_cache(maxsize=256)
+def _scale_color_cached(hex_color, factor_q):
+    """Inner cached implementation — factor_q is pre-quantized."""
     hex_color = hex_color.lstrip('#')
-    r = min(255, int(int(hex_color[0:2], 16) * factor))
-    g = min(255, int(int(hex_color[2:4], 16) * factor))
-    b = min(255, int(int(hex_color[4:6], 16) * factor))
+    r = min(255, int(int(hex_color[0:2], 16) * factor_q))
+    g = min(255, int(int(hex_color[2:4], 16) * factor_q))
+    b = min(255, int(int(hex_color[4:6], 16) * factor_q))
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _scale_color(hex_color, factor):
+    """Return hex_color scaled by factor (0.0 = black, 1.0 = full brightness).
+
+    Factor is quantized to 2 decimal places before cache lookup — this maps
+    ~84 per-frame calls down to a handful of unique cache keys without
+    visible quality loss (1/255 ≈ 0.004, so 0.01 resolution is plenty).
+    """
+    return _scale_color_cached(hex_color, round(factor, 2))
 
 
 # ============================================
@@ -283,7 +295,9 @@ class StrobeWheel:
         self._brightness = brightness
 
         # Update segment positions (rotate by phase_offset)
-        if abs(phase_offset - self._phase_offset) < 0.01 and brightness < 0.01:
+        # Skip coordinate recalculation when phase hasn't moved enough to see.
+        # 0.005 degrees ≈ 0.09px at 50px radius — sub-pixel, invisible.
+        if abs(phase_offset - self._phase_offset) < 0.005:
             return  # No visible change, skip coordinate update
 
         self._phase_offset = phase_offset
@@ -298,11 +312,6 @@ class StrobeWheel:
                     start, end, steps
                 )
                 self.canvas.coords(poly_id, *points)
-
-        # Re-raise mask to stay on top
-        self.canvas.tag_raise(self._mask_id)
-        self.canvas.tag_raise(self._inner_mask)
-        self.canvas.tag_raise(self._label_id)
 
 
 # ============================================
@@ -1018,6 +1027,9 @@ class TunerTabMixin:
         if not self._tuner_engine:
             return
 
+        if hasattr(self, '_tuner_canvas'):
+            self._tuner_canvas.delete("error")
+
         if not self._tuner_wheels_built:
             self._tuner_build_wheels()
 
@@ -1062,8 +1074,18 @@ class TunerTabMixin:
         if not self._tuner_running:
             return
 
+        # Check if the engine died with an error
+        if self._tuner_engine and self._tuner_engine.last_error:
+            self._tuner_show_stream_error(self._tuner_engine.last_error)
+            return
+
         if self._tuner_engine and self._tuner_engine.is_running:
             result = self._tuner_engine.analyze()
+
+            # Re-check after analyze() — stream may have just died
+            if self._tuner_engine.last_error:
+                self._tuner_show_stream_error(self._tuner_engine.last_error)
+                return
 
             if self._tuner_wheels:
                 sens = self._tuner_sens_var.get() / 100.0
@@ -1083,6 +1105,30 @@ class TunerTabMixin:
 
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
         self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
+
+    def _tuner_show_stream_error(self, error_msg):
+        """Show audio stream error on the tuner canvas with a retry option."""
+        self._tuner_running = False
+        self._tuner_set_pilot(False)
+        if hasattr(self, '_tuner_canvas'):
+            c = self._tuner_canvas
+            cx = c.winfo_width() / 2
+            cy = c.winfo_height() / 2
+            c.delete("error")
+            c.create_text(cx, cy - 15, text=error_msg,
+                          fill="#FF4444", font=("Helvetica", 12),
+                          tags="error")
+            c.create_text(cx, cy + 15, text="Click here to retry",
+                          fill="#4488FF", font=("Helvetica", 11, "underline"),
+                          tags=("error", "error_retry"))
+            c.tag_bind("error_retry", "<Button-1>",
+                       lambda e: self._tuner_retry())
+
+    def _tuner_retry(self):
+        """Retry starting the tuner after a stream error."""
+        if self._tuner_engine:
+            self._tuner_engine.last_error = None
+        self._tuner_start()
 
     # ------------------------------------------------------------------
     # SETTINGS SAVE/RESTORE

@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import copy
 import shutil
 import ssl
 from tkinter import messagebox
@@ -131,7 +132,8 @@ def migrate_legacy_files():
         "pad_presets.json",
         "key_height_library.json",
         "app_settings.json",
-        "screw_specs.json"
+        "screw_specs.json",
+        "tone_profiles.json"
     ]
 
     migrated = []
@@ -163,7 +165,8 @@ def find_config_files_in_directory(directory):
         "app_settings.json",
         "pad_presets.json",
         "key_height_library.json",
-        "screw_specs.json"
+        "screw_specs.json",
+        "tone_profiles.json"
     ]
     found = []
     for filename in config_files:
@@ -392,7 +395,6 @@ DEFAULT_SETTINGS = {
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
-    "seen_sdcard_tutorial": False,
     "seen_kerf_test_tutorial": False,
     "seen_calibration_tutorial": False,
 
@@ -482,7 +484,7 @@ def load_settings():
         try:
             with open(SETTINGS_FILE, 'r') as f:
                 loaded_settings = json.load(f)
-                settings = DEFAULT_SETTINGS.copy()
+                settings = copy.deepcopy(DEFAULT_SETTINGS)
                 
                 # Deep copy key_layout to avoid shared references
                 if "key_layout" not in loaded_settings:

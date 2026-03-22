@@ -94,7 +94,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 ### From Release (Recommended)
 Download the latest release for your platform from the [Releases](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases) page.
 
-**macOS users**: Requires Apple Silicon (M1/M2/M3/M4). Intel Macs are not supported — users on older Intel Macs can use [version 1.61](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases/tag/v1.61) or run from source.
+**macOS users**: Two builds are available — **Apple Silicon** (M1/M2/M3/M4) with full features, and **Intel** with all features except the Tuner and Tone Analyzer (which require audio libraries not available on Intel Macs).
 
 The app is not signed with an Apple Developer certificate, so macOS will block it on first launch. To open it, right-click (or Control-click) the app and select **Open**, then click **Open** in the dialog. You only need to do this once — after that it launches normally.
 

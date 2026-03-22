@@ -220,18 +220,26 @@ test("Dark tone: dark > bright",
 
 # ============================================================
 section("Descriptors - fullness")
-# Both bright and dark = full
-audio = make_audio(440.0, {2: 0.8, 3: 0.7, 4: 0.6, 5: 0.5,
-                            7: 0.5, 8: 0.45, 9: 0.4, 10: 0.35})
+# Fullness = balance of bright and dark energy. Peaks when both sides
+# contribute equally, drops when one dominates. At 440 Hz with default
+# break (750 Hz), H2+ are all bright, so even a harmonic-rich tone
+# reads as unbalanced (bright-heavy) and low fullness. This is correct.
+
+# Use a low fundamental (130 Hz = C3) where some harmonics fall below break
+# and others above — this CAN be a genuinely full tone.
+audio = make_audio(130.0, {2: 0.8, 3: 0.7, 4: 0.6, 5: 0.5,
+                            6: 0.5, 7: 0.45, 8: 0.4, 9: 0.35})
 r = engine.analyze_buffer(audio)
-test("Full tone: high fullness", r.descriptors['fullness'] > 0.2,
+test("Full tone (low note, balanced harmonics): high fullness",
+     r.descriptors['fullness'] > 0.3,
      f"got {r.descriptors['fullness']:.2f}")
 
-# Only bright (but fundamental still contributes some darkness, so fullness
-# can be moderate — this is correct, the fundamental is always present)
-audio = make_audio(440.0, {7: 0.6, 8: 0.5, 9: 0.4})
+# Very bright-heavy signal: strong upper harmonics swamp the fundamental
+audio = make_audio(440.0, {2: 1.2, 3: 1.0, 4: 0.9, 5: 0.8,
+                            6: 0.7, 7: 0.6, 8: 0.5, 9: 0.4})
 r = engine.analyze_buffer(audio)
-test("Bright-only: fullness from fundamental", r.descriptors['brightness'] > 0.3,
+test("Bright-heavy high note: lower fullness than balanced low note",
+     r.descriptors['fullness'] < 0.4,
      f"bright={r.descriptors['brightness']:.2f} full={r.descriptors['fullness']:.2f}")
 
 # ============================================================

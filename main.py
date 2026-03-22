@@ -2,9 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import os
 import json
-import shutil
 import sys
-import glob
 import subprocess
 import time
 
