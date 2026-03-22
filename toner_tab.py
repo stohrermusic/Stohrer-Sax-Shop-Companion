@@ -509,16 +509,24 @@ class TonerTabMixin:
                   font=("Helvetica", 9),
                   command=self._toner_unload_profile).pack(side="left", padx=(0, 8))
 
-        # Capture mode selector
+        # Capture mode radio buttons
         self._toner_mode_var = tk.StringVar(value="free")
-        mode_combo = ttk.Combobox(
-            cap_frame, textvariable=self._toner_mode_var,
-            values=["free", "calibration"], state="readonly", width=9)
-        mode_combo.pack(side="left", padx=(0, 2))
+        tk.Radiobutton(
+            cap_frame, text="Free", variable=self._toner_mode_var,
+            value="free", bg=ctrl_bg, fg=ctrl_fg,
+            selectcolor=ctrl_bg, activebackground=ctrl_bg,
+            font=("Helvetica", 9),
+        ).pack(side="left", padx=(0, 2))
+        tk.Radiobutton(
+            cap_frame, text="Calibration", variable=self._toner_mode_var,
+            value="calibration", bg=ctrl_bg, fg=ctrl_fg,
+            selectcolor=ctrl_bg, activebackground=ctrl_bg,
+            font=("Helvetica", 9),
+        ).pack(side="left", padx=(0, 6))
 
         self._toner_capture_btn = tk.Button(
             cap_frame, text="Capture",
-            font=("Helvetica", 9),
+            font=("Helvetica", 9, "bold"),
             command=self._toner_toggle_capture)
         self._toner_capture_btn.pack(side="left")
 
@@ -850,6 +858,10 @@ class TonerTabMixin:
         self._toner_cal_prompt = cv.create_text(
             0, 0, text="", fill="#FFCC00",
             font=("Helvetica", 48, "bold"), anchor="ne", state="hidden")
+        # Status line below the big prompt
+        self._toner_cal_status = cv.create_text(
+            0, 0, text="", fill="#AAAAAA",
+            font=("Helvetica", 14), anchor="ne", state="hidden")
 
         # Comparison label
         self._toner_compare_label = cv.create_text(
@@ -1971,7 +1983,7 @@ class TonerTabMixin:
         return (result.fundamental_freq > 0 and result.harmonics
                 and result.signal_level > threshold)
 
-    def _toner_update_cal_prompt(self, text):
+    def _toner_update_cal_prompt(self, text, status=""):
         """Update the large calibration prompt on the spectrum canvas."""
         cv = self._toner_spectrum_canvas
         if hasattr(self, '_toner_cal_prompt'):
@@ -1979,8 +1991,12 @@ class TonerTabMixin:
                 w = cv.winfo_width()
                 cv.coords(self._toner_cal_prompt, w - 10, 10)
                 cv.itemconfigure(self._toner_cal_prompt, text=text, state="normal")
+                cv.coords(self._toner_cal_status, w - 10, 65)
+                cv.itemconfigure(self._toner_cal_status,
+                                 text=status, state="normal" if status else "hidden")
             else:
                 cv.itemconfigure(self._toner_cal_prompt, state="hidden")
+                cv.itemconfigure(self._toner_cal_status, state="hidden")
 
     def _toner_update_profile_label(self):
         """Update the active profile indicator."""
@@ -2312,7 +2328,7 @@ class TonerTabMixin:
             if remaining > 0:
                 self._toner_capture_label.configure(
                     text=f"Calibration starting in {remaining:.0f}s... get ready")
-                self._toner_update_cal_prompt(f"{remaining:.0f}s")
+                self._toner_update_cal_prompt(f"{remaining:.0f}s", "get ready...")
                 return
             # Countdown done — start calibration
             self._toner_capture_state = 'calibration'
@@ -2347,11 +2363,12 @@ class TonerTabMixin:
                     self._toner_capture_frames = []
                     self._toner_capture_label.configure(
                         text=f"Recording {display_note}... ({note_num}/{total})")
+                    self._toner_update_cal_prompt(display_note, "recording...")
                 else:
                     self._toner_capture_label.configure(
                         text=f"Play {display_note} ({note_num}/{total})")
                     self._toner_capture_progress.configure(text="waiting...")
-                self._toner_update_cal_prompt(display_note)
+                    self._toner_update_cal_prompt(display_note, f"({note_num}/{total})")
                 return
 
             # Recording this note (skip attack transient ~100ms)
@@ -2372,6 +2389,7 @@ class TonerTabMixin:
                 text=f"Recording {display_note}... {remaining:.1f}s ({note_num}/{total})")
             self._toner_capture_progress.configure(
                 text=f"({n_frames} frames)")
+            self._toner_update_cal_prompt(display_note, f"recording {remaining:.0f}s")
 
             if remaining <= 0:
                 # Save this note's capture
@@ -2405,7 +2423,7 @@ class TonerTabMixin:
                 self._toner_capture_label.configure(
                     text=f"Captured {display_note} \u2713  stop playing...")
                 self._toner_capture_progress.configure(text="")
-                self._toner_update_cal_prompt("\u2713")
+                self._toner_update_cal_prompt("\u2713", "stop playing...")
             return
 
         # --- CAL_PAUSE: wait for silence between calibration notes ---
@@ -2423,7 +2441,7 @@ class TonerTabMixin:
                     self._toner_capture_label.configure(
                         text=f"Play {next_note} ({note_num}/{total})")
                     self._toner_capture_progress.configure(text="waiting...")
-                    self._toner_update_cal_prompt(next_note)
+                    self._toner_update_cal_prompt(next_note, f"({note_num}/{total})")
             return
 
     def _toner_free_save_micro_capture(self):
