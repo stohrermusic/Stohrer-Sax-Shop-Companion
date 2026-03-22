@@ -725,10 +725,10 @@ class TonerTabMixin:
             cv.create_text(lx, ly, text=label, fill=tick_color,
                            font=("Helvetica", 10, "bold"), anchor="center")
 
-        # Cents readout text (updated each frame)
+        # Cents readout text (top-right corner, out of the way)
         self._toner_cents_text_id = cv.create_text(
-            cx, cy - r - 18, text="", fill=tick_color,
-            font=("Helvetica", 9, "bold"), anchor="center")
+            cv_w - 6, 6, text="", fill=tick_color,
+            font=("Helvetica", 8), anchor="ne")
 
         # Needle + shadow
         needle_len = r - 16
