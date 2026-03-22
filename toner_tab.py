@@ -551,6 +551,23 @@ class TonerTabMixin:
         cap_frame._skip_theme = True
         cap_frame.pack(side="right", padx=(12, 0))
 
+        # Session lamp (amber when session is active)
+        session_frame = tk.Frame(cap_frame, bg=ctrl_bg)
+        session_frame._skip_theme = True
+        session_frame.pack(side="left", padx=(0, 6))
+
+        self._toner_session_canvas = tk.Canvas(
+            session_frame, bg=ctrl_bg, highlightthickness=0, width=16, height=16)
+        self._toner_session_canvas._dark_canvas = True
+        self._toner_session_canvas.pack(side="left")
+        self._toner_session_glow = self._toner_session_canvas.create_oval(
+            1, 1, 15, 15, fill="#1A150A", outline="")
+        self._toner_session_lamp = self._toner_session_canvas.create_oval(
+            3, 3, 13, 13, fill="#332200", outline="#444444", width=1)
+
+        tk.Label(session_frame, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
+                 font=("Helvetica", 6, "bold")).pack(side="left", padx=(2, 0))
+
         # Active profile indicator
         self._toner_profile_label = tk.Label(
             cap_frame, text="no profile", bg=ctrl_bg, fg="#666666",
@@ -1199,6 +1216,22 @@ class TonerTabMixin:
             sax = self._toner_sax_var.get()
             cv.itemconfigure(self._toner_pitch_mode_label,
                              text=f"Written ({sax})")
+
+    def _toner_update_session_lamp(self):
+        """Update the session indicator lamp (amber when session is active)."""
+        if not hasattr(self, '_toner_session_lamp'):
+            return
+        active = self._toner_active_session is not None
+        if active:
+            self._toner_session_canvas.itemconfigure(
+                self._toner_session_lamp, fill="#CC8800")
+            self._toner_session_canvas.itemconfigure(
+                self._toner_session_glow, fill="#332200")
+        else:
+            self._toner_session_canvas.itemconfigure(
+                self._toner_session_lamp, fill="#332200")
+            self._toner_session_canvas.itemconfigure(
+                self._toner_session_glow, fill="#1A150A")
 
     def _toner_on_sensitivity_changed(self, value=None):
         if self._toner_engine:
@@ -3078,6 +3111,9 @@ class TonerTabMixin:
                         "response. Low register readings may be inaccurate.\n\n"
                         "For best results, use a condenser mic such as the "
                         "Audio-Technica AT2020 USB.")
+
+            # Update session lamp
+            self._toner_update_session_lamp()
 
             # Update spectrum
             self._toner_render_spectrum(result)
