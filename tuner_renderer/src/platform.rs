@@ -36,8 +36,18 @@ pub fn raw_handles_from_winfo_id(handle: isize) -> (RawWindowHandle, RawDisplayH
 #[cfg(target_os = "linux")]
 pub fn raw_handles_from_winfo_id(handle: isize) -> (RawWindowHandle, RawDisplayHandle) {
     use raw_window_handle::{XlibWindowHandle, XlibDisplayHandle};
+
+    // wgpu's Vulkan backend requires a real X11 Display pointer.
+    // Since tkinter is already using X11, libX11 is loaded in the process.
+    #[link(name = "X11")]
+    extern "C" {
+        fn XOpenDisplay(display_name: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    }
+
+    let display = unsafe { XOpenDisplay(std::ptr::null()) };
+    let display_ptr = std::ptr::NonNull::new(display);
+
     let wh = XlibWindowHandle::new(handle as std::ffi::c_ulong);
-    // None = default display, 0 = default screen
-    let dh = XlibDisplayHandle::new(None, 0);
+    let dh = XlibDisplayHandle::new(display_ptr, 0);
     (RawWindowHandle::Xlib(wh), RawDisplayHandle::Xlib(dh))
 }

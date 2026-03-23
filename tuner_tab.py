@@ -755,7 +755,7 @@ class TunerTabMixin:
                 self._gpu_renderer = tuner_render.TunerRenderer(hwnd, w, h)
                 self._gpu_renderer.set_stripe_color(self._tuner_color)
                 self._gpu_renderer.set_faceplate_color(bg)
-            except Exception as e:
+            except (Exception, BaseException) as e:
                 print(f"GPU renderer init failed, falling back to canvas: {e}")
                 self._tuner_use_gpu = False
                 self._gpu_renderer = None

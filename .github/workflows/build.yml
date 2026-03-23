@@ -45,7 +45,7 @@ jobs:
 
       - name: Install system audio libraries (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev
 
       - name: Install dependencies (full)
         if: matrix.full_build
