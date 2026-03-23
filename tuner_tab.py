@@ -1419,7 +1419,10 @@ class TunerTabMixin:
                 self._tuner_perf_log.append(sample)
 
                 if len(self._tuner_perf_log) >= 300:
-                    self._tuner_dump_perf_log()
+                    try:
+                        self._tuner_dump_perf_log()
+                    except Exception:
+                        self._tuner_perf_log = []  # discard on error
 
         # FPS measurement — average over 1 second, display update once per second
         if self._tuner_show_fps.get():
