@@ -16,20 +16,20 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: StohrerSaxShopCompanion.exe
-            asset_name: StohrerSaxShopCompanion-Windows.exe
+            artifact_name: SaxShopCompanion.exe
+            asset_name: SaxShopCompanion-Windows.exe
             full_build: true
           - os: macos-latest
-            artifact_name: StohrerSaxShopCompanion.app
-            asset_name: StohrerSaxShopCompanion-macOS.zip
+            artifact_name: SaxShopCompanion.app
+            asset_name: SaxShopCompanion-macOS.zip
             full_build: true
           - os: macos-15-intel
-            artifact_name: StohrerSaxShopCompanion.app
-            asset_name: StohrerSaxShopCompanion-macOS-Intel.zip
+            artifact_name: SaxShopCompanion.app
+            asset_name: SaxShopCompanion-macOS-Intel.zip
             full_build: false
           - os: ubuntu-latest
-            artifact_name: StohrerSaxShopCompanion
-            asset_name: StohrerSaxShopCompanion-Linux
+            artifact_name: SaxShopCompanion
+            asset_name: SaxShopCompanion-Linux
             full_build: true
 
     runs-on: ${{ matrix.os }}
@@ -77,18 +77,18 @@ jobs:
       # Rename artifacts for release
       - name: Rename Windows artifact
         if: matrix.os == 'windows-latest'
-        run: mv dist/StohrerSaxShopCompanion.exe dist/StohrerSaxShopCompanion-Windows.exe
+        run: mv dist/SaxShopCompanion.exe dist/SaxShopCompanion-Windows.exe
 
       - name: Rename Linux artifact
         if: matrix.os == 'ubuntu-latest'
-        run: mv dist/StohrerSaxShopCompanion dist/StohrerSaxShopCompanion-Linux
+        run: mv dist/SaxShopCompanion dist/SaxShopCompanion-Linux
 
       # macOS: Create zip of .app bundle
       - name: Package macOS app
         if: runner.os == 'macOS'
         run: |
           cd dist
-          zip -r ${{ matrix.asset_name }} StohrerSaxShopCompanion.app
+          zip -r ${{ matrix.asset_name }} SaxShopCompanion.app
 
       # Upload artifacts
       - name: Upload artifact

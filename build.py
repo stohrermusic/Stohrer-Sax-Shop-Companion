@@ -15,7 +15,7 @@ import os
 import shutil
 import argparse
 
-APP_NAME = "StohrerSaxShopCompanion"
+APP_NAME = "SaxShopCompanion"
 MAIN_SCRIPT = "main.py"
 DMG_NAME = f"{APP_NAME}.dmg"
 
