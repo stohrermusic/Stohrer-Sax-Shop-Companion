@@ -59,6 +59,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install svgwrite pyinstaller
 
+      # GPU strobe tuner renderer (Rust/wgpu) — only for full builds
+      - name: Install Rust toolchain
+        if: matrix.full_build
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build GPU tuner renderer
+        if: matrix.full_build
+        run: |
+          pip install maturin
+          python -m maturin build --release --manifest-path tuner_renderer/Cargo.toml
+          pip install --find-links tuner_renderer/target/wheels tuner_render
+
       - name: Build with PyInstaller
         run: python build.py
 
