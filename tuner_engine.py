@@ -359,7 +359,9 @@ class TunerEngine:
 
                     # Accumulate phase offset (the strobe rotation)
                     # Uses per-pitch-class drift rate matching Stroboconn disc physics
-                    self._phase_offsets[pc] -= cents * self._drift_rates[pc] * dt
+                    # Positive cents (sharp) → increasing phase → CW rotation in shader
+                    # Negative cents (flat) → decreasing phase → CCW rotation
+                    self._phase_offsets[pc] += cents * self._drift_rates[pc] * dt
                     self._phase_offsets[pc] %= 360.0
 
             result.phase_offsets[pc] = self._phase_offsets[pc]

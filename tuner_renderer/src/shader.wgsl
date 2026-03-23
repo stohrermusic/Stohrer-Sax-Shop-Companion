@@ -152,8 +152,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Per-ring vs uniform brightness blending
     let ring_mag = wheel.ring_mags[ring_idx];
-    let uniform_b = max(DIM_MULTIPLIER, wheel.brightness);
-    let per_ring_b = max(DIM_MULTIPLIER, ring_mag);
+    // DIM_MULTIPLIER keeps stripes visible in always-spinning mode.
+    // When brightness is exactly 0, the wheel is inactive — don't force dim.
+    let uniform_b = select(max(DIM_MULTIPLIER, wheel.brightness), 0.0, wheel.brightness <= 0.0);
+    let per_ring_b = select(max(DIM_MULTIPLIER, ring_mag), 0.0, wheel.brightness <= 0.0);
     let blended_b = mix(uniform_b, per_ring_b, wheel.ring_brightness_blend);
     let final_b = blended_b * wheel.overall_brightness;
 

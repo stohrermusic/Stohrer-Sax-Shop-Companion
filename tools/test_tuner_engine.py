@@ -301,7 +301,7 @@ if delta_sharp > 180:
     delta_sharp -= 360
 elif delta_sharp < -180:
     delta_sharp += 360
-test(f"Sharp: phase drifts negative/clockwise (delta={delta_sharp:.1f})", delta_sharp < 0)
+test(f"Sharp: phase drifts positive/CW in shader (delta={delta_sharp:.1f})", delta_sharp > 0)
 
 engine_dir3 = TunerEngine()
 engine_dir3._window = np.hanning(FFT_SIZE).astype(np.float32)
@@ -317,7 +317,7 @@ if delta_flat > 180:
     delta_flat -= 360
 elif delta_flat < -180:
     delta_flat += 360
-test(f"Flat: phase drifts positive/counterclockwise (delta={delta_flat:.1f})", delta_flat > 0)
+test(f"Flat: phase drifts negative/CCW in shader (delta={delta_flat:.1f})", delta_flat < 0)
 
 # ============================================
 # SENSITIVITY
