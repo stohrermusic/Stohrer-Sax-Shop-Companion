@@ -545,15 +545,6 @@ class TunerTabMixin:
                  font=("Helvetica", 7)).grid(row=row, column=0)
         row += 1
 
-        self._tuner_play_btn = tk.Button(
-            center_frame, text="\u25b6",
-            command=self._tuner_toggle_ref_tone,
-            font=("Helvetica", 9), width=3)
-        self._tuner_play_btn.grid(row=row, column=0, pady=(4, 0))
-        row += 1
-        tk.Label(center_frame, text="ref.", bg=ctrl_bg, fg="#888888",
-                 font=("Helvetica", 7)).grid(row=row, column=0)
-
         # ---- RIGHT: VU meter (centered in its column) ----
         vu_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
         vu_frame._skip_theme = True
@@ -1009,56 +1000,9 @@ class TunerTabMixin:
 
         fp_swatch.configure(command=pick_faceplate_color)
 
-        # --- Reference tone note ---
-        ref_row = tk.Frame(frame, bg=bg)
-        ref_row.pack(fill="x", pady=(0, 10))
-        tk.Label(ref_row, text="Reference Note:", bg=bg, fg=fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        note_names = [n for n, _ in self._tuner_ref_notes]
-        ttk.Combobox(
-            ref_row, textvariable=self._tuner_ref_note_var,
-            values=note_names, state="readonly", width=5
-        ).pack(side="left")
-
-        # --- Waveform ---
-        wf_row = tk.Frame(frame, bg=bg)
-        wf_row.pack(fill="x", pady=(0, 10))
-        tk.Label(wf_row, text="Waveform:", bg=bg, fg=fg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        tk.Radiobutton(
-            wf_row, text="Pure", variable=self._tuner_waveform_var,
-            value="pure", bg=bg, fg=fg,
-            selectcolor=bg, activebackground=bg,
-            font=("Helvetica", 10)
-        ).pack(side="left", padx=(0, 4))
-        tk.Radiobutton(
-            wf_row, text="Rich", variable=self._tuner_waveform_var,
-            value="rich", bg=bg, fg=fg,
-            selectcolor=bg, activebackground=bg,
-            font=("Helvetica", 10)
-        ).pack(side="left")
-
         # Close button
         tk.Button(frame, text="Close", command=dlg.destroy,
                   width=10).pack(pady=(5, 0))
-
-    def _tuner_toggle_ref_tone(self):
-        """Toggle reference tone playback."""
-        if self._tuner_player and self._tuner_player.is_playing:
-            self._tuner_player.stop()
-            self._tuner_play_btn.configure(text="\u25b6")
-        else:
-            # Find frequency for selected note
-            note_name = self._tuner_ref_note_var.get()
-            freq = 440.0
-            for name, f in self._tuner_ref_notes:
-                if name == note_name:
-                    freq = f
-                    break
-            waveform = self._tuner_waveform_var.get()
-            if self._tuner_player:
-                self._tuner_player.play(freq, waveform)
-                self._tuner_play_btn.configure(text="\u25a0 Stop")
 
     # ------------------------------------------------------------------
     # ANIMATION LOOP
