@@ -1443,8 +1443,12 @@ class TunerTabMixin:
 
     def _tuner_dump_perf_log(self):
         """Write collected perf samples to a debug log file."""
-        import os
-        log_path = os.path.join(os.path.dirname(__file__), 'tools', 'tuner_perf.log')
+        import os, tempfile
+        tools_dir = os.path.join(os.path.dirname(__file__), 'tools')
+        if os.path.isdir(tools_dir):
+            log_path = os.path.join(tools_dir, 'tuner_perf.log')
+        else:
+            log_path = os.path.join(tempfile.gettempdir(), 'tuner_perf.log')
         samples = self._tuner_perf_log
         self._tuner_perf_log = []
 
