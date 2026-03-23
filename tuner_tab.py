@@ -376,6 +376,8 @@ class TunerTabMixin:
         self._tuner_anim_id = None
         self._tuner_fps_times = []      # Timestamps for FPS measurement
         self._tuner_fps_display = None  # Canvas text id for FPS overlay
+        self._tuner_perf_log = []       # Collected perf samples for debug dump
+        self._tuner_perf_frame = 0      # Frame counter for perf logging
 
     def create_tuner_tab(self, parent):
         """Build the Tuner tab UI."""
@@ -1107,6 +1109,11 @@ class TunerTabMixin:
                 self._tuner_show_stream_error(self._tuner_engine.last_error)
                 return
 
+            wheels_updated = 0
+            coords_calls = 0
+            color_calls = 0
+            phase_skips = 0
+
             if self._tuner_wheels:
                 sens = self._tuner_sens_var.get() / 100.0
                 gain = GAIN_MIN + sens * GAIN_RANGE
@@ -1114,6 +1121,9 @@ class TunerTabMixin:
                     mag = min(1.0, result.magnitudes[i] * gain)
                     ring_mags = [min(1.0, rm * gain)
                                  for rm in result.ring_magnitudes[i]]
+
+                    old_phase = wheel._phase_offset
+                    old_fills = wheel._last_ring_fills
                     wheel.update(
                         result.phase_offsets[i],
                         mag,
@@ -1121,23 +1131,59 @@ class TunerTabMixin:
                         ring_brightness_pct=self._tuner_ring_brightness,
                         overall_brightness_pct=self._tuner_overall_brightness,
                     )
-                self._vu_update(result)
+                    if wheel._phase_offset != old_phase:
+                        wheels_updated += 1
+                        # Count visible segments that were updated
+                        for ring in wheel._segments:
+                            coords_calls += len(ring)
+                    else:
+                        phase_skips += 1
+                    if wheel._last_ring_fills != old_fills:
+                        for ring in wheel._segments:
+                            color_calls += len(ring)
 
             _t2 = _time.perf_counter()
 
-            # Show timing breakdown when FPS display is on
+            self._vu_update(result)
+
+            _t3 = _time.perf_counter()
+
+            # Perf logging
             if self._tuner_show_fps.get():
                 analyze_ms = (_t1 - _t0) * 1000
-                render_ms = (_t2 - _t1) * 1000
-                total_ms = (_t2 - _t0) * 1000
-                polys = sum(len(ring) for w in self._tuner_wheels
-                            for ring in w._segments)
+                wheel_ms = (_t2 - _t1) * 1000
+                vu_ms = (_t3 - _t2) * 1000
+                total_ms = (_t3 - _t0) * 1000
+
                 self._tuner_perf_text = (
-                    f"analyze: {analyze_ms:.0f}ms | "
-                    f"render: {render_ms:.0f}ms | "
-                    f"total: {total_ms:.0f}ms | "
-                    f"{polys} polys"
+                    f"analyze:{analyze_ms:.0f}ms "
+                    f"wheels:{wheel_ms:.0f}ms "
+                    f"vu:{vu_ms:.0f}ms "
+                    f"total:{total_ms:.0f}ms"
                 )
+
+                # Collect detailed samples for log dump
+                self._tuner_perf_frame += 1
+                active_wheels = sum(1 for m in result.magnitudes if m > ACTIVE_THRESHOLD)
+                sample = {
+                    'frame': self._tuner_perf_frame,
+                    'analyze_ms': round(analyze_ms, 1),
+                    'wheel_ms': round(wheel_ms, 1),
+                    'vu_ms': round(vu_ms, 1),
+                    'total_ms': round(total_ms, 1),
+                    'wheels_updated': wheels_updated,
+                    'phase_skips': phase_skips,
+                    'coords_calls': coords_calls,
+                    'color_calls': color_calls,
+                    'active_wheels': active_wheels,
+                    'canvas_w': self._tuner_canvas.winfo_width(),
+                    'canvas_h': self._tuner_canvas.winfo_height(),
+                }
+                self._tuner_perf_log.append(sample)
+
+                # Dump log every 300 frames (~30s at 10fps)
+                if len(self._tuner_perf_log) >= 300:
+                    self._tuner_dump_perf_log()
 
         # FPS measurement
         if self._tuner_show_fps.get():
@@ -1158,6 +1204,88 @@ class TunerTabMixin:
 
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
         self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
+
+    def _tuner_dump_perf_log(self):
+        """Write collected perf samples to a debug log file."""
+        import os
+        log_path = os.path.join(os.path.dirname(__file__), 'tools', 'tuner_perf.log')
+        samples = self._tuner_perf_log
+        self._tuner_perf_log = []
+
+        if not samples:
+            return
+
+        # Compute stats
+        n = len(samples)
+        def avg(key): return sum(s[key] for s in samples) / n
+        def mx(key): return max(s[key] for s in samples)
+        def mn(key): return min(s[key] for s in samples)
+
+        # FPS from timestamps
+        fps_times = self._tuner_fps_times
+        if len(fps_times) >= 2:
+            elapsed = fps_times[-1] - fps_times[0]
+            actual_fps = (len(fps_times) - 1) / elapsed if elapsed > 0 else 0
+        else:
+            actual_fps = 0
+
+        total_polys = sum(len(ring) for w in self._tuner_wheels
+                          for ring in w._segments)
+
+        with open(log_path, 'a') as f:
+            import time as _time
+            f.write(f"\n{'='*70}\n")
+            f.write(f"Tuner Perf Log — {_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"{'='*70}\n")
+            f.write(f"Frames sampled: {n}\n")
+            f.write(f"Actual FPS: {actual_fps:.1f}\n")
+            f.write(f"Target FPS: {self._tuner_fps_var.get()}\n")
+            f.write(f"Canvas size: {samples[-1]['canvas_w']}x{samples[-1]['canvas_h']}\n")
+            f.write(f"Total polygon objects: {total_polys}\n")
+            f.write(f"Wheels: {len(self._tuner_wheels)}\n")
+            f.write(f"Rings per wheel: {NUM_RINGS}\n")
+            f.write(f"Ring segments: {RING_SEGMENTS}\n\n")
+
+            f.write(f"{'Metric':25s} {'Avg':>8s} {'Min':>8s} {'Max':>8s}\n")
+            f.write(f"{'-'*25} {'-'*8} {'-'*8} {'-'*8}\n")
+            for key, label in [
+                ('analyze_ms', 'FFT analyze'),
+                ('wheel_ms', 'Wheel rendering'),
+                ('vu_ms', 'VU meter'),
+                ('total_ms', 'Total frame'),
+                ('wheels_updated', 'Wheels w/ coord update'),
+                ('phase_skips', 'Wheels skipped (phase)'),
+                ('coords_calls', 'coords() calls'),
+                ('color_calls', 'itemconfigure() calls'),
+                ('active_wheels', 'Active wheels (signal)'),
+            ]:
+                f.write(f"{label:25s} {avg(key):8.1f} {mn(key):8.1f} {mx(key):8.1f}\n")
+
+            # Histogram of total frame time
+            f.write(f"\nFrame time distribution:\n")
+            buckets = [0]*10  # 0-10, 10-20, ... 90-100+ ms
+            for s in samples:
+                b = min(9, int(s['total_ms'] / 10))
+                buckets[b] += 1
+            for i, count in enumerate(buckets):
+                lo = i * 10
+                hi = (i + 1) * 10 if i < 9 else "+"
+                bar = '#' * (count * 50 // n) if n > 0 else ''
+                f.write(f"  {lo:3d}-{hi:>3s}ms: {count:4d} ({count*100//n:2d}%) {bar}\n")
+
+            # Sample of individual frames (first 20)
+            f.write(f"\nFirst 20 frames:\n")
+            f.write(f"{'Frame':>6s} {'Analyze':>8s} {'Wheels':>8s} {'VU':>6s} "
+                    f"{'Total':>8s} {'Updated':>8s} {'Coords':>8s} {'Active':>7s}\n")
+            for s in samples[:20]:
+                f.write(f"{s['frame']:6d} {s['analyze_ms']:7.1f}ms "
+                        f"{s['wheel_ms']:7.1f}ms {s['vu_ms']:5.1f}ms "
+                        f"{s['total_ms']:7.1f}ms {s['wheels_updated']:8d} "
+                        f"{s['coords_calls']:8d} {s['active_wheels']:7d}\n")
+
+            f.write(f"\n{'='*70}\n\n")
+
+        print(f"[Tuner] Perf log written to {log_path} ({n} frames)")
 
     def _tuner_update_fps_display(self, text):
         """Update the FPS counter overlay on the canvas."""
