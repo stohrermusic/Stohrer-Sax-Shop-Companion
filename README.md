@@ -60,7 +60,10 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner (Experimental)
-- 12-wheel stroboscopic tuner modeled after the Conn Stroboconn
+- 12-wheel stroboscopic tuner modeled after the Peterson Stroboconn
+- GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
+  - Automatic fallback to CPU canvas rendering if GPU unavailable
+- "Wheels always spinning" mechanical mode with per-pitch RPMs from US Patent 2,286,030
 - Per-ring octave brightness from real spectral data
 - Graphic EQ gain panel and vintage backlit VU meter with damped needle
 - Transposition support (Concert, Bb, Eb, F)
@@ -76,11 +79,12 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Brightness/darkness adapted per saxophone type using Benade spectral break frequencies
 - Supports all standard saxophone types including baritone
 - Tone profiles: capture harmonic fingerprints of individual horns
-  - Free capture (natural playing) and guided calibration modes, plus WAV file import
+  - Free capture and guided calibration modes, plus WAV file import
   - Profiles stored in concert pitch for cross-instrument comparison
   - Organized into libraries with import/export
 - Comparison tool with filtering, per-note and horn-average views
 - Auto-transposition by saxophone type with concert pitch toggle
+- Coverage summary after capture sessions — shows note distribution and gaps
 - A quality microphone is essential — laptop mics do not provide reliable results
 
 ### General
