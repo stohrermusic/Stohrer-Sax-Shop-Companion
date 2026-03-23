@@ -36,9 +36,7 @@ pub fn raw_handles_from_winfo_id(handle: isize) -> (RawWindowHandle, RawDisplayH
 #[cfg(target_os = "linux")]
 pub fn raw_handles_from_winfo_id(handle: isize) -> (RawWindowHandle, RawDisplayHandle) {
     use raw_window_handle::{XlibWindowHandle, XlibDisplayHandle};
-    let window = std::num::NonZero::new(handle as u32)
-        .expect("null X11 window from winfo_id()");
-    let wh = XlibWindowHandle::new(window);
+    let wh = XlibWindowHandle::new(handle as std::ffi::c_ulong);
     // None = default display, 0 = default screen
     let dh = XlibDisplayHandle::new(None, 0);
     (RawWindowHandle::Xlib(wh), RawDisplayHandle::Xlib(dh))
