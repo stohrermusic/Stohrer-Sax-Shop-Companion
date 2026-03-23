@@ -75,16 +75,18 @@ result = engine.analyze_buffer(audio)
 test("Richness is low", result.descriptors['richness'] < 0.3)
 
 # ================================================
-print("\n=== Test 5: Bright Tone (strong upper harmonics) ===")
-harmonics = [(7, 0.7), (8, 0.6), (9, 0.5), (10, 0.4), (11, 0.3)]
+print("\n=== Test 5: Bright Tone (strong presence harmonics H3-H5) ===")
+# Brightness is based on H2-H6 presence strength (H3-H5 weighted highest).
+# Strong H3-H5 = bright/present, weak = dark/muted.
+harmonics = [(2, 0.6), (3, 0.8), (4, 0.7), (5, 0.6), (6, 0.4)]
 audio = make_audio(440.0, harmonics=harmonics)
 result = engine.analyze_buffer(audio)
 test("Brightness is high", result.descriptors['brightness'] > 0.3)
 
 # ================================================
-print("\n=== Test 6: Dark Tone (strong lower harmonics only) ===")
-# Use low fundamental so harmonics stay below break frequency (~750 Hz)
-harmonics = [(2, 0.9), (3, 0.7), (4, 0.5)]
+print("\n=== Test 6: Dark Tone (weak upper harmonics) ===")
+# Only fundamental with very weak H2 — presence harmonics are absent.
+harmonics = [(2, 0.1)]
 audio = make_audio(200.0, harmonics=harmonics)
 result = engine.analyze_buffer(audio)
 test("Darkness is high", result.descriptors['darkness'] > 0.4)

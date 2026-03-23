@@ -204,15 +204,14 @@ test("Moderate tone: mid richness", r.descriptors['richness'] > 0.05,
 
 # ============================================================
 section("Descriptors - brightness and darkness")
-# Bright: strong upper harmonics
-audio = make_audio(440.0, {7: 0.6, 8: 0.55, 9: 0.5, 10: 0.4})
+# Bright: strong presence harmonics (H3-H5 drive brightness gauge)
+audio = make_audio(440.0, {2: 0.6, 3: 0.8, 4: 0.7, 5: 0.6, 6: 0.4})
 r = engine.analyze_buffer(audio)
 test("Bright tone", r.descriptors['brightness'] > 0.3,
      f"got {r.descriptors['brightness']:.2f}")
 
-# Dark: low fundamental with strong harmonics below break frequency (~750 Hz)
-# Use 200 Hz so H2=400, H3=600 are below break, H4=800 barely above
-audio = make_audio(200.0, {2: 0.8, 3: 0.5, 4: 0.3})
+# Dark: only weak H2, no presence harmonics — brightness should be low
+audio = make_audio(200.0, {2: 0.1})
 r = engine.analyze_buffer(audio)
 test("Dark tone: dark > bright",
      r.descriptors['darkness'] > r.descriptors['brightness'],
@@ -270,16 +269,17 @@ engine.set_sensitivity(50)
 # ============================================================
 section("average_captures()")
 caps = [
-    {'harmonics_db': [0.0, -6.0, -12.0], 'descriptors': {'resonance': 0.8, 'richness': 0.4, 'brightness': 0.3, 'darkness': 0.5, 'fullness': 0.2}},
-    {'harmonics_db': [0.0, -8.0, -16.0], 'descriptors': {'resonance': 0.6, 'richness': 0.6, 'brightness': 0.5, 'darkness': 0.3, 'fullness': 0.4}},
+    {'harmonics_db': [0.0, -6.0, -12.0], 'fundamental_freq': 440.0},
+    {'harmonics_db': [0.0, -8.0, -16.0], 'fundamental_freq': 440.0},
 ]
 avg = average_captures(caps)
 test("Average not None", avg is not None)
 test("Average harmonics count", len(avg['harmonics_db']) == 3)
 test("Average H2 dB", abs(avg['harmonics_db'][1] - (-7.0)) < 0.01)
 test("Average H3 dB", abs(avg['harmonics_db'][2] - (-14.0)) < 0.01)
-test("Average resonance", abs(avg['descriptors']['resonance'] - 0.7) < 0.01)
-test("Average richness", abs(avg['descriptors']['richness'] - 0.5) < 0.01)
+test("Average fundamental_freq", abs(avg['fundamental_freq'] - 440.0) < 0.01)
+test("No descriptors in average", 'descriptors' not in avg,
+     "descriptors are computed on-the-fly, not stored")
 
 # Empty
 test("Empty captures returns None", average_captures([]) is None)
@@ -291,22 +291,24 @@ test("Single: same values", single['harmonics_db'] == caps[0]['harmonics_db'])
 
 # Different lengths
 mixed = [
-    {'harmonics_db': [0.0, -6.0], 'descriptors': {'resonance': 0.5, 'richness': 0.5, 'brightness': 0.5, 'darkness': 0.5, 'fullness': 0.5}},
-    {'harmonics_db': [0.0, -6.0, -12.0, -18.0], 'descriptors': {'resonance': 0.5, 'richness': 0.5, 'brightness': 0.5, 'darkness': 0.5, 'fullness': 0.5}},
+    {'harmonics_db': [0.0, -6.0], 'fundamental_freq': 440.0},
+    {'harmonics_db': [0.0, -6.0, -12.0, -18.0], 'fundamental_freq': 440.0},
 ]
 avg = average_captures(mixed)
 test("Mixed lengths: takes max", len(avg['harmonics_db']) == 4)
 
 # ============================================================
 section("compute_fingerprint()")
+# Captures store only raw measurement data — no descriptors.
+# compute_fingerprint recomputes descriptors from harmonics_db.
 sessions = [
     {'captures': [
-        {'note': 'A4', 'harmonics_db': [0, -6, -12], 'descriptors': {'resonance': 0.8, 'richness': 0.5, 'brightness': 0.3, 'darkness': 0.5, 'fullness': 0.2}},
-        {'note': 'B4', 'harmonics_db': [0, -5, -10], 'descriptors': {'resonance': 0.9, 'richness': 0.6, 'brightness': 0.4, 'darkness': 0.6, 'fullness': 0.3}},
-        {'note': 'C5', 'harmonics_db': [0, -8, -16], 'descriptors': {'resonance': 0.7, 'richness': 0.4, 'brightness': 0.2, 'darkness': 0.4, 'fullness': 0.1}},
+        {'note': 'A4', 'fundamental_freq': 440.0, 'harmonics_db': [0, -6, -12]},
+        {'note': 'B4', 'fundamental_freq': 493.9, 'harmonics_db': [0, -5, -10]},
+        {'note': 'C5', 'fundamental_freq': 523.3, 'harmonics_db': [0, -8, -16]},
     ]},
     {'captures': [
-        {'note': 'A4', 'harmonics_db': [0, -7, -14], 'descriptors': {'resonance': 0.75, 'richness': 0.55, 'brightness': 0.35, 'darkness': 0.55, 'fullness': 0.25}},
+        {'note': 'A4', 'fundamental_freq': 440.0, 'harmonics_db': [0, -7, -14]},
     ]},
 ]
 fp = compute_fingerprint(sessions)
@@ -317,7 +319,24 @@ test("Per-note has B4", 'B4' in fp['per_note'])
 test("Per-note has C5", 'C5' in fp['per_note'])
 test("A4 averaged from 2 captures",
      abs(fp['per_note']['A4']['harmonics_db'][1] - (-6.5)) < 0.01)
+test("Descriptors computed from harmonics",
+     'brightness' in fp['per_note']['A4'].get('descriptors', {}))
 test("Overall harmonics exist", len(fp['harmonics_db']) == 3)
+test("Overall descriptors computed", 'brightness' in fp['descriptors'])
+
+# Backward compat: old captures with stored descriptors still work
+# (descriptors are ignored, recomputed from harmonics_db)
+old_sessions = [
+    {'captures': [
+        {'note': 'A4', 'fundamental_freq': 440.0, 'harmonics_db': [0, -6, -12],
+         'descriptors': {'resonance': 0.99, 'richness': 0.99, 'brightness': 0.99,
+                         'darkness': 0.01, 'fullness': 0.99}},
+    ]},
+]
+fp_old = compute_fingerprint(old_sessions)
+test("Old captures: descriptors recomputed (not 0.99)",
+     fp_old['descriptors']['brightness'] != 0.99,
+     f"got {fp_old['descriptors']['brightness']:.3f}")
 
 # Empty sessions
 fp_empty = compute_fingerprint([])

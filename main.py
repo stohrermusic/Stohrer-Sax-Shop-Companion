@@ -434,7 +434,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.pad_notes_btn = tk.Button(left_btns, text="View Notes", command=self.on_pad_notes, state="disabled")
         self.pad_notes_btn.pack(side="left", padx=5)
 
-        tk.Button(preset_btn_frame, text="Delete Preset", command=self.on_delete_pad_preset).pack(side="right")
+        self.pad_delete_btn = tk.Button(preset_btn_frame, text="Delete Preset", command=self.on_delete_pad_preset)
+        self.pad_delete_btn.pack(side="right")
 
         self.pad_preset_loaded_library = None
         self.pad_preset_loaded_name = None
@@ -1562,6 +1563,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.pad_preset_menu['values'] = preset_list
         self.pad_preset_menu.set("Load Pad Preset")
 
+        # Toggle delete button: "Delete Library" when library is empty
+        if (lib_name != "All Libraries"
+                and lib_name in self.pad_presets
+                and not self.pad_presets[lib_name]):
+            self.pad_delete_btn.config(text="Delete Library")
+        else:
+            self.pad_delete_btn.config(text="Delete Preset")
+
         # Remember last used library
         self.settings["last_pad_library"] = lib_name
 
@@ -1669,6 +1678,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def on_delete_pad_preset(self):
         selected_lib = self.pad_library_var.get()
+
+        # Delete empty library
+        if (selected_lib != "All Libraries"
+                and selected_lib in self.pad_presets
+                and not self.pad_presets[selected_lib]):
+            if messagebox.askyesno("Delete Library",
+                    f"Are you sure you want to delete the empty library '{selected_lib}'?"):
+                del self.pad_presets[selected_lib]
+                save_presets(self.pad_presets, PAD_PRESET_FILE)
+                self.update_pad_library_dropdown()
+                messagebox.showinfo("Library Deleted", f"Library '{selected_lib}' deleted.")
+            return
+
+        # Delete individual preset
         selected_preset = self.pad_preset_var.get()
 
         if not selected_preset or selected_preset.startswith("Load"):
@@ -1682,7 +1705,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             except ValueError:
                 messagebox.showerror("Delete Error", "Cannot delete from 'All Libraries' view. Please select the specific library first.")
                 return
-        
+
         if messagebox.askyesno("Delete Pad Preset", f"Are you sure you want to delete the preset '{selected_preset}' from the '{selected_lib}' library?"):
             if selected_lib in self.pad_presets and selected_preset in self.pad_presets[selected_lib]:
                 del self.pad_presets[selected_lib][selected_preset]

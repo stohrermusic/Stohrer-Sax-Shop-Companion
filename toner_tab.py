@@ -1397,7 +1397,7 @@ class TonerTabMixin:
             pass
 
         sessions = profile.get('sessions', [])
-        fp = compute_fingerprint(sessions)
+        fp = compute_fingerprint(sessions, sax_type=profile.get('horn_type', 'Tenor'))
         if fp['capture_count'] == 0:
             messagebox.showinfo("No Data",
                 "This profile has no captures yet.")
@@ -2382,7 +2382,6 @@ class TonerTabMixin:
                             'note': note,  # concert pitch (raw from engine)
                             'freq': result.fundamental_freq,
                             'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                            'descriptors': dict(result.descriptors),
                         })
                 else:
                     # Note changed — save accumulated if enough, start new
@@ -2480,7 +2479,6 @@ class TonerTabMixin:
                     'detected_note': result.fundamental_note,
                     'freq': result.fundamental_freq,
                     'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                    'descriptors': dict(result.descriptors),
                 })
 
             remaining = CALIBRATION_DURATION_S - elapsed
@@ -2509,7 +2507,6 @@ class TonerTabMixin:
                         'detected_as': top_detected,
                         'fundamental_freq': round(avg_freq, 2),
                         'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
-                        'descriptors': {k: round(v, 3) for k, v in averaged['descriptors'].items()},
                         'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
                         'n_frames': len(self._toner_capture_frames),
                         'method': 'calibration',
@@ -2569,7 +2566,6 @@ class TonerTabMixin:
             'note': dominant_note,
             'fundamental_freq': round(avg_freq, 2),
             'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
-            'descriptors': {k: round(v, 3) for k, v in averaged['descriptors'].items()},
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'n_frames': len(note_frames),
             'method': 'free',
@@ -2749,7 +2745,8 @@ class TonerTabMixin:
             for i, var in enumerate(check_vars):
                 if var.get():
                     lib_name, prof_name, prof = filtered_profiles[i]
-                    fp = compute_fingerprint(prof.get('sessions', []))
+                    fp = compute_fingerprint(prof.get('sessions', []),
+                                            sax_type=prof.get('horn_type', 'Tenor'))
                     fp['_name'] = prof_name
                     fp['_profile'] = prof
                     results.append(fp)

@@ -152,17 +152,17 @@ for ratio in [1.0, 0.7, 0.5, 0.25, 0.1, 0.05, 0.01]:
 # ================================================
 print("\n--- Test 5: Descriptor accuracy for known profiles ---")
 
-# Bright tone: strong upper harmonics
-amps_bright = {1: 1.0, 2: 0.5, 3: 0.4, 4: 0.35, 5: 0.3, 6: 0.28,
-               7: 0.6, 8: 0.55, 9: 0.5, 10: 0.4}
+# Bright tone: strong presence harmonics H2-H6 (especially H3-H5)
+amps_bright = {1: 1.0, 2: 0.7, 3: 0.8, 4: 0.75, 5: 0.65, 6: 0.5,
+               7: 0.3, 8: 0.25, 9: 0.2, 10: 0.15}
 audio = make_audio(440.0, amps_bright)
 r = engine.analyze_buffer(audio)
 print(f"  Bright tone: brightness={r.descriptors['brightness']:.2f} darkness={r.descriptors['darkness']:.2f}")
 test("Bright tone reads as bright", r.descriptors['brightness'] > 0.3,
      f"got {r.descriptors['brightness']:.2f}")
 
-# Dark tone: low fundamental so harmonics stay below break frequency (~750 Hz)
-amps_dark = {1: 1.0, 2: 0.8, 3: 0.5, 4: 0.3, 5: 0.05, 6: 0.02}
+# Dark tone: weak presence harmonics, only faint H2
+amps_dark = {1: 1.0, 2: 0.15, 3: 0.05, 4: 0.02, 5: 0.01, 6: 0.01}
 audio = make_audio(200.0, amps_dark)
 r = engine.analyze_buffer(audio)
 print(f"  Dark tone: brightness={r.descriptors['brightness']:.2f} darkness={r.descriptors['darkness']:.2f}")

@@ -99,7 +99,8 @@ class LibraryFeaturesMixin:
         self.key_preset_menu.pack(side="left", padx=5)
         self.key_preset_menu.bind("<<ComboboxSelected>>", lambda e: self.on_load_key_preset(self.key_preset_var.get()))
         
-        tk.Button(preset_frame, text="Delete Set", command=self.on_delete_key_preset).pack(side="left", padx=5)
+        self.key_delete_btn = tk.Button(preset_frame, text="Delete Set", command=self.on_delete_key_preset)
+        self.key_delete_btn.pack(side="left", padx=5)
         
         self.update_key_library_dropdown() 
 
@@ -308,6 +309,20 @@ class LibraryFeaturesMixin:
             
     def on_delete_key_preset(self):
         selected_lib = self.key_library_var.get()
+
+        # Delete empty library
+        if (selected_lib != "All Libraries"
+                and selected_lib in self.key_presets
+                and not self.key_presets[selected_lib]):
+            if messagebox.askyesno("Delete Library",
+                    f"Are you sure you want to delete the empty library '{selected_lib}'?"):
+                del self.key_presets[selected_lib]
+                save_presets(self.key_presets, KEY_PRESET_FILE)
+                self.update_key_library_dropdown()
+                messagebox.showinfo("Library Deleted", f"Library '{selected_lib}' deleted.")
+            return
+
+        # Delete individual preset
         selected_preset = self.key_preset_var.get()
 
         if not selected_preset or selected_preset == "Load Key Set":
@@ -325,7 +340,7 @@ class LibraryFeaturesMixin:
         if messagebox.askyesno("Delete Key Height Set", f"Are you sure you want to delete the set '{selected_preset}' from the '{selected_lib}' library?"):
             del self.key_presets[selected_lib][selected_preset]
             if save_presets(self.key_presets, KEY_PRESET_FILE):
-                self.on_key_library_selected() 
+                self.on_key_library_selected()
                 # Clear the form
                 for var in self.key_field_vars.values():
                     if isinstance(var, tk.StringVar):
@@ -344,9 +359,17 @@ class LibraryFeaturesMixin:
                     preset_list.append(f"[{library}] {name}")
         else:
             preset_list = sorted(self.key_presets.get(lib_name, {}).keys())
-        
+
         self.key_preset_menu['values'] = preset_list
         self.key_preset_menu.set("Load Key Set")
+
+        # Toggle delete button: "Delete Library" when library is empty
+        if (lib_name != "All Libraries"
+                and lib_name in self.key_presets
+                and not self.key_presets[lib_name]):
+            self.key_delete_btn.config(text="Delete Library")
+        else:
+            self.key_delete_btn.config(text="Delete Set")
 
         # Remember last used library
         self.settings["last_key_library"] = lib_name

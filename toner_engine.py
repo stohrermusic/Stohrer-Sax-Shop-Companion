@@ -94,6 +94,14 @@ RICHNESS_SIG_THRESHOLD_DB = -35.0
 # Richness: raw spectral flatness*coverage range mapped to gauge
 RICHNESS_RAW_MIN = 0.50      # Below this = gauge 0%
 RICHNESS_RAW_RANGE = 0.45    # 0.95 - 0.50
+# Brightness: weighted harmonic strength with presence emphasis.
+# Weights for H2-H6: H3-H5 ("presence" harmonics) weighted highest,
+# H2 and H6 de-weighted. This tracks what techs hear as "bright" vs "dark" —
+# strong mid harmonics (H3-H5) = bright/present, weak = dark/muted.
+# Calibrated against 3 horns (SBA, BA, Shadow tenors) 2026-03-23.
+BRIGHTNESS_HARMONIC_WEIGHTS = (0.5, 1.5, 2.0, 1.5, 0.5)  # H2, H3, H4, H5, H6
+BRIGHTNESS_DB_FLOOR = -10.0   # Weighted avg at or below this = gauge 0%
+BRIGHTNESS_DB_RANGE = 8.0     # -10 to -2 dB maps to 0-100%
 # Fullness: exponent for balance penalty (higher = harsher penalty for imbalance)
 FULLNESS_BALANCE_EXPONENT = 2.0
 # Fullness: weight split between base fullness and energy-dependent component
@@ -638,16 +646,13 @@ class TonerEngine:
     def _compute_descriptors(self, harmonics, f0=440.0):
         """Compute tone quality descriptors from harmonic data.
 
-        Uses the Benade break frequency to divide "lower" from "upper"
-        harmonics. Below f_b, the sax body naturally amplifies harmonics;
-        above f_b, they roll off. This makes brightness/darkness
-        physically meaningful across soprano, alto, tenor, and bari.
+        Brightness uses weighted harmonic presence strength (H3-H5
+        emphasis) rather than a frequency cutoff.  Calibrated against
+        Selmer SBA, BA, and Keilwerth Shadow tenors (2026-03-23).
         """
         if not harmonics:
             return {'resonance': 0.5, 'richness': 0.0, 'brightness': 0.0,
                     'darkness': 0.0, 'fullness': 0.0}
-
-        f_b = self._break_freq
 
         # --- Resonance: how well harmonics align to ideal positions ---
         # Scaled for saxophone reality: even a mediocre horn is within
@@ -690,14 +695,34 @@ class TonerEngine:
         else:
             richness = 0.0
 
-        # --- Brightness & Darkness using Benade break frequency ---
-        # Harmonics with frequency above f_b contribute to brightness.
-        # Harmonics with frequency at or below f_b contribute to darkness.
-        # Brightness/darkness: ratio of harmonic energy above/below break.
-        # The fundamental always counts toward darkness (it IS the body of
-        # the sound, always at or below the break for normal sax range).
-        # This ensures the gauges have useful range even on high notes
-        # where all upper harmonics are above the break.
+        # --- Brightness & Darkness: weighted harmonic presence strength ---
+        # Measures how strong the "presence" harmonics (H3-H5) are relative
+        # to the fundamental, with lighter contribution from H2 and H6.
+        # Replaces the Benade break-frequency approach which gave identical
+        # readings for perceptually different horns (SBA vs BA tenors).
+        # The weighted average of H2-H6 dB levels (relative to fundamental)
+        # tracks what techs hear: strong mid harmonics = bright, weak = dark.
+        h_by_num = {h.harmonic_number: h.magnitude_db for h in harmonics}
+        brightness = 0.0
+        if len(h_by_num) >= 6:  # Need at least H1-H6
+            weighted_sum = 0.0
+            weight_total = 0.0
+            for i, w in enumerate(BRIGHTNESS_HARMONIC_WEIGHTS):
+                h_num = i + 2  # H2, H3, H4, H5, H6
+                if h_num in h_by_num:
+                    weighted_sum += w * h_by_num[h_num]
+                    weight_total += w
+            if weight_total > 0:
+                weighted_avg_db = weighted_sum / weight_total
+                brightness = max(0.0, min(1.0,
+                    (weighted_avg_db - BRIGHTNESS_DB_FLOOR) / BRIGHTNESS_DB_RANGE))
+        darkness = 1.0 - brightness
+
+        # --- Fullness: balance of upper/lower energy (Benade split) ---
+        # Fullness still uses the break-frequency energy split internally:
+        # a "full" tone has strong harmonics on BOTH sides of the break.
+        # This is independent of the brightness display metric above.
+        f_b = self._break_freq
         upper_energy = 0.0
         lower_energy = 0.0
         total_energy = 0.0
@@ -706,34 +731,16 @@ class TonerEngine:
             linear_mag = 10.0 ** (h.magnitude_db / 20.0)
             total_energy += linear_mag
             if h.harmonic_number == 1:
-                lower_energy += linear_mag  # Fundamental always counts as dark
+                lower_energy += linear_mag
             elif freq > f_b:
                 upper_energy += linear_mag
             else:
                 lower_energy += linear_mag
-
-        brightness = 0.0
-        if total_energy > 0:
-            brightness = upper_energy / total_energy
-
-        darkness = 0.0
-        if total_energy > 0:
-            darkness = lower_energy / total_energy
-
-        # --- Fullness: balance of bright and dark energy ---
-        # A "full" tone has strong harmonics on BOTH sides of the break
-        # frequency — neither bright nor dark dominates. A thin or harsh
-        # tone is lopsided toward one side. Peaks at 50/50 bright/dark,
-        # drops toward zero as either side takes over.
-        # Uses 1 - |b - d| rather than min(b,d)*k for a more gradual curve.
-        # Energy weight ensures a thin tone with coincidentally balanced
-        # bright/dark doesn't read as full.
-        # Squared to penalize imbalance harder — a 70/30 split reads much
-        # lower than 55/45. Calibrated: BA tenor "full" ≈ 50%, SBA "not full" ≈ 38%.
-        balance = (1.0 - abs(brightness - darkness)) ** FULLNESS_BALANCE_EXPONENT
+        benade_bright = upper_energy / total_energy if total_energy > 0 else 0.0
+        benade_dark = lower_energy / total_energy if total_energy > 0 else 0.0
+        balance = (1.0 - abs(benade_bright - benade_dark)) ** FULLNESS_BALANCE_EXPONENT
         fund_linear = 10.0 ** (harmonics[0].magnitude_db / 20.0) if harmonics else 0.0
         non_fund_energy = total_energy - fund_linear
-        # How much harmonic energy exists relative to fundamental
         energy_factor = min(1.0, non_fund_energy / max(fund_linear, 1e-10) / FULLNESS_ENERGY_DIVISOR)
         fullness = balance * (FULLNESS_BASE_WEIGHT + FULLNESS_ENERGY_WEIGHT * energy_factor)
 
@@ -910,60 +917,87 @@ def migrate_profile_to_concert(profile):
     return profile
 
 
+def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor"):
+    """Compute descriptors from raw harmonic dB data using current formulas.
+
+    This is the canonical way to interpret stored harmonic measurements.
+    Captures store only the raw data (harmonics_db + fundamental_freq);
+    descriptors are always computed on the fly so formula improvements
+    apply retroactively to all historical data.
+
+    Args:
+        harmonics_db: list of dB values relative to fundamental (index 0 = H1 = 0dB)
+        f0: fundamental frequency in Hz
+        sax_type: saxophone type string (for break frequency in fullness)
+
+    Returns:
+        dict with resonance, richness, brightness, darkness, fullness (0.0-1.0)
+    """
+    if not harmonics_db or f0 <= 0:
+        return {'resonance': 0.5, 'richness': 0.0, 'brightness': 0.0,
+                'darkness': 1.0, 'fullness': 0.0}
+    # Lightweight engine instance for _compute_descriptors
+    engine = TonerEngine.__new__(TonerEngine)
+    engine._break_freq = BREAK_FREQUENCIES.get(sax_type, DEFAULT_BREAK_FREQ)
+    harmonics = [
+        HarmonicInfo(i + 1, f0 * (i + 1), f0 * (i + 1), db, 0.0)
+        for i, db in enumerate(harmonics_db)
+    ]
+    return engine._compute_descriptors(harmonics, f0=f0)
+
+
 def average_captures(captures):
     """Average a list of per-frame capture dicts into one summary.
 
-    Each capture dict has:
-        'harmonics_db': list of dB values (index 0=fundamental, 1=2nd, ...)
-        'descriptors': dict of descriptor values
+    Each capture dict must have 'harmonics_db' (list of dB values).
+    Descriptors, if present, are ignored — they are always recomputed
+    from harmonics_db by the caller.
 
-    Returns averaged dict with same structure.
+    Returns dict with 'harmonics_db' (averaged) and 'fundamental_freq'.
     """
     if not captures:
         return None
 
-    n = len(captures)
-
     # Average harmonic dB values
-    max_len = max(len(c['harmonics_db']) for c in captures)
+    max_len = max(len(c.get('harmonics_db', [])) for c in captures)
     avg_db = [0.0] * max_len
     counts = [0] * max_len
     for c in captures:
-        for i, db in enumerate(c['harmonics_db']):
+        for i, db in enumerate(c.get('harmonics_db', [])):
             avg_db[i] += db
             counts[i] += 1
     for i in range(max_len):
         if counts[i] > 0:
             avg_db[i] /= counts[i]
 
-    # Average descriptors
-    desc_keys = ['resonance', 'richness', 'brightness', 'darkness', 'fullness']
-    avg_desc = {}
-    for key in desc_keys:
-        total = sum(c['descriptors'].get(key, 0.0) for c in captures)
-        avg_desc[key] = total / n
+    # Average fundamental frequency if available
+    freqs = [c.get('fundamental_freq', c.get('freq', 0)) for c in captures]
+    freqs = [f for f in freqs if f > 0]
+    avg_freq = sum(freqs) / len(freqs) if freqs else 0.0
 
     return {
         'harmonics_db': avg_db,
-        'descriptors': avg_desc,
+        'fundamental_freq': avg_freq,
     }
 
 
-def compute_fingerprint(sessions):
+def compute_fingerprint(sessions, sax_type="Tenor"):
     """Compute an aggregate harmonic fingerprint from all sessions in a profile.
 
-    First averages captures within each note, then averages across notes
-    with equal weight per note. This prevents low notes (which tend toward
-    darkness) from diluting high-note brightness or vice versa — each
-    note's descriptors are computed correctly for its own frequency first,
-    then the horn-level summary gives each note equal say.
+    Descriptors are always recomputed from harmonics_db using current
+    formulas — stored descriptors (if present) are ignored.  This means
+    formula improvements apply retroactively to all historical captures.
+
+    First averages captures within each note, computes descriptors from
+    the averaged harmonics, then averages descriptors across notes with
+    equal weight per note. This prevents register skew.
 
     Returns dict with:
         'harmonics_db': averaged harmonic dB curve across all notes
-        'descriptors': averaged descriptor values (equal weight per note)
+        'descriptors': computed descriptor values (equal weight per note)
         'note_count': total unique notes
         'capture_count': total captures
-        'per_note': dict of note_name -> averaged capture for that note
+        'per_note': dict of note_name -> averaged capture with computed descriptors
     """
     all_captures = []
     per_note = {}
@@ -973,7 +1007,7 @@ def compute_fingerprint(sessions):
             note = cap.get('note', '')
             entry = {
                 'harmonics_db': cap.get('harmonics_db', []),
-                'descriptors': cap.get('descriptors', {}),
+                'fundamental_freq': cap.get('fundamental_freq', cap.get('freq', 0)),
             }
             all_captures.append(entry)
 
@@ -981,14 +1015,16 @@ def compute_fingerprint(sessions):
                 per_note[note] = []
             per_note[note].append(entry)
 
-    # Average per-note first
+    # Average per-note first, then compute descriptors from averaged harmonics
     per_note_avg = {}
     for note, caps in per_note.items():
-        per_note_avg[note] = average_captures(caps)
+        avg = average_captures(caps)
+        if avg:
+            avg['descriptors'] = descriptors_from_harmonics(
+                avg['harmonics_db'], avg['fundamental_freq'], sax_type)
+        per_note_avg[note] = avg
 
     # Horn-level descriptors: average the per-note descriptors (equal weight per note)
-    # This is more meaningful than averaging all raw captures, because each note's
-    # brightness/darkness is computed at its own frequency relative to the break.
     desc_keys = ['resonance', 'richness', 'brightness', 'darkness', 'fullness']
     if per_note_avg:
         horn_descriptors = {}
@@ -999,8 +1035,7 @@ def compute_fingerprint(sessions):
     else:
         horn_descriptors = {k: 0.0 for k in desc_keys}
 
-    # Horn-level harmonics: still average all captures (harmonic dB is relative
-    # to each note's own fundamental, so averaging is reasonable)
+    # Horn-level harmonics: still average all captures
     overall = average_captures(all_captures) if all_captures else None
 
     return {
@@ -1010,6 +1045,7 @@ def compute_fingerprint(sessions):
         'capture_count': len(all_captures),
         'per_note': per_note_avg,
     }
+
 
 
 def analyze_audio_file(filepath, engine, progress_cb=None):
@@ -1103,7 +1139,6 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
                 'note': r.fundamental_note,
                 'freq': r.fundamental_freq,
                 'harmonics_db': [h.magnitude_db for h in r.harmonics],
-                'descriptors': dict(r.descriptors),
             })
 
         avg = average_captures(frames)
@@ -1113,7 +1148,6 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
                 'note': seg_note,
                 'fundamental_freq': round(avg_freq, 2),
                 'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
-                'descriptors': {k: round(v, 3) for k, v in avg['descriptors'].items()},
                 'timestamp': '',  # Filled by caller
                 'n_frames': len(frames),
                 'method': 'file',
