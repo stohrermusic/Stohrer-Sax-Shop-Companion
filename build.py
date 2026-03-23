@@ -175,6 +175,16 @@ def build():
     except ImportError:
         print("  Pillow not found — tuner will fall back to polygon rendering")
 
+    # GPU-accelerated tuner renderer (Rust/wgpu via pyo3)
+    try:
+        import tuner_render
+        cmd.extend([
+            '--hidden-import', 'tuner_render',
+        ])
+        print("  tuner_render found — including GPU strobe renderer")
+    except ImportError:
+        print("  tuner_render not found — tuner will use CPU canvas rendering")
+
     # Add the main script
     cmd.append(MAIN_SCRIPT)
 
