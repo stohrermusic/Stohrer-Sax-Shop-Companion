@@ -2679,18 +2679,33 @@ class TonerTabMixin:
                 cb.pack(side="left", padx=(0, 6))
                 cb.bind("<<ComboboxSelected>>", lambda e: refresh_list())
 
-        # Multi-select listbox
-        listbox = tk.Listbox(frame, width=50, height=10,
-                              font=("Helvetica", 10),
-                              selectmode=tk.EXTENDED)
-        listbox.pack(fill="both", expand=True, pady=(0, 10))
+        # Scrollable checkbox list
+        list_outer = tk.Frame(frame, bg=bg)
+        list_outer.pack(fill="both", expand=True, pady=(0, 10))
+
+        list_canvas = tk.Canvas(list_outer, bg=bg, highlightthickness=0,
+                                height=250)
+        scrollbar = tk.Scrollbar(list_outer, orient="vertical",
+                                 command=list_canvas.yview)
+        list_inner = tk.Frame(list_canvas, bg=bg)
+
+        list_inner.bind("<Configure>",
+            lambda e: list_canvas.configure(scrollregion=list_canvas.bbox("all")))
+        list_canvas.create_window((0, 0), window=list_inner, anchor="nw")
+        list_canvas.configure(yscrollcommand=scrollbar.set)
+
+        list_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
         filtered_profiles = []
+        check_vars = []  # list of (BooleanVar, index into filtered_profiles)
 
         def refresh_list():
-            nonlocal filtered_profiles
-            listbox.delete(0, tk.END)
+            nonlocal filtered_profiles, check_vars
+            for w in list_inner.winfo_children():
+                w.destroy()
             filtered_profiles = []
+            check_vars = []
             ft = filter_type.get()
             fp = filter_player.get()
             fm = filter_mpc.get()
@@ -2710,8 +2725,16 @@ class TonerTabMixin:
                 status = f"{len(notes)} notes"
                 if len(notes) >= MIN_PROFILE_NOTES:
                     status += " \u2713"
-                listbox.insert(tk.END,
-                    f"[{lib_name}] {prof_name}  ({status})")
+
+                var = tk.BooleanVar(value=False)
+                check_vars.append(var)
+                tk.Checkbutton(
+                    list_inner,
+                    text=f"[{lib_name}] {prof_name}  ({status})",
+                    variable=var, bg=bg, fg=fg,
+                    selectcolor=bg, activebackground=bg,
+                    anchor="w", font=("Helvetica", 10),
+                ).pack(fill="x", anchor="w")
 
         refresh_list()
 
@@ -2719,17 +2742,17 @@ class TonerTabMixin:
         btn_frame.pack(fill="x")
 
         def get_selected():
-            """Return list of (name, fingerprint) for selected profiles."""
-            sel = listbox.curselection()
-            if not sel or not filtered_profiles:
+            """Return list of (name, fingerprint) for checked profiles."""
+            if not filtered_profiles:
                 return []
             results = []
-            for idx in sel:
-                lib_name, prof_name, prof = filtered_profiles[idx]
-                fp = compute_fingerprint(prof.get('sessions', []))
-                fp['_name'] = prof_name
-                fp['_profile'] = prof
-                results.append(fp)
+            for i, var in enumerate(check_vars):
+                if var.get():
+                    lib_name, prof_name, prof = filtered_profiles[i]
+                    fp = compute_fingerprint(prof.get('sessions', []))
+                    fp['_name'] = prof_name
+                    fp['_profile'] = prof
+                    results.append(fp)
             return results
 
         def load_overlay():
