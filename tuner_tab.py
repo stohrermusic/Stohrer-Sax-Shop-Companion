@@ -357,6 +357,8 @@ class TunerTabMixin:
         self._tuner_wheels = []
         self._tuner_running = False
         self._tuner_anim_id = None
+        self._tuner_fps_times = []      # Timestamps for FPS measurement
+        self._tuner_fps_display = None  # Canvas text id for FPS overlay
 
     def create_tuner_tab(self, parent):
         """Build the Tuner tab UI."""
@@ -373,6 +375,8 @@ class TunerTabMixin:
         self._tuner_overall_brightness = tuner_settings.get("overall_brightness", 80)
         self._tuner_fps_var = tk.StringVar(
             value=str(tuner_settings.get("fps", "60")))
+        self._tuner_show_fps = tk.BooleanVar(
+            value=tuner_settings.get("show_fps", False))
 
         bg = self._tuner_faceplate_color
 
@@ -1000,6 +1004,14 @@ class TunerTabMixin:
 
         fp_swatch.configure(command=pick_faceplate_color)
 
+        # --- Show FPS ---
+        tk.Checkbutton(
+            frame, text="Show frame rate on screen",
+            variable=self._tuner_show_fps,
+            bg=bg, fg=fg, selectcolor=bg, activebackground=bg,
+            font=("Helvetica", 10),
+        ).pack(fill="x", pady=(0, 10))
+
         # Close button
         tk.Button(frame, text="Close", command=dlg.destroy,
                   width=10).pack(pady=(5, 0))
@@ -1089,8 +1101,36 @@ class TunerTabMixin:
                     )
                 self._vu_update(result)
 
+        # FPS measurement
+        if self._tuner_show_fps.get():
+            import time as _time
+            now = _time.perf_counter()
+            self._tuner_fps_times.append(now)
+            # Keep last 60 timestamps
+            if len(self._tuner_fps_times) > 60:
+                self._tuner_fps_times = self._tuner_fps_times[-60:]
+            if len(self._tuner_fps_times) >= 2:
+                elapsed = self._tuner_fps_times[-1] - self._tuner_fps_times[0]
+                if elapsed > 0:
+                    actual_fps = (len(self._tuner_fps_times) - 1) / elapsed
+                    self._tuner_update_fps_display(f"{actual_fps:.0f} fps")
+        elif self._tuner_fps_display:
+            self._tuner_canvas.itemconfigure(self._tuner_fps_display, text="")
+
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
         self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
+
+    def _tuner_update_fps_display(self, text):
+        """Update the FPS counter overlay on the canvas."""
+        if not hasattr(self, '_tuner_canvas'):
+            return
+        if not self._tuner_fps_display:
+            self._tuner_fps_display = self._tuner_canvas.create_text(
+                10, 10, text=text, anchor="nw",
+                fill="#888888", font=("Helvetica", 9),
+                tags="fps_overlay")
+        else:
+            self._tuner_canvas.itemconfigure(self._tuner_fps_display, text=text)
 
     def _tuner_show_stream_error(self, error_msg):
         """Show audio stream error on the tuner canvas with a retry option."""
@@ -1132,4 +1172,5 @@ class TunerTabMixin:
             "ring_brightness": self._tuner_ring_brightness if hasattr(self, '_tuner_ring_brightness') else 100,
             "overall_brightness": self._tuner_overall_brightness if hasattr(self, '_tuner_overall_brightness') else 80,
             "faceplate_color": self._tuner_faceplate_color if hasattr(self, '_tuner_faceplate_color') else DEFAULT_FACEPLATE,
+            "show_fps": self._tuner_show_fps.get() if hasattr(self, '_tuner_show_fps') else False,
         }
