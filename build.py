@@ -162,6 +162,19 @@ def build():
     except ImportError:
         print("  Audio libraries not found — building without tuner/toner")
 
+    # Hidden import for PIL (used by strobe tuner wheel rendering)
+    try:
+        import PIL
+        cmd.extend([
+            '--hidden-import', 'PIL',
+            '--hidden-import', 'PIL.Image',
+            '--hidden-import', 'PIL.ImageDraw',
+            '--hidden-import', 'PIL.ImageTk',
+        ])
+        print("  Pillow found — including PIL image support")
+    except ImportError:
+        print("  Pillow not found — tuner will fall back to polygon rendering")
+
     # Add the main script
     cmd.append(MAIN_SCRIPT)
 

@@ -2,3 +2,4 @@ svgwrite
 pyinstaller
 numpy
 sounddevice
+Pillow

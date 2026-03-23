@@ -17,6 +17,12 @@ import sys
 IS_MACOS = sys.platform == 'darwin'
 
 try:
+    from PIL import Image, ImageDraw, ImageTk
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
+
+try:
     from tuner_engine import (
         TunerEngine, ReferencePlayer, AUDIO_AVAILABLE,
         PITCH_CLASSES, MIN_OCTAVE, MAX_OCTAVE,
@@ -124,6 +130,14 @@ def _scale_color(hex_color, factor):
 # WHEEL RENDERING
 # ============================================
 
+def _hex_to_rgb(hex_color):
+    """Convert '#RRGGBB' to (R, G, B) tuple."""
+    h = hex_color.lstrip('#')
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
+# --- Polygon-based fallback (used when PIL is unavailable) ---
+
 def _annular_sector_points(cx, cy, r_inner, r_outer, angle_start, angle_end, steps=6):
     """Compute polygon points for an annular sector (arc-shaped wedge).
 
@@ -146,17 +160,15 @@ def _annular_sector_points(cx, cy, r_inner, r_outer, angle_start, angle_end, ste
     return points
 
 
-class StrobeWheel:
-    """One of the 12 strobe disc wheels."""
+class _PolygonStrobeWheel:
+    """Polygon-based strobe wheel fallback (used when PIL is unavailable).
+
+    Creates ~254 canvas polygon items per wheel. Slower than PIL rendering
+    but works without any external image library.
+    """
 
     def __init__(self, canvas, cx, cy, radius, stripe_color, faceplate_color,
                  direction="up"):
-        """Create a strobe wheel.
-
-        Args:
-            direction: "up" = wedge opens upward (top row), "down" = opens downward (bottom row)
-            faceplate_color: Background color for mask areas
-        """
         self.canvas = canvas
         self.cx = cx
         self.cy = cy
@@ -164,18 +176,16 @@ class StrobeWheel:
         self.stripe_color = stripe_color
         self.faceplate_color = faceplate_color
         self.direction = direction
-        self._brightness = 0.0       # 0.0 = dark, 1.0 = full brightness
-        self._last_ring_fills = None  # Cache to avoid redundant itemconfigure calls
+        self._brightness = 0.0
+        self._last_ring_fills = None
         self._phase_offset = 0.0
 
-        # Wedge center angle: 90° = up, 270° = down
         if direction == "up":
             self._wedge_center = 90.0
         else:
             self._wedge_center = 270.0
 
-        # Ring radii — evenly spaced from center to outer radius
-        gap = radius * CENTER_GAP_FRACTION  # First ring starts here
+        gap = radius * CENTER_GAP_FRACTION
         ring_width = (radius - gap) / NUM_RINGS
         self._ring_radii = []
         for i in range(NUM_RINGS):
@@ -183,15 +193,10 @@ class StrobeWheel:
             r_outer = gap + (i + 1) * ring_width - ring_width * RING_GAP_FRACTION
             self._ring_radii.append((r_inner, r_outer))
 
-        # Pre-create segment polygons
-        # segments[ring_idx] = list of (polygon_id, base_start_angle, segment_span)
         self._segments = []
         self._create_segments()
-
-        # Create masking overlay (covers everything outside the wedge)
         self._create_mask()
 
-        # Note label (drawn on top)
         self._label_id = canvas.create_text(
             cx, cy + radius + 12,
             text="", fill=LABEL_COLOR,
@@ -200,19 +205,15 @@ class StrobeWheel:
         )
 
     def _create_segments(self):
-        """Create all segment polygons for this wheel (full disc, masked later)."""
         self._segments = []
         for ring_idx in range(NUM_RINGS):
             ring_segs = []
             n_total = RING_SEGMENTS[ring_idx]
-            seg_span = 360.0 / n_total  # Degrees per segment
+            seg_span = 360.0 / n_total
             r_inner, r_outer = self._ring_radii[ring_idx]
-
-            # Only create the colored segments (every other one)
             for seg_i in range(n_total):
-                if seg_i % 2 == 0:  # Colored segment
+                if seg_i % 2 == 0:
                     base_start = seg_i * seg_span
-                    # Determine arc detail based on segment size
                     steps = max(2, min(8, int(seg_span / 3)))
                     points = _annular_sector_points(
                         self.cx, self.cy, r_inner, r_outer,
@@ -223,37 +224,27 @@ class StrobeWheel:
                         points, fill=initial_fill, outline='', width=0
                     )
                     ring_segs.append((poly_id, base_start, seg_span, steps))
-
             self._segments.append(ring_segs)
 
     def _create_mask(self):
-        """Create wedge-shaped mask matching the Stroboconn cutout."""
         cx, cy = self.cx, self.cy
         r = self.radius
-        mr = r + MASK_EXTEND_PX  # Mask extends slightly beyond disc edge
-
-        # Wedge sector: centered on _wedge_center, spanning WEDGE_ANGLE
+        mr = r + MASK_EXTEND_PX
         wedge_start = self._wedge_center - WEDGE_ANGLE / 2
         wedge_end = self._wedge_center + WEDGE_ANGLE / 2
-
-        # Outer mask: large sector covering the NON-visible portion
         mask_start = wedge_end
         mask_end = wedge_start + 360.0
         steps = 50
-
-        points = [cx, cy]  # Center point
+        points = [cx, cy]
         for i in range(steps + 1):
             t = mask_start + (mask_end - mask_start) * i / steps
             rad = math.radians(t)
             points.append(cx + mr * math.cos(rad))
             points.append(cy - mr * math.sin(rad))
-
         self._mask_id = self.canvas.create_polygon(
             points, fill=self.faceplate_color, outline='', width=0
         )
-
-        # Inner mask: covers the center gap (no rings visible there)
-        inner_r = self._ring_radii[0][0]  # Inner radius of first ring
+        inner_r = self._ring_radii[0][0]
         inner_pts = []
         for i in range(32):
             a = i * 2 * math.pi / 32
@@ -264,17 +255,262 @@ class StrobeWheel:
         )
 
     def set_label(self, text):
-        """Set the note name label."""
         self.canvas.itemconfigure(self._label_id, text=text)
 
     def set_color(self, hex_color):
-        """Update the stripe color."""
         self.stripe_color = hex_color
-        self._last_ring_fills = None  # Force fill refresh
+        self._last_ring_fills = None
         fill = _scale_color(hex_color, DIM_MULTIPLIER + self._brightness * (1.0 - DIM_MULTIPLIER))
         for ring_segs in self._segments:
             for poly_id, _, _, _ in ring_segs:
                 self.canvas.itemconfigure(poly_id, fill=fill)
+
+    def update(self, phase_offset, magnitude, ring_magnitudes=None,
+               ring_brightness_pct=100, overall_brightness_pct=80):
+        overall_scale = overall_brightness_pct / 100.0
+        brightness = min(1.0, magnitude ** BRIGHTNESS_GAMMA) if magnitude > MAGNITUDE_THRESHOLD else 0.0
+        ring_mix = ring_brightness_pct / 100.0
+        if ring_magnitudes and ring_mix > 0.0:
+            ring_fills = []
+            uniform_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
+            for ring_idx in range(NUM_RINGS):
+                rm = min(1.0, ring_magnitudes[ring_idx])
+                rb = min(1.0, rm ** BRIGHTNESS_GAMMA) if rm > MAGNITUDE_THRESHOLD else 0.0
+                per_ring_factor = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
+                blended = uniform_factor * (1.0 - ring_mix) + per_ring_factor * ring_mix
+                ring_fills.append(_scale_color(self.stripe_color, blended * overall_scale))
+        else:
+            fill_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
+            fill_factor *= overall_scale
+            ring_fills = [_scale_color(self.stripe_color, fill_factor)] * NUM_RINGS
+
+        if ring_fills != self._last_ring_fills:
+            self._last_ring_fills = ring_fills
+            for ring_idx, ring_segs in enumerate(self._segments):
+                fill = ring_fills[ring_idx]
+                for poly_id, _, _, _ in ring_segs:
+                    self.canvas.itemconfigure(poly_id, fill=fill)
+            label_color = _scale_color("#FFFFFF", LABEL_BRIGHTNESS_MIN + brightness * LABEL_BRIGHTNESS_RANGE)
+            self.canvas.itemconfigure(self._label_id, fill=label_color)
+
+        self._brightness = brightness
+
+        if abs(phase_offset - self._phase_offset) < PHASE_CHANGE_THRESHOLD:
+            return
+        self._phase_offset = phase_offset
+
+        wedge_half = WEDGE_ANGLE / 2.0
+        vis_lo = 90.0 - wedge_half
+        vis_hi = 90.0 + wedge_half
+        for ring_idx in range(NUM_RINGS):
+            r_inner, r_outer = self._ring_radii[ring_idx]
+            for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
+                start = (base_start + phase_offset) % 360.0
+                end = start + seg_span
+                if not (end > vis_lo and start < vis_hi):
+                    if not (end + 360.0 > vis_lo and start < vis_hi) and \
+                       not (end > vis_lo and start - 360.0 < vis_hi):
+                        continue
+                points = _annular_sector_points(
+                    self.cx, self.cy, r_inner, r_outer,
+                    base_start + phase_offset,
+                    base_start + phase_offset + seg_span, steps
+                )
+                self.canvas.coords(poly_id, *points)
+
+
+# --- PIL image-based rendering (primary, much faster) ---
+
+class _PILStrobeWheel:
+    """One of the 12 strobe disc wheels — PIL image-based rendering.
+
+    Instead of 254 canvas polygon items per wheel, renders the entire disc
+    as a single PIL image and displays it as one canvas image item.
+    This reduces 3048 polygon updates to 12 image updates across all wheels.
+    """
+
+    def __init__(self, canvas, cx, cy, radius, stripe_color, faceplate_color,
+                 direction="up"):
+        """Create a strobe wheel.
+
+        Args:
+            canvas: tkinter Canvas to draw on
+            cx, cy: Center coordinates on the canvas
+            radius: Disc radius in pixels
+            stripe_color: Hex color for the colored segments
+            faceplate_color: Background color for mask/non-visible areas
+            direction: "up" = wedge opens upward (top row), "down" = opens downward
+        """
+        self.canvas = canvas
+        self.cx = cx
+        self.cy = cy
+        self.radius = radius
+        self.stripe_color = stripe_color
+        self.faceplate_color = faceplate_color
+        self.direction = direction
+        self._brightness = 0.0
+        self._last_ring_fills = None  # Cache to detect fill changes
+        self._phase_offset = 0.0
+        # Compatibility: empty list so perf logging code doesn't crash
+        self._segments = [[] for _ in range(NUM_RINGS)]
+
+        # Wedge center angle: 90° = up, 270° = down
+        if direction == "up":
+            self._wedge_center = 90.0
+        else:
+            self._wedge_center = 270.0
+
+        # Image size — diameter of disc plus a small margin
+        self._img_size = int(radius * 2) + 2
+        self._img_cx = self._img_size // 2
+        self._img_cy = self._img_size // 2
+
+        # Ring radii — evenly spaced from center to outer radius
+        gap = radius * CENTER_GAP_FRACTION
+        ring_width = (radius - gap) / NUM_RINGS
+        self._ring_radii = []
+        for i in range(NUM_RINGS):
+            r_inner = gap + i * ring_width
+            r_outer = gap + (i + 1) * ring_width - ring_width * RING_GAP_FRACTION
+            self._ring_radii.append((r_inner, r_outer))
+
+        # Pre-render the wedge mask (static — only changes on resize/color change)
+        self._mask_img = self._render_mask()
+
+        # Current ring colors (initialized to dim)
+        self._ring_colors = [_hex_to_rgb(_scale_color(stripe_color, DIM_MULTIPLIER))] * NUM_RINGS
+
+        # Create the canvas image item
+        # Render initial frame
+        self._photo = None
+        self._render_frame(0.0)
+        self._image_id = canvas.create_image(cx, cy, image=self._photo, anchor="center")
+
+        # Note label (drawn on top of the image)
+        self._label_id = canvas.create_text(
+            cx, cy + radius + 12,
+            text="", fill=LABEL_COLOR,
+            font=("Helvetica", 10, "bold"),
+            anchor="center"
+        )
+
+    def _render_mask(self):
+        """Pre-render the wedge mask as an RGBA image.
+
+        The mask is transparent in the wedge opening and faceplate_color
+        everywhere else (including the center gap). This gets composited
+        on top of the rotated disc.
+        """
+        size = self._img_size
+        cx, cy = self._img_cx, self._img_cy
+        fp_rgb = _hex_to_rgb(self.faceplate_color)
+
+        # Start fully opaque faceplate color
+        mask = Image.new("RGBA", (size, size), (*fp_rgb, 255))
+        draw = ImageDraw.Draw(mask)
+
+        # Cut out the visible wedge (make it transparent)
+        # PIL pieslice uses angles in degrees, clockwise from 3-o'clock (east)
+        # Our math convention: counterclockwise from east
+        # PIL convention: clockwise from east
+        # So math angle A becomes PIL angle -A
+        wedge_half = WEDGE_ANGLE / 2.0
+        # Math angles of wedge edges
+        math_start = self._wedge_center - wedge_half
+        math_end = self._wedge_center + wedge_half
+        # Convert to PIL angles (negate for clockwise, and PIL measures from east)
+        pil_start = -math_end
+        pil_end = -math_start
+
+        r = self.radius
+        # Draw transparent pie slice for the wedge opening
+        bbox = (cx - r, cy - r, cx + r, cy + r)
+        draw.pieslice(bbox, pil_start, pil_end, fill=(0, 0, 0, 0))
+
+        # Re-fill the center gap (should stay masked/faceplate color)
+        inner_r = self._ring_radii[0][0]
+        if inner_r > 1:
+            center_bbox = (cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r)
+            draw.ellipse(center_bbox, fill=(*fp_rgb, 255))
+
+        return mask
+
+    def _render_disc(self, phase_offset):
+        """Render the disc image with current ring colors and phase offset.
+
+        Draws alternating colored/black arc segments for each ring,
+        rotated by phase_offset degrees.
+        """
+        size = self._img_size
+        cx, cy = self._img_cx, self._img_cy
+        bg_rgb = _hex_to_rgb(WHEEL_BG)
+
+        # Start with wheel background
+        disc = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(disc)
+
+        # Draw disc background circle
+        r = self.radius
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(*bg_rgb, 255))
+
+        # Draw each ring's colored segments
+        for ring_idx in range(NUM_RINGS):
+            r_inner, r_outer = self._ring_radii[ring_idx]
+            n_total = RING_SEGMENTS[ring_idx]
+            seg_span = 360.0 / n_total
+            color_rgb = self._ring_colors[ring_idx]
+
+            # Outer bbox for this ring
+            outer_bbox = (cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer)
+            # Inner bbox to punch out
+            inner_bbox = (cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner)
+
+            # Draw colored segments (every other one)
+            for seg_i in range(n_total):
+                if seg_i % 2 != 0:
+                    continue
+                # Math angle of segment start
+                math_start = seg_i * seg_span + phase_offset
+                math_end = math_start + seg_span
+                # Convert to PIL angles (negate for CW convention)
+                pil_start = -math_end
+                pil_end = -math_start
+
+                # Draw outer pieslice
+                draw.pieslice(outer_bbox, pil_start, pil_end,
+                              fill=(*color_rgb, 255))
+
+            # Punch out the inner part to create the ring (restore bg)
+            if r_inner > 0:
+                draw.ellipse(inner_bbox, fill=(*bg_rgb, 255))
+
+        # Punch out center gap
+        inner_r = self._ring_radii[0][0]
+        if inner_r > 1:
+            draw.ellipse((cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r),
+                         fill=(*bg_rgb, 255))
+
+        return disc
+
+    def _render_frame(self, phase_offset):
+        """Render a complete frame: disc + mask composited together."""
+        disc = self._render_disc(phase_offset)
+        # Composite mask on top (hides everything outside wedge)
+        result = Image.alpha_composite(disc, self._mask_img)
+        self._photo = ImageTk.PhotoImage(result)
+
+    def set_label(self, text):
+        """Set the note name label."""
+        self.canvas.itemconfigure(self._label_id, text=text)
+
+    def set_color(self, hex_color):
+        """Update the stripe color and re-render."""
+        self.stripe_color = hex_color
+        self._last_ring_fills = None  # Force fill refresh on next update
+        factor = DIM_MULTIPLIER + self._brightness * (1.0 - DIM_MULTIPLIER)
+        self._ring_colors = [_hex_to_rgb(_scale_color(hex_color, factor))] * NUM_RINGS
+        self._render_frame(self._phase_offset)
+        self.canvas.itemconfigure(self._image_id, image=self._photo)
 
     def update(self, phase_offset, magnitude, ring_magnitudes=None,
                ring_brightness_pct=100, overall_brightness_pct=80):
@@ -294,7 +530,7 @@ class StrobeWheel:
         brightness = min(1.0, magnitude ** BRIGHTNESS_GAMMA) if magnitude > MAGNITUDE_THRESHOLD else 0.0
 
         # Per-ring brightness from real spectral data
-        ring_mix = ring_brightness_pct / 100.0  # 0.0 = uniform, 1.0 = full per-ring
+        ring_mix = ring_brightness_pct / 100.0
         if ring_magnitudes and ring_mix > 0.0:
             ring_fills = []
             uniform_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
@@ -302,7 +538,6 @@ class StrobeWheel:
                 rm = min(1.0, ring_magnitudes[ring_idx])
                 rb = min(1.0, rm ** BRIGHTNESS_GAMMA) if rm > MAGNITUDE_THRESHOLD else 0.0
                 per_ring_factor = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
-                # Blend between uniform and per-ring based on ring_mix
                 blended = uniform_factor * (1.0 - ring_mix) + per_ring_factor * ring_mix
                 ring_fills.append(_scale_color(self.stripe_color, blended * overall_scale))
         else:
@@ -310,54 +545,33 @@ class StrobeWheel:
             fill_factor *= overall_scale
             ring_fills = [_scale_color(self.stripe_color, fill_factor)] * NUM_RINGS
 
-        # Update fill colors per ring (only if changed)
-        if ring_fills != self._last_ring_fills:
+        # Detect whether colors or phase changed
+        fills_changed = ring_fills != self._last_ring_fills
+        phase_changed = abs(phase_offset - self._phase_offset) >= PHASE_CHANGE_THRESHOLD
+
+        if not fills_changed and not phase_changed:
+            return  # Nothing visible changed
+
+        # Update ring colors if brightness changed
+        if fills_changed:
             self._last_ring_fills = ring_fills
-            for ring_idx, ring_segs in enumerate(self._segments):
-                fill = ring_fills[ring_idx]
-                for poly_id, _, _, _ in ring_segs:
-                    self.canvas.itemconfigure(poly_id, fill=fill)
+            self._ring_colors = [_hex_to_rgb(f) for f in ring_fills]
             # Label brightness tracks overall magnitude
             label_color = _scale_color("#FFFFFF", LABEL_BRIGHTNESS_MIN + brightness * LABEL_BRIGHTNESS_RANGE)
             self.canvas.itemconfigure(self._label_id, fill=label_color)
 
         self._brightness = brightness
 
-        # Update segment positions (rotate by phase_offset)
-        # Skip coordinate recalculation when phase hasn't moved enough to see.
-        # 0.005 degrees ≈ 0.09px at 50px radius — sub-pixel, invisible.
-        if abs(phase_offset - self._phase_offset) < PHASE_CHANGE_THRESHOLD:
-            return  # No visible change, skip coordinate update
+        if phase_changed:
+            self._phase_offset = phase_offset
 
-        self._phase_offset = phase_offset
+        # Re-render the disc image with updated colors and/or phase
+        self._render_frame(self._phase_offset)
+        self.canvas.itemconfigure(self._image_id, image=self._photo)
 
-        # Only update segments that are visible through the wedge cutout.
-        # The wedge shows WEDGE_ANGLE degrees centered on 90° (top).
-        # Segments outside this arc are hidden behind the mask — skip them.
-        wedge_half = WEDGE_ANGLE / 2.0
-        # Visible range in "math angle" space (90° = top of screen)
-        vis_lo = 90.0 - wedge_half
-        vis_hi = 90.0 + wedge_half
 
-        for ring_idx in range(NUM_RINGS):
-            r_inner, r_outer = self._ring_radii[ring_idx]
-            for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
-                start = (base_start + phase_offset) % 360.0
-                end = start + seg_span
-                # Check if segment overlaps the visible wedge
-                # (handle wrap-around: segment at 350°-10° overlaps wedge at 50°-130°)
-                if not (end > vis_lo and start < vis_hi):
-                    # Also check wrap-around
-                    if not (end + 360.0 > vis_lo and start < vis_hi) and \
-                       not (end > vis_lo and start - 360.0 < vis_hi):
-                        continue  # Hidden behind mask — skip
-
-                points = _annular_sector_points(
-                    self.cx, self.cy, r_inner, r_outer,
-                    base_start + phase_offset,
-                    base_start + phase_offset + seg_span, steps
-                )
-                self.canvas.coords(poly_id, *points)
+# Select implementation: PIL (fast) if available, polygon fallback otherwise
+StrobeWheel = _PILStrobeWheel if _PIL_AVAILABLE else _PolygonStrobeWheel
 
 
 # ============================================
