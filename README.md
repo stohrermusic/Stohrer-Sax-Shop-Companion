@@ -60,7 +60,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner (Experimental)
-- 12-wheel stroboscopic tuner modeled after the Peterson Stroboconn
+- 12-wheel stroboscopic tuner
 - GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
   - Automatic fallback to CPU canvas rendering if GPU unavailable
 - "Wheels always spinning" mechanical mode with per-pitch RPMs from US Patent 2,286,030
