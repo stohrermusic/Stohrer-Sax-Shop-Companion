@@ -331,14 +331,31 @@ class StrobeWheel:
 
         self._phase_offset = phase_offset
 
+        # Only update segments that are visible through the wedge cutout.
+        # The wedge shows WEDGE_ANGLE degrees centered on 90° (top).
+        # Segments outside this arc are hidden behind the mask — skip them.
+        wedge_half = WEDGE_ANGLE / 2.0
+        # Visible range in "math angle" space (90° = top of screen)
+        vis_lo = 90.0 - wedge_half
+        vis_hi = 90.0 + wedge_half
+
         for ring_idx in range(NUM_RINGS):
             r_inner, r_outer = self._ring_radii[ring_idx]
             for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
-                start = base_start + phase_offset
+                start = (base_start + phase_offset) % 360.0
                 end = start + seg_span
+                # Check if segment overlaps the visible wedge
+                # (handle wrap-around: segment at 350°-10° overlaps wedge at 50°-130°)
+                if not (end > vis_lo and start < vis_hi):
+                    # Also check wrap-around
+                    if not (end + 360.0 > vis_lo and start < vis_hi) and \
+                       not (end > vis_lo and start - 360.0 < vis_hi):
+                        continue  # Hidden behind mask — skip
+
                 points = _annular_sector_points(
                     self.cx, self.cy, r_inner, r_outer,
-                    start, end, steps
+                    base_start + phase_offset,
+                    base_start + phase_offset + seg_span, steps
                 )
                 self.canvas.coords(poly_id, *points)
 
