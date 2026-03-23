@@ -1834,6 +1834,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def _open_input_device_dialog(self):
         """Open a dialog to select the audio input device."""
+        if sys.platform == 'linux':
+            messagebox.showinfo("Input Device",
+                "On Linux, audio input is locked to the system default.\n\n"
+                "Set your preferred device in your system audio settings\n"
+                "(PulseAudio or PipeWire).")
+            return
+
         devices = get_input_devices()
         if not devices:
             messagebox.showinfo("No Devices", "No audio input devices found.")
