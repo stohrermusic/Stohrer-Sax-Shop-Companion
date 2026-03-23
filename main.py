@@ -306,9 +306,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         menu = self._tab_menus.get(selected)
         if menu:
             self.root.config(menu=menu)
-            # Force menu bar refresh — works around tkinter bug where
-            # the menu bar disappears in fullscreen/maximized mode
+            # Force menu bar refresh — works around tkinter/X11 bug where
+            # the menu bar disappears in maximized mode on Linux.
+            # A geometry toggle forces the window manager to redraw.
             self.root.update_idletasks()
+            if sys.platform == 'linux':
+                geo = self.root.geometry()
+                self.root.geometry(geo)
 
         # Start/stop audio tabs
         if selected == str(self.tuner_tab_frame):
