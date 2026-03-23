@@ -978,12 +978,15 @@ class TunerTabMixin:
         canvas = self._vu_canvas
         shift = TRANSPOSITION_SHIFTS.get(self._tuner_transpose_var.get(), 0)
 
-        # Find dominant pitch class
+        # Find dominant pitch class (apply sensitivity gain)
+        sens = self._tuner_sens_var.get() / 100.0
+        vu_gain = GAIN_MIN + sens * GAIN_RANGE
         best_pc = -1
         best_mag = 0.0
         for pc in range(12):
-            if result.magnitudes[pc] > best_mag:
-                best_mag = result.magnitudes[pc]
+            m = result.magnitudes[pc] * vu_gain
+            if m > best_mag:
+                best_mag = m
                 best_pc = pc
 
         target_cents = 0.0
@@ -1317,24 +1320,25 @@ class TunerTabMixin:
                 # ── GPU path: single call to Rust renderer ──
                 magnitudes = [min(1.0, result.magnitudes[i] * gain) for i in range(12)]
                 phases = []
+                spin_mags = []
                 for i in range(12):
                     if magnitudes[i] > MAGNITUDE_THRESHOLD:
                         phases.append(result.phase_offsets[i])
+                        spin_mags.append(magnitudes[i])
                     elif always_spin:
                         phases.append(self._tuner_spin_phases[i])
+                        spin_mags.append(DIM_MULTIPLIER)
                     else:
-                        phases.append(result.phase_offsets[i])
+                        # No signal, not spinning — wheel off
+                        phases.append(0.0)
+                        spin_mags.append(0.0)
 
-                # In always-spinning mode, inactive wheels get dim brightness
-                if always_spin:
-                    spin_mags = [max(m, DIM_MULTIPLIER) for m in magnitudes]
-                else:
-                    spin_mags = magnitudes
-
-                ring_mags = [
-                    [min(1.0, rm * gain) for rm in result.ring_magnitudes[i]]
-                    for i in range(12)
-                ]
+                ring_mags = []
+                for i in range(12):
+                    if spin_mags[i] > 0:
+                        ring_mags.append([min(1.0, rm * gain) for rm in result.ring_magnitudes[i]])
+                    else:
+                        ring_mags.append([0.0] * len(result.ring_magnitudes[i]))
                 try:
                     self._gpu_renderer.render(
                         phases, spin_mags, ring_mags,
@@ -1368,7 +1372,9 @@ class TunerTabMixin:
                         phase = self._tuner_spin_phases[i]
                         mag = DIM_MULTIPLIER
                     else:
-                        phase = result.phase_offsets[i]
+                        phase = 0.0
+                        mag = 0.0
+                        ring_mags = [0.0] * len(ring_mags)
                     wheel.update(
                         phase,
                         mag,
