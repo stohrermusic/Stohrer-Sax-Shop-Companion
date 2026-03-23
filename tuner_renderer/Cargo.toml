@@ -1,0 +1,15 @@
+[package]
+name = "tuner_render"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tuner_render"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.28", features = ["extension-module"] }
+wgpu = "23"
+raw-window-handle = "0.6"
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "0.4"

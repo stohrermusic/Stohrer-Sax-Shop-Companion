@@ -27,6 +27,13 @@ except ImportError:
     AUDIO_AVAILABLE = False
     PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
+# GPU-accelerated renderer (Rust/wgpu) — falls back to canvas if unavailable
+try:
+    import tuner_render
+    _HAS_GPU_RENDERER = True
+except ImportError:
+    _HAS_GPU_RENDERER = False
+
 
 # ============================================
 # CONSTANTS
@@ -68,6 +75,18 @@ VU_RADIUS = 80                   # Radius of the VU meter arc
 # --- Sensitivity gain mapping ---
 GAIN_MIN = 0.2                   # Gain at sensitivity=0%
 GAIN_RANGE = 4.8                 # Additional gain at sensitivity=100%
+
+# --- Stroboconn mechanical spin rates (US Patent 2,286,030) ---
+# Motor: 27.5 RPS for the A disc, each pitch class geared by alternating
+# ratios 89/84 and 107/101 (≈ 2^(1/12) per semitone).
+# Idler shaft 82 reverses rotation: upper discs (accidentals) spin opposite
+# to lower discs (naturals).
+# Actual patent motor speed — 27.5 RPS for A disc.
+_SPIN_BASE_A_DPS = 27.5 * 360.0  # degrees/sec for A (pitch class 9)
+STROBOCONN_SPIN_RATES = [
+    _SPIN_BASE_A_DPS * 2.0 ** ((pc - 9) / 12.0) for pc in range(12)
+]
+TOP_ROW_PCS = {1, 3, 6, 8, 10}  # accidentals — opposite spin direction
 
 # --- Wheel layout ---
 LAYOUT_MARGIN_FRACTION = 0.08    # Horizontal margin as fraction of column width
@@ -379,6 +398,10 @@ class TunerTabMixin:
         self._tuner_perf_log = []       # Collected perf samples for debug dump
         self._tuner_perf_frame = 0      # Frame counter for perf logging
         self._tuner_perf_text = ""      # Latest perf text for FPS overlay
+        self._tuner_use_gpu = False     # Set True if GPU renderer initializes
+        self._gpu_renderer = None       # tuner_render.TunerRenderer instance
+        self._tuner_gpu_labels = {}     # pc_index → tk.Label (GPU mode only)
+        self._tuner_spin_phases = [0.0] * 12  # Per-wheel free-spinning phases
 
     def create_tuner_tab(self, parent):
         """Build the Tuner tab UI."""
@@ -397,6 +420,8 @@ class TunerTabMixin:
             value=str(tuner_settings.get("fps", "60")))
         self._tuner_show_fps = tk.BooleanVar(
             value=tuner_settings.get("show_fps", False))
+        self._tuner_always_spin = tk.BooleanVar(
+            value=tuner_settings.get("always_spinning", False))
 
         bg = self._tuner_faceplate_color
 
@@ -405,13 +430,41 @@ class TunerTabMixin:
         self._tuner_main_frame._skip_theme = True
         self._tuner_main_frame.pack(fill="both", expand=True)
 
-        # --- Canvas (strobe wheels) ---
-        self._tuner_canvas = tk.Canvas(
-            self._tuner_main_frame, bg=bg, highlightthickness=0,
-            borderwidth=0,
-        )
-        self._tuner_canvas._dark_canvas = True  # Skip theme walker
-        self._tuner_canvas.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+        # --- Wheel display area ---
+        if _HAS_GPU_RENDERER:
+            # GPU mode: tk.Frame whose native window becomes the wgpu surface.
+            # Labels and overlays are placed as child widgets.
+            self._tuner_use_gpu = True
+            self._tuner_gpu_frame = tk.Frame(
+                self._tuner_main_frame, bg=bg)
+            self._tuner_gpu_frame._skip_theme = True
+            self._tuner_gpu_frame.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+            # FPS overlay label (hidden until Show FPS enabled)
+            self._tuner_fps_lbl = tk.Label(
+                self._tuner_gpu_frame, text="", bg=bg, fg="#888888",
+                font=("Helvetica", 9), anchor="nw")
+            self._tuner_fps_lbl.place(x=10, y=10)
+            self._tuner_fps_lbl.lift()
+            # Error overlay label (hidden by default)
+            self._tuner_error_lbl = tk.Label(
+                self._tuner_gpu_frame, text="", bg=bg, fg="#FF4444",
+                font=("Helvetica", 12), justify="center")
+            # Keep a canvas reference for code that checks hasattr
+            self._tuner_canvas = None
+        else:
+            # Canvas mode: classic tkinter polygon rendering
+            self._tuner_canvas = tk.Canvas(
+                self._tuner_main_frame, bg=bg, highlightthickness=0,
+                borderwidth=0,
+            )
+            self._tuner_canvas._dark_canvas = True  # Skip theme walker
+            self._tuner_canvas.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+            # Persistent CPU mode notice
+            self._cpu_mode_lbl = tk.Label(
+                self._tuner_main_frame,
+                text="CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration",
+                bg=bg, fg="#555555", font=("Helvetica", 8))
+            self._cpu_mode_lbl.place(relx=0.5, y=6, anchor="n")
 
         # --- Control panel (EQ sliders | flat/pilot/sharp | VU meter) ---
         ctrl_bg = "systemWindowBackgroundColor" if IS_MACOS else "#2A2A2A"
@@ -607,8 +660,11 @@ class TunerTabMixin:
             pass
         self._tuner_engine.set_sensitivity(self._tuner_sens_var.get())
 
-        # Bind canvas resize to rebuild wheels
-        self._tuner_canvas.bind("<Configure>", self._tuner_on_canvas_resize)
+        # Bind resize to rebuild wheels
+        if self._tuner_use_gpu:
+            self._tuner_gpu_frame.bind("<Configure>", self._tuner_on_canvas_resize)
+        elif self._tuner_canvas:
+            self._tuner_canvas.bind("<Configure>", self._tuner_on_canvas_resize)
         self._tuner_wheels_built = False
 
     def _create_tuner_fallback(self, parent):
@@ -639,54 +695,141 @@ class TunerTabMixin:
     # WHEEL CREATION & LAYOUT
     # ------------------------------------------------------------------
 
-    def _tuner_build_wheels(self):
-        """Create the 12 strobe wheels in piano keyboard layout."""
-        canvas = self._tuner_canvas
-        canvas.delete("all")
-        self._tuner_fps_display = None  # Canvas items destroyed by delete("all")
+    def _tuner_compute_layout(self, w, h):
+        """Compute wheel positions for the piano keyboard layout.
 
-        bg = self._tuner_faceplate_color
-        canvas.configure(bg=bg)
-
-        w = canvas.winfo_width()
-        h = canvas.winfo_height()
+        Returns list of (pc, cx, cy, radius, is_up) for 12 pitch classes,
+        or None if the area is too small.
+        """
         if w < 100 or h < 100:
-            return
+            return None
 
-        wheel_h = h
-
-        # Piano keyboard layout
         naturals = [(0, 0), (2, 1), (4, 2), (5, 3), (7, 4), (9, 5), (11, 6)]
         accidentals = [(1, 0.5), (3, 1.5), (6, 3.5), (8, 4.5), (10, 5.5)]
 
         col_w = w / 7
         margin_x = col_w * LAYOUT_MARGIN_FRACTION
 
-        # Row layout: top row overlapping bottom row (like real Stroboconn)
         label_gap = LAYOUT_LABEL_GAP
-        row_h = (wheel_h - label_gap) / 2
+        row_h = (h - label_gap) / 2
         top_cy = row_h * 0.50
         bottom_cy = row_h + label_gap + row_h * 0.50
 
         radius = min(col_w * LAYOUT_RADIUS_COL_LIMIT, row_h * LAYOUT_RADIUS_ROW_LIMIT)
 
-        positions = {}
-        for pc, col in naturals:
-            positions[pc] = (margin_x + col_w * (col + 0.5), bottom_cy)
-        for pc, col in accidentals:
-            positions[pc] = (margin_x + col_w * (col + 0.5), top_cy)
-
         top_pcs = {1, 3, 6, 8, 10}
+        result = []
+        for pc, col in naturals:
+            cx = margin_x + col_w * (col + 0.5)
+            result.append((pc, cx, bottom_cy, radius, False))
+        for pc, col in accidentals:
+            cx = margin_x + col_w * (col + 0.5)
+            result.append((pc, cx, top_cy, radius, True))
+        result.sort(key=lambda t: t[0])
+        return result
+
+    def _tuner_build_wheels(self):
+        """Create the 12 strobe wheels in piano keyboard layout."""
+        if self._tuner_use_gpu:
+            self._tuner_build_wheels_gpu()
+        else:
+            self._tuner_build_wheels_canvas()
+
+    def _tuner_build_wheels_gpu(self):
+        """GPU path: initialize/resize renderer and place label widgets."""
+        frame = self._tuner_gpu_frame
+        w = frame.winfo_width()
+        h = frame.winfo_height()
+
+        layout = self._tuner_compute_layout(w, h)
+        if layout is None:
+            return
+
+        bg = self._tuner_faceplate_color
+
+        # Initialize or resize the GPU renderer
+        if self._gpu_renderer is None:
+            frame.update_idletasks()  # ensure native window exists
+            try:
+                hwnd = frame.winfo_id()
+                self._gpu_renderer = tuner_render.TunerRenderer(hwnd, w, h)
+                self._gpu_renderer.set_stripe_color(self._tuner_color)
+                self._gpu_renderer.set_faceplate_color(bg)
+            except Exception as e:
+                print(f"GPU renderer init failed, falling back to canvas: {e}")
+                self._tuner_use_gpu = False
+                self._gpu_renderer = None
+                # Create canvas and rebuild with canvas path
+                self._tuner_canvas = tk.Canvas(
+                    self._tuner_main_frame, bg=bg,
+                    highlightthickness=0, borderwidth=0)
+                self._tuner_canvas._dark_canvas = True
+                self._tuner_canvas.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+                self._tuner_canvas.bind("<Configure>", self._tuner_on_canvas_resize)
+                self._tuner_build_wheels_canvas()
+                return
+        else:
+            self._gpu_renderer.resize(w, h)
+            self._gpu_renderer.set_faceplate_color(bg)
+
+        # Set wheel layout (list of tuples for the Rust side)
+        positions = [(cx, cy, radius, is_up) for (_, cx, cy, radius, is_up) in layout]
+        self._gpu_renderer.set_layout(positions)
+
+        # Place label widgets
+        label_offset = 6
+        # Remove old labels
+        for lbl in self._tuner_gpu_labels.values():
+            lbl.destroy()
+        self._tuner_gpu_labels = {}
+
+        for pc, cx, cy, radius, is_up in layout:
+            if is_up:
+                lbl_y = cy + radius + label_offset
+            else:
+                lbl_y = cy - radius - label_offset
+            lbl = tk.Label(frame, text="", bg=bg, fg=LABEL_COLOR,
+                           font=("Helvetica", 10, "bold"))
+            lbl._skip_theme = True
+            lbl.place(x=cx, y=lbl_y, anchor="center")
+            self._tuner_gpu_labels[pc] = lbl
+
+        # Update label colors
+        frame.configure(bg=bg)
+        if hasattr(self, '_tuner_fps_lbl'):
+            self._tuner_fps_lbl.configure(bg=bg)
+        if hasattr(self, '_tuner_error_lbl'):
+            self._tuner_error_lbl.configure(bg=bg)
+
+        self._tuner_update_labels()
+        self._tuner_wheels_built = True
+
+    def _tuner_build_wheels_canvas(self):
+        """Canvas path: create StrobeWheel objects (original approach)."""
+        canvas = self._tuner_canvas
+        if canvas is None:
+            return
+        canvas.delete("all")
+        self._tuner_fps_display = None
+
+        bg = self._tuner_faceplate_color
+        canvas.configure(bg=bg)
+
+        w = canvas.winfo_width()
+        h = canvas.winfo_height()
+
+        layout = self._tuner_compute_layout(w, h)
+        if layout is None:
+            return
 
         label_offset = 6
         self._tuner_wheels = []
-        for pc in range(12):
-            cx, cy = positions[pc]
-            direction = "up" if pc in top_pcs else "down"
+        for pc, cx, cy, radius, is_up in layout:
+            direction = "up" if is_up else "down"
             wheel = StrobeWheel(canvas, cx, cy, radius, self._tuner_color,
                                 self._tuner_faceplate_color, direction)
             self._tuner_wheels.append(wheel)
-            if pc in top_pcs:
+            if is_up:
                 lbl_y = cy + radius + label_offset
             else:
                 lbl_y = cy - radius - label_offset
@@ -902,9 +1045,14 @@ class TunerTabMixin:
     def _tuner_update_labels(self):
         """Update wheel note labels based on transposition setting."""
         shift = TRANSPOSITION_SHIFTS.get(self._tuner_transpose_var.get(), 0)
-        for i, wheel in enumerate(self._tuner_wheels):
-            pc = (i + shift) % 12
-            wheel.set_label(PITCH_CLASSES[pc])
+        if self._tuner_use_gpu:
+            for pc_idx, lbl in self._tuner_gpu_labels.items():
+                display_pc = (pc_idx + shift) % 12
+                lbl.configure(text=PITCH_CLASSES[display_pc])
+        else:
+            for i, wheel in enumerate(self._tuner_wheels):
+                pc = (i + shift) % 12
+                wheel.set_label(PITCH_CLASSES[pc])
 
     # ------------------------------------------------------------------
     # CONTROLS
@@ -995,8 +1143,11 @@ class TunerTabMixin:
             if c[1]:
                 self._tuner_color = c[1]
                 color_swatch.configure(bg=self._tuner_color)
-                for wheel in self._tuner_wheels:
-                    wheel.set_color(self._tuner_color)
+                if self._tuner_use_gpu and self._gpu_renderer:
+                    self._gpu_renderer.set_stripe_color(self._tuner_color)
+                else:
+                    for wheel in self._tuner_wheels:
+                        wheel.set_color(self._tuner_color)
 
         color_swatch.configure(command=pick_stripe_color)
 
@@ -1019,11 +1170,32 @@ class TunerTabMixin:
             if c[1]:
                 self._tuner_faceplate_color = c[1]
                 fp_swatch.configure(bg=self._tuner_faceplate_color)
-                # Rebuild wheels to apply new faceplate color
-                self._tuner_wheels_built = False
-                self._tuner_build_wheels()
+                if self._tuner_use_gpu and self._gpu_renderer:
+                    self._gpu_renderer.set_faceplate_color(self._tuner_faceplate_color)
+                    # Update label backgrounds to match
+                    for lbl in self._tuner_gpu_labels.values():
+                        lbl.configure(bg=self._tuner_faceplate_color)
+                    if hasattr(self, '_tuner_gpu_frame'):
+                        self._tuner_gpu_frame.configure(bg=self._tuner_faceplate_color)
+                    if hasattr(self, '_tuner_fps_lbl'):
+                        self._tuner_fps_lbl.configure(bg=self._tuner_faceplate_color)
+                else:
+                    # Rebuild wheels to apply new faceplate color
+                    self._tuner_wheels_built = False
+                    self._tuner_build_wheels()
 
         fp_swatch.configure(command=pick_faceplate_color)
+
+        # --- Always spinning ---
+        tk.Checkbutton(
+            frame, text="Wheels always spinning (mechanical mode)",
+            variable=self._tuner_always_spin,
+            bg=bg, fg=fg, selectcolor=bg, activebackground=bg,
+            font=("Helvetica", 10),
+        ).pack(fill="x", pady=(0, 0))
+        tk.Label(frame, text="Per-pitch RPMs from US Patent 2,286,030. Best at 120 FPS.",
+                 bg=bg, fg="#888888", font=("Helvetica", 8),
+                 anchor="w").pack(fill="x", padx=(23, 0), pady=(0, 5))
 
         # --- Show FPS ---
         tk.Checkbutton(
@@ -1046,7 +1218,10 @@ class TunerTabMixin:
         if not self._tuner_engine:
             return
 
-        if hasattr(self, '_tuner_canvas'):
+        # Clear previous errors
+        if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
+            self._tuner_error_lbl.place_forget()
+        elif self._tuner_canvas:
             self._tuner_canvas.delete("error")
 
         if not self._tuner_wheels_built:
@@ -1055,7 +1230,11 @@ class TunerTabMixin:
         device = self.settings.get("audio_input_device")
         success, err = self._tuner_engine.start(device=device)
         if not success:
-            if hasattr(self, '_tuner_canvas'):
+            if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
+                self._tuner_error_lbl.configure(text=f"Audio error: {err}")
+                self._tuner_error_lbl.place(relx=0.5, rely=0.5, anchor="center")
+                self._tuner_error_lbl.lift()
+            elif self._tuner_canvas:
                 self._tuner_canvas.create_text(
                     self._tuner_canvas.winfo_width() / 2,
                     self._tuner_canvas.winfo_height() / 2,
@@ -1111,38 +1290,85 @@ class TunerTabMixin:
                 self._tuner_show_stream_error(self._tuner_engine.last_error)
                 return
 
-            wheels_updated = 0
-            coords_calls = 0
-            color_calls = 0
-            phase_skips = 0
+            sens = self._tuner_sens_var.get() / 100.0
+            gain = GAIN_MIN + sens * GAIN_RANGE
 
-            if self._tuner_wheels:
-                sens = self._tuner_sens_var.get() / 100.0
-                gain = GAIN_MIN + sens * GAIN_RANGE
+            # "Always spinning" mode: each wheel spins at its Stroboconn
+            # patent RPM (scaled for visibility). Upper row (accidentals) and
+            # lower row (naturals) spin in opposite directions per the patent.
+            always_spin = self._tuner_always_spin.get()
+            if always_spin:
+                dt = FRAME_RATES.get(self._tuner_fps_var.get(), 16) / 1000.0
+                for pc in range(12):
+                    rate = STROBOCONN_SPIN_RATES[pc]
+                    if pc in TOP_ROW_PCS:
+                        rate = -rate  # idler shaft reverses upper row
+                    self._tuner_spin_phases[pc] = (
+                        self._tuner_spin_phases[pc] + rate * dt) % 360.0
+
+            if self._tuner_use_gpu and self._gpu_renderer:
+                # ── GPU path: single call to Rust renderer ──
+                magnitudes = [min(1.0, result.magnitudes[i] * gain) for i in range(12)]
+                phases = []
+                for i in range(12):
+                    if magnitudes[i] > MAGNITUDE_THRESHOLD:
+                        phases.append(result.phase_offsets[i])
+                    elif always_spin:
+                        phases.append(self._tuner_spin_phases[i])
+                    else:
+                        phases.append(result.phase_offsets[i])
+
+                # In always-spinning mode, inactive wheels get dim brightness
+                if always_spin:
+                    spin_mags = [max(m, DIM_MULTIPLIER) for m in magnitudes]
+                else:
+                    spin_mags = magnitudes
+
+                ring_mags = [
+                    [min(1.0, rm * gain) for rm in result.ring_magnitudes[i]]
+                    for i in range(12)
+                ]
+                try:
+                    self._gpu_renderer.render(
+                        phases, spin_mags, ring_mags,
+                        float(self._tuner_ring_brightness),
+                        float(self._tuner_overall_brightness),
+                    )
+                except Exception:
+                    pass  # frame drop, not fatal
+
+                # Update label brightness based on magnitude
+                for pc_idx, lbl in self._tuner_gpu_labels.items():
+                    mag = magnitudes[pc_idx]
+                    if mag > MAGNITUDE_THRESHOLD:
+                        b = min(1.0, mag ** BRIGHTNESS_GAMMA)
+                        gray = int((LABEL_BRIGHTNESS_MIN + b * LABEL_BRIGHTNESS_RANGE) * 255)
+                    elif always_spin:
+                        gray = int(0x55)
+                    else:
+                        gray = int(0x88)
+                    lbl.configure(fg=f"#{gray:02x}{gray:02x}{gray:02x}")
+
+            elif self._tuner_wheels:
+                # ── Canvas path: update each StrobeWheel ──
                 for i, wheel in enumerate(self._tuner_wheels):
                     mag = min(1.0, result.magnitudes[i] * gain)
                     ring_mags = [min(1.0, rm * gain)
                                  for rm in result.ring_magnitudes[i]]
-
-                    old_phase = wheel._phase_offset
-                    old_fills = wheel._last_ring_fills
+                    if mag > MAGNITUDE_THRESHOLD:
+                        phase = result.phase_offsets[i]
+                    elif always_spin:
+                        phase = self._tuner_spin_phases[i]
+                        mag = DIM_MULTIPLIER
+                    else:
+                        phase = result.phase_offsets[i]
                     wheel.update(
-                        result.phase_offsets[i],
+                        phase,
                         mag,
                         ring_magnitudes=ring_mags,
                         ring_brightness_pct=self._tuner_ring_brightness,
                         overall_brightness_pct=self._tuner_overall_brightness,
                     )
-                    if wheel._phase_offset != old_phase:
-                        wheels_updated += 1
-                        # Count visible segments that were updated
-                        for ring in wheel._segments:
-                            coords_calls += len(ring)
-                    else:
-                        phase_skips += 1
-                    if wheel._last_ring_fills != old_fills:
-                        for ring in wheel._segments:
-                            color_calls += len(ring)
 
             _t2 = _time.perf_counter()
 
@@ -1164,45 +1390,53 @@ class TunerTabMixin:
                     f"total:{total_ms:.0f}ms"
                 )
 
-                # Collect detailed samples for log dump
                 self._tuner_perf_frame += 1
                 active_wheels = sum(1 for m in result.magnitudes if m > MAGNITUDE_THRESHOLD)
+                display_w = (self._tuner_gpu_frame.winfo_width()
+                             if self._tuner_use_gpu and hasattr(self, '_tuner_gpu_frame')
+                             else self._tuner_canvas.winfo_width() if self._tuner_canvas else 0)
+                display_h = (self._tuner_gpu_frame.winfo_height()
+                             if self._tuner_use_gpu and hasattr(self, '_tuner_gpu_frame')
+                             else self._tuner_canvas.winfo_height() if self._tuner_canvas else 0)
                 sample = {
                     'frame': self._tuner_perf_frame,
                     'analyze_ms': round(analyze_ms, 1),
                     'wheel_ms': round(wheel_ms, 1),
                     'vu_ms': round(vu_ms, 1),
                     'total_ms': round(total_ms, 1),
-                    'wheels_updated': wheels_updated,
-                    'phase_skips': phase_skips,
-                    'coords_calls': coords_calls,
-                    'color_calls': color_calls,
                     'active_wheels': active_wheels,
-                    'canvas_w': self._tuner_canvas.winfo_width(),
-                    'canvas_h': self._tuner_canvas.winfo_height(),
+                    'gpu': self._tuner_use_gpu,
+                    'canvas_w': display_w,
+                    'canvas_h': display_h,
                 }
                 self._tuner_perf_log.append(sample)
 
-                # Dump log every 300 frames (~30s at 10fps)
                 if len(self._tuner_perf_log) >= 300:
                     self._tuner_dump_perf_log()
 
-        # FPS measurement
+        # FPS measurement — average over 1 second, display update once per second
         if self._tuner_show_fps.get():
             import time as _time
             now = _time.perf_counter()
             self._tuner_fps_times.append(now)
-            if len(self._tuner_fps_times) > 60:
-                self._tuner_fps_times = self._tuner_fps_times[-60:]
-            if len(self._tuner_fps_times) >= 2:
+            # Trim to last 2 seconds of timestamps
+            cutoff = now - 2.0
+            self._tuner_fps_times = [t for t in self._tuner_fps_times if t > cutoff]
+            # Update display at most once per second
+            last_update = getattr(self, '_tuner_fps_last_update', 0.0)
+            if now - last_update >= 1.0 and len(self._tuner_fps_times) >= 2:
+                self._tuner_fps_last_update = now
                 elapsed = self._tuner_fps_times[-1] - self._tuner_fps_times[0]
                 if elapsed > 0:
                     actual_fps = (len(self._tuner_fps_times) - 1) / elapsed
                     perf = getattr(self, '_tuner_perf_text', '')
+                    gpu_tag = " [GPU]" if self._tuner_use_gpu else ""
                     self._tuner_update_fps_display(
-                        f"{actual_fps:.0f} fps | {perf}")
-        elif self._tuner_fps_display:
-            self._tuner_canvas.itemconfigure(self._tuner_fps_display, text="")
+                        f"{actual_fps:.0f} fps{gpu_tag} | {perf}")
+        else:
+            if getattr(self, '_tuner_fps_last_update', 0.0) > 0:
+                self._tuner_update_fps_display("")
+                self._tuner_fps_last_update = 0.0
 
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
         self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
@@ -1217,13 +1451,11 @@ class TunerTabMixin:
         if not samples:
             return
 
-        # Compute stats
         n = len(samples)
-        def avg(key): return sum(s[key] for s in samples) / n
-        def mx(key): return max(s[key] for s in samples)
-        def mn(key): return min(s[key] for s in samples)
+        def avg(key): return sum(s.get(key, 0) for s in samples) / n
+        def mx(key): return max(s.get(key, 0) for s in samples)
+        def mn(key): return min(s.get(key, 0) for s in samples)
 
-        # FPS from timestamps
         fps_times = self._tuner_fps_times
         if len(fps_times) >= 2:
             elapsed = fps_times[-1] - fps_times[0]
@@ -1231,22 +1463,18 @@ class TunerTabMixin:
         else:
             actual_fps = 0
 
-        total_polys = sum(len(ring) for w in self._tuner_wheels
-                          for ring in w._segments)
+        is_gpu = samples[0].get('gpu', False) if samples else False
 
         with open(log_path, 'a') as f:
             import time as _time
             f.write(f"\n{'='*70}\n")
             f.write(f"Tuner Perf Log — {_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"{'='*70}\n")
+            f.write(f"Renderer: {'GPU (wgpu)' if is_gpu else 'Canvas'}\n")
             f.write(f"Frames sampled: {n}\n")
             f.write(f"Actual FPS: {actual_fps:.1f}\n")
             f.write(f"Target FPS: {self._tuner_fps_var.get()}\n")
-            f.write(f"Canvas size: {samples[-1]['canvas_w']}x{samples[-1]['canvas_h']}\n")
-            f.write(f"Total polygon objects: {total_polys}\n")
-            f.write(f"Wheels: {len(self._tuner_wheels)}\n")
-            f.write(f"Rings per wheel: {NUM_RINGS}\n")
-            f.write(f"Ring segments: {RING_SEGMENTS}\n\n")
+            f.write(f"Display size: {samples[-1].get('canvas_w', 0)}x{samples[-1].get('canvas_h', 0)}\n\n")
 
             f.write(f"{'Metric':25s} {'Avg':>8s} {'Min':>8s} {'Max':>8s}\n")
             f.write(f"{'-'*25} {'-'*8} {'-'*8} {'-'*8}\n")
@@ -1255,10 +1483,6 @@ class TunerTabMixin:
                 ('wheel_ms', 'Wheel rendering'),
                 ('vu_ms', 'VU meter'),
                 ('total_ms', 'Total frame'),
-                ('wheels_updated', 'Wheels w/ coord update'),
-                ('phase_skips', 'Wheels skipped (phase)'),
-                ('coords_calls', 'coords() calls'),
-                ('color_calls', 'itemconfigure() calls'),
                 ('active_wheels', 'Active wheels (signal)'),
             ]:
                 f.write(f"{label:25s} {avg(key):8.1f} {mn(key):8.1f} {mx(key):8.1f}\n")
@@ -1278,20 +1502,25 @@ class TunerTabMixin:
             # Sample of individual frames (first 20)
             f.write(f"\nFirst 20 frames:\n")
             f.write(f"{'Frame':>6s} {'Analyze':>8s} {'Wheels':>8s} {'VU':>6s} "
-                    f"{'Total':>8s} {'Updated':>8s} {'Coords':>8s} {'Active':>7s}\n")
+                    f"{'Total':>8s} {'Active':>7s}\n")
             for s in samples[:20]:
-                f.write(f"{s['frame']:6d} {s['analyze_ms']:7.1f}ms "
-                        f"{s['wheel_ms']:7.1f}ms {s['vu_ms']:5.1f}ms "
-                        f"{s['total_ms']:7.1f}ms {s['wheels_updated']:8d} "
-                        f"{s['coords_calls']:8d} {s['active_wheels']:7d}\n")
+                f.write(f"{s.get('frame',0):6d} {s.get('analyze_ms',0):7.1f}ms "
+                        f"{s.get('wheel_ms',0):7.1f}ms {s.get('vu_ms',0):5.1f}ms "
+                        f"{s.get('total_ms',0):7.1f}ms {s.get('active_wheels',0):7d}\n")
 
             f.write(f"\n{'='*70}\n\n")
 
         print(f"[Tuner] Perf log written to {log_path} ({n} frames)")
 
     def _tuner_update_fps_display(self, text):
-        """Update the FPS counter overlay on the canvas."""
-        if not hasattr(self, '_tuner_canvas'):
+        """Update the FPS counter overlay."""
+        if self._tuner_use_gpu:
+            if hasattr(self, '_tuner_fps_lbl'):
+                self._tuner_fps_lbl.configure(text=text)
+                if text:
+                    self._tuner_fps_lbl.lift()
+            return
+        if not self._tuner_canvas:
             return
         try:
             if self._tuner_fps_display:
@@ -1302,14 +1531,21 @@ class TunerTabMixin:
                     fill="#888888", font=("Helvetica", 9),
                     tags="fps_overlay")
         except tk.TclError:
-            # Canvas item was destroyed (e.g. by wheel rebuild)
             self._tuner_fps_display = None
 
     def _tuner_show_stream_error(self, error_msg):
-        """Show audio stream error on the tuner canvas with a retry option."""
+        """Show audio stream error with a retry option."""
         self._tuner_running = False
         self._tuner_set_pilot(False)
-        if hasattr(self, '_tuner_canvas'):
+        if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
+            self._tuner_error_lbl.configure(
+                text=f"{error_msg}\n\nClick here to retry",
+                cursor="hand2")
+            self._tuner_error_lbl.place(relx=0.5, rely=0.5, anchor="center")
+            self._tuner_error_lbl.lift()
+            self._tuner_error_lbl.bind("<Button-1>",
+                                       lambda e: self._tuner_retry())
+        elif self._tuner_canvas:
             c = self._tuner_canvas
             cx = c.winfo_width() / 2
             cy = c.winfo_height() / 2
@@ -1327,6 +1563,8 @@ class TunerTabMixin:
         """Retry starting the tuner after a stream error."""
         if self._tuner_engine:
             self._tuner_engine.last_error = None
+        if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
+            self._tuner_error_lbl.place_forget()
         self._tuner_start()
 
     # ------------------------------------------------------------------
@@ -1346,4 +1584,5 @@ class TunerTabMixin:
             "overall_brightness": self._tuner_overall_brightness if hasattr(self, '_tuner_overall_brightness') else 80,
             "faceplate_color": self._tuner_faceplate_color if hasattr(self, '_tuner_faceplate_color') else DEFAULT_FACEPLATE,
             "show_fps": self._tuner_show_fps.get() if hasattr(self, '_tuner_show_fps') else False,
+            "always_spinning": self._tuner_always_spin.get() if hasattr(self, '_tuner_always_spin') else False,
         }
