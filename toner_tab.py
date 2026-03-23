@@ -3102,6 +3102,8 @@ class TonerTabMixin:
                     "Audio-Technica AT2020 USB.")
 
         device = self.settings.get("audio_input_device")
+        if sys.platform == 'linux':
+            device = None  # Linux/PulseAudio: device selection unreliable, use system default
         success, err = self._toner_engine.start(device=device)
         if not success:
             if hasattr(self, '_toner_spectrum_canvas'):

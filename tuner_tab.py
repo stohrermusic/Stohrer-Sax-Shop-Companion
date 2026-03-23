@@ -1095,34 +1095,41 @@ class TunerTabMixin:
             tk.Label(mic_row, text="Input Device:", bg=bg, fg=fg,
                      font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
 
-            current_dev = self.settings.get("audio_input_device")
-            dev_names = ["System Default"] + [name for _, name in devices]
-            dev_indices = [None] + [idx for idx, _ in devices]
+            if sys.platform == 'linux':
+                # Linux/PulseAudio: device selection via PortAudio is unreliable.
+                # Use system default and let the user set their preferred device
+                # in PulseAudio/PipeWire settings.
+                tk.Label(mic_row, text="System Default (set in system audio settings)",
+                         bg=bg, fg="#888888", font=("Helvetica", 10)).pack(side="left")
+            else:
+                current_dev = self.settings.get("audio_input_device")
+                dev_names = ["System Default"] + [name for _, name in devices]
+                dev_indices = [None] + [idx for idx, _ in devices]
 
-            mic_var = tk.StringVar(value="System Default")
-            if current_dev is not None:
-                for idx, name in devices:
-                    if idx == current_dev:
-                        mic_var.set(name)
-                        break
+                mic_var = tk.StringVar(value="System Default")
+                if current_dev is not None:
+                    for idx, name in devices:
+                        if idx == current_dev:
+                            mic_var.set(name)
+                            break
 
-            mic_combo = ttk.Combobox(mic_row, textvariable=mic_var,
-                                     values=dev_names, state="readonly", width=35)
-            mic_combo.pack(side="left")
+                mic_combo = ttk.Combobox(mic_row, textvariable=mic_var,
+                                         values=dev_names, state="readonly", width=35)
+                mic_combo.pack(side="left")
 
-            def on_mic_changed(event=None):
-                sel = mic_combo.current()
-                dev_idx = dev_indices[sel] if sel >= 0 else None
-                self.settings["audio_input_device"] = dev_idx
-                # Restart engine with new device
-                if self._tuner_engine and self._tuner_engine.is_running:
-                    self._tuner_stop()
-                    self._tuner_engine.start(device=dev_idx)
-                    self._tuner_running = True
-                    self._tuner_set_pilot(True)
-                    self._tuner_animate()
+                def on_mic_changed(event=None):
+                    sel = mic_combo.current()
+                    dev_idx = dev_indices[sel] if sel >= 0 else None
+                    self.settings["audio_input_device"] = dev_idx
+                    # Restart engine with new device
+                    if self._tuner_engine and self._tuner_engine.is_running:
+                        self._tuner_stop()
+                        self._tuner_engine.start(device=dev_idx)
+                        self._tuner_running = True
+                        self._tuner_set_pilot(True)
+                        self._tuner_animate()
 
-            mic_combo.bind("<<ComboboxSelected>>", on_mic_changed)
+                mic_combo.bind("<<ComboboxSelected>>", on_mic_changed)
 
         # --- Stripe/Backlight color ---
         color_row = tk.Frame(frame, bg=bg)
