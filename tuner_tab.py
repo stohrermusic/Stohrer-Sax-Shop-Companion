@@ -377,11 +377,15 @@ class _PILStrobeWheel:
         # Pre-render the wedge mask (static — only changes on resize/color change)
         self._mask_img = self._render_mask()
 
-        # Current ring colors (initialized to dim)
-        self._ring_colors = [_hex_to_rgb(_scale_color(stripe_color, DIM_MULTIPLIER))] * NUM_RINGS
+        # Full-brightness ring color (templates rendered at full brightness)
+        self._full_color_rgb = _hex_to_rgb(stripe_color)
+        self._ring_colors = [self._full_color_rgb] * NUM_RINGS
+        # Per-ring brightness factors (0.0-1.0), applied during compositing
+        self._ring_brightness_factors = [DIM_MULTIPLIER] * NUM_RINGS
+        self._ring_templates = []
+        self._rebuild_ring_templates()
 
         # Create the canvas image item
-        # Render initial frame
         self._photo = None
         self._render_frame(0.0)
         self._image_id = canvas.create_image(cx, cy, image=self._photo, anchor="center")
@@ -435,67 +439,90 @@ class _PILStrobeWheel:
 
         return mask
 
-    def _render_disc(self, phase_offset):
-        """Render the disc image with current ring colors and phase offset.
+    def _render_ring_template(self, ring_idx, color_rgb):
+        """Render a single ring at phase=0 as an RGBA image.
 
-        Draws alternating colored/black arc segments for each ring,
-        rotated by phase_offset degrees.
+        Each ring template is rendered once and cached. On frame update,
+        the template is rotated (one fast C call) instead of re-drawn.
+        """
+        size = self._img_size
+        cx, cy = self._img_cx, self._img_cy
+        r_inner, r_outer = self._ring_radii[ring_idx]
+        n_total = RING_SEGMENTS[ring_idx]
+        seg_span = 360.0 / n_total
+
+        ring_img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(ring_img)
+
+        outer_bbox = (cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer)
+
+        # Draw colored segments (every other one) at phase=0
+        for seg_i in range(0, n_total, 2):
+            math_start = seg_i * seg_span
+            math_end = math_start + seg_span
+            pil_start = -math_end
+            pil_end = -math_start
+            draw.pieslice(outer_bbox, pil_start, pil_end,
+                          fill=(*color_rgb, 255))
+
+        # Punch out inner circle
+        if r_inner > 0:
+            inner_bbox = (cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner)
+            draw.ellipse(inner_bbox, fill=(0, 0, 0, 0))
+
+        return ring_img
+
+    def _rebuild_ring_templates(self):
+        """Rebuild all ring templates with current colors. Called on color change."""
+        self._ring_templates = []
+        for ring_idx in range(NUM_RINGS):
+            color_rgb = self._ring_colors[ring_idx]
+            self._ring_templates.append(
+                self._render_ring_template(ring_idx, color_rgb))
+
+    def _render_frame(self, phase_offset):
+        """Render a complete frame by rotating pre-rendered ring templates.
+
+        Each ring template is rotated by the phase offset (single fast C
+        call per ring), dimmed by its brightness factor, then composited
+        onto a disc background and masked.
         """
         size = self._img_size
         cx, cy = self._img_cx, self._img_cy
         bg_rgb = _hex_to_rgb(WHEEL_BG)
 
-        # Start with wheel background
+        # Start with disc background
         disc = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         draw = ImageDraw.Draw(disc)
-
-        # Draw disc background circle
         r = self.radius
         draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(*bg_rgb, 255))
 
-        # Draw each ring's colored segments
-        for ring_idx in range(NUM_RINGS):
-            r_inner, r_outer = self._ring_radii[ring_idx]
-            n_total = RING_SEGMENTS[ring_idx]
-            seg_span = 360.0 / n_total
-            color_rgb = self._ring_colors[ring_idx]
-
-            # Outer bbox for this ring
-            outer_bbox = (cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer)
-            # Inner bbox to punch out
-            inner_bbox = (cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner)
-
-            # Draw colored segments (every other one)
-            for seg_i in range(n_total):
-                if seg_i % 2 != 0:
-                    continue
-                # Math angle of segment start
-                math_start = seg_i * seg_span + phase_offset
-                math_end = math_start + seg_span
-                # Convert to PIL angles (negate for CW convention)
-                pil_start = -math_end
-                pil_end = -math_start
-
-                # Draw outer pieslice
-                draw.pieslice(outer_bbox, pil_start, pil_end,
-                              fill=(*color_rgb, 255))
-
-            # Punch out the inner part to create the ring (restore bg)
-            if r_inner > 0:
-                draw.ellipse(inner_bbox, fill=(*bg_rgb, 255))
+        # Rotate and composite each ring template with per-ring brightness
+        for ring_idx, ring_img in enumerate(self._ring_templates):
+            rotated = ring_img.rotate(phase_offset, resample=Image.NEAREST,
+                                      center=(cx, cy))
+            # Apply per-ring brightness by scaling alpha
+            bf = self._ring_brightness_factors[ring_idx]
+            if bf < 0.99:
+                # Multiply RGB channels by brightness factor
+                # Split, scale, merge is faster than per-pixel in Python
+                r_ch, g_ch, b_ch, a_ch = rotated.split()
+                import PIL.ImageEnhance as _Enh
+                # Use point() to scale RGB — single C call per channel
+                scale = lambda ch: ch.point(lambda p: int(p * bf))
+                rotated = Image.merge("RGBA", (scale(r_ch), scale(g_ch),
+                                                scale(b_ch), a_ch))
+            disc = Image.alpha_composite(disc, rotated)
 
         # Punch out center gap
         inner_r = self._ring_radii[0][0]
         if inner_r > 1:
-            draw.ellipse((cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r),
-                         fill=(*bg_rgb, 255))
+            draw2 = ImageDraw.Draw(disc)
+            draw2.ellipse((cx - inner_r, cy - inner_r,
+                           cx + inner_r, cy + inner_r),
+                          fill=(*bg_rgb, 255))
 
-        return disc
-
-    def _render_frame(self, phase_offset):
-        """Render a complete frame: disc + mask composited together."""
-        disc = self._render_disc(phase_offset)
-        # Composite mask on top (hides everything outside wedge)
+        # Composite wedge mask on top
         result = Image.alpha_composite(disc, self._mask_img)
         self._photo = ImageTk.PhotoImage(result)
 
@@ -504,11 +531,12 @@ class _PILStrobeWheel:
         self.canvas.itemconfigure(self._label_id, text=text)
 
     def set_color(self, hex_color):
-        """Update the stripe color and re-render."""
+        """Update the stripe color and rebuild ring templates."""
         self.stripe_color = hex_color
-        self._last_ring_fills = None  # Force fill refresh on next update
-        factor = DIM_MULTIPLIER + self._brightness * (1.0 - DIM_MULTIPLIER)
-        self._ring_colors = [_hex_to_rgb(_scale_color(hex_color, factor))] * NUM_RINGS
+        self._full_color_rgb = _hex_to_rgb(hex_color)
+        self._ring_colors = [self._full_color_rgb] * NUM_RINGS
+        self._rebuild_ring_templates()
+        self._ring_brightness_factors = [DIM_MULTIPLIER] * NUM_RINGS
         self._render_frame(self._phase_offset)
         self.canvas.itemconfigure(self._image_id, image=self._photo)
 
@@ -529,33 +557,31 @@ class _PILStrobeWheel:
         # Compute overall brightness for label
         brightness = min(1.0, magnitude ** BRIGHTNESS_GAMMA) if magnitude > MAGNITUDE_THRESHOLD else 0.0
 
-        # Per-ring brightness from real spectral data
+        # Compute per-ring brightness factors (0.0-1.0)
         ring_mix = ring_brightness_pct / 100.0
         if ring_magnitudes and ring_mix > 0.0:
-            ring_fills = []
+            new_factors = []
             uniform_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
             for ring_idx in range(NUM_RINGS):
                 rm = min(1.0, ring_magnitudes[ring_idx])
                 rb = min(1.0, rm ** BRIGHTNESS_GAMMA) if rm > MAGNITUDE_THRESHOLD else 0.0
                 per_ring_factor = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
                 blended = uniform_factor * (1.0 - ring_mix) + per_ring_factor * ring_mix
-                ring_fills.append(_scale_color(self.stripe_color, blended * overall_scale))
+                new_factors.append(round(blended * overall_scale, 2))
         else:
             fill_factor = DIM_MULTIPLIER + brightness * (1.0 - DIM_MULTIPLIER)
             fill_factor *= overall_scale
-            ring_fills = [_scale_color(self.stripe_color, fill_factor)] * NUM_RINGS
+            new_factors = [round(fill_factor, 2)] * NUM_RINGS
 
-        # Detect whether colors or phase changed
-        fills_changed = ring_fills != self._last_ring_fills
+        # Detect changes
+        factors_changed = new_factors != self._ring_brightness_factors
         phase_changed = abs(phase_offset - self._phase_offset) >= PHASE_CHANGE_THRESHOLD
 
-        if not fills_changed and not phase_changed:
+        if not factors_changed and not phase_changed:
             return  # Nothing visible changed
 
-        # Update ring colors if brightness changed
-        if fills_changed:
-            self._last_ring_fills = ring_fills
-            self._ring_colors = [_hex_to_rgb(f) for f in ring_fills]
+        if factors_changed:
+            self._ring_brightness_factors = new_factors
             # Label brightness tracks overall magnitude
             label_color = _scale_color("#FFFFFF", LABEL_BRIGHTNESS_MIN + brightness * LABEL_BRIGHTNESS_RANGE)
             self.canvas.itemconfigure(self._label_id, fill=label_color)
@@ -565,7 +591,7 @@ class _PILStrobeWheel:
         if phase_changed:
             self._phase_offset = phase_offset
 
-        # Re-render the disc image with updated colors and/or phase
+        # Render frame: rotates pre-built templates + applies brightness
         self._render_frame(self._phase_offset)
         self.canvas.itemconfigure(self._image_id, image=self._photo)
 
