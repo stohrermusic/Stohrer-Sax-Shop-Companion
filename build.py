@@ -141,11 +141,19 @@ def build():
         # Windows/Linux: single executable
         cmd.append('--onefile')
 
+    # App icon (platform-appropriate format)
     if sys.platform == 'win32':
-        # Windows: Add icon if available
         icon_path = 'icon.ico'
-        if os.path.exists(icon_path):
-            cmd.extend(['--icon', icon_path])
+    elif sys.platform == 'darwin':
+        icon_path = 'icon.icns'
+    else:
+        icon_path = 'icon.ico'  # Linux uses .ico via PyInstaller
+    if os.path.exists(icon_path):
+        cmd.extend(['--icon', icon_path])
+        print(f"  Using icon: {icon_path}")
+    # Also bundle icon.ico as data so tkinter can use it at runtime
+    if os.path.exists('icon.ico'):
+        cmd.extend(['--add-data', f'icon.ico{os.pathsep}.'])
 
     # Hidden imports for optional audio dependencies (tuner/toner)
     # Only include if numpy/sounddevice are installed (not present in legacy Mac build)

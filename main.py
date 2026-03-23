@@ -40,6 +40,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.root.title("Stohrer Sax Shop Companion")
         self.root.geometry("640x720")
 
+        # App icon (taskbar + title bar)
+        try:
+            import os, sys
+            if getattr(sys, 'frozen', False):
+                base = sys._MEIPASS
+            else:
+                base = os.path.dirname(__file__)
+            ico = os.path.join(base, 'icon.ico')
+            if os.path.exists(ico):
+                self.root.iconbitmap(ico)
+        except Exception:
+            pass
+
         # On macOS, use native system colors (supports dark/light mode).
         # On Windows/Linux, use our custom cream theme.
         if IS_MACOS:
