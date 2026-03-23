@@ -778,8 +778,8 @@ FREE_MIN_FRAMES = 10      # Minimum frames to keep a micro-capture
 # File import: analysis hop size
 FILE_HOP_SAMPLES = 1024   # Advance this many samples between analyses
 
-SAX_TYPES = ["Sopranino", "Soprano", "F Mezzo", "Alto",
-             "C Melody", "Tenor", "Baritone", "Bass"]
+SAX_TYPES = ["Bass", "Baritone", "Tenor", "C Melody",
+             "Alto", "F Mezzo", "Soprano", "Sopranino"]
 
 # Benade spectral envelope break frequencies (Hz).
 # Below f_b, harmonics rise ~3 dB/oct. Above, they fall ~18 dB/oct.
@@ -917,18 +917,20 @@ def migrate_profile_to_concert(profile):
     return profile
 
 
-def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor"):
+def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
+                               harmonic_cents=None):
     """Compute descriptors from raw harmonic dB data using current formulas.
 
     This is the canonical way to interpret stored harmonic measurements.
-    Captures store only the raw data (harmonics_db + fundamental_freq);
-    descriptors are always computed on the fly so formula improvements
-    apply retroactively to all historical data.
+    Captures store only the raw data (harmonics_db + fundamental_freq +
+    harmonic_cents); descriptors are always computed on the fly so formula
+    improvements apply retroactively to all historical data.
 
     Args:
         harmonics_db: list of dB values relative to fundamental (index 0 = H1 = 0dB)
         f0: fundamental frequency in Hz
         sax_type: saxophone type string (for break frequency in fullness)
+        harmonic_cents: optional list of cents deviations from ideal position
 
     Returns:
         dict with resonance, richness, brightness, darkness, fullness (0.0-1.0)
@@ -939,10 +941,10 @@ def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor"):
     # Lightweight engine instance for _compute_descriptors
     engine = TonerEngine.__new__(TonerEngine)
     engine._break_freq = BREAK_FREQUENCIES.get(sax_type, DEFAULT_BREAK_FREQ)
-    harmonics = [
-        HarmonicInfo(i + 1, f0 * (i + 1), f0 * (i + 1), db, 0.0)
-        for i, db in enumerate(harmonics_db)
-    ]
+    harmonics = []
+    for i, db in enumerate(harmonics_db):
+        cents = harmonic_cents[i] if harmonic_cents and i < len(harmonic_cents) else 0.0
+        harmonics.append(HarmonicInfo(i + 1, f0 * (i + 1), f0 * (i + 1), db, cents))
     return engine._compute_descriptors(harmonics, f0=f0)
 
 
@@ -950,10 +952,12 @@ def average_captures(captures):
     """Average a list of per-frame capture dicts into one summary.
 
     Each capture dict must have 'harmonics_db' (list of dB values).
+    May also have 'harmonic_cents' (list of cents deviations).
     Descriptors, if present, are ignored — they are always recomputed
     from harmonics_db by the caller.
 
-    Returns dict with 'harmonics_db' (averaged) and 'fundamental_freq'.
+    Returns dict with 'harmonics_db', 'fundamental_freq', and
+    'harmonic_cents' (if any input had cents data).
     """
     if not captures:
         return None
@@ -970,15 +974,33 @@ def average_captures(captures):
         if counts[i] > 0:
             avg_db[i] /= counts[i]
 
+    # Average harmonic cents deviations (if available)
+    has_cents = any(c.get('harmonic_cents') for c in captures)
+    avg_cents = []
+    if has_cents:
+        max_cents_len = max((len(c.get('harmonic_cents', [])) for c in captures), default=0)
+        avg_cents = [0.0] * max_cents_len
+        cents_counts = [0] * max_cents_len
+        for c in captures:
+            for i, cents in enumerate(c.get('harmonic_cents', [])):
+                avg_cents[i] += cents
+                cents_counts[i] += 1
+        for i in range(max_cents_len):
+            if cents_counts[i] > 0:
+                avg_cents[i] /= cents_counts[i]
+
     # Average fundamental frequency if available
     freqs = [c.get('fundamental_freq', c.get('freq', 0)) for c in captures]
     freqs = [f for f in freqs if f > 0]
     avg_freq = sum(freqs) / len(freqs) if freqs else 0.0
 
-    return {
+    result = {
         'harmonics_db': avg_db,
         'fundamental_freq': avg_freq,
     }
+    if avg_cents:
+        result['harmonic_cents'] = avg_cents
+    return result
 
 
 def compute_fingerprint(sessions, sax_type="Tenor"):
@@ -1021,7 +1043,8 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         avg = average_captures(caps)
         if avg:
             avg['descriptors'] = descriptors_from_harmonics(
-                avg['harmonics_db'], avg['fundamental_freq'], sax_type)
+                avg['harmonics_db'], avg['fundamental_freq'], sax_type,
+                harmonic_cents=avg.get('harmonic_cents'))
         per_note_avg[note] = avg
 
     # Horn-level descriptors: average the per-note descriptors (equal weight per note)
@@ -1139,6 +1162,7 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
                 'note': r.fundamental_note,
                 'freq': r.fundamental_freq,
                 'harmonics_db': [h.magnitude_db for h in r.harmonics],
+                'harmonic_cents': [h.cents_deviation for h in r.harmonics],
             })
 
         avg = average_captures(frames)

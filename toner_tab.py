@@ -353,7 +353,7 @@ class TonerTabMixin:
         self._toner_gauges = {}
         gauge_defs = [
             ("resonance", "Dissonant", "Resonant"),
-            ("richness", "Pure", "Rich"),
+            ("richness", "Pure", "Complex"),
             ("brightness", "", "Bright"),
             ("darkness", "", "Dark"),
         ]
@@ -527,8 +527,10 @@ class TonerTabMixin:
         lbl_frame = tk.Frame(sax_inner, bg=ctrl_bg)
         lbl_frame._skip_theme = True
         lbl_frame.pack(fill="x")
+        _sax_abbrev = {"Sopranino": "Nino", "Soprano": "Sop", "F Mezzo": "Mez",
+                       "Baritone": "Bari", "C Melody": "C Mel"}
         for i, stype in enumerate(visible_sax):
-            abbrev = stype[:3] if len(stype) > 5 else stype
+            abbrev = _sax_abbrev.get(stype, stype[:3] if len(stype) > 5 else stype)
             tk.Label(lbl_frame, text=abbrev, bg=ctrl_bg, fg="#AAAAAA",
                      font=("Helvetica", 6)).pack(side="left", expand=True)
 
@@ -1448,7 +1450,7 @@ class TonerTabMixin:
         desc_row = tk.Frame(desc_frame, bg=bg)
         desc_row.pack(fill="x", padx=10, pady=8)
 
-        for label, key in [("Resonance", "resonance"), ("Richness", "richness"),
+        for label, key in [("Resonance", "resonance"), ("Complexity", "richness"),
                            ("Brightness", "brightness"), ("Darkness", "darkness"),
                            ("Fullness", "fullness")]:
             val = d.get(key, 0)
@@ -2382,6 +2384,7 @@ class TonerTabMixin:
                             'note': note,  # concert pitch (raw from engine)
                             'freq': result.fundamental_freq,
                             'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                            'harmonic_cents': [h.cents_deviation for h in result.harmonics],
                         })
                 else:
                     # Note changed — save accumulated if enough, start new
@@ -2479,6 +2482,7 @@ class TonerTabMixin:
                     'detected_note': result.fundamental_note,
                     'freq': result.fundamental_freq,
                     'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                    'harmonic_cents': [h.cents_deviation for h in result.harmonics],
                 })
 
             remaining = CALIBRATION_DURATION_S - elapsed
@@ -2507,6 +2511,7 @@ class TonerTabMixin:
                         'detected_as': top_detected,
                         'fundamental_freq': round(avg_freq, 2),
                         'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
+                        'harmonic_cents': [round(c, 2) for c in averaged.get('harmonic_cents', [])],
                         'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
                         'n_frames': len(self._toner_capture_frames),
                         'method': 'calibration',
@@ -2566,6 +2571,7 @@ class TonerTabMixin:
             'note': dominant_note,
             'fundamental_freq': round(avg_freq, 2),
             'harmonics_db': [round(db, 2) for db in averaged['harmonics_db']],
+            'harmonic_cents': [round(c, 2) for c in averaged.get('harmonic_cents', [])],
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'n_frames': len(note_frames),
             'method': 'free',
@@ -2965,7 +2971,7 @@ class TonerTabMixin:
 
         desc_labels = [
             ("Resonance", "resonance"),
-            ("Richness", "richness"),
+            ("Complexity", "richness"),
             ("Brightness", "brightness"),
             ("Darkness", "darkness"),
             ("Fullness", "fullness"),
