@@ -378,6 +378,7 @@ class TunerTabMixin:
         self._tuner_fps_display = None  # Canvas text id for FPS overlay
         self._tuner_perf_log = []       # Collected perf samples for debug dump
         self._tuner_perf_frame = 0      # Frame counter for perf logging
+        self._tuner_perf_text = ""      # Latest perf text for FPS overlay
 
     def create_tuner_tab(self, parent):
         """Build the Tuner tab UI."""
@@ -642,6 +643,7 @@ class TunerTabMixin:
         """Create the 12 strobe wheels in piano keyboard layout."""
         canvas = self._tuner_canvas
         canvas.delete("all")
+        self._tuner_fps_display = None  # Canvas items destroyed by delete("all")
 
         bg = self._tuner_faceplate_color
         canvas.configure(bg=bg)
@@ -1291,13 +1293,17 @@ class TunerTabMixin:
         """Update the FPS counter overlay on the canvas."""
         if not hasattr(self, '_tuner_canvas'):
             return
-        if not self._tuner_fps_display:
-            self._tuner_fps_display = self._tuner_canvas.create_text(
-                10, 10, text=text, anchor="nw",
-                fill="#888888", font=("Helvetica", 9),
-                tags="fps_overlay")
-        else:
-            self._tuner_canvas.itemconfigure(self._tuner_fps_display, text=text)
+        try:
+            if self._tuner_fps_display:
+                self._tuner_canvas.itemconfigure(self._tuner_fps_display, text=text)
+            else:
+                self._tuner_fps_display = self._tuner_canvas.create_text(
+                    10, 10, text=text, anchor="nw",
+                    fill="#888888", font=("Helvetica", 9),
+                    tags="fps_overlay")
+        except tk.TclError:
+            # Canvas item was destroyed (e.g. by wheel rebuild)
+            self._tuner_fps_display = None
 
     def _tuner_show_stream_error(self, error_msg):
         """Show audio stream error on the tuner canvas with a retry option."""
