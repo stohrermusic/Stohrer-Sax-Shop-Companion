@@ -1095,7 +1095,12 @@ class TunerTabMixin:
             return
 
         if self._tuner_engine and self._tuner_engine.is_running:
+            import time as _time
+            _t0 = _time.perf_counter()
+
             result = self._tuner_engine.analyze()
+
+            _t1 = _time.perf_counter()
 
             # Re-check after analyze() — stream may have just died
             if self._tuner_engine.last_error:
@@ -1118,19 +1123,36 @@ class TunerTabMixin:
                     )
                 self._vu_update(result)
 
+            _t2 = _time.perf_counter()
+
+            # Show timing breakdown when FPS display is on
+            if self._tuner_show_fps.get():
+                analyze_ms = (_t1 - _t0) * 1000
+                render_ms = (_t2 - _t1) * 1000
+                total_ms = (_t2 - _t0) * 1000
+                polys = sum(len(ring) for w in self._tuner_wheels
+                            for ring in w._segments)
+                self._tuner_perf_text = (
+                    f"analyze: {analyze_ms:.0f}ms | "
+                    f"render: {render_ms:.0f}ms | "
+                    f"total: {total_ms:.0f}ms | "
+                    f"{polys} polys"
+                )
+
         # FPS measurement
         if self._tuner_show_fps.get():
             import time as _time
             now = _time.perf_counter()
             self._tuner_fps_times.append(now)
-            # Keep last 60 timestamps
             if len(self._tuner_fps_times) > 60:
                 self._tuner_fps_times = self._tuner_fps_times[-60:]
             if len(self._tuner_fps_times) >= 2:
                 elapsed = self._tuner_fps_times[-1] - self._tuner_fps_times[0]
                 if elapsed > 0:
                     actual_fps = (len(self._tuner_fps_times) - 1) / elapsed
-                    self._tuner_update_fps_display(f"{actual_fps:.0f} fps")
+                    perf = getattr(self, '_tuner_perf_text', '')
+                    self._tuner_update_fps_display(
+                        f"{actual_fps:.0f} fps | {perf}")
         elif self._tuner_fps_display:
             self._tuner_canvas.itemconfigure(self._tuner_fps_display, text="")
 
