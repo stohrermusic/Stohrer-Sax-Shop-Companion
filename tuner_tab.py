@@ -1166,7 +1166,7 @@ class TunerTabMixin:
 
                 # Collect detailed samples for log dump
                 self._tuner_perf_frame += 1
-                active_wheels = sum(1 for m in result.magnitudes if m > ACTIVE_THRESHOLD)
+                active_wheels = sum(1 for m in result.magnitudes if m > MAGNITUDE_THRESHOLD)
                 sample = {
                     'frame': self._tuner_perf_frame,
                     'analyze_ms': round(analyze_ms, 1),
