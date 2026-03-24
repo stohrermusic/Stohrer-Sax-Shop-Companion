@@ -18,11 +18,20 @@ python main.py
 
 External dependencies: `svgwrite`, `numpy`, `sounddevice` (tuner/toner). The GUI uses Python's built-in `tkinter`. Requires Python 3.11+.
 
-There is no automated test suite. Changes are verified by running the application manually.
+### Testing
 
-### Testing Before Commits
+Test suites live in `tools/` and run non-interactively (no GUI). Run individual suites directly:
 
-Before committing, write a temporary test script in `tools/` that exercises affected code paths non-interactively (no GUI). Test engine/logic functions directly. Print PASS/FAIL per test with a summary. Cover: the specific changes, regressions in nearby code, all affected materials, and edge cases.
+```bash
+python tools/test_toner_engine.py
+python tools/test_toner_full.py
+python tools/test_tuner_engine.py
+python tools/test_bugfixes.py
+python tools/test_config.py
+# etc.
+```
+
+Before committing, run the suites affected by your changes. For releases, run all. If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
 
 ## Building Executables
 
@@ -42,9 +51,9 @@ python build.py --clean
 python build.py --dmg
 
 # Output locations:
-#   Windows: dist/StohrerSaxShopCompanion.exe
-#   macOS:   dist/StohrerSaxShopCompanion.app (or .dmg with --dmg flag)
-#   Linux:   dist/StohrerSaxShopCompanion
+#   Windows: dist/SaxShopCompanion.exe
+#   macOS:   dist/SaxShopCompanion.app (or .dmg with --dmg flag)
+#   Linux:   dist/SaxShopCompanion
 ```
 
 ## Branching Strategy
@@ -92,6 +101,8 @@ tuner_tab.py            → TunerTabMixin (Chromatic strobe tuner tab, StrobeWhe
 tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no tkinter)
 toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, profile system, comparison)
 toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, profile storage, no tkinter)
+audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
+tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings, optional fallback to canvas)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
@@ -125,6 +136,14 @@ build.py               → Cross-platform PyInstaller build script
 - Leather: pad_size + 2*(felt_thickness + wrap) with star bonus for small pads
 - Exact: pad_size unchanged
 
+**Per-Size-Range Settings**: Sizing rules, dart/star settings, engraving settings, and engraving placement each support a Universal/Range mode. In Universal mode, one set of values applies to all pad sizes. In Range mode, users define size ranges with different values. Four helper functions in config.py centralize this lookup — engines should always use these instead of reading raw `settings["dart_*"]` etc:
+- `get_dart_settings_for_size(pad_size, settings)` → returns range dict or **None** (no match = no stars)
+- `get_sizing_for_size(pad_size, settings)` → returns sizing dict (no match = **universal fallback**)
+- `get_engraving_settings_for_size(pad_size, settings)` → returns engraving on/off + font sizes (universal fallback)
+- `get_engraving_placement_for_size(pad_size, settings)` → returns placement mode/value per material (universal fallback)
+
+Key difference: dart ranges return None on no match (opt-in), while the other three always return a dict (every pad needs values).
+
 **Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`. Supports both rectangular sheets and custom polygon shapes. `nest_pads()` is the public API for the preview window. Edge bias controls scan direction: cardinal (N/S/E/W) scan linearly from the edge, corners (NW/NE/SW/SE) use distance-from-corner scoring with smallest-first sort order for efficient corner packing.
 
 **Nesting Preview**: `NestingPreviewWindow` in ui_dialogs.py shows the nested layout before file generation. Works in standard mode (one material at a time) and scrap mode. The generate flow nests first via `nest_pads()`, shows the preview, then writes files via `generate_svg_from_placed()` / `generate_gcode_from_placed()` — no double-nesting.
@@ -153,24 +172,25 @@ build.py               → Cross-platform PyInstaller build script
 - File → Send G-code to SD Card: guided workflow that copies a .gcode file, optionally clears old files, and ejects (Windows only via PowerShell COM object).
 
 **Strobe Tuner**: 12-wheel chromatic tuner modeled after the Peterson Stroboconn. Architecture:
-- `tuner_engine.py`: Pure audio/math — FFT-based pitch detection, per-pitch-class phase tracking, per-ring (octave) magnitude extraction. `TunerEngine` manages the sounddevice input stream; `TunerResult` holds magnitudes, phase offsets, ring magnitudes, and cents errors for all 12 pitch classes. `ReferencePlayer` outputs reference tones.
-- `tuner_tab.py`: All tkinter UI — `StrobeWheel` class renders one disc (annular sector polygons with wedge mask), `TunerTabMixin` builds the tab with 3-column control panel (graphic EQ sliders | flat/pilot/sharp indicator | vintage backlit VU meter). The VU needle has damped movement (lerp toward target each frame). Theme walker is bypassed via `_skip_theme` and `_dark_canvas` flags on all dark widgets.
+- `tuner_engine.py`: Pure audio/math — FFT-based pitch detection, per-pitch-class phase tracking, per-ring (octave) magnitude extraction. `TunerEngine` manages the sounddevice input stream; `TunerResult` holds magnitudes, phase offsets, ring magnitudes, and cents errors for all 12 pitch classes. `ReferencePlayer` outputs reference tones. Magnitude normalization is gated: `max_mag` must exceed `threshold * 1.5` before normalizing to 0-1, otherwise all magnitudes are zeroed. This prevents sensitive mics from showing wheel activity on room noise.
+- `tuner_tab.py`: All tkinter UI — `StrobeWheel` class renders one disc (annular sector polygons with wedge mask), `TunerTabMixin` builds the tab with 3-column control panel (graphic EQ sliders | flat/pilot/sharp indicator | vintage backlit VU meter). The VU needle has damped movement (lerp toward target each frame). Sensitivity uses a quadratic gain curve (`sens**2`) so the low end of the slider has fine control. Theme walker is bypassed via `_skip_theme` and `_dark_canvas` flags on all dark widgets.
 - The tuner auto-starts/stops when switching tabs (`_tuner_start`/`_tuner_stop` called from `on_tab_changed` in main.py).
 - Transposition support: wheel labels and VU readout both apply the shift from TRANSPOSITION_SHIFTS, with octave correction when the shift wraps past C.
 
 **Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
-- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 12th harmonic (noise floor cutoff at -60 dB), descriptor computation (resonance, richness, brightness, darkness, fullness). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
-- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Auto-capture system uses a state machine (`listening` → `delay` → `recording` → `cooldown`) that detects stable tones and records 5-second averages without button presses. Profile management, comparison tool with multi-select and filtering, import/export.
+- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 12th harmonic (noise floor cutoff at -60 dB), descriptor computation (resonance, complexity, brightness, darkness, fullness). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
+- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Profile management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
-- Descriptors use Benade's spectral break frequency (measured by Benade/Wolfe, JASA 1988, UNSW) to define the boundary between "bright" and "dark" harmonics. Break frequencies adapt to sax type: soprano 1300 Hz, alto 837 Hz, tenor 618 Hz, bari 450 Hz. The SAX selector in the control strip sets this.
+- Brightness uses weighted harmonic presence strength: H2-H6 dB levels with H3-H5 weighted highest (weights 0.5, 1.5, 2.0, 1.5, 0.5). This tracks what techs hear as "bright" (strong mid harmonics) vs "dark" (weak). Darkness = 1 - brightness. Calibrated against SBA, BA, Shadow tenors, Conn/Couesnon altos, and Conn stretch soprano.
+- Fullness uses the Benade break-frequency energy split internally (upper vs lower energy balance). Break frequencies adapt to sax type: soprano 1300 Hz, alto 837 Hz, tenor 618 Hz, bari 450 Hz.
+- Complexity (labeled "Pure" ↔ "Complex" on gauge) uses spectral flatness (geometric mean / arithmetic mean of harmonic amplitudes) combined with a coverage factor.
 - Bias sliders on each gauge offset the display without affecting captured data. Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
-- Richness uses spectral flatness (geometric mean / arithmetic mean of harmonic amplitudes) combined with a coverage factor, not a simple count.
-- Four capture modes: "structured" (hold notes, 5s recording), "free" (0.5s stability, continuous micro-captures while playing naturally), "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
+- Three capture modes: "free" (0.5s stability, continuous micro-captures while playing naturally), "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
 - Auto-transposition: SAX selector sets both the break frequency and the displayed note names. Written pitch is shown by default (alto shows A4 when concert C4 is played). "Concert" checkbox overrides to concert pitch.
 - Coverage summary dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
-- `compute_fingerprint()` averages descriptors per-note first (equal weight per note), then across notes. This prevents register skew — a profile with mostly high-note captures won't read artificially bright.
+- `compute_fingerprint(sessions, sax_type)` recomputes descriptors from raw harmonics (never uses stored descriptors), averages per-note first (equal weight per note), then across notes. This prevents register skew.
 
-**Audio Stream Health**: Both `tuner_engine.py` and `toner_engine.py` include stream health monitoring. The `AudioRingBuffer` tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
+**Audio Stream Health**: Both `tuner_engine.py` and `toner_engine.py` import `AudioRingBuffer` from `audio_utils.py` for stream health monitoring. The ring buffer tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
 
 **Tooling Tab**: Accordion-style UI with die insert and die holder SVG/G-code generation. Small dies ≤39.5mm (50mm OD), large ≥40mm (70mm OD). Die holders 85mm OD, 4-layer stack. Canvas widgets need explicit handling in the resonance theme walker.
 
@@ -199,9 +219,17 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 
 Profiles use nested library format: `{library_name: {profile_name: profile_data}}`. Each profile is a fixed setup (horn + player + mouthpiece + reed). Changing any variable means creating a new profile.
 
-A profile contains sessions (date + captures). Each capture stores `harmonics_db` (list of dB values relative to fundamental, index 0 = fundamental), `descriptors` (computed resonance/richness/brightness/darkness/fullness), `method` ("structured", "free", or "file"), `n_frames`, and metadata. Harmonics below -60 dB are filtered out as noise floor.
+A profile contains sessions (date + captures). **Captures store only raw measurement data** — no pre-computed descriptors:
+- `harmonics_db`: list of dB values relative to fundamental (index 0 = fundamental)
+- `harmonic_cents`: list of cents deviations from ideal harmonic positions (for resonance)
+- `fundamental_freq`: detected fundamental frequency in Hz
+- `note`: concert-pitch note name
+- `method`: "free", "calibration", or "file"
+- `n_frames`, `timestamp`, and other metadata
 
-`compute_fingerprint()` in `toner_engine.py` aggregates all sessions into an overall average and per-note breakdown. The `per_note` dict maps note names to averaged harmonic data, enabling note-by-note comparison across horns.
+Descriptors (brightness, complexity, fullness, etc.) are always computed on the fly by `descriptors_from_harmonics()` using current formulas. This means formula improvements apply retroactively to all historical data. Old captures with baked-in `descriptors` fields still load fine — stored descriptors are ignored.
+
+`compute_fingerprint(sessions, sax_type)` in `toner_engine.py` aggregates all sessions: averages harmonics per-note, computes descriptors from the averaged harmonics, then averages descriptors across notes with equal weight. The `per_note` dict maps note names to averaged harmonic data, enabling note-by-note comparison across horns.
 
 Flat legacy format (profiles at top level without library wrapper) is auto-migrated on load.
 
@@ -209,7 +237,7 @@ Flat legacy format (profiles at top level without library wrapper) is auto-migra
 
 Profile notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated profiles, extracts keywords, compares them against computed descriptors, and reports alignment. The `tools/analyze_horn_spread.py` script computes statistical spread of descriptors across all profiles — min/max/mean/stddev per descriptor, per-note variation, gauge scaling suggestions, and grouping analysis by horn type and manufacturer. Both tools help identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
 
-**Descriptor calibration status**: Resonance is rescaled to the 85-100% raw range (gauge 0% = 85% raw = 7.5 cents mean deviation, gauge 100% = perfect). Brightness/darkness use pure energy ratios relative to break frequency with fundamental always counting as dark. Richness uses spectral flatness. All are functional but tuning continues against real calibration data. `tools/profile_report.py` generates a detailed single-profile report (setup, descriptors, per-note breakdown, harmonic chart, notable findings).
+**Descriptor calibration status**: Descriptors are under active iterative calibration against real horns. The full development history — every formula tried, why each was accepted or rejected, calibration data from 6 horns, harmonic signatures, and known limitations — is documented in the project memory at `.claude/projects/*/memory/descriptors.md`. Key constants live in toner_engine.py: `BRIGHTNESS_HARMONIC_WEIGHTS`, `BRIGHTNESS_DB_FLOOR`, `BRIGHTNESS_DB_RANGE`, `RICHNESS_RAW_MIN`, `RICHNESS_RAW_RANGE`, `RESONANCE_RAW_MIN`, `RESONANCE_RAW_RANGE`, `FULLNESS_BALANCE_EXPONENT`. `tools/profile_report.py` generates a detailed single-profile report (setup, descriptors, per-note breakdown, harmonic chart, notable findings).
 
 **Settings persistence pattern**: Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in config.py. The `load_settings()` merge only preserves keys that exist in the defaults — runtime-only keys get silently dropped on next load. When adding a new setting, always add it to `DEFAULT_SETTINGS` first.
 
