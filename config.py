@@ -7,6 +7,89 @@ import ssl
 from tkinter import messagebox
 
 
+def get_dart_settings_for_size(pad_size, settings):
+    """Return dart settings dict for the given pad size, or None if no stars.
+
+    In universal mode: returns global dart settings if darts_enabled and pad_size < threshold.
+    In range mode: finds matching range (min_size <= pad_size <= max_size), returns it or None.
+    """
+    if not settings.get("darts_enabled", True):
+        return None
+
+    mode = settings.get("dart_range_mode", "universal")
+
+    if mode == "range":
+        for r in settings.get("dart_ranges", []):
+            if r["min_size"] <= pad_size <= r["max_size"]:
+                return r
+        return None
+    else:  # universal
+        threshold = settings.get("dart_threshold", 18.0)
+        if pad_size < threshold:
+            return {
+                "overwrap": settings.get("dart_overwrap", 0.5),
+                "wrap_bonus": settings.get("dart_wrap_bonus", 0.75),
+                "frequency_multiplier": settings.get("dart_frequency_multiplier", 1.0),
+                "shape_factor": settings.get("dart_shape_factor", 0.0),
+                "engraving_on": settings.get("dart_engraving_on", True),
+                "engraving_loc": settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5}),
+            }
+        return None
+
+
+def get_sizing_for_size(pad_size, settings):
+    """Return sizing dict for the given pad size.
+
+    In range mode: finds matching range, or falls back to universal.
+    In universal mode: returns the global sizing settings.
+    """
+    if settings.get("sizing_range_mode", "universal") == "range":
+        for r in settings.get("sizing_ranges", []):
+            if r["min_size"] <= pad_size <= r["max_size"]:
+                return r
+    return {
+        "felt_offset": settings.get("felt_offset", 0.75),
+        "card_to_felt_offset": settings.get("card_to_felt_offset", 0.5),
+        "leather_wrap_multiplier": settings.get("leather_wrap_multiplier", 1.0),
+        "min_hole_size": settings.get("min_hole_size", 16.5),
+        "felt_thickness": settings.get("felt_thickness", 3.175),
+        "felt_thickness_unit": settings.get("felt_thickness_unit", "mm"),
+    }
+
+
+def get_engraving_settings_for_size(pad_size, settings):
+    """Return engraving on/off and font sizes for the given pad size.
+
+    In range mode: finds matching range, or falls back to universal.
+    In universal mode: returns the global engraving settings.
+    """
+    if settings.get("engraving_settings_range_mode", "universal") == "range":
+        for r in settings.get("engraving_settings_ranges", []):
+            if r["min_size"] <= pad_size <= r["max_size"]:
+                return r
+    return {
+        "engraving_on": settings.get("engraving_on", True),
+        "engraving_font_size": settings.get("engraving_font_size", {
+            "felt": 3.0, "card": 3.0, "leather": 3.0, "exact_size": 3.0
+        }),
+    }
+
+
+def get_engraving_placement_for_size(pad_size, settings):
+    """Return engraving placement (location per material) for the given pad size.
+
+    In range mode: finds matching range, or falls back to universal.
+    In universal mode: returns the global engraving location settings.
+    """
+    if settings.get("engraving_placement_range_mode", "universal") == "range":
+        for r in settings.get("engraving_placement_ranges", []):
+            if r["min_size"] <= pad_size <= r["max_size"]:
+                return r
+    return {
+        "engraving_location": settings.get("engraving_location", DEFAULT_SETTINGS.get("engraving_location")),
+    }
+
+
 def get_ssl_context():
     """Get an SSL context that works on macOS (and everywhere else).
 
@@ -248,18 +331,31 @@ DEFAULT_SETTINGS = {
     "compatibility_mode": False,
     
     # DART / STAR SETTINGS
-    "darts_enabled": True,    
-    "dart_threshold": 18.0,   
-    "dart_overwrap": 0.5,      
-    "dart_wrap_bonus": 0.75, 
+    "darts_enabled": True,
+    "dart_threshold": 18.0,
+    "dart_overwrap": 0.5,
+    "dart_wrap_bonus": 0.75,
     "dart_frequency_multiplier": 1.0,
     "dart_shape_factor": 0.0,
-    
+
     "dart_engraving_on": True,
     "dart_engraving_loc": {"mode": "from_outside", "value": 2.5},
 
-    # MAX FILL SETTINGS
-    "max_fill_style": "center_out",  # "center_out" or "longest_edge"
+    # DART RANGE MODE: "universal" uses global settings above, "range" uses per-size ranges
+    "dart_range_mode": "universal",
+    "dart_ranges": [],  # list of {"min_size", "max_size", "overwrap", "wrap_bonus", "frequency_multiplier", "shape_factor", "engraving_on", "engraving_loc"}
+
+    # SIZING RANGE MODE
+    "sizing_range_mode": "universal",
+    "sizing_ranges": [],  # list of {"min_size", "max_size", "felt_offset", "card_to_felt_offset", "leather_wrap_multiplier", "min_hole_size", "felt_thickness", "felt_thickness_unit"}
+
+    # ENGRAVING SETTINGS RANGE MODE
+    "engraving_settings_range_mode": "universal",
+    "engraving_settings_ranges": [],  # list of {"min_size", "max_size", "engraving_on", "engraving_font_size": {material: size}}
+
+    # ENGRAVING PLACEMENT RANGE MODE
+    "engraving_placement_range_mode": "universal",
+    "engraving_placement_ranges": [],  # list of {"min_size", "max_size", "engraving_location": {material: {mode, value}}}
 
     # EDGE BIAS - direction to bias circle packing toward
     # "center" (no bias), "n", "ne", "e", "se", "s", "sw", "w", "nw"

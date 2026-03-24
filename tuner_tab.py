@@ -73,8 +73,8 @@ VU_ARC_END_DEG = 25.0            # Needle arc end angle (degrees, right side)
 VU_RADIUS = 80                   # Radius of the VU meter arc
 
 # --- Sensitivity gain mapping ---
-GAIN_MIN = 0.2                   # Gain at sensitivity=0%
-GAIN_RANGE = 4.8                 # Additional gain at sensitivity=100%
+GAIN_MIN = 0.1                   # Gain at sensitivity=0%
+GAIN_RANGE = 2.4                 # Additional gain at sensitivity=100% (total 2.5)
 
 # --- Stroboconn mechanical spin rates (US Patent 2,286,030) ---
 # Motor: 27.5 RPS for the A disc, each pitch class geared by alternating
@@ -979,8 +979,9 @@ class TunerTabMixin:
         shift = TRANSPOSITION_SHIFTS.get(self._tuner_transpose_var.get(), 0)
 
         # Find dominant pitch class (apply sensitivity gain)
+        # Quadratic curve: fine control at low end, faster ramp at high end
         sens = self._tuner_sens_var.get() / 100.0
-        vu_gain = GAIN_MIN + sens * GAIN_RANGE
+        vu_gain = GAIN_MIN + (sens ** 2) * GAIN_RANGE
         best_pc = -1
         best_mag = 0.0
         for pc in range(12):

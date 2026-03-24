@@ -1,6 +1,7 @@
 import math
 import svgwrite
-from config import DEFAULT_SETTINGS
+from config import (DEFAULT_SETTINGS, get_dart_settings_for_size, get_sizing_for_size,
+                    get_engraving_settings_for_size, get_engraving_placement_for_size)
 
 # ==========================================
 # CORE MATH & LOGIC
@@ -59,56 +60,57 @@ def leather_back_wrap(pad_size, multiplier, extra_base=0.0):
     total_base = base_wrap + extra_base
     return total_base * multiplier
 
-def get_felt_thickness_mm(settings):
-    thickness = settings.get("felt_thickness", 3.175)
-    if settings.get("felt_thickness_unit") == "in":
+def get_felt_thickness_mm(settings, sizing=None):
+    src = sizing or settings
+    thickness = src.get("felt_thickness", 3.175)
+    if src.get("felt_thickness_unit") == "in":
         return thickness * 25.4
     return thickness
 
 def get_disc_diameter(pad_size, material, settings):
     if material == 'die_ring':
         return 70.0 if pad_size >= 40.0 else 50.0
-    if material == 'felt': return pad_size - settings["felt_offset"]
-    if material == 'card': return pad_size - (settings["felt_offset"] + settings["card_to_felt_offset"])
+
+    sizing = get_sizing_for_size(pad_size, settings)
+
+    if material == 'felt': return pad_size - sizing["felt_offset"]
+    if material == 'card': return pad_size - (sizing["felt_offset"] + sizing["card_to_felt_offset"])
     if material == 'exact_size': return pad_size
 
     if material == 'leather':
-        threshold = settings.get("dart_threshold", 18.0)
-        darts_enabled = settings.get("darts_enabled", True)
-        
-        if darts_enabled and pad_size < threshold:
-            # DART BOOST: Add extra wrap for stars
-            bonus = settings.get("dart_wrap_bonus", 0.75)
-            wrap = leather_back_wrap(pad_size, settings["leather_wrap_multiplier"], extra_base=bonus)
+        dart_cfg = get_dart_settings_for_size(pad_size, settings)
+        if dart_cfg:
+            bonus = dart_cfg.get("wrap_bonus", 0.75)
+            wrap = leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"], extra_base=bonus)
         else:
-            # Standard Wrap
-            wrap = leather_back_wrap(pad_size, settings["leather_wrap_multiplier"])
-            
-        felt_thickness_mm = get_felt_thickness_mm(settings)
+            wrap = leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"])
+
+        felt_thickness_mm = get_felt_thickness_mm(settings, sizing)
         diameter = pad_size + 2 * (felt_thickness_mm + wrap)
         return round(diameter * 2) / 2
-        
+
     return 0
 
 def should_have_center_hole(pad_size, hole_dia, settings):
-    min_size = settings.get("min_hole_size", 16.5)
+    sizing = get_sizing_for_size(pad_size, settings)
+    min_size = sizing.get("min_hole_size", 16.5)
     return hole_dia > 0 and pad_size >= min_size
 
 def check_for_oversized_engravings(pads, material_vars, settings):
     oversized = {}
     for material, var in material_vars.items():
         if not var.get(): continue
-        
-        font_size = settings["engraving_font_size"].get(material, 2.0)
-        oversized_sizes = set()
 
+        oversized_sizes = set()
         for pad in pads:
             pad_size = pad['size']
+            eng_cfg = get_engraving_settings_for_size(pad_size, settings)
+            font_size = eng_cfg.get("engraving_font_size", {}).get(material, 2.0)
             diameter = get_disc_diameter(pad_size, material, settings)
             radius = diameter / 2
             if font_size >= radius * 0.8:
                 oversized_sizes.add(pad_size)
-        
+
         if oversized_sizes:
             oversized[material] = oversized_sizes
     return oversized
@@ -348,27 +350,6 @@ def _distance_to_nearest_vertex(cx, cy, polygon):
     return min_dist
 
 
-def _find_longest_edge(polygon):
-    """
-    Find the longest edge of a polygon.
-    Returns (start_point, end_point, length, edge_index).
-    """
-    n = len(polygon)
-    longest = None
-    longest_len = 0
-    longest_idx = 0
-
-    for i in range(n):
-        x1, y1 = polygon[i]
-        x2, y2 = polygon[(i + 1) % n]
-        length = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        if length > longest_len:
-            longest_len = length
-            longest = ((x1, y1), (x2, y2))
-            longest_idx = i
-
-    return longest[0], longest[1], longest_len, longest_idx
-
 
 def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     """
@@ -409,7 +390,11 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     centroid_y = sum(p[1] for p in polygon) / n
 
     # Size threshold - small pads use edge-seeking behavior
-    size_threshold = settings.get("dart_threshold", 18.0)
+    if settings.get("dart_range_mode", "universal") == "range":
+        ranges = settings.get("dart_ranges", [])
+        size_threshold = max((r["max_size"] for r in ranges), default=18.0) if ranges else 18.0
+    else:
+        size_threshold = settings.get("dart_threshold", 18.0)
 
     # Edge bias: compute a target point that pulls discs toward the biased edge/corner
     edge_bias = settings.get("edge_bias", "center")
@@ -532,66 +517,6 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
         return best_pos
 
-    # Cache longest edge for the entire nesting operation
-    (longest_ex1, longest_ey1), (longest_ex2, longest_ey2), _, _ = _find_longest_edge(polygon)
-
-    def find_best_position_longest_edge(r, placed_discs):
-        """
-        Fill from longest edge inward.
-        Prioritizes positions closest to the longest edge, with snug packing.
-        """
-        best_pos = None
-        best_score = float('inf')
-
-        # Use 1mm grid for accuracy (early-exit optimization keeps it fast)
-        edge_step = 1
-
-        y = min_y + spacing_mm
-        while y + r <= max_y:
-            x = min_x + spacing_mm
-            while x + r <= max_x:
-                cx, cy = x + r, y + r
-
-                # Quick score check - skip if can't possibly be better
-                dist_to_edge = _distance_point_to_segment(cx, cy, longest_ex1, longest_ey1, longest_ex2, longest_ey2)
-                if dist_to_edge + _bias_score(cx, cy) >= best_score:
-                    x += edge_step
-                    continue
-
-                # Check validity
-                if not _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
-                    x += edge_step
-                    continue
-
-                is_collision = any(
-                    (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
-                    for _, px, py, pr in placed_discs
-                )
-                if is_collision:
-                    x += edge_step
-                    continue
-
-                # Full score with snugness
-                snugness = 0
-                if placed_discs:
-                    min_gap = float('inf')
-                    for _, px, py, pr in placed_discs:
-                        dist = math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
-                        gap = dist - (r + pr + spacing_mm)
-                        min_gap = min(min_gap, gap)
-                    snugness = min_gap
-
-                score = dist_to_edge + snugness * 0.3 + _bias_score(cx, cy)
-
-                if score < best_score:
-                    best_score = score
-                    best_pos = (cx, cy)
-
-                x += edge_step
-            y += edge_step
-
-        return best_pos
-
     # Place fixed pads
     for pad_size, dia in discs:
         r = dia / 2
@@ -611,15 +536,8 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
         max_dia = get_disc_diameter(max_size, material, settings)
         max_r = max_dia / 2
 
-        # Choose fill strategy based on setting
-        max_fill_style = settings.get("max_fill_style", "center_out")
-        if max_fill_style == "longest_edge":
-            find_fn = find_best_position_longest_edge
-        else:
-            find_fn = find_best_position_large  # center_out
-
         while True:
-            best_pos = find_fn(max_r, placed)
+            best_pos = find_best_position_large(max_r, placed)
             if best_pos:
                 placed.append((max_size, best_pos[0], best_pos[1], max_r))
             else:
@@ -639,17 +557,18 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
 
     for pad_size, cx, cy, r in placed:
-        threshold = settings.get("dart_threshold", 18.0)
-        darts_enabled = settings.get("darts_enabled", True)
-
-        is_dart_pad = (material == 'leather' and darts_enabled and pad_size < threshold)
+        sizing = get_sizing_for_size(pad_size, settings)
+        eng_cfg = get_engraving_settings_for_size(pad_size, settings)
+        plc_cfg = get_engraving_placement_for_size(pad_size, settings)
+        dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
+        is_dart_pad = dart_cfg is not None
 
         if is_dart_pad:
             # --- STAR LOGIC ---
-            felt_thick = get_felt_thickness_mm(settings)
-            overwrap = settings.get("dart_overwrap", 0.5)
+            felt_thick = get_felt_thickness_mm(settings, sizing)
+            overwrap = dart_cfg.get("overwrap", 0.5)
 
-            felt_r = (pad_size - settings["felt_offset"]) / 2
+            felt_r = (pad_size - sizing["felt_offset"]) / 2
             inner_r = felt_r + felt_thick + overwrap
             outer_r = r
 
@@ -657,14 +576,14 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                 inner_r = outer_r - 0.2
 
             circumference = 2 * math.pi * inner_r
-            freq_mult = settings.get("dart_frequency_multiplier", 1.0)
+            freq_mult = dart_cfg.get("frequency_multiplier", 1.0)
             num_points = int((circumference / 3.5) * freq_mult)
             if num_points < 12:
                 num_points = 12
             if num_points % 2 != 0:
                 num_points += 1
 
-            shape_factor = settings.get("dart_shape_factor", 0.0)
+            shape_factor = dart_cfg.get("shape_factor", 0.0)
             path_d = calculate_star_path(cx, cy, outer_r, inner_r, num_points=num_points, shape_factor=shape_factor)
 
             dwg.add(dwg.path(d=path_d, stroke=layer_colors[f'{material}_outline'], fill='none', stroke_width=stroke_w))
@@ -685,18 +604,18 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
             else:
                 dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{hole_dia / 2}mm", stroke=layer_colors[f'{material}_center_hole'], fill='none', stroke_width=stroke_w))
 
-        font_size = settings.get("engraving_font_size", {}).get(material, 2.0)
+        font_size = eng_cfg.get("engraving_font_size", {}).get(material, 2.0)
 
         # --- Determine Engraving Settings (Standard vs Star) ---
         should_engrave = False
 
         if is_dart_pad:
-            if settings.get("dart_engraving_on", True):
-                engraving_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
+            if dart_cfg.get("engraving_on", True):
+                engraving_settings = dart_cfg.get("engraving_loc", {"mode": "from_outside", "value": 2.5})
                 should_engrave = True
         else:
-            if settings.get("engraving_on", True):
-                engraving_settings = settings["engraving_location"][material]
+            if eng_cfg.get("engraving_on", True):
+                engraving_settings = plc_cfg.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
                 should_engrave = True
 
         if should_engrave and (font_size >= r * 0.8):

@@ -53,8 +53,8 @@ MAX_OCTAVE = 7
 # --- Analysis tuning parameters ---
 # Multiplier applied to median spectrum magnitude for adaptive noise floor
 NOISE_FLOOR_MULTIPLIER = 3.0
-# Sensitivity range factor: maps sensitivity 0-100 to threshold scale 1.0-5.0
-SENSITIVITY_RANGE_FACTOR = 0.04
+# Sensitivity range factor: maps sensitivity 0-100 to threshold scale 1.0-7.0
+SENSITIVITY_RANGE_FACTOR = 0.06
 # Minimum frequency (Hz) to consider in FFT analysis
 MIN_FREQUENCY_HZ = 25
 # Cents error clamp: maximum ±cents before clamping (1 semitone)

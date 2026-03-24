@@ -152,24 +152,69 @@ class OptionsWindow:
         self.felt_thickness_var = tk.DoubleVar(value=self.settings["felt_thickness"])
         self.felt_thickness_unit_var = tk.StringVar(value=self.settings["felt_thickness_unit"])
         
-        # DART VARS
+        # DART VARS (universal mode)
         self.darts_enabled_var = tk.BooleanVar(value=self.settings.get("darts_enabled", True))
         self.dart_threshold_var = tk.DoubleVar(value=self.settings.get("dart_threshold", 18.0))
         self.dart_overwrap_var = tk.DoubleVar(value=self.settings.get("dart_overwrap", 0.5))
         self.dart_wrap_bonus_var = tk.DoubleVar(value=self.settings.get("dart_wrap_bonus", 0.75))
         self.dart_frequency_multiplier_var = tk.DoubleVar(value=self.settings.get("dart_frequency_multiplier", 1.0))
         self.dart_shape_factor_var = tk.DoubleVar(value=self.settings.get("dart_shape_factor", 0.0))
-        
+
+        # Dart range mode vars
+        self.dart_range_mode_var = tk.StringVar(value=self.settings.get("dart_range_mode", "universal"))
+        self.dart_ranges = list(self.settings.get("dart_ranges", []))
+        self.selected_range_index = None
+
+        # Range editing vars
+        self.range_min_var = tk.DoubleVar(value=0.0)
+        self.range_max_var = tk.DoubleVar(value=18.0)
+        self.range_overwrap_var = tk.DoubleVar(value=0.5)
+        self.range_wrap_bonus_var = tk.DoubleVar(value=0.75)
+        self.range_freq_mult_var = tk.DoubleVar(value=1.0)
+        self.range_shape_factor_var = tk.DoubleVar(value=0.0)
+        self.range_engraving_on_var = tk.BooleanVar(value=True)
+        self.range_engraving_mode_var = tk.StringVar(value="from_outside")
+        self.range_engraving_val_var = tk.DoubleVar(value=2.5)
+
         self.engraving_on_var = tk.BooleanVar(value=self.settings["engraving_on"])
         self.compatibility_mode_var = tk.BooleanVar(value=self.settings.get("compatibility_mode", False))
-        self.max_fill_style_var = tk.StringVar(value=self.settings.get("max_fill_style", "center_out"))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
-        
-        # Dart Engraving Vars
+
+        # Dart Engraving Vars (universal mode)
         self.dart_engraving_on_var = tk.BooleanVar(value=self.settings.get("dart_engraving_on", True))
         self.dart_engraving_mode_var = tk.StringVar(value=self.settings.get("dart_engraving_loc", {}).get("mode", "from_outside"))
         self.dart_engraving_val_var = tk.DoubleVar(value=self.settings.get("dart_engraving_loc", {}).get("value", 2.5))
+
+        # Sizing range mode vars
+        self.sizing_range_mode_var = tk.StringVar(value=self.settings.get("sizing_range_mode", "universal"))
+        self.sizing_ranges = list(self.settings.get("sizing_ranges", []))
+        self.sizing_selected_range_index = None
+        self.sizing_range_min_var = tk.DoubleVar(value=0.0)
+        self.sizing_range_max_var = tk.DoubleVar(value=60.0)
+        self.sizing_range_felt_offset_var = tk.DoubleVar(value=0.75)
+        self.sizing_range_card_offset_var = tk.DoubleVar(value=0.5)
+        self.sizing_range_leather_mult_var = tk.DoubleVar(value=1.0)
+        self.sizing_range_min_hole_var = tk.DoubleVar(value=16.5)
+        self.sizing_range_felt_thick_var = tk.DoubleVar(value=3.175)
+        self.sizing_range_felt_thick_unit_var = tk.StringVar(value="mm")
+
+        # Engraving settings range mode vars
+        self.eng_settings_range_mode_var = tk.StringVar(value=self.settings.get("engraving_settings_range_mode", "universal"))
+        self.eng_settings_ranges = list(self.settings.get("engraving_settings_ranges", []))
+        self.eng_settings_selected_range_index = None
+        self.eng_settings_range_min_var = tk.DoubleVar(value=0.0)
+        self.eng_settings_range_max_var = tk.DoubleVar(value=60.0)
+        self.eng_settings_range_on_var = tk.BooleanVar(value=True)
+        self.eng_settings_range_font_vars = {}
+
+        # Engraving placement range mode vars
+        self.eng_placement_range_mode_var = tk.StringVar(value=self.settings.get("engraving_placement_range_mode", "universal"))
+        self.eng_placement_ranges = list(self.settings.get("engraving_placement_ranges", []))
+        self.eng_placement_selected_range_index = None
+        self.eng_placement_range_min_var = tk.DoubleVar(value=0.0)
+        self.eng_placement_range_max_var = tk.DoubleVar(value=60.0)
+        self.eng_placement_range_loc_vars = {}
 
         self.create_option_widgets()
     
@@ -186,114 +231,644 @@ class OptionsWindow:
         rules_frame.pack(fill="x", pady=5)
         rules_frame.columnconfigure(1, weight=1)
 
-        tk.Label(rules_frame, text="Felt Diameter Reduction (mm):", bg=DIALOG_BG).grid(row=0, column=0, sticky='w', pady=2)
-        tk.Entry(rules_frame, textvariable=self.felt_offset_var, width=10).grid(row=0, column=1, sticky='w', pady=2)
+        sizing_mode_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
+        sizing_mode_frame.grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
+        tk.Radiobutton(sizing_mode_frame, text="Universal", variable=self.sizing_range_mode_var,
+                       value="universal", bg=DIALOG_BG, command=self._toggle_sizing_mode).pack(side="left", padx=(0, 10))
+        tk.Radiobutton(sizing_mode_frame, text="Per Size Range", variable=self.sizing_range_mode_var,
+                       value="range", bg=DIALOG_BG, command=self._toggle_sizing_mode).pack(side="left")
 
-        tk.Label(rules_frame, text="Card Additional Reduction (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(rules_frame, textvariable=self.card_offset_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+        # === Sizing Universal Sub-Frame ===
+        self.sizing_universal_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
+        self.sizing_universal_frame.columnconfigure(1, weight=1)
+        self._build_sizing_fields(self.sizing_universal_frame,
+                                  self.felt_offset_var, self.card_offset_var,
+                                  self.leather_mult_var, self.min_hole_size_var,
+                                  self.felt_thickness_var, self.felt_thickness_unit_var)
 
-        tk.Label(rules_frame, text="Leather Wrap Multiplier (1.00=default):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(rules_frame, textvariable=self.leather_mult_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        # === Sizing Range Sub-Frame ===
+        self.sizing_range_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
+        self.sizing_range_frame.columnconfigure(1, weight=1)
 
-        tk.Label(rules_frame, text="Min. Pad Size for Hole (mm):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
-        tk.Entry(rules_frame, textvariable=self.min_hole_size_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
-        
-        felt_thickness_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
-        felt_thickness_frame.grid(row=4, column=0, columnspan=2, sticky='w', pady=2)
-        tk.Label(felt_thickness_frame, text="Felt Thickness:", bg=DIALOG_BG).pack(side="left")
-        tk.Entry(felt_thickness_frame, textvariable=self.felt_thickness_var, width=10).pack(side="left", padx=5)
-        tk.Radiobutton(felt_thickness_frame, text="in", variable=self.felt_thickness_unit_var, value="in", bg=DIALOG_BG).pack(side="left")
-        tk.Radiobutton(felt_thickness_frame, text="mm", variable=self.felt_thickness_unit_var, value="mm", bg=DIALOG_BG).pack(side="left")
+        sr_sel = tk.Frame(self.sizing_range_frame, bg=DIALOG_BG)
+        sr_sel.grid(row=0, column=0, columnspan=2, sticky='ew', pady=2)
+        tk.Label(sr_sel, text="Range:", bg=DIALOG_BG).pack(side="left")
+        self.sizing_range_combo = ttk.Combobox(sr_sel, state="readonly", width=25)
+        self.sizing_range_combo.pack(side="left", padx=5)
+        self.sizing_range_combo.bind("<<ComboboxSelected>>", self._on_sizing_range_selected)
+
+        tk.Label(self.sizing_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
+        tk.Entry(self.sizing_range_frame, textvariable=self.sizing_range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+        tk.Label(self.sizing_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
+        tk.Entry(self.sizing_range_frame, textvariable=self.sizing_range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+
+        self._build_sizing_fields(self.sizing_range_frame,
+                                  self.sizing_range_felt_offset_var, self.sizing_range_card_offset_var,
+                                  self.sizing_range_leather_mult_var, self.sizing_range_min_hole_var,
+                                  self.sizing_range_felt_thick_var, self.sizing_range_felt_thick_unit_var,
+                                  row_start=3)
+
+        sr_btn = tk.Frame(self.sizing_range_frame, bg=DIALOG_BG)
+        sr_btn.grid(row=8, column=0, columnspan=2, sticky='ew', pady=5)
+        tk.Button(sr_btn, text="Add Range", command=self._add_sizing_range).pack(side="left", padx=2)
+        tk.Button(sr_btn, text="Update", command=self._update_sizing_range).pack(side="left", padx=2)
+        tk.Button(sr_btn, text="Delete", command=self._delete_sizing_range).pack(side="left", padx=2)
+
+        self._toggle_sizing_mode()
 
         # --- DART SETTINGS FRAME ---
         darts_frame = tk.LabelFrame(main_frame, text="Star / Dart Settings", bg=DIALOG_BG, padx=5, pady=5)
         darts_frame.pack(fill="x", pady=5)
         darts_frame.columnconfigure(1, weight=1)
-        
+
         tk.Checkbutton(darts_frame, text="Enable Star / Dart Pattern", variable=self.darts_enabled_var, bg=DIALOG_BG).grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
-        
-        tk.Label(darts_frame, text="Use Star Pattern below (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(darts_frame, textvariable=self.dart_threshold_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
 
-        tk.Label(darts_frame, text="Star Safe Overwrap (Valley) (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(darts_frame, textvariable=self.dart_overwrap_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        # Mode toggle: Universal vs Range
+        mode_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
+        mode_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=2)
+        tk.Radiobutton(mode_frame, text="Universal", variable=self.dart_range_mode_var,
+                       value="universal", bg=DIALOG_BG, command=self._toggle_dart_mode).pack(side="left", padx=(0, 10))
+        tk.Radiobutton(mode_frame, text="Per Size Range", variable=self.dart_range_mode_var,
+                       value="range", bg=DIALOG_BG, command=self._toggle_dart_mode).pack(side="left")
 
-        tk.Label(darts_frame, text="Star Wrap Bonus (Adds to Tip) (mm):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
-        tk.Entry(darts_frame, textvariable=self.dart_wrap_bonus_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
+        # === UNIVERSAL SUB-FRAME ===
+        self.dart_universal_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
+        self.dart_universal_frame.columnconfigure(1, weight=1)
 
-        tk.Label(darts_frame, text="Star Frequency Multiplier (1.0=Default):", bg=DIALOG_BG).grid(row=4, column=0, sticky='w', pady=2)
-        tk.Entry(darts_frame, textvariable=self.dart_frequency_multiplier_var, width=10).grid(row=4, column=1, sticky='w', pady=2)
+        tk.Label(self.dart_universal_frame, text="Use Star Pattern below (mm):", bg=DIALOG_BG).grid(row=0, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_universal_frame, textvariable=self.dart_threshold_var, width=10).grid(row=0, column=1, sticky='w', pady=2)
 
-        # Row 5: Shape Slider
-        shape_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
-        shape_frame.grid(row=5, column=0, columnspan=2, sticky='ew', pady=5)
-        
+        tk.Label(self.dart_universal_frame, text="Star Safe Overwrap (Valley) (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_universal_frame, textvariable=self.dart_overwrap_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+
+        tk.Label(self.dart_universal_frame, text="Star Wrap Bonus (Adds to Tip) (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_universal_frame, textvariable=self.dart_wrap_bonus_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+
+        tk.Label(self.dart_universal_frame, text="Star Frequency Multiplier (1.0=Default):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_universal_frame, textvariable=self.dart_frequency_multiplier_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
+
+        shape_frame = tk.Frame(self.dart_universal_frame, bg=DIALOG_BG)
+        shape_frame.grid(row=4, column=0, columnspan=2, sticky='ew', pady=5)
         tk.Label(shape_frame, text="Shape:", bg=DIALOG_BG).pack(side="left")
         tk.Label(shape_frame, text="Sine", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left", padx=(5, 0))
-        scale = tk.Scale(shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL, 
-                         variable=self.dart_shape_factor_var, showvalue=0, 
-                         bg=DIALOG_BG, highlightthickness=0, length=150, resolution=0.01)
-        scale.pack(side="left", fill="x", expand=True, padx=5)
+        tk.Scale(shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL,
+                 variable=self.dart_shape_factor_var, showvalue=0,
+                 bg=DIALOG_BG, highlightthickness=0, length=150, resolution=0.01).pack(side="left", fill="x", expand=True, padx=5)
         tk.Label(shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left")
 
-        # Star Engraving Section (Nested Here)
-        tk.Label(darts_frame, text="-------------------------", bg=DIALOG_BG).grid(row=6, column=0, columnspan=2, pady=5)
-        tk.Checkbutton(darts_frame, text="Show Label on Star Pads", variable=self.dart_engraving_on_var, bg=DIALOG_BG).grid(row=7, column=0, columnspan=2, sticky='w', pady=2)
-        
-        star_loc_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
-        star_loc_frame.grid(row=8, column=0, columnspan=2, sticky='ew', pady=2)
+        tk.Label(self.dart_universal_frame, text="-------------------------", bg=DIALOG_BG).grid(row=5, column=0, columnspan=2, pady=5)
+        tk.Checkbutton(self.dart_universal_frame, text="Show Label on Star Pads", variable=self.dart_engraving_on_var, bg=DIALOG_BG).grid(row=6, column=0, columnspan=2, sticky='w', pady=2)
+
+        star_loc_frame = tk.Frame(self.dart_universal_frame, bg=DIALOG_BG)
+        star_loc_frame.grid(row=7, column=0, columnspan=2, sticky='ew', pady=2)
         tk.Radiobutton(star_loc_frame, text="outside", variable=self.dart_engraving_mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
         tk.Radiobutton(star_loc_frame, text="inside", variable=self.dart_engraving_mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
         tk.Radiobutton(star_loc_frame, text="center", variable=self.dart_engraving_mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
         tk.Entry(star_loc_frame, textvariable=self.dart_engraving_val_var, width=5).pack(side="left", padx=5)
         tk.Label(star_loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
 
+        # === RANGE SUB-FRAME ===
+        self.dart_range_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
+        self.dart_range_frame.columnconfigure(1, weight=1)
+
+        # Range selector dropdown
+        range_sel_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
+        range_sel_frame.grid(row=0, column=0, columnspan=2, sticky='ew', pady=2)
+        tk.Label(range_sel_frame, text="Range:", bg=DIALOG_BG).pack(side="left")
+        self.range_combo = ttk.Combobox(range_sel_frame, state="readonly", width=25)
+        self.range_combo.pack(side="left", padx=5)
+        self.range_combo.bind("<<ComboboxSelected>>", self._on_range_selected)
+
+        # Range editing fields
+        tk.Label(self.dart_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_range_frame, textvariable=self.range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+
+        tk.Label(self.dart_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_range_frame, textvariable=self.range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+
+        tk.Label(self.dart_range_frame, text="Overwrap (Valley) (mm):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_range_frame, textvariable=self.range_overwrap_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
+
+        tk.Label(self.dart_range_frame, text="Wrap Bonus (Tip) (mm):", bg=DIALOG_BG).grid(row=4, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_range_frame, textvariable=self.range_wrap_bonus_var, width=10).grid(row=4, column=1, sticky='w', pady=2)
+
+        tk.Label(self.dart_range_frame, text="Frequency Multiplier:", bg=DIALOG_BG).grid(row=5, column=0, sticky='w', pady=2)
+        tk.Entry(self.dart_range_frame, textvariable=self.range_freq_mult_var, width=10).grid(row=5, column=1, sticky='w', pady=2)
+
+        range_shape_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
+        range_shape_frame.grid(row=6, column=0, columnspan=2, sticky='ew', pady=5)
+        tk.Label(range_shape_frame, text="Shape:", bg=DIALOG_BG).pack(side="left")
+        tk.Label(range_shape_frame, text="Sine", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left", padx=(5, 0))
+        tk.Scale(range_shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL,
+                 variable=self.range_shape_factor_var, showvalue=0,
+                 bg=DIALOG_BG, highlightthickness=0, length=150, resolution=0.01).pack(side="left", fill="x", expand=True, padx=5)
+        tk.Label(range_shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left")
+
+        tk.Label(self.dart_range_frame, text="-------------------------", bg=DIALOG_BG).grid(row=7, column=0, columnspan=2, pady=5)
+        tk.Checkbutton(self.dart_range_frame, text="Show Label on Star Pads", variable=self.range_engraving_on_var, bg=DIALOG_BG).grid(row=8, column=0, columnspan=2, sticky='w', pady=2)
+
+        range_loc_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
+        range_loc_frame.grid(row=9, column=0, columnspan=2, sticky='ew', pady=2)
+        tk.Radiobutton(range_loc_frame, text="outside", variable=self.range_engraving_mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
+        tk.Radiobutton(range_loc_frame, text="inside", variable=self.range_engraving_mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
+        tk.Radiobutton(range_loc_frame, text="center", variable=self.range_engraving_mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
+        tk.Entry(range_loc_frame, textvariable=self.range_engraving_val_var, width=5).pack(side="left", padx=5)
+        tk.Label(range_loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
+
+        # Range action buttons
+        btn_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
+        btn_frame.grid(row=10, column=0, columnspan=2, sticky='ew', pady=5)
+        tk.Button(btn_frame, text="Add Range", command=self._add_range).pack(side="left", padx=2)
+        tk.Button(btn_frame, text="Update", command=self._update_range).pack(side="left", padx=2)
+        tk.Button(btn_frame, text="Delete", command=self._delete_range).pack(side="left", padx=2)
+
+        # Show the correct sub-frame
+        self._toggle_dart_mode()
+
+        # --- ENGRAVING SETTINGS FRAME ---
         engraving_frame = tk.LabelFrame(main_frame, text="Engraving Settings (Standard Pads)", bg=DIALOG_BG, padx=5, pady=5)
         engraving_frame.pack(fill="x", pady=5)
-        
-        tk.Checkbutton(engraving_frame, text="Show Size Label", variable=self.engraving_on_var, bg=DIALOG_BG).pack(anchor='w')
 
-        font_size_frame = tk.LabelFrame(engraving_frame, text="Font Sizes (mm)", bg=DIALOG_BG, padx=5, pady=5)
-        font_size_frame.pack(fill='x', pady=5)
-        
+        es_mode_frame = tk.Frame(engraving_frame, bg=DIALOG_BG)
+        es_mode_frame.pack(fill="x", pady=2)
+        tk.Radiobutton(es_mode_frame, text="Universal", variable=self.eng_settings_range_mode_var,
+                       value="universal", bg=DIALOG_BG, command=self._toggle_eng_settings_mode).pack(side="left", padx=(0, 10))
+        tk.Radiobutton(es_mode_frame, text="Per Size Range", variable=self.eng_settings_range_mode_var,
+                       value="range", bg=DIALOG_BG, command=self._toggle_eng_settings_mode).pack(side="left")
+
+        # === Engraving Settings Universal ===
+        self.eng_settings_universal_frame = tk.Frame(engraving_frame, bg=DIALOG_BG)
+        tk.Checkbutton(self.eng_settings_universal_frame, text="Show Size Label", variable=self.engraving_on_var, bg=DIALOG_BG).pack(anchor='w')
+        fs_frame = tk.LabelFrame(self.eng_settings_universal_frame, text="Font Sizes (mm)", bg=DIALOG_BG, padx=5, pady=5)
+        fs_frame.pack(fill='x', pady=5)
         materials = ['felt', 'card', 'leather', 'exact_size']
-        for i, material in enumerate(materials):
-            tk.Label(font_size_frame, text=f"{material.replace('_', ' ').capitalize()}:", bg=DIALOG_BG).grid(row=i, column=0, sticky='w', padx=5, pady=2)
-            font_size_var = tk.DoubleVar(value=self.settings["engraving_font_size"].get(material, 2.0))
-            self.engraving_font_size_vars[material] = font_size_var
-            tk.Entry(font_size_frame, textvariable=font_size_var, width=8).grid(row=i, column=1, sticky='w', padx=5, pady=2)
+        for i, mat in enumerate(materials):
+            tk.Label(fs_frame, text=f"{mat.replace('_', ' ').capitalize()}:", bg=DIALOG_BG).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            fvar = tk.DoubleVar(value=self.settings["engraving_font_size"].get(mat, 2.0))
+            self.engraving_font_size_vars[mat] = fvar
+            tk.Entry(fs_frame, textvariable=fvar, width=8).grid(row=i, column=1, sticky='w', padx=5, pady=2)
 
-        engraving_loc_frame = tk.LabelFrame(engraving_frame, text="Placement", bg=DIALOG_BG, padx=5, pady=5)
+        # === Engraving Settings Range ===
+        self.eng_settings_range_frame = tk.Frame(engraving_frame, bg=DIALOG_BG)
+        self.eng_settings_range_frame.columnconfigure(1, weight=1)
+
+        esr_sel = tk.Frame(self.eng_settings_range_frame, bg=DIALOG_BG)
+        esr_sel.grid(row=0, column=0, columnspan=2, sticky='ew', pady=2)
+        tk.Label(esr_sel, text="Range:", bg=DIALOG_BG).pack(side="left")
+        self.eng_settings_range_combo = ttk.Combobox(esr_sel, state="readonly", width=25)
+        self.eng_settings_range_combo.pack(side="left", padx=5)
+        self.eng_settings_range_combo.bind("<<ComboboxSelected>>", self._on_eng_settings_range_selected)
+
+        tk.Label(self.eng_settings_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
+        tk.Entry(self.eng_settings_range_frame, textvariable=self.eng_settings_range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+        tk.Label(self.eng_settings_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
+        tk.Entry(self.eng_settings_range_frame, textvariable=self.eng_settings_range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        tk.Checkbutton(self.eng_settings_range_frame, text="Show Size Label", variable=self.eng_settings_range_on_var, bg=DIALOG_BG).grid(row=3, column=0, columnspan=2, sticky='w', pady=2)
+
+        esr_fs = tk.LabelFrame(self.eng_settings_range_frame, text="Font Sizes (mm)", bg=DIALOG_BG, padx=5, pady=5)
+        esr_fs.grid(row=4, column=0, columnspan=2, sticky='ew', pady=2)
+        for i, mat in enumerate(materials):
+            tk.Label(esr_fs, text=f"{mat.replace('_', ' ').capitalize()}:", bg=DIALOG_BG).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            fvar = tk.DoubleVar(value=2.0)
+            self.eng_settings_range_font_vars[mat] = fvar
+            tk.Entry(esr_fs, textvariable=fvar, width=8).grid(row=i, column=1, sticky='w', padx=5, pady=2)
+
+        esr_btn = tk.Frame(self.eng_settings_range_frame, bg=DIALOG_BG)
+        esr_btn.grid(row=5, column=0, columnspan=2, sticky='ew', pady=5)
+        tk.Button(esr_btn, text="Add Range", command=self._add_eng_settings_range).pack(side="left", padx=2)
+        tk.Button(esr_btn, text="Update", command=self._update_eng_settings_range).pack(side="left", padx=2)
+        tk.Button(esr_btn, text="Delete", command=self._delete_eng_settings_range).pack(side="left", padx=2)
+
+        self._toggle_eng_settings_mode()
+
+        # --- ENGRAVING PLACEMENT FRAME ---
+        engraving_loc_frame = tk.LabelFrame(main_frame, text="Engraving Placement", bg=DIALOG_BG, padx=5, pady=5)
         engraving_loc_frame.pack(fill="x", pady=5)
-        
-        for material in materials:
-            frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
+
+        ep_mode_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
+        ep_mode_frame.pack(fill="x", pady=2)
+        tk.Radiobutton(ep_mode_frame, text="Universal", variable=self.eng_placement_range_mode_var,
+                       value="universal", bg=DIALOG_BG, command=self._toggle_eng_placement_mode).pack(side="left", padx=(0, 10))
+        tk.Radiobutton(ep_mode_frame, text="Per Size Range", variable=self.eng_placement_range_mode_var,
+                       value="range", bg=DIALOG_BG, command=self._toggle_eng_placement_mode).pack(side="left")
+
+        # === Engraving Placement Universal ===
+        self.eng_placement_universal_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
+        for mat in materials:
+            frame = tk.Frame(self.eng_placement_universal_frame, bg=DIALOG_BG)
             frame.pack(fill='x', pady=2)
-            tk.Label(frame, text=material.replace('_', ' ').capitalize() + ":", bg=DIALOG_BG, width=10, anchor='w').pack(side="left")
-
-            mode_var = tk.StringVar(value=self.settings["engraving_location"][material]['mode'])
-            val_var = tk.DoubleVar(value=self.settings["engraving_location"][material]['value'])
-            self.engraving_loc_vars[material] = {'mode': mode_var, 'value': val_var}
-
+            tk.Label(frame, text=mat.replace('_', ' ').capitalize() + ":", bg=DIALOG_BG, width=10, anchor='w').pack(side="left")
+            mode_var = tk.StringVar(value=self.settings["engraving_location"][mat]['mode'])
+            val_var = tk.DoubleVar(value=self.settings["engraving_location"][mat]['value'])
+            self.engraving_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
             tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
             tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
             tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
-            
             tk.Entry(frame, textvariable=val_var, width=5).pack(side="left", padx=5)
             tk.Label(frame, text="mm", bg=DIALOG_BG).pack(side="left")
+
+        # === Engraving Placement Range ===
+        self.eng_placement_range_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
+        self.eng_placement_range_frame.columnconfigure(1, weight=1)
+
+        epr_sel = tk.Frame(self.eng_placement_range_frame, bg=DIALOG_BG)
+        epr_sel.grid(row=0, column=0, columnspan=2, sticky='ew', pady=2)
+        tk.Label(epr_sel, text="Range:", bg=DIALOG_BG).pack(side="left")
+        self.eng_placement_range_combo = ttk.Combobox(epr_sel, state="readonly", width=25)
+        self.eng_placement_range_combo.pack(side="left", padx=5)
+        self.eng_placement_range_combo.bind("<<ComboboxSelected>>", self._on_eng_placement_range_selected)
+
+        tk.Label(self.eng_placement_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
+        tk.Entry(self.eng_placement_range_frame, textvariable=self.eng_placement_range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+        tk.Label(self.eng_placement_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
+        tk.Entry(self.eng_placement_range_frame, textvariable=self.eng_placement_range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+
+        epr_loc = tk.Frame(self.eng_placement_range_frame, bg=DIALOG_BG)
+        epr_loc.grid(row=3, column=0, columnspan=2, sticky='ew', pady=2)
+        for mat in materials:
+            frame = tk.Frame(epr_loc, bg=DIALOG_BG)
+            frame.pack(fill='x', pady=2)
+            tk.Label(frame, text=mat.replace('_', ' ').capitalize() + ":", bg=DIALOG_BG, width=10, anchor='w').pack(side="left")
+            mode_var = tk.StringVar(value="from_outside")
+            val_var = tk.DoubleVar(value=2.5)
+            self.eng_placement_range_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
+            tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
+            tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
+            tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
+            tk.Entry(frame, textvariable=val_var, width=5).pack(side="left", padx=5)
+            tk.Label(frame, text="mm", bg=DIALOG_BG).pack(side="left")
+
+        epr_btn = tk.Frame(self.eng_placement_range_frame, bg=DIALOG_BG)
+        epr_btn.grid(row=4, column=0, columnspan=2, sticky='ew', pady=5)
+        tk.Button(epr_btn, text="Add Range", command=self._add_eng_placement_range).pack(side="left", padx=2)
+        tk.Button(epr_btn, text="Update", command=self._update_eng_placement_range).pack(side="left", padx=2)
+        tk.Button(epr_btn, text="Delete", command=self._delete_eng_placement_range).pack(side="left", padx=2)
+
+        self._toggle_eng_placement_mode()
 
         export_frame = tk.LabelFrame(main_frame, text="Export Settings", bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
         tk.Checkbutton(export_frame, text="Enable Inkscape/Compatibility Mode (unitless SVG)", variable=self.compatibility_mode_var, bg=DIALOG_BG).pack(anchor='w')
 
-        # Max Fill Style
-        max_fill_frame = tk.LabelFrame(main_frame, text="Max Fill Style (Polygon Shapes)", bg=DIALOG_BG, padx=5, pady=5)
-        max_fill_frame.pack(fill="x", pady=5)
-        tk.Radiobutton(max_fill_frame, text="Center Out (fill from center outward)",
-                       variable=self.max_fill_style_var, value="center_out", bg=DIALOG_BG).pack(anchor='w')
-        tk.Radiobutton(max_fill_frame, text="Longest Edge (fill from longest edge inward)",
-                       variable=self.max_fill_style_var, value="longest_edge", bg=DIALOG_BG).pack(anchor='w')
+    # --- Dart Range Management ---
 
+    def _toggle_dart_mode(self):
+        """Show/hide universal vs range sub-frames."""
+        if self.dart_range_mode_var.get() == "universal":
+            self.dart_range_frame.grid_forget()
+            self.dart_universal_frame.grid(row=2, column=0, columnspan=2, sticky='ew')
+        else:
+            self.dart_universal_frame.grid_forget()
+            self.dart_range_frame.grid(row=2, column=0, columnspan=2, sticky='ew')
+            self._refresh_range_combo()
+
+    def _refresh_range_combo(self):
+        """Update the range combobox values from self.dart_ranges."""
+        labels = [f"{r['min_size']:.1f} - {r['max_size']:.1f} mm" for r in self.dart_ranges]
+        self.range_combo['values'] = labels
+        if labels and self.selected_range_index is not None and self.selected_range_index < len(labels):
+            self.range_combo.current(self.selected_range_index)
+        elif labels:
+            self.range_combo.current(len(labels) - 1)
+            self.selected_range_index = len(labels) - 1
+            self._load_range_fields(self.selected_range_index)
+        else:
+            self.range_combo.set("")
+            self.selected_range_index = None
+
+    def _on_range_selected(self, event=None):
+        """Populate editing fields from the selected range."""
+        idx = self.range_combo.current()
+        if idx < 0 or idx >= len(self.dart_ranges):
+            return
+        self.selected_range_index = idx
+        self._load_range_fields(idx)
+
+    def _load_range_fields(self, idx):
+        """Load a range's values into the editing fields."""
+        r = self.dart_ranges[idx]
+        self.range_min_var.set(r.get("min_size", 0.0))
+        self.range_max_var.set(r.get("max_size", 18.0))
+        self.range_overwrap_var.set(r.get("overwrap", 0.5))
+        self.range_wrap_bonus_var.set(r.get("wrap_bonus", 0.75))
+        self.range_freq_mult_var.set(r.get("frequency_multiplier", 1.0))
+        self.range_shape_factor_var.set(r.get("shape_factor", 0.0))
+        self.range_engraving_on_var.set(r.get("engraving_on", True))
+        eng_loc = r.get("engraving_loc", {"mode": "from_outside", "value": 2.5})
+        self.range_engraving_mode_var.set(eng_loc.get("mode", "from_outside"))
+        self.range_engraving_val_var.set(eng_loc.get("value", 2.5))
+
+    def _read_range_fields(self):
+        """Read current editing fields into a range dict."""
+        return {
+            "min_size": self.range_min_var.get(),
+            "max_size": self.range_max_var.get(),
+            "overwrap": self.range_overwrap_var.get(),
+            "wrap_bonus": self.range_wrap_bonus_var.get(),
+            "frequency_multiplier": self.range_freq_mult_var.get(),
+            "shape_factor": self.range_shape_factor_var.get(),
+            "engraving_on": self.range_engraving_on_var.get(),
+            "engraving_loc": {
+                "mode": self.range_engraving_mode_var.get(),
+                "value": self.range_engraving_val_var.get(),
+            },
+        }
+
+    def _add_range(self):
+        """Add a new range from the current editing fields."""
+        r = self._read_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.dart_ranges.append(r)
+        self.dart_ranges.sort(key=lambda x: x["min_size"])
+        self.selected_range_index = self.dart_ranges.index(r)
+        self._refresh_range_combo()
+
+    def _update_range(self):
+        """Update the currently selected range with editing field values."""
+        if self.selected_range_index is None or self.selected_range_index >= len(self.dart_ranges):
+            messagebox.showinfo("No Selection", "Select a range to update.")
+            return
+        r = self._read_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.dart_ranges[self.selected_range_index] = r
+        self.dart_ranges.sort(key=lambda x: x["min_size"])
+        self.selected_range_index = self.dart_ranges.index(r)
+        self._refresh_range_combo()
+
+    def _delete_range(self):
+        """Delete the currently selected range."""
+        if self.selected_range_index is None or self.selected_range_index >= len(self.dart_ranges):
+            messagebox.showinfo("No Selection", "Select a range to delete.")
+            return
+        del self.dart_ranges[self.selected_range_index]
+        self.selected_range_index = None
+        self._refresh_range_combo()
+
+    # --- Sizing Fields Helper ---
+
+    def _build_sizing_fields(self, parent, felt_var, card_var, leather_var, hole_var, thick_var, thick_unit_var, row_start=0):
+        """Build the common sizing rule fields into a grid frame."""
+        tk.Label(parent, text="Felt Diameter Reduction (mm):", bg=DIALOG_BG).grid(row=row_start, column=0, sticky='w', pady=2)
+        tk.Entry(parent, textvariable=felt_var, width=10).grid(row=row_start, column=1, sticky='w', pady=2)
+        tk.Label(parent, text="Card Additional Reduction (mm):", bg=DIALOG_BG).grid(row=row_start+1, column=0, sticky='w', pady=2)
+        tk.Entry(parent, textvariable=card_var, width=10).grid(row=row_start+1, column=1, sticky='w', pady=2)
+        tk.Label(parent, text="Leather Wrap Multiplier (1.00=default):", bg=DIALOG_BG).grid(row=row_start+2, column=0, sticky='w', pady=2)
+        tk.Entry(parent, textvariable=leather_var, width=10).grid(row=row_start+2, column=1, sticky='w', pady=2)
+        tk.Label(parent, text="Min. Pad Size for Hole (mm):", bg=DIALOG_BG).grid(row=row_start+3, column=0, sticky='w', pady=2)
+        tk.Entry(parent, textvariable=hole_var, width=10).grid(row=row_start+3, column=1, sticky='w', pady=2)
+        ft_frame = tk.Frame(parent, bg=DIALOG_BG)
+        ft_frame.grid(row=row_start+4, column=0, columnspan=2, sticky='w', pady=2)
+        tk.Label(ft_frame, text="Felt Thickness:", bg=DIALOG_BG).pack(side="left")
+        tk.Entry(ft_frame, textvariable=thick_var, width=10).pack(side="left", padx=5)
+        tk.Radiobutton(ft_frame, text="in", variable=thick_unit_var, value="in", bg=DIALOG_BG).pack(side="left")
+        tk.Radiobutton(ft_frame, text="mm", variable=thick_unit_var, value="mm", bg=DIALOG_BG).pack(side="left")
+
+    # --- Sizing Range Management ---
+
+    def _toggle_sizing_mode(self):
+        if self.sizing_range_mode_var.get() == "universal":
+            self.sizing_range_frame.grid_forget()
+            self.sizing_universal_frame.grid(row=1, column=0, columnspan=2, sticky='ew')
+        else:
+            self.sizing_universal_frame.grid_forget()
+            self.sizing_range_frame.grid(row=1, column=0, columnspan=2, sticky='ew')
+            self._refresh_sizing_range_combo()
+
+    def _refresh_sizing_range_combo(self):
+        labels = [f"{r['min_size']:.1f} - {r['max_size']:.1f} mm" for r in self.sizing_ranges]
+        self.sizing_range_combo['values'] = labels
+        if labels and self.sizing_selected_range_index is not None and self.sizing_selected_range_index < len(labels):
+            self.sizing_range_combo.current(self.sizing_selected_range_index)
+        elif labels:
+            self.sizing_range_combo.current(len(labels) - 1)
+            self.sizing_selected_range_index = len(labels) - 1
+            self._load_sizing_range_fields(self.sizing_selected_range_index)
+        else:
+            self.sizing_range_combo.set("")
+            self.sizing_selected_range_index = None
+
+    def _on_sizing_range_selected(self, event=None):
+        idx = self.sizing_range_combo.current()
+        if 0 <= idx < len(self.sizing_ranges):
+            self.sizing_selected_range_index = idx
+            self._load_sizing_range_fields(idx)
+
+    def _load_sizing_range_fields(self, idx):
+        r = self.sizing_ranges[idx]
+        self.sizing_range_min_var.set(r.get("min_size", 0.0))
+        self.sizing_range_max_var.set(r.get("max_size", 60.0))
+        self.sizing_range_felt_offset_var.set(r.get("felt_offset", 0.75))
+        self.sizing_range_card_offset_var.set(r.get("card_to_felt_offset", 0.5))
+        self.sizing_range_leather_mult_var.set(r.get("leather_wrap_multiplier", 1.0))
+        self.sizing_range_min_hole_var.set(r.get("min_hole_size", 16.5))
+        self.sizing_range_felt_thick_var.set(r.get("felt_thickness", 3.175))
+        self.sizing_range_felt_thick_unit_var.set(r.get("felt_thickness_unit", "mm"))
+
+    def _read_sizing_range_fields(self):
+        return {
+            "min_size": self.sizing_range_min_var.get(),
+            "max_size": self.sizing_range_max_var.get(),
+            "felt_offset": self.sizing_range_felt_offset_var.get(),
+            "card_to_felt_offset": self.sizing_range_card_offset_var.get(),
+            "leather_wrap_multiplier": self.sizing_range_leather_mult_var.get(),
+            "min_hole_size": self.sizing_range_min_hole_var.get(),
+            "felt_thickness": self.sizing_range_felt_thick_var.get(),
+            "felt_thickness_unit": self.sizing_range_felt_thick_unit_var.get(),
+        }
+
+    def _add_sizing_range(self):
+        r = self._read_sizing_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.sizing_ranges.append(r)
+        self.sizing_ranges.sort(key=lambda x: x["min_size"])
+        self.sizing_selected_range_index = self.sizing_ranges.index(r)
+        self._refresh_sizing_range_combo()
+
+    def _update_sizing_range(self):
+        if self.sizing_selected_range_index is None or self.sizing_selected_range_index >= len(self.sizing_ranges):
+            messagebox.showinfo("No Selection", "Select a range to update.")
+            return
+        r = self._read_sizing_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.sizing_ranges[self.sizing_selected_range_index] = r
+        self.sizing_ranges.sort(key=lambda x: x["min_size"])
+        self.sizing_selected_range_index = self.sizing_ranges.index(r)
+        self._refresh_sizing_range_combo()
+
+    def _delete_sizing_range(self):
+        if self.sizing_selected_range_index is None or self.sizing_selected_range_index >= len(self.sizing_ranges):
+            messagebox.showinfo("No Selection", "Select a range to delete.")
+            return
+        del self.sizing_ranges[self.sizing_selected_range_index]
+        self.sizing_selected_range_index = None
+        self._refresh_sizing_range_combo()
+
+    # --- Engraving Settings Range Management ---
+
+    def _toggle_eng_settings_mode(self):
+        if self.eng_settings_range_mode_var.get() == "universal":
+            self.eng_settings_range_frame.pack_forget()
+            self.eng_settings_universal_frame.pack(fill="x")
+        else:
+            self.eng_settings_universal_frame.pack_forget()
+            self.eng_settings_range_frame.pack(fill="x")
+            self._refresh_eng_settings_range_combo()
+
+    def _refresh_eng_settings_range_combo(self):
+        labels = [f"{r['min_size']:.1f} - {r['max_size']:.1f} mm" for r in self.eng_settings_ranges]
+        self.eng_settings_range_combo['values'] = labels
+        if labels and self.eng_settings_selected_range_index is not None and self.eng_settings_selected_range_index < len(labels):
+            self.eng_settings_range_combo.current(self.eng_settings_selected_range_index)
+        elif labels:
+            self.eng_settings_range_combo.current(len(labels) - 1)
+            self.eng_settings_selected_range_index = len(labels) - 1
+            self._load_eng_settings_range_fields(self.eng_settings_selected_range_index)
+        else:
+            self.eng_settings_range_combo.set("")
+            self.eng_settings_selected_range_index = None
+
+    def _on_eng_settings_range_selected(self, event=None):
+        idx = self.eng_settings_range_combo.current()
+        if 0 <= idx < len(self.eng_settings_ranges):
+            self.eng_settings_selected_range_index = idx
+            self._load_eng_settings_range_fields(idx)
+
+    def _load_eng_settings_range_fields(self, idx):
+        r = self.eng_settings_ranges[idx]
+        self.eng_settings_range_min_var.set(r.get("min_size", 0.0))
+        self.eng_settings_range_max_var.set(r.get("max_size", 60.0))
+        self.eng_settings_range_on_var.set(r.get("engraving_on", True))
+        fs = r.get("engraving_font_size", {})
+        for mat, var in self.eng_settings_range_font_vars.items():
+            var.set(fs.get(mat, 2.0))
+
+    def _read_eng_settings_range_fields(self):
+        return {
+            "min_size": self.eng_settings_range_min_var.get(),
+            "max_size": self.eng_settings_range_max_var.get(),
+            "engraving_on": self.eng_settings_range_on_var.get(),
+            "engraving_font_size": {mat: var.get() for mat, var in self.eng_settings_range_font_vars.items()},
+        }
+
+    def _add_eng_settings_range(self):
+        r = self._read_eng_settings_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.eng_settings_ranges.append(r)
+        self.eng_settings_ranges.sort(key=lambda x: x["min_size"])
+        self.eng_settings_selected_range_index = self.eng_settings_ranges.index(r)
+        self._refresh_eng_settings_range_combo()
+
+    def _update_eng_settings_range(self):
+        if self.eng_settings_selected_range_index is None or self.eng_settings_selected_range_index >= len(self.eng_settings_ranges):
+            messagebox.showinfo("No Selection", "Select a range to update.")
+            return
+        r = self._read_eng_settings_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.eng_settings_ranges[self.eng_settings_selected_range_index] = r
+        self.eng_settings_ranges.sort(key=lambda x: x["min_size"])
+        self.eng_settings_selected_range_index = self.eng_settings_ranges.index(r)
+        self._refresh_eng_settings_range_combo()
+
+    def _delete_eng_settings_range(self):
+        if self.eng_settings_selected_range_index is None or self.eng_settings_selected_range_index >= len(self.eng_settings_ranges):
+            messagebox.showinfo("No Selection", "Select a range to delete.")
+            return
+        del self.eng_settings_ranges[self.eng_settings_selected_range_index]
+        self.eng_settings_selected_range_index = None
+        self._refresh_eng_settings_range_combo()
+
+    # --- Engraving Placement Range Management ---
+
+    def _toggle_eng_placement_mode(self):
+        if self.eng_placement_range_mode_var.get() == "universal":
+            self.eng_placement_range_frame.pack_forget()
+            self.eng_placement_universal_frame.pack(fill="x")
+        else:
+            self.eng_placement_universal_frame.pack_forget()
+            self.eng_placement_range_frame.pack(fill="x")
+            self._refresh_eng_placement_range_combo()
+
+    def _refresh_eng_placement_range_combo(self):
+        labels = [f"{r['min_size']:.1f} - {r['max_size']:.1f} mm" for r in self.eng_placement_ranges]
+        self.eng_placement_range_combo['values'] = labels
+        if labels and self.eng_placement_selected_range_index is not None and self.eng_placement_selected_range_index < len(labels):
+            self.eng_placement_range_combo.current(self.eng_placement_selected_range_index)
+        elif labels:
+            self.eng_placement_range_combo.current(len(labels) - 1)
+            self.eng_placement_selected_range_index = len(labels) - 1
+            self._load_eng_placement_range_fields(self.eng_placement_selected_range_index)
+        else:
+            self.eng_placement_range_combo.set("")
+            self.eng_placement_selected_range_index = None
+
+    def _on_eng_placement_range_selected(self, event=None):
+        idx = self.eng_placement_range_combo.current()
+        if 0 <= idx < len(self.eng_placement_ranges):
+            self.eng_placement_selected_range_index = idx
+            self._load_eng_placement_range_fields(idx)
+
+    def _load_eng_placement_range_fields(self, idx):
+        r = self.eng_placement_ranges[idx]
+        self.eng_placement_range_min_var.set(r.get("min_size", 0.0))
+        self.eng_placement_range_max_var.set(r.get("max_size", 60.0))
+        loc = r.get("engraving_location", {})
+        for mat, vars in self.eng_placement_range_loc_vars.items():
+            ml = loc.get(mat, {"mode": "from_outside", "value": 2.5})
+            vars['mode'].set(ml.get("mode", "from_outside"))
+            vars['value'].set(ml.get("value", 2.5))
+
+    def _read_eng_placement_range_fields(self):
+        return {
+            "min_size": self.eng_placement_range_min_var.get(),
+            "max_size": self.eng_placement_range_max_var.get(),
+            "engraving_location": {
+                mat: {"mode": vars['mode'].get(), "value": vars['value'].get()}
+                for mat, vars in self.eng_placement_range_loc_vars.items()
+            },
+        }
+
+    def _add_eng_placement_range(self):
+        r = self._read_eng_placement_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.eng_placement_ranges.append(r)
+        self.eng_placement_ranges.sort(key=lambda x: x["min_size"])
+        self.eng_placement_selected_range_index = self.eng_placement_ranges.index(r)
+        self._refresh_eng_placement_range_combo()
+
+    def _update_eng_placement_range(self):
+        if self.eng_placement_selected_range_index is None or self.eng_placement_selected_range_index >= len(self.eng_placement_ranges):
+            messagebox.showinfo("No Selection", "Select a range to update.")
+            return
+        r = self._read_eng_placement_range_fields()
+        if r["min_size"] >= r["max_size"]:
+            messagebox.showerror("Invalid Range", "Min size must be less than max size.")
+            return
+        self.eng_placement_ranges[self.eng_placement_selected_range_index] = r
+        self.eng_placement_ranges.sort(key=lambda x: x["min_size"])
+        self.eng_placement_selected_range_index = self.eng_placement_ranges.index(r)
+        self._refresh_eng_placement_range_combo()
+
+    def _delete_eng_placement_range(self):
+        if self.eng_placement_selected_range_index is None or self.eng_placement_selected_range_index >= len(self.eng_placement_ranges):
+            messagebox.showinfo("No Selection", "Select a range to delete.")
+            return
+        del self.eng_placement_ranges[self.eng_placement_selected_range_index]
+        self.eng_placement_selected_range_index = None
+        self._refresh_eng_placement_range_combo()
 
     def save_options(self):
         # Sizing
@@ -304,24 +879,32 @@ class OptionsWindow:
         self.settings["min_hole_size"] = self.min_hole_size_var.get()
         self.settings["felt_thickness"] = self.felt_thickness_var.get()
         self.settings["felt_thickness_unit"] = self.felt_thickness_unit_var.get()
-        
+        self.settings["sizing_range_mode"] = self.sizing_range_mode_var.get()
+        self.settings["sizing_ranges"] = self.sizing_ranges
+
         # DART SAVE LOGIC
         self.settings["darts_enabled"] = self.darts_enabled_var.get()
+        self.settings["dart_range_mode"] = self.dart_range_mode_var.get()
         self.settings["dart_threshold"] = self.dart_threshold_var.get()
         self.settings["dart_overwrap"] = self.dart_overwrap_var.get()
         self.settings["dart_wrap_bonus"] = self.dart_wrap_bonus_var.get()
         self.settings["dart_frequency_multiplier"] = self.dart_frequency_multiplier_var.get()
         self.settings["dart_shape_factor"] = self.dart_shape_factor_var.get()
+        self.settings["dart_ranges"] = self.dart_ranges
         
         # Engraving
         self.settings["engraving_on"] = self.engraving_on_var.get()
         for material, var in self.engraving_font_size_vars.items():
             self.settings["engraving_font_size"][material] = var.get()
+        self.settings["engraving_settings_range_mode"] = self.eng_settings_range_mode_var.get()
+        self.settings["engraving_settings_ranges"] = self.eng_settings_ranges
 
         for material, vars in self.engraving_loc_vars.items():
             self.settings["engraving_location"][material]['mode'] = vars['mode'].get()
             self.settings["engraving_location"][material]['value'] = vars['value'].get()
-            
+        self.settings["engraving_placement_range_mode"] = self.eng_placement_range_mode_var.get()
+        self.settings["engraving_placement_ranges"] = self.eng_placement_ranges
+
         # STAR ENGRAVING SAVE
         self.settings["dart_engraving_on"] = self.dart_engraving_on_var.get()
         self.settings["dart_engraving_loc"] = {
@@ -331,9 +914,6 @@ class OptionsWindow:
             
         # Export
         self.settings["compatibility_mode"] = self.compatibility_mode_var.get()
-
-        # Max Fill
-        self.settings["max_fill_style"] = self.max_fill_style_var.get()
 
         self.save_callback()
         self.update_callback()
@@ -349,23 +929,39 @@ class OptionsWindow:
             self.min_hole_size_var.set(DEFAULT_SETTINGS["min_hole_size"])
             self.felt_thickness_var.set(DEFAULT_SETTINGS["felt_thickness"])
             self.felt_thickness_unit_var.set(DEFAULT_SETTINGS["felt_thickness_unit"])
+            self.sizing_range_mode_var.set("universal")
+            self.sizing_ranges = []
+            self._refresh_sizing_range_combo()
+            self._toggle_sizing_mode()
             
             # REVERT DART LOGIC
             self.darts_enabled_var.set(DEFAULT_SETTINGS.get("darts_enabled", True))
+            self.dart_range_mode_var.set("universal")
             self.dart_threshold_var.set(DEFAULT_SETTINGS.get("dart_threshold", 18.0))
             self.dart_overwrap_var.set(DEFAULT_SETTINGS.get("dart_overwrap", 0.5))
             self.dart_wrap_bonus_var.set(DEFAULT_SETTINGS.get("dart_wrap_bonus", 0.75))
             self.dart_frequency_multiplier_var.set(DEFAULT_SETTINGS.get("dart_frequency_multiplier", 1.0))
             self.dart_shape_factor_var.set(DEFAULT_SETTINGS.get("dart_shape_factor", 0.0))
+            self.dart_ranges = []
+            self._refresh_range_combo()
+            self._toggle_dart_mode()
             
             # Engraving
             self.engraving_on_var.set(DEFAULT_SETTINGS["engraving_on"])
             for material, var in self.engraving_font_size_vars.items():
                  var.set(DEFAULT_SETTINGS["engraving_font_size"][material])
-            
+            self.eng_settings_range_mode_var.set("universal")
+            self.eng_settings_ranges = []
+            self._refresh_eng_settings_range_combo()
+            self._toggle_eng_settings_mode()
+
             for material, vars in self.engraving_loc_vars.items():
                  vars['mode'].set(DEFAULT_SETTINGS["engraving_location"][material]['mode'])
                  vars['value'].set(DEFAULT_SETTINGS["engraving_location"][material]['value'])
+            self.eng_placement_range_mode_var.set("universal")
+            self.eng_placement_ranges = []
+            self._refresh_eng_placement_range_combo()
+            self._toggle_eng_placement_mode()
                  
             # Revert Star Engraving
             self.dart_engraving_on_var.set(True)
@@ -374,9 +970,6 @@ class OptionsWindow:
 
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
-
-            # Max Fill
-            self.max_fill_style_var.set(DEFAULT_SETTINGS.get("max_fill_style", "center_out"))
 
 class LayerColorWindow:
     def __init__(self, parent, settings, save_callback):
@@ -1909,10 +2502,12 @@ class UserGuideWindow(tk.Toplevel):
 
         self._h2("Engraving")
         self._body("Each disc is engraved with its pad size number for identification. "
-                    "Engraving can be toggled on/off and positioned per material in Sizing Rules.")
+                    "Engraving settings and placement are configured in Options > Sizing Rules.")
         self._bullet("Position modes: distance from outside edge, distance from inside "
                       "(center hole), or centered between the two")
-        self._bullet("Font size is set per material in Sizing Rules")
+        self._bullet("Font size is set per material")
+        self._bullet("Both engraving settings (on/off, font sizes) and placement (position modes) "
+                      "support Universal or Per Size Range mode, just like sizing rules")
         self._bullet("On small pads, the text automatically shifts toward the center to stay "
                       "within the disc. If the text is too large to fit even when centered, "
                       "it scales down as a last resort.")
@@ -1932,7 +2527,7 @@ class UserGuideWindow(tk.Toplevel):
 
         self._h2("Materials & Sizing Rules")
         self._body("Options > Sizing Rules configures how disc sizes are calculated from "
-                    "the pad size you enter. Each material has its own sizing rules:")
+                    "the pad size you enter:")
         self._bullet("Felt Offset: how much smaller the felt disc is than the pad cup "
                       "(e.g. 0.75mm means the felt disc is 0.75mm smaller in diameter)")
         self._bullet("Card-to-Felt Offset: additional reduction for cardboard backing "
@@ -1941,11 +2536,17 @@ class UserGuideWindow(tk.Toplevel):
                       "for wrapping around the felt (1.0 = standard wrap)")
         self._bullet("Felt Thickness: the thickness of felt being used, affects leather "
                       "wrap calculation")
-        self._bullet("Star/Dart Settings: for leather pads below the dart threshold, "
-                      "star or dart patterns are added so the leather can fold around the felt. "
-                      "Threshold, overwrap, frequency, and shape factor are all adjustable.")
-        self._bullet("Engraving Location: where the pad label is placed, specified as "
-                      "distance from inside or outside edge of the disc")
+        self._bullet("Min. Pad Size for Hole: pads below this size skip the center hole")
+        self._body("Sizing rules, engraving settings, engraving placement, and star/dart "
+                    "settings each have a Universal/Range toggle. In Universal mode (default), "
+                    "one set of values applies to all pad sizes. In Range mode, define multiple "
+                    "size ranges with different values for each. Pads not covered by any range "
+                    "fall back to the universal values. Star/dart ranges work slightly differently: "
+                    "pads not in a range simply get no star pattern.")
+        self._blank()
+        self._body("Star/Dart Settings: for leather pads below a size threshold, "
+                    "star or dart patterns are added so the leather can fold around the felt. "
+                    "Overwrap, wrap bonus, frequency multiplier, and shape factor are all adjustable.")
         self._blank()
 
         self._h2("G-code Settings")

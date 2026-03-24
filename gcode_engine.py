@@ -615,6 +615,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
                  is used for Y-flip instead of sheet_height_mm
     """
     from svg_engine import get_felt_thickness_mm
+    from config import (get_dart_settings_for_size, get_sizing_for_size,
+                        get_engraving_settings_for_size, get_engraving_placement_for_size)
 
     if not placed:
         return
@@ -665,17 +667,9 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     kerf_width = mat_settings.get("kerf_width", 0.0)
     kerf_offset = kerf_width / 2
 
-    # Font size for engraving
-    engraving_font_sizes = settings.get("engraving_font_size", {})
-    font_size = engraving_font_sizes.get(material, 3.0)
-
     # Track bounds
     all_x = []
     all_y = []
-
-    # Check if this material uses star patterns
-    use_stars = material == 'leather' and settings.get("darts_enabled", True)
-    dart_threshold = settings.get("dart_threshold", 18.0)
 
     def _collect_disc_strokes(pad_size, cx, cy, radius):
         """Collect engraving, hole, and cut strokes for a single disc."""
@@ -683,19 +677,25 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         disc_hole = []
         disc_cut = []
 
-        is_dart_pad = use_stars and pad_size < dart_threshold
+        sizing = get_sizing_for_size(pad_size, settings)
+        eng_cfg = get_engraving_settings_for_size(pad_size, settings)
+        plc_cfg = get_engraving_placement_for_size(pad_size, settings)
+        font_size = eng_cfg.get("engraving_font_size", {}).get(material, 3.0)
+
+        dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
+        is_dart_pad = dart_cfg is not None
 
         # Engraving
         should_engrave = False
         eng_settings = None
 
         if is_dart_pad:
-            if settings.get("dart_engraving_on", True):
-                eng_settings = settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5})
+            if dart_cfg.get("engraving_on", True):
+                eng_settings = dart_cfg.get("engraving_loc", {"mode": "from_outside", "value": 2.5})
                 should_engrave = True
         else:
-            if settings.get("engraving_on", True):
-                eng_settings = settings.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
+            if eng_cfg.get("engraving_on", True):
+                eng_settings = plc_cfg.get("engraving_location", {}).get(material, {"mode": "centered", "value": 0})
                 should_engrave = True
 
         if should_engrave and font_size >= radius * 0.8:
@@ -767,19 +767,18 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             disc_eng.extend(text_strokes)
 
         # Center hole
-        min_hole_size = settings.get("min_hole_size", 16.5)
-        if hole_dia > 0 and pad_size >= min_hole_size:
+        if hole_dia > 0 and pad_size >= sizing.get("min_hole_size", 16.5):
             hole_radius = (hole_dia / 2) - kerf_offset
             if hole_radius > 0:
                 hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
                 disc_hole.append(hole_points)
 
         # Outer cut - circle or star pattern
-        if use_stars and pad_size < dart_threshold:
-            felt_thick = get_felt_thickness_mm(settings)
-            overwrap = settings.get("dart_overwrap", 0.5)
+        if is_dart_pad:
+            felt_thick = get_felt_thickness_mm(settings, sizing)
+            overwrap = dart_cfg.get("overwrap", 0.5)
 
-            felt_r = (pad_size - settings.get("felt_offset", 0.75)) / 2
+            felt_r = (pad_size - sizing.get("felt_offset", 0.75)) / 2
             inner_r = felt_r + felt_thick + overwrap
             outer_r = radius
 
@@ -790,14 +789,14 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             inner_r += kerf_offset
 
             circumference = 2 * math.pi * inner_r
-            freq_mult = settings.get("dart_frequency_multiplier", 1.0)
+            freq_mult = dart_cfg.get("frequency_multiplier", 1.0)
             num_points = int((circumference / 3.5) * freq_mult)
             if num_points < 12:
                 num_points = 12
             if num_points % 2 != 0:
                 num_points += 1
 
-            shape_factor = settings.get("dart_shape_factor", 0.0)
+            shape_factor = dart_cfg.get("shape_factor", 0.0)
             star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
             disc_cut.append(star_points)
         else:
