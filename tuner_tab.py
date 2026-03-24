@@ -76,17 +76,6 @@ VU_RADIUS = 80                   # Radius of the VU meter arc
 GAIN_MIN = 0.1                   # Gain at sensitivity=0%
 GAIN_RANGE = 2.4                 # Additional gain at sensitivity=100% (total 2.5)
 
-# --- Stroboconn mechanical spin rates (US Patent 2,286,030) ---
-# Motor: 27.5 RPS for the A disc, each pitch class geared by alternating
-# ratios 89/84 and 107/101 (≈ 2^(1/12) per semitone).
-# Idler shaft 82 reverses rotation: upper discs (accidentals) spin opposite
-# to lower discs (naturals).
-# Actual patent motor speed — 27.5 RPS for A disc.
-_SPIN_BASE_A_DPS = 27.5 * 360.0  # degrees/sec for A (pitch class 9)
-STROBOCONN_SPIN_RATES = [
-    _SPIN_BASE_A_DPS * 2.0 ** ((pc - 9) / 12.0) for pc in range(12)
-]
-TOP_ROW_PCS = {1, 3, 6, 8, 10}  # accidentals — opposite spin direction
 
 # --- Wheel layout ---
 LAYOUT_MARGIN_FRACTION = 0.08    # Horizontal margin as fraction of column width
@@ -401,7 +390,6 @@ class TunerTabMixin:
         self._tuner_use_gpu = False     # Set True if GPU renderer initializes
         self._gpu_renderer = None       # tuner_render.TunerRenderer instance
         self._tuner_gpu_labels = {}     # pc_index → tk.Label (GPU mode only)
-        self._tuner_spin_phases = [0.0] * 12  # Per-wheel free-spinning phases
 
     def create_tuner_tab(self, parent):
         """Build the Tuner tab UI."""
@@ -420,9 +408,6 @@ class TunerTabMixin:
             value=str(tuner_settings.get("fps", "60")))
         self._tuner_show_fps = tk.BooleanVar(
             value=tuner_settings.get("show_fps", False))
-        self._tuner_always_spin = tk.BooleanVar(
-            value=tuner_settings.get("always_spinning", False))
-
         bg = self._tuner_faceplate_color
 
         # --- Main container (skip theme walker — dark display) ---
@@ -1197,17 +1182,6 @@ class TunerTabMixin:
 
         fp_swatch.configure(command=pick_faceplate_color)
 
-        # --- Always spinning ---
-        tk.Checkbutton(
-            frame, text="Wheels always spinning (mechanical mode)",
-            variable=self._tuner_always_spin,
-            bg=bg, fg=fg, selectcolor=bg, activebackground=bg,
-            font=("Helvetica", 10),
-        ).pack(fill="x", pady=(0, 0))
-        tk.Label(frame, text="Per-pitch RPMs from US Patent 2,286,030. Best at 120 FPS.",
-                 bg=bg, fg="#888888", font=("Helvetica", 8),
-                 anchor="w").pack(fill="x", padx=(23, 0), pady=(0, 5))
-
         # --- Show FPS ---
         tk.Checkbutton(
             frame, text="Show frame rate on screen",
@@ -1304,19 +1278,6 @@ class TunerTabMixin:
             sens = self._tuner_sens_var.get() / 100.0
             gain = GAIN_MIN + sens * GAIN_RANGE
 
-            # "Always spinning" mode: each wheel spins at its Stroboconn
-            # patent RPM (scaled for visibility). Upper row (accidentals) and
-            # lower row (naturals) spin in opposite directions per the patent.
-            always_spin = self._tuner_always_spin.get()
-            if always_spin:
-                dt = FRAME_RATES.get(self._tuner_fps_var.get(), 16) / 1000.0
-                for pc in range(12):
-                    rate = STROBOCONN_SPIN_RATES[pc]
-                    if pc in TOP_ROW_PCS:
-                        rate = -rate  # idler shaft reverses upper row
-                    self._tuner_spin_phases[pc] = (
-                        self._tuner_spin_phases[pc] + rate * dt) % 360.0
-
             if self._tuner_use_gpu and self._gpu_renderer:
                 # ── GPU path: single call to Rust renderer ──
                 magnitudes = [min(1.0, result.magnitudes[i] * gain) for i in range(12)]
@@ -1326,11 +1287,7 @@ class TunerTabMixin:
                     if magnitudes[i] > MAGNITUDE_THRESHOLD:
                         phases.append(result.phase_offsets[i])
                         spin_mags.append(magnitudes[i])
-                    elif always_spin:
-                        phases.append(self._tuner_spin_phases[i])
-                        spin_mags.append(DIM_MULTIPLIER)
                     else:
-                        # No signal, not spinning — wheel off
                         phases.append(0.0)
                         spin_mags.append(0.0)
 
@@ -1355,8 +1312,6 @@ class TunerTabMixin:
                     if mag > MAGNITUDE_THRESHOLD:
                         b = min(1.0, mag ** BRIGHTNESS_GAMMA)
                         gray = int((LABEL_BRIGHTNESS_MIN + b * LABEL_BRIGHTNESS_RANGE) * 255)
-                    elif always_spin:
-                        gray = int(0x55)
                     else:
                         gray = int(0x88)
                     lbl.configure(fg=f"#{gray:02x}{gray:02x}{gray:02x}")
@@ -1369,9 +1324,6 @@ class TunerTabMixin:
                                  for rm in result.ring_magnitudes[i]]
                     if mag > MAGNITUDE_THRESHOLD:
                         phase = result.phase_offsets[i]
-                    elif always_spin:
-                        phase = self._tuner_spin_phases[i]
-                        mag = DIM_MULTIPLIER
                     else:
                         phase = 0.0
                         mag = 0.0
@@ -1605,5 +1557,4 @@ class TunerTabMixin:
             "overall_brightness": self._tuner_overall_brightness if hasattr(self, '_tuner_overall_brightness') else 80,
             "faceplate_color": self._tuner_faceplate_color if hasattr(self, '_tuner_faceplate_color') else DEFAULT_FACEPLATE,
             "show_fps": self._tuner_show_fps.get() if hasattr(self, '_tuner_show_fps') else False,
-            "always_spinning": self._tuner_always_spin.get() if hasattr(self, '_tuner_always_spin') else False,
         }

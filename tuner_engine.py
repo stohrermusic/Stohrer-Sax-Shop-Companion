@@ -366,12 +366,19 @@ class TunerEngine:
 
             result.phase_offsets[pc] = self._phase_offsets[pc]
 
-        # Normalize magnitudes to 0-1
-        if max_mag > 0:
+        # Normalize magnitudes to 0-1, but only if the strongest signal
+        # is meaningfully above the noise floor (not just noise peaks)
+        if max_mag > threshold * 1.5:
             for pc in range(12):
                 result.magnitudes[pc] /= max_mag
                 for r in range(NUM_RINGS):
                     result.ring_magnitudes[pc][r] /= max_mag
+        else:
+            # No real signal — zero everything so wheels stay dark
+            for pc in range(12):
+                result.magnitudes[pc] = 0.0
+                for r in range(NUM_RINGS):
+                    result.ring_magnitudes[pc][r] = 0.0
 
         # Determine active wheels
         for pc in range(12):
