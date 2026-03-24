@@ -12,7 +12,8 @@ from config import (
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE,
     DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files,
-    get_ssl_context, get_input_devices
+    get_ssl_context, get_input_devices,
+    setup_logging, get_log_file
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
 from gcode_engine import generate_gcode, generate_gcode_from_placed
@@ -296,6 +297,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             help_menu = tk.Menu(menu, tearoff=0)
             menu.add_cascade(label="Help", menu=help_menu)
             help_menu.add_command(label="User Guide...", command=self.open_user_guide)
+            help_menu.add_separator()
+            help_menu.add_command(label="Open Log File", command=self._open_log_file)
             help_menu.add_separator()
             help_menu.add_command(label="About", command=self.open_about)
 
@@ -2130,6 +2133,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def open_about(self):
         AboutDialog(self.root)
 
+    def _open_log_file(self):
+        """Open the log file in the system's default text editor."""
+        log_path = get_log_file()
+        if log_path and os.path.exists(log_path):
+            if sys.platform == 'win32':
+                os.startfile(log_path)
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', log_path])
+            else:
+                subprocess.Popen(['xdg-open', log_path])
+        else:
+            messagebox.showinfo("Log File", f"No log file found.\nExpected at: {log_path}")
+
     def _save_checkbox(self, key, var):
         """Save a checkbox setting."""
         self.settings[key] = var.get()
@@ -2183,6 +2199,30 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
         self.height_label.config(text=f"Height ({self.settings['units']}):")
 
 if __name__ == '__main__':
+    setup_logging()
+
+    def _handle_exception(exc_type, exc_value, exc_tb):
+        """Log unhandled exceptions to the log file and show a dialog."""
+        import traceback, logging
+        tb_text = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        logging.error("Unhandled exception:\n%s", tb_text)
+        try:
+            messagebox.showerror(
+                "Unexpected Error",
+                f"{exc_type.__name__}: {exc_value}\n\n"
+                "Details saved to log file (Help > Open Log File).")
+        except Exception:
+            pass  # GUI may not be available
+
+    sys.excepthook = _handle_exception
+
     root = tk.Tk()
+
+    def _handle_tk_exception(exc_type, exc_value, exc_tb):
+        """Handle exceptions in tkinter callbacks."""
+        _handle_exception(exc_type, exc_value, exc_tb)
+
+    root.report_callback_exception = _handle_tk_exception
+
     app = PadSVGGeneratorApp(root)
     root.mainloop()

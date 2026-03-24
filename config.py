@@ -4,6 +4,8 @@ import json
 import copy
 import shutil
 import ssl
+import logging
+import logging.handlers
 from tkinter import messagebox
 
 
@@ -203,6 +205,38 @@ def ensure_config_dir():
     if not os.path.exists(config_dir):
         os.makedirs(config_dir, exist_ok=True)
     return config_dir
+
+
+LOG_FILE = None  # Set by setup_logging()
+
+def setup_logging():
+    """Set up file logging for error diagnostics.
+
+    Log file goes in the config directory. Rotates at 500KB, keeps 1 backup.
+    Returns the log file path.
+    """
+    global LOG_FILE
+    config_dir = ensure_config_dir()
+    LOG_FILE = os.path.join(config_dir, "app.log")
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.WARNING)
+
+    # Rotating file handler: 500KB max, 1 backup
+    handler = logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=500_000, backupCount=1, encoding='utf-8')
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    logger.addHandler(handler)
+
+    # Log app startup at WARNING level so it always appears
+    logging.warning("App starting — version %s", APP_VERSION)
+    return LOG_FILE
+
+
+def get_log_file():
+    """Return the path to the log file."""
+    return LOG_FILE
 
 
 def migrate_legacy_files():
