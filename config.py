@@ -590,6 +590,9 @@ def load_settings():
                 for key, default_value in DEFAULT_SETTINGS.items():
                     if key in loaded_settings:
                         if isinstance(default_value, dict):
+                            # Only merge if loaded value is also a dict; otherwise keep default
+                            if not isinstance(loaded_settings[key], dict):
+                                continue
                             settings[key] = {}
                             for sub_key, sub_default in default_value.items():
                                 if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
@@ -601,12 +604,22 @@ def load_settings():
                                 else:
                                     settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
                         else:
-                            settings[key] = loaded_settings[key]
-                
+                            # Don't replace defaults with None — old configs may have nulls
+                            if loaded_settings[key] is not None:
+                                settings[key] = loaded_settings[key]
+
+                # Validate layer_colors: old versions used LightBurn codes (C10, C15)
+                # instead of hex colors. Replace any non-hex values with defaults.
+                if "layer_colors" in settings and isinstance(settings["layer_colors"], dict):
+                    default_colors = DEFAULT_SETTINGS["layer_colors"]
+                    for key, val in settings["layer_colors"].items():
+                        if not isinstance(val, str) or not val.startswith("#"):
+                            settings["layer_colors"][key] = default_colors.get(key, "#000000")
+
                 return settings
-        except (json.JSONDecodeError, TypeError):
-            return DEFAULT_SETTINGS.copy()
-    return DEFAULT_SETTINGS.copy()
+        except (json.JSONDecodeError, TypeError, KeyError, AttributeError, ValueError):
+            return copy.deepcopy(DEFAULT_SETTINGS)
+    return copy.deepcopy(DEFAULT_SETTINGS)
 
 def save_settings(settings):
     try:
