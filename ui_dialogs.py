@@ -2785,6 +2785,38 @@ class UserGuideWindow(tk.Toplevel):
 
     def _section_toner(self):
         self._h2("Toner \u2014 Tone Analyzer")
+
+        self._h2("How to Think About This Tool")
+        self._body("The Toner measures the harmonic fingerprint of your sound \u2014 but "
+                    "your sound is shaped by everything at once: your air, your embouchure, "
+                    "your reed, your mouthpiece, your horn, and the room you're in. No "
+                    "single reading can separate these. Instead, the tool works at "
+                    "different time scales, and each scale answers a different question:")
+        self._blank()
+        self._bullet("The live gauges (right now): \"What is my sound doing this second?\" "
+                      "Use them as biofeedback while practicing. The movement IS the "
+                      "information \u2014 it shows how your playing choices affect the "
+                      "sound in real time.")
+        self._bullet("A single session: \"How did I sound today on this setup?\" "
+                      "One capture session blends horn + mouthpiece + reed + player + "
+                      "room + mic. You can't separate those variables from one session.")
+        self._bullet("Many sessions, same setup: \"What does this setup tend to sound "
+                      "like?\" Day-to-day player variation averages out. What remains "
+                      "says more about the equipment.")
+        self._bullet("Many setups, same horn: \"What does this horn do across different "
+                      "players and mouthpieces?\" Only at this level can you start to "
+                      "make statements about a horn's character \u2014 and even then, "
+                      "with appropriate humility.")
+        self._blank()
+        self._body("The more data you collect, the more the tool can reveal. A single "
+                    "session shows that saxophones are flexible instruments with a wide "
+                    "tonal range depending on how they're played. Over many sessions, "
+                    "underlying differences between horns, mouthpieces, and players may "
+                    "emerge \u2014 but they emerge from the data, not from any single "
+                    "measurement. Be skeptical of strong claims from small samples.")
+        self._blank()
+
+        self._h2("What It Measures")
         self._body("A real-time harmonic analyzer for saxophone. Detects the fundamental pitch "
                     "and shows the strength of each harmonic overtone, giving visual feedback "
                     "on your tone quality. The saxophone is a conical bore instrument, so it "
@@ -2847,19 +2879,28 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("Gauges")
-        self._body("Five VU-style gauges show different aspects of tone quality:")
+        self._body("Five VU-style gauges show different aspects of tone quality. "
+                    "These respond to your playing in real time \u2014 they reflect the "
+                    "complete system (you + your setup), not just the horn.")
         self._bullet("Intonation: flat/sharp meter with cents readout")
         self._bullet("Dissonant / Resonant: how well the harmonics align to ideal "
-                      "integer ratios of the fundamental. Perfect alignment = resonant. "
-                      "Harmonics that drift from their ideal positions = dissonant.")
-        self._bullet("Pure / Rich: measures both how many harmonics are present and "
+                      "integer ratios of the fundamental. Saxophone acoustics (mode "
+                      "locking) keeps this tight, so the scale is narrow. "
+                      "A well-built bore with a good setup reads high; misalignment "
+                      "from bore issues or unusual setups reads lower.")
+        self._bullet("Pure / Complex: measures both how many harmonics are present and "
                       "how evenly the energy is spread among them (spectral flatness). "
                       "A tone with energy concentrated in the fundamental = pure. "
-                      "Energy spread evenly across many harmonics = rich.")
-        self._bullet("Bright: strength of harmonics above the break frequency")
-        self._bullet("Dark: strength of harmonics below the break frequency")
+                      "Energy spread evenly across many harmonics = complex.")
+        self._bullet("Bright: strength of the \"presence\" harmonics (H3\u2013H5) "
+                      "relative to the fundamental. These mid harmonics are where "
+                      "the ear is most sensitive to brightness. Strong H3\u2013H5 = "
+                      "bright and present; weak = dark and muted.")
+        self._bullet("Dark: the inverse of brightness")
         self._bullet("FULL lamp: lights up when both bright and dark are strong \u2014 "
-                      "a tone with presence across the full harmonic range")
+                      "a tone with balanced energy across the full harmonic range. "
+                      "Uses the Benade break frequency internally to measure the "
+                      "balance of upper vs lower harmonics.")
         self._blank()
 
         self._h2("Bias Sliders")
@@ -2879,6 +2920,14 @@ class UserGuideWindow(tk.Toplevel):
                     "If any variable changes, that's a new profile. This keeps the data "
                     "clean \u2014 you can compare \"same horn, different mouthpiece\" or "
                     "\"same player, different horn\" without muddying the results.")
+        self._blank()
+        self._body("Each session captures a snapshot of how that setup sounded that day. "
+                    "Multiple sessions build a richer picture. Over time, patterns that "
+                    "persist across sessions are more likely to reflect the equipment; "
+                    "patterns that come and go are more likely the player, the reed, or "
+                    "the room. The tool never claims a horn \"is\" bright or dark \u2014 "
+                    "it shows what the data says across however many sessions you've "
+                    "recorded, and lets you draw your own conclusions.")
         self._blank()
         self._bullet("Click Capture to start. Select or create a profile, then play.")
         self._bullet("The tool auto-detects steady tones: hold a note for ~1 second and "

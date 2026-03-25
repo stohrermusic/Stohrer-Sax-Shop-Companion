@@ -17,7 +17,7 @@ import threading
 import time
 import json
 import os
-from collections import namedtuple
+from collections import deque, namedtuple
 
 try:
     import numpy as np
@@ -84,9 +84,13 @@ HARMONIC_NOISE_FLOOR_DB = -60.0
 HARMONIC_CENTS_CLAMP = 100.0
 
 # --- Descriptor scaling constants ---
-# Resonance: raw score range mapped to gauge (0.85 raw = gauge 0%, 1.0 = gauge 100%)
-RESONANCE_RAW_MIN = 0.85
-RESONANCE_RAW_RANGE = 0.15    # 1.0 - 0.85
+# Resonance: raw score range mapped to gauge.
+# Mode-locking in saxophones keeps played harmonics within a few cents of
+# ideal, so the useful range is narrow.  Mean deviation of ~3.5 cents maps
+# to gauge 0%; perfect alignment maps to 100%.  Deliberately mistuned
+# horns (microtuner, bad bore) should read clearly low.
+RESONANCE_RAW_MIN = 0.93
+RESONANCE_RAW_RANGE = 0.07    # 1.0 - 0.93
 # Resonance: max mean deviation (cents) for raw score calculation
 RESONANCE_MAX_DEVIATION = 50.0
 # Richness significance threshold (dB re: fundamental) for "significant" harmonics
@@ -107,6 +111,10 @@ FULLNESS_BALANCE_EXPONENT = 2.0
 # Fullness: weight split between base fullness and energy-dependent component
 FULLNESS_BASE_WEIGHT = 0.6   # Minimum fullness fraction from balance alone
 FULLNESS_ENERGY_WEIGHT = 0.4 # Additional fullness fraction from harmonic energy
+# Multi-frame averaging: smooth harmonic data across N frames before computing
+# descriptors.  Reduces per-frame noise (~16% stdev within same note) without
+# adding latency — consecutive FFT frames overlap heavily (~90% shared audio).
+DESCRIPTOR_AVG_FRAMES = 3
 # Fullness: energy factor divisor (non-fund energy / fund energy / this value)
 FULLNESS_ENERGY_DIVISOR = 2.0
 
@@ -173,6 +181,7 @@ class TonerResult:
             'brightness': 0.0,
             'darkness': 0.0,
             'fullness': 0.0,
+            'low_harmonic_data': False,
         }
         self.signal_level = 0.0
 
@@ -221,6 +230,7 @@ class TonerEngine:
         self._running = False
         self._window = None
         self._last_fundamental = 0.0  # For temporal smoothing
+        self._harmonic_history = deque(maxlen=DESCRIPTOR_AVG_FRAMES)
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
         self.last_error = None     # Set when stream restart fails
@@ -333,7 +343,31 @@ class TonerEngine:
         if audio is None:
             return result
 
-        return self.analyze_buffer(audio)
+        result = self.analyze_buffer(audio)
+
+        # --- Multi-frame averaging for descriptor stability ---
+        # Smooth harmonic data across recent frames before recomputing
+        # descriptors.  result.harmonics stays per-frame for spectrum
+        # display and captures; descriptors use the averaged data.
+        # analyze_buffer() remains stateless for tests.
+        if result.harmonics and result.fundamental_freq > 0:
+            # Clear history on note change (>1 semitone)
+            if (self._last_fundamental > 0 and
+                    abs(1200.0 * math.log2(
+                        result.fundamental_freq / self._last_fundamental)) > 100):
+                self._harmonic_history.clear()
+            frame_data = {}
+            for h in result.harmonics:
+                frame_data[h.harmonic_number] = (
+                    h.magnitude_db, h.cents_deviation,
+                    h.expected_freq, h.actual_freq)
+            self._harmonic_history.append(frame_data)
+            if len(self._harmonic_history) > 1:
+                avg_harmonics = self._averaged_harmonics(result.fundamental_freq)
+                result.descriptors = self._compute_descriptors(
+                    avg_harmonics, result.fundamental_freq)
+
+        return result
 
     def _restart_stream(self):
         """Restart the audio stream (recover from dead callback)."""
@@ -643,6 +677,43 @@ class TonerEngine:
 
         return harmonics
 
+    def _averaged_harmonics(self, f0):
+        """Average harmonic data across recent frames for descriptor stability.
+
+        Returns a list of HarmonicInfo with averaged dB and cents values.
+        Uses current-frame frequencies (expected/actual) since those don't
+        benefit from averaging — only amplitude and deviation do.
+        """
+        if not self._harmonic_history:
+            return []
+
+        # Collect all harmonic numbers seen across frames
+        all_nums = set()
+        for frame in self._harmonic_history:
+            all_nums.update(frame.keys())
+
+        averaged = []
+        latest = self._harmonic_history[-1]
+        for n in sorted(all_nums):
+            db_vals = []
+            cents_vals = []
+            for frame in self._harmonic_history:
+                if n in frame:
+                    db_vals.append(frame[n][0])
+                    cents_vals.append(frame[n][1])
+            if not db_vals:
+                continue
+            avg_db = sum(db_vals) / len(db_vals)
+            avg_cents = sum(cents_vals) / len(cents_vals)
+            # Use latest frame's frequency data
+            if n in latest:
+                exp_freq, act_freq = latest[n][2], latest[n][3]
+            else:
+                exp_freq, act_freq = f0 * n, f0 * n
+            averaged.append(HarmonicInfo(n, exp_freq, act_freq,
+                                         avg_db, avg_cents))
+        return averaged
+
     def _compute_descriptors(self, harmonics, f0=440.0):
         """Compute tone quality descriptors from harmonic data.
 
@@ -652,7 +723,8 @@ class TonerEngine:
         """
         if not harmonics:
             return {'resonance': 0.5, 'richness': 0.0, 'brightness': 0.0,
-                    'darkness': 0.0, 'fullness': 0.0}
+                    'darkness': 0.0, 'fullness': 0.0,
+                    'low_harmonic_data': False}
 
         # --- Resonance: how well harmonics align to ideal positions ---
         # Scaled for saxophone reality: even a mediocre horn is within
@@ -704,7 +776,9 @@ class TonerEngine:
         # tracks what techs hear: strong mid harmonics = bright, weak = dark.
         h_by_num = {h.harmonic_number: h.magnitude_db for h in harmonics}
         brightness = 0.0
-        if len(h_by_num) >= 6:  # Need at least H1-H6
+        low_harmonic_data = False
+        brightness_available = sum(1 for h in range(2, 7) if h in h_by_num)
+        if brightness_available >= 3:  # Need at least 3 of H2-H6
             weighted_sum = 0.0
             weight_total = 0.0
             for i, w in enumerate(BRIGHTNESS_HARMONIC_WEIGHTS):
@@ -716,6 +790,8 @@ class TonerEngine:
                 weighted_avg_db = weighted_sum / weight_total
                 brightness = max(0.0, min(1.0,
                     (weighted_avg_db - BRIGHTNESS_DB_FLOOR) / BRIGHTNESS_DB_RANGE))
+        else:
+            low_harmonic_data = True
         darkness = 1.0 - brightness
 
         # --- Fullness: balance of upper/lower energy (Benade split) ---
@@ -750,6 +826,7 @@ class TonerEngine:
             'brightness': brightness,
             'darkness': darkness,
             'fullness': fullness,
+            'low_harmonic_data': low_harmonic_data,
         }
 
 
@@ -937,7 +1014,8 @@ def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
     """
     if not harmonics_db or f0 <= 0:
         return {'resonance': 0.5, 'richness': 0.0, 'brightness': 0.0,
-                'darkness': 1.0, 'fullness': 0.0}
+                'darkness': 1.0, 'fullness': 0.0,
+                'low_harmonic_data': False}
     # Lightweight engine instance for _compute_descriptors
     engine = TonerEngine.__new__(TonerEngine)
     engine._break_freq = BREAK_FREQUENCIES.get(sax_type, DEFAULT_BREAK_FREQ)
@@ -1069,6 +1147,130 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         'per_note': per_note_avg,
     }
 
+
+
+def compute_session_fingerprint(session, sax_type="Tenor"):
+    """Compute a fingerprint for a single session.
+
+    Same algorithm as compute_fingerprint but for one session only.
+    Returns the same dict shape (harmonics_db, descriptors, note_count,
+    capture_count, per_note).  Returns None if the session has no captures.
+    """
+    if not session or not session.get('captures'):
+        return None
+    return compute_fingerprint([session], sax_type)
+
+
+def compute_session_variation(sessions, sax_type="Tenor"):
+    """Compute descriptor variation across sessions within a profile.
+
+    Returns dict with:
+        'session_fingerprints': list of (date, fingerprint) tuples
+        'descriptor_stats': {descriptor_name: {mean, stdev, min, max, n}}
+        'session_count': int (sessions with captures)
+    Returns None if fewer than 2 sessions have captures.
+    """
+    fps = []
+    for s in sessions:
+        fp = compute_session_fingerprint(s, sax_type)
+        if fp and fp['capture_count'] > 0:
+            fps.append((s.get('date', '?'), fp))
+    if len(fps) < 2:
+        return None
+
+    desc_keys = ['resonance', 'richness', 'brightness', 'darkness', 'fullness']
+    stats = {}
+    for key in desc_keys:
+        values = [fp['descriptors'].get(key, 0.0) for _, fp in fps]
+        n = len(values)
+        mean = sum(values) / n
+        variance = sum((v - mean) ** 2 for v in values) / n
+        stdev = math.sqrt(variance)
+        stats[key] = {
+            'mean': mean, 'stdev': stdev,
+            'min': min(values), 'max': max(values), 'n': n,
+        }
+    return {
+        'session_fingerprints': fps,
+        'descriptor_stats': stats,
+        'session_count': len(fps),
+    }
+
+
+def compute_group_fingerprint(profiles, sax_type=None):
+    """Compute an aggregate fingerprint across multiple profiles.
+
+    Args:
+        profiles: list of (name, profile_data) tuples
+        sax_type: if None, uses each profile's own horn_type
+
+    Averages per-profile fingerprints with equal weight per profile.
+
+    Returns dict with:
+        'descriptors': averaged descriptors across profiles
+        'harmonics_db': averaged harmonic curve
+        'descriptor_stats': {key: {mean, stdev, min, max, n}}
+        'profile_count': int
+        'total_captures': int
+        'per_profile': list of (name, fingerprint)
+    """
+    per_profile = []
+    for name, pdata in profiles:
+        st = sax_type or pdata.get('horn_type', 'Tenor')
+        fp = compute_fingerprint(pdata.get('sessions', []), st)
+        if fp['capture_count'] > 0:
+            per_profile.append((name, fp))
+
+    if not per_profile:
+        return {
+            'descriptors': {k: 0.0 for k in
+                           ['resonance', 'richness', 'brightness', 'darkness', 'fullness']},
+            'harmonics_db': [],
+            'descriptor_stats': {},
+            'profile_count': 0,
+            'total_captures': 0,
+            'per_profile': [],
+        }
+
+    desc_keys = ['resonance', 'richness', 'brightness', 'darkness', 'fullness']
+
+    # Average descriptors across profiles (equal weight per profile)
+    avg_desc = {}
+    stats = {}
+    for key in desc_keys:
+        values = [fp['descriptors'].get(key, 0.0) for _, fp in per_profile]
+        n = len(values)
+        mean = sum(values) / n
+        variance = sum((v - mean) ** 2 for v in values) / n
+        stdev = math.sqrt(variance)
+        avg_desc[key] = mean
+        stats[key] = {
+            'mean': mean, 'stdev': stdev,
+            'min': min(values), 'max': max(values), 'n': n,
+        }
+
+    # Average harmonic curves
+    max_len = max((len(fp['harmonics_db']) for _, fp in per_profile), default=0)
+    avg_hdb = [0.0] * max_len
+    counts = [0] * max_len
+    for _, fp in per_profile:
+        for i, db in enumerate(fp.get('harmonics_db', [])):
+            avg_hdb[i] += db
+            counts[i] += 1
+    for i in range(max_len):
+        if counts[i] > 0:
+            avg_hdb[i] /= counts[i]
+
+    total_caps = sum(fp['capture_count'] for _, fp in per_profile)
+
+    return {
+        'descriptors': avg_desc,
+        'harmonics_db': avg_hdb,
+        'descriptor_stats': stats,
+        'profile_count': len(per_profile),
+        'total_captures': total_caps,
+        'per_profile': per_profile,
+    }
 
 
 def analyze_audio_file(filepath, engine, progress_cb=None):

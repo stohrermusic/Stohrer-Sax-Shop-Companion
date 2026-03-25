@@ -142,6 +142,56 @@ result = engine.analyze_buffer(audio)
 test("Detects high fundamental", result.fundamental_freq > 0)
 test("Fundamental near 1400 Hz", abs(result.fundamental_freq - 1400.0) < 10.0)
 
+# === Test 13: Brightness with sparse harmonics (H6 missing) ===
+# Regression test: brightness should not snap to 0 when fewer than 6 total
+# harmonics are detected. The weighted H2-H6 formula should compute from
+# whatever brightness-relevant harmonics are available.
+print(f"\n=== Test 13: Brightness with sparse harmonics (H6 missing) ===")
+# Bright tone: strong H2-H5, no H6 or higher
+audio_sparse = make_audio(440.0, harmonics=[
+    (2, 0.8),   # H2 strong
+    (3, 0.9),   # H3 very strong
+    (4, 0.7),   # H4 strong
+    (5, 0.5),   # H5 moderate
+    # H6+ absent — only 5 harmonics total
+])
+result_sparse = engine.analyze_buffer(audio_sparse)
+test("Brightness > 0 with only H1-H5", result_sparse.descriptors.get('brightness', 0) > 0)
+test("Brightness substantial with strong H3-H5",
+     result_sparse.descriptors.get('brightness', 0) > 0.2)
+# Compare: same tone but with H6 added — should be similar, not a huge jump
+audio_full = make_audio(440.0, harmonics=[
+    (2, 0.8), (3, 0.9), (4, 0.7), (5, 0.5), (6, 0.2),
+])
+result_full = engine.analyze_buffer(audio_full)
+diff = abs(result_full.descriptors.get('brightness', 0) - result_sparse.descriptors.get('brightness', 0))
+test("Adding weak H6 doesn't drastically change brightness (diff < 0.15)", diff < 0.15)
+
+# === Test 14: low_harmonic_data flag ===
+print(f"\n=== Test 14: low_harmonic_data flag ===")
+# With strong harmonics — flag should be False
+audio_good = make_audio(440.0, harmonics=[
+    (2, 0.8), (3, 0.9), (4, 0.7), (5, 0.5), (6, 0.3),
+])
+result_good = engine.analyze_buffer(audio_good)
+test("low_harmonic_data=False with full harmonics",
+     result_good.descriptors.get('low_harmonic_data') == False)
+# Pure tone (only fundamental) — fewer than 3 of H2-H6, flag should be True
+audio_pure = make_audio(440.0)
+result_pure = engine.analyze_buffer(audio_pure)
+test("low_harmonic_data=True for pure tone (no H2-H6)",
+     result_pure.descriptors.get('low_harmonic_data') == True)
+# Just barely enough: H3 and H4 only (2 of H2-H6 = not enough, need 3)
+audio_two = make_audio(440.0, harmonics=[(3, 0.5), (4, 0.5)])
+result_two = engine.analyze_buffer(audio_two)
+test("low_harmonic_data=True with only 2 of H2-H6",
+     result_two.descriptors.get('low_harmonic_data') == True)
+# Three of H2-H6 present — should be enough
+audio_three = make_audio(440.0, harmonics=[(3, 0.8), (4, 0.7), (5, 0.6)])
+result_three = engine.analyze_buffer(audio_three)
+test("low_harmonic_data=False with 3 of H2-H6",
+     result_three.descriptors.get('low_harmonic_data') == False)
+
 # ================================================
 print(f"\n{'='*50}")
 print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")

@@ -29,6 +29,8 @@ try:
         SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
         ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
+        compute_session_fingerprint, compute_session_variation,
+        compute_group_fingerprint,
         load_tone_profiles, save_tone_profiles,
         analyze_audio_file, check_mic_quality,
         transpose_note, reverse_transpose_note, note_to_freq,
@@ -80,6 +82,7 @@ SPECTRUM_MAX_FREQ = 8000.0            # Hz — right edge of spectrum display
 FULLNESS_BRIGHTNESS_THRESHOLD = 0.5   # brightness above this to trigger FULL lamp
 FULLNESS_DARKNESS_THRESHOLD = 0.6     # darkness above this to trigger FULL lamp
 SPECTRAL_CHECK_FRAME_COUNT = 25       # frames before mic quality check fires
+LOW_DATA_FRAME_THRESHOLD = 15         # frames (~0.5s) before "low data" overlay shows
 FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 fps
 
 # Capture state machine
@@ -183,6 +186,9 @@ class TonerTabMixin:
             'resonance': 0.5, 'richness': 0.0,
             'brightness': 0.0, 'darkness': 0.0, 'fullness': 0.0,
         }
+        # Low harmonic data tracking — grey out gauges when sustained
+        self._toner_low_data_frames = 0
+        self._toner_low_data_shown = False
         # Profile system state — nested: {library: {profile_name: data}}
         self._toner_profiles = {}
         self._toner_active_library = None   # Library name
@@ -713,10 +719,17 @@ class TonerTabMixin:
         cv.create_oval(cx - 4, cy - 4, cx + 4, cy + 4,
                        fill="#2A1A00", outline="#1A1200", width=1)
 
+        # "Low data" overlay — hidden by default, shown when harmonics insufficient
+        low_data_id = cv.create_text(
+            cx, cy - 30, text="Low harmonic data",
+            fill="#AA4400", font=("Helvetica", 8, "bold"),
+            state="hidden")
+
         return {
             'canvas': cv, 'cx': cx, 'cy': cy,
             'needle_len': needle_len, 'needle_id': needle_id,
             'shadow_id': shadow_id, 'arc_start': arc_start, 'arc_end': arc_end,
+            'low_data_id': low_data_id,
         }
 
     def _toner_build_intonation_gauge(self, cv):
@@ -899,6 +912,20 @@ class TonerTabMixin:
                   gauge['cx'] + 1, gauge['cy'] + 1, nx + 1, ny + 1)
         cv.coords(gauge['needle_id'],
                   gauge['cx'], gauge['cy'], nx, ny)
+
+    def _toner_set_low_data_overlay(self, show):
+        """Show or hide 'Low harmonic data' overlay on descriptor gauges."""
+        self._toner_low_data_shown = show
+        state = "normal" if show else "hidden"
+        # Dim needles when showing, restore when hiding
+        needle_color = "#554400" if show else "#1A1200"
+        shadow_color = "#665522" if show else "#8A6500"
+        for key, gauge in self._toner_gauges.items():
+            cv = gauge['canvas']
+            if 'low_data_id' in gauge:
+                cv.itemconfigure(gauge['low_data_id'], state=state)
+            cv.itemconfigure(gauge['needle_id'], fill=needle_color)
+            cv.itemconfigure(gauge['shadow_id'], fill=shadow_color)
 
     # ------------------------------------------------------------------
     # SPECTRUM RENDERING
@@ -1407,9 +1434,12 @@ class TonerTabMixin:
 
         from toner_engine import BREAK_FREQUENCIES
 
+        sax_type = profile.get('horn_type', 'Tenor')
+        variation = compute_session_variation(sessions, sax_type)
+
         dlg = tk.Toplevel(self.root)
         dlg.title(f"Report \u2014 {prof_name}")
-        dlg.geometry("650x550")
+        dlg.geometry("700x700")
         dlg.transient(self.root)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
@@ -1437,9 +1467,19 @@ class TonerTabMixin:
         tk.Label(main, text=" | ".join(setup_parts), bg=bg, fg=fg,
                  font=("Helvetica", 9)).pack(anchor="w")
 
-        tk.Label(main, text=f"{fp['capture_count']} captures, "
+        n_sessions = len([s for s in sessions if s.get('captures')])
+        session_word = "session" if n_sessions == 1 else "sessions"
+        tk.Label(main, text=f"{fp['capture_count']} captures across "
+                 f"{n_sessions} {session_word}, "
                  f"{fp['note_count']} notes  |  break freq: {break_freq} Hz",
-                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 8))
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w")
+        # Date range
+        dates = [s.get('date', '')[:10] for s in sessions if s.get('captures')]
+        if len(dates) >= 2:
+            tk.Label(main, text=f"Sessions: {min(dates)} to {max(dates)}",
+                     bg=bg, fg=fg, font=("Helvetica", 8)).pack(anchor="w", pady=(0, 8))
+        else:
+            tk.Label(main, text="", bg=bg).pack(pady=(0, 4))
 
         # --- Descriptors ---
         desc_frame = tk.LabelFrame(main, text="Tone Character", bg=bg, fg=fg,
@@ -1450,6 +1490,7 @@ class TonerTabMixin:
         desc_row = tk.Frame(desc_frame, bg=bg)
         desc_row.pack(fill="x", padx=10, pady=8)
 
+        var_stats = variation['descriptor_stats'] if variation else {}
         for label, key in [("Resonance", "resonance"), ("Complexity", "richness"),
                            ("Brightness", "brightness"), ("Darkness", "darkness"),
                            ("Fullness", "fullness")]:
@@ -1458,8 +1499,102 @@ class TonerTabMixin:
             col.pack(side="left", expand=True)
             tk.Label(col, text=f"{val:.0%}", bg=bg, fg=fg,
                      font=("Helvetica", 16, "bold")).pack()
+            if key in var_stats:
+                sd = var_stats[key]['stdev']
+                tk.Label(col, text=f"\u00b1{sd:.0%}", bg=bg, fg="#666666",
+                         font=("Helvetica", 8)).pack()
             tk.Label(col, text=label, bg=bg, fg=fg,
                      font=("Helvetica", 8)).pack()
+
+        # --- Session History (only if 2+ sessions) ---
+        if variation:
+            sess_frame = tk.LabelFrame(main, text="Session History", bg=bg,
+                                        fg=fg, font=("Helvetica", 10, "bold"))
+            sess_frame.pack(fill="x", pady=(0, 8))
+
+            sess_cv = tk.Canvas(sess_frame, bg=bg, highlightthickness=0,
+                                 height=90)
+            sess_sb = tk.Scrollbar(sess_frame, orient="vertical",
+                                    command=sess_cv.yview)
+            sess_inner = tk.Frame(sess_cv, bg=bg)
+            sess_inner.bind("<Configure>",
+                lambda e: sess_cv.configure(scrollregion=sess_cv.bbox("all")))
+            sess_cv.create_window((0, 0), window=sess_inner, anchor="nw")
+            sess_cv.configure(yscrollcommand=sess_sb.set)
+            sess_cv.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+            sess_sb.pack(side="right", fill="y")
+
+            # Header row
+            shdr = tk.Frame(sess_inner, bg=bg)
+            shdr.pack(fill="x")
+            for text, w in [("Date", 12), ("Caps", 5), ("Notes", 5),
+                            ("Res", 5), ("Cmplx", 5), ("Bri", 5),
+                            ("Drk", 5), ("Full", 5)]:
+                tk.Label(shdr, text=text, width=w, bg=bg, fg=fg,
+                         font=("Helvetica", 8, "bold")).pack(side="left")
+
+            # One row per session
+            for date, sfp in variation['session_fingerprints']:
+                srow = tk.Frame(sess_inner, bg=bg)
+                srow.pack(fill="x")
+                sd = sfp.get('descriptors', {})
+                tk.Label(srow, text=date[:10], width=12, bg=bg, fg=fg,
+                         font=("Helvetica", 8)).pack(side="left")
+                tk.Label(srow, text=str(sfp['capture_count']), width=5,
+                         bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
+                tk.Label(srow, text=str(sfp['note_count']), width=5,
+                         bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
+                for key in ['resonance', 'richness', 'brightness',
+                           'darkness', 'fullness']:
+                    tk.Label(srow, text=f"{sd.get(key, 0):.0%}", width=5,
+                             bg=bg, fg=fg,
+                             font=("Helvetica", 8)).pack(side="left")
+
+            # Overall row (bold)
+            orow = tk.Frame(sess_inner, bg=bg)
+            orow.pack(fill="x", pady=(2, 0))
+            tk.Label(orow, text="Overall", width=12, bg=bg, fg=fg,
+                     font=("Helvetica", 8, "bold")).pack(side="left")
+            tk.Label(orow, text=str(fp['capture_count']), width=5, bg=bg,
+                     fg=fg, font=("Helvetica", 8, "bold")).pack(side="left")
+            tk.Label(orow, text=str(fp['note_count']), width=5, bg=bg,
+                     fg=fg, font=("Helvetica", 8, "bold")).pack(side="left")
+            for key in ['resonance', 'richness', 'brightness',
+                       'darkness', 'fullness']:
+                tk.Label(orow, text=f"{d.get(key, 0):.0%}", width=5,
+                         bg=bg, fg=fg,
+                         font=("Helvetica", 8, "bold")).pack(side="left")
+
+            # Variation summary text
+            vs = variation['descriptor_stats']
+            parts = []
+            for label, key in [("brightness", "brightness"),
+                               ("complexity", "richness"),
+                               ("resonance", "resonance"),
+                               ("fullness", "fullness")]:
+                sd = vs[key]['stdev']
+                if sd < 0.03:
+                    word = "very consistent"
+                elif sd < 0.07:
+                    word = "consistent"
+                elif sd < 0.12:
+                    word = "moderate variation"
+                else:
+                    word = "high variation"
+                parts.append((label, vs[key]['mean'], sd, word))
+            # Find most/least variable
+            most_var = max(parts, key=lambda p: p[2])
+            summary = (f"Across {variation['session_count']} sessions: "
+                       f"{most_var[0]} shows the most variation "
+                       f"(\u00b1{most_var[2]:.0%}, {most_var[3]}).")
+            tk.Label(sess_frame, text=summary, bg=bg, fg="#444444",
+                     font=("Helvetica", 8), wraplength=650,
+                     justify="left").pack(padx=10, pady=(0, 5), anchor="w")
+
+        elif n_sessions == 1:
+            tk.Label(main, text="Record more sessions to see consistency data.",
+                     bg=bg, fg="#888888",
+                     font=("Helvetica", 8, "italic")).pack(anchor="w", pady=(0, 8))
 
         # --- Harmonic chart ---
         chart_frame = tk.LabelFrame(main, text="Harmonic Profile (average)",
@@ -1571,6 +1706,21 @@ class TonerTabMixin:
                     val = nd.get(key, 0)
                     tk.Label(row, text=f"{val:.0%}", width=5, bg=bg, fg=fg,
                              font=("Helvetica", 8)).pack(side="left")
+
+        # Context footer
+        ctx_parts = [f"Based on {fp['capture_count']} captures across "
+                     f"{n_sessions} {session_word}."]
+        if fp['capture_count'] < 20 or n_sessions < 2:
+            ctx_parts.append(
+                f"With only {fp['capture_count']} captures from "
+                f"{n_sessions} {session_word}, these readings may not "
+                f"be fully stable. More sessions will improve confidence.")
+        ctx_parts.append(
+            "Room acoustics, mic placement, and mic frequency response "
+            "all affect these readings.")
+        tk.Label(main, text=" ".join(ctx_parts), bg=bg, fg="#888888",
+                 font=("Helvetica", 7), wraplength=660,
+                 justify="left").pack(anchor="w", pady=(0, 8))
 
         # Notes
         if profile.get('notes'):
@@ -2699,14 +2849,19 @@ class TonerTabMixin:
         list_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        filtered_profiles = []
-        check_vars = []  # list of (BooleanVar, index into filtered_profiles)
+        # Each item in check_items is a dict describing what the checkbox
+        # represents: either an entire profile or a single session.
+        # {'type': 'profile', 'lib': str, 'name': str, 'profile': dict}
+        # {'type': 'session', 'lib': str, 'name': str, 'profile': dict,
+        #  'session': dict, 'date': str}
+        check_items = []
+        check_vars = []
 
         def refresh_list():
-            nonlocal filtered_profiles, check_vars
+            nonlocal check_items, check_vars
             for w in list_inner.winfo_children():
                 w.destroy()
-            filtered_profiles = []
+            check_items = []
             check_vars = []
             ft = filter_type.get()
             fp = filter_player.get()
@@ -2718,18 +2873,23 @@ class TonerTabMixin:
                     continue
                 if fm != "All" and prof.get('mouthpiece', '') != fm:
                     continue
-                filtered_profiles.append((lib_name, prof_name, prof))
-                sessions = prof.get('sessions', [])
+                sessions = [s for s in prof.get('sessions', [])
+                            if s.get('captures')]
                 notes = set()
                 for s in sessions:
                     for c in s.get('captures', []):
                         notes.add(c.get('note', ''))
+                if not notes:
+                    continue
                 status = f"{len(notes)} notes"
                 if len(notes) >= MIN_PROFILE_NOTES:
                     status += " \u2713"
 
+                # Profile-level checkbox (all sessions)
                 var = tk.BooleanVar(value=False)
                 check_vars.append(var)
+                check_items.append({'type': 'profile', 'lib': lib_name,
+                                    'name': prof_name, 'profile': prof})
                 tk.Checkbutton(
                     list_inner,
                     text=f"[{lib_name}] {prof_name}  ({status})",
@@ -2738,24 +2898,54 @@ class TonerTabMixin:
                     anchor="w", font=("Helvetica", 10),
                 ).pack(fill="x", anchor="w")
 
+                # Session-level checkboxes (indented, only if 2+ sessions)
+                if len(sessions) >= 2:
+                    for sess in sessions:
+                        date = sess.get('date', '?')[:10]
+                        n_caps = len(sess.get('captures', []))
+                        s_notes = set(c.get('note', '')
+                                      for c in sess.get('captures', []))
+                        svar = tk.BooleanVar(value=False)
+                        check_vars.append(svar)
+                        check_items.append({
+                            'type': 'session', 'lib': lib_name,
+                            'name': prof_name, 'profile': prof,
+                            'session': sess, 'date': date})
+                        tk.Checkbutton(
+                            list_inner,
+                            text=f"      {date}  ({n_caps} caps, "
+                                 f"{len(s_notes)} notes)",
+                            variable=svar, bg=bg, fg="#555555",
+                            selectcolor=bg, activebackground=bg,
+                            anchor="w", font=("Helvetica", 9),
+                        ).pack(fill="x", anchor="w")
+
         refresh_list()
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
 
         def get_selected():
-            """Return list of (name, fingerprint) for checked profiles."""
-            if not filtered_profiles:
-                return []
+            """Return fingerprints for checked items (profiles or sessions)."""
             results = []
             for i, var in enumerate(check_vars):
                 if var.get():
-                    lib_name, prof_name, prof = filtered_profiles[i]
-                    fp = compute_fingerprint(prof.get('sessions', []),
-                                            sax_type=prof.get('horn_type', 'Tenor'))
-                    fp['_name'] = prof_name
-                    fp['_profile'] = prof
-                    results.append(fp)
+                    item = check_items[i]
+                    sax = item['profile'].get('horn_type', 'Tenor')
+                    if item['type'] == 'profile':
+                        fp_val = compute_fingerprint(
+                            item['profile'].get('sessions', []), sax)
+                        fp_val['_name'] = item['name']
+                        fp_val['_profile'] = item['profile']
+                    else:
+                        fp_val = compute_session_fingerprint(
+                            item['session'], sax)
+                        if not fp_val:
+                            continue
+                        fp_val['_name'] = (f"{item['name']} \u2014 "
+                                           f"{item['date']}")
+                        fp_val['_profile'] = item['profile']
+                    results.append(fp_val)
             return results
 
         def load_overlay():
@@ -2790,8 +2980,26 @@ class TonerTabMixin:
                 self._toner_spectrum_canvas.itemconfigure(g, state="hidden")
             dlg.destroy()
 
+        def average_selected():
+            """Compute group average of selected profiles (profile-level only)."""
+            profile_list = []
+            for i, var in enumerate(check_vars):
+                if var.get() and check_items[i]['type'] == 'profile':
+                    item = check_items[i]
+                    profile_list.append((item['name'], item['profile']))
+            if len(profile_list) < 2:
+                messagebox.showinfo("Select More",
+                    "Select at least 2 profiles to average.\n"
+                    "(Individual sessions are not included in group averages.)",
+                    parent=dlg)
+                return
+            dlg.destroy()
+            self._toner_show_group_report(profile_list)
+
         tk.Button(btn_frame, text="Compare Selected",
                   command=compare_selected).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Average Selected",
+                  command=average_selected).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Overlay on Spectrum",
                   command=load_overlay).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Clear",
@@ -3034,7 +3242,20 @@ class TonerTabMixin:
             if mode == "per_note":
                 prefix = f"For {note_var.get()}: "
 
+            # Helper: session/capture context for a profile
+            def _prof_ctx(fp):
+                p = fp.get('_profile', {})
+                n_sess = len([s for s in p.get('sessions', [])
+                              if s.get('captures')]) if p else 0
+                return f"{fp['capture_count']} caps, {n_sess} sess"
+
             lines = []
+            # Context header
+            ctx_parts = [f"{fp['_name']} ({_prof_ctx(fp)})"
+                         for fp in fingerprints]
+            lines.append(f"Comparing: {', '.join(ctx_parts)}")
+            lines.append("")
+
             if len(fingerprints) == 2:
                 da = data[0].get('descriptors', {})
                 db_d = data[1].get('descriptors', {})
@@ -3049,7 +3270,7 @@ class TonerTabMixin:
                             winner = fingerprints[0]['_name'] if diff > 0 else fingerprints[1]['_name']
                             lines.append(f"{prefix}{winner} is more {label.lower()} "
                                         f"({abs(diff):.0%} difference)")
-                    if not lines:
+                    if len(lines) <= 2:  # only context header
                         lines.append(f"{prefix}These profiles are very similar.")
             else:
                 for label, key in desc_labels:
@@ -3075,6 +3296,224 @@ class TonerTabMixin:
         # Initial build
         rebuild_table()
         rebuild_analysis()
+
+        tk.Button(main, text="Close", command=dlg.destroy).pack(pady=(5, 0))
+
+    # ------------------------------------------------------------------
+    # GROUP REPORT
+    # ------------------------------------------------------------------
+
+    def _toner_show_group_report(self, profile_list):
+        """Show an aggregated report across multiple profiles.
+
+        Args:
+            profile_list: list of (name, profile_data) tuples
+        """
+        grp = compute_group_fingerprint(profile_list)
+        if grp['profile_count'] == 0:
+            messagebox.showinfo("No Data",
+                "Selected profiles have no captures.")
+            return
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Group Average")
+        dlg.geometry("720x650")
+        dlg.transient(self.root)
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+
+        main = tk.Frame(dlg, bg=bg)
+        main.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # --- Header ---
+        tk.Label(main, text=f"Group Average: {grp['profile_count']} profiles",
+                 bg=bg, fg=fg,
+                 font=("Helvetica", 13, "bold")).pack(anchor="w")
+        names = [n for n, _ in profile_list]
+        tk.Label(main, text=", ".join(names), bg=bg, fg=fg,
+                 font=("Helvetica", 9), wraplength=680,
+                 justify="left").pack(anchor="w")
+        tk.Label(main, text=f"{grp['total_captures']} total captures",
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 8))
+
+        # --- Descriptors with ± stdev ---
+        desc_frame = tk.LabelFrame(main, text="Group Tone Character",
+                                    bg=bg, fg=fg,
+                                    font=("Helvetica", 10, "bold"))
+        desc_frame.pack(fill="x", pady=(0, 8))
+
+        desc_row = tk.Frame(desc_frame, bg=bg)
+        desc_row.pack(fill="x", padx=10, pady=8)
+
+        gd = grp['descriptors']
+        gs = grp['descriptor_stats']
+        for label, key in [("Resonance", "resonance"), ("Complexity", "richness"),
+                           ("Brightness", "brightness"), ("Darkness", "darkness"),
+                           ("Fullness", "fullness")]:
+            val = gd.get(key, 0)
+            col = tk.Frame(desc_row, bg=bg)
+            col.pack(side="left", expand=True)
+            tk.Label(col, text=f"{val:.0%}", bg=bg, fg=fg,
+                     font=("Helvetica", 16, "bold")).pack()
+            if key in gs and gs[key]['n'] >= 2:
+                sd = gs[key]['stdev']
+                tk.Label(col, text=f"\u00b1{sd:.0%}", bg=bg, fg="#666666",
+                         font=("Helvetica", 8)).pack()
+            tk.Label(col, text=label, bg=bg, fg=fg,
+                     font=("Helvetica", 8)).pack()
+
+        # --- Harmonic chart: group average + individual profiles ---
+        chart_frame = tk.LabelFrame(main, text="Harmonic Profiles",
+                                     bg=bg, fg=fg,
+                                     font=("Helvetica", 10, "bold"))
+        chart_frame.pack(fill="both", expand=True, pady=(0, 8))
+
+        chart_colors = ["#2196F3", "#FF5722", "#4CAF50", "#FF9800",
+                        "#9C27B0", "#00BCD4", "#E91E63", "#8BC34A"]
+        chart_cv = tk.Canvas(chart_frame, bg="white", highlightthickness=0,
+                              height=150)
+        chart_cv.pack(fill="both", expand=True, padx=5, pady=5)
+
+        def draw_group_chart(event=None):
+            chart_cv.delete("all")
+            w = chart_cv.winfo_width()
+            h = chart_cv.winfo_height()
+            if w < 50 or h < 50:
+                return
+
+            margin_l, margin_r, margin_t, margin_b = 40, 100, 10, 25
+            cw = w - margin_l - margin_r
+            ch = h - margin_t - margin_b
+            db_min, db_max = -60.0, 5.0
+
+            # Grid
+            for db in range(-60, 6, 10):
+                y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
+                chart_cv.create_line(margin_l, y, w - margin_r, y,
+                                      fill="#DDDDDD", width=1)
+                chart_cv.create_text(margin_l - 4, y, text=f"{db}",
+                                      fill="#888888", font=("Helvetica", 7),
+                                      anchor="e")
+
+            max_h = max((len(fp.get('harmonics_db', []))
+                         for _, fp in grp['per_profile']),
+                        default=0)
+            max_h = max(max_h, len(grp.get('harmonics_db', [])))
+            if max_h < 2:
+                return
+
+            for hi in range(max_h):
+                x = margin_l + cw * hi / (max_h - 1)
+                chart_cv.create_text(x, h - 5, text=f"H{hi+1}",
+                                      fill="#888888", font=("Helvetica", 7))
+
+            # Individual profiles (thin lines)
+            for idx, (name, fp) in enumerate(grp['per_profile']):
+                color = chart_colors[idx % len(chart_colors)]
+                hdb = fp.get('harmonics_db', [])
+                points = []
+                for hi, db in enumerate(hdb):
+                    x = margin_l + cw * hi / (max_h - 1)
+                    clamped = max(db_min, min(db_max, db))
+                    y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
+                    points.extend([x, y])
+                if len(points) >= 4:
+                    chart_cv.create_line(*points, fill=color, width=1,
+                                          smooth=True, dash=(3, 3))
+
+            # Group average (thick line)
+            hdb = grp.get('harmonics_db', [])
+            points = []
+            for hi, db in enumerate(hdb):
+                x = margin_l + cw * hi / (max_h - 1)
+                clamped = max(db_min, min(db_max, db))
+                y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
+                points.extend([x, y])
+            if len(points) >= 4:
+                chart_cv.create_line(*points, fill="#000000", width=3,
+                                      smooth=True)
+
+            # Legend
+            legend_x = w - margin_r + 8
+            legend_y = margin_t + 5
+            chart_cv.create_rectangle(legend_x - 2, legend_y - 2,
+                                       legend_x + 10, legend_y + 10,
+                                       fill="#000000", outline="")
+            chart_cv.create_text(legend_x + 14, legend_y + 4,
+                                  text="Average", fill="#000000",
+                                  font=("Helvetica", 7), anchor="w")
+            legend_y += 16
+            for idx, (name, _) in enumerate(grp['per_profile']):
+                color = chart_colors[idx % len(chart_colors)]
+                chart_cv.create_rectangle(legend_x - 2, legend_y - 2,
+                                           legend_x + 10, legend_y + 10,
+                                           fill=color, outline="")
+                disp = name[:18] + "\u2026" if len(name) > 18 else name
+                chart_cv.create_text(legend_x + 14, legend_y + 4,
+                                      text=disp, fill=color,
+                                      font=("Helvetica", 7), anchor="w")
+                legend_y += 14
+
+        chart_cv.bind("<Configure>", draw_group_chart)
+
+        # --- Per-profile breakdown table ---
+        tbl_frame = tk.LabelFrame(main, text="Per-Profile Breakdown",
+                                   bg=bg, fg=fg,
+                                   font=("Helvetica", 10, "bold"))
+        tbl_frame.pack(fill="x", pady=(0, 8))
+
+        tbl_cv = tk.Canvas(tbl_frame, bg=bg, highlightthickness=0, height=100)
+        tbl_sb = tk.Scrollbar(tbl_frame, orient="vertical", command=tbl_cv.yview)
+        tbl_inner = tk.Frame(tbl_cv, bg=bg)
+        tbl_inner.bind("<Configure>",
+            lambda e: tbl_cv.configure(scrollregion=tbl_cv.bbox("all")))
+        tbl_cv.create_window((0, 0), window=tbl_inner, anchor="nw")
+        tbl_cv.configure(yscrollcommand=tbl_sb.set)
+        tbl_cv.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        tbl_sb.pack(side="right", fill="y")
+
+        # Header
+        thdr = tk.Frame(tbl_inner, bg=bg)
+        thdr.pack(fill="x")
+        for text, w in [("Profile", 20), ("Sess", 5), ("Caps", 5),
+                        ("Notes", 5), ("Bri", 5), ("Cmplx", 5), ("Full", 5)]:
+            tk.Label(thdr, text=text, width=w, bg=bg, fg=fg,
+                     font=("Helvetica", 8, "bold")).pack(side="left")
+
+        for name, fp in grp['per_profile']:
+            trow = tk.Frame(tbl_inner, bg=bg)
+            trow.pack(fill="x")
+            # Find session count from profile_list
+            n_sess = 0
+            for pn, pd in profile_list:
+                if pn == name:
+                    n_sess = len([s for s in pd.get('sessions', [])
+                                  if s.get('captures')])
+                    break
+            disp_name = name[:20] + "\u2026" if len(name) > 20 else name
+            td = fp.get('descriptors', {})
+            tk.Label(trow, text=disp_name, width=20, bg=bg, fg=fg,
+                     font=("Helvetica", 8), anchor="w").pack(side="left")
+            tk.Label(trow, text=str(n_sess), width=5, bg=bg, fg=fg,
+                     font=("Helvetica", 8)).pack(side="left")
+            tk.Label(trow, text=str(fp['capture_count']), width=5, bg=bg,
+                     fg=fg, font=("Helvetica", 8)).pack(side="left")
+            tk.Label(trow, text=str(fp['note_count']), width=5, bg=bg,
+                     fg=fg, font=("Helvetica", 8)).pack(side="left")
+            for key in ['brightness', 'richness', 'fullness']:
+                tk.Label(trow, text=f"{td.get(key, 0):.0%}", width=5,
+                         bg=bg, fg=fg,
+                         font=("Helvetica", 8)).pack(side="left")
+
+        # Context text
+        ctx = (f"Group average across {grp['profile_count']} profiles "
+               f"({grp['total_captures']} total captures). "
+               f"\u00b1 values reflect variation across profiles, "
+               f"not measurement noise within a profile.")
+        tk.Label(main, text=ctx, bg=bg, fg="#888888",
+                 font=("Helvetica", 7), wraplength=680,
+                 justify="left").pack(anchor="w", pady=(0, 4))
 
         tk.Button(main, text="Close", command=dlg.destroy).pack(pady=(5, 0))
 
@@ -3185,6 +3624,21 @@ class TonerTabMixin:
 
             # Update descriptor gauges
             d = result.descriptors
+
+            # Track low harmonic data condition
+            if d.get('low_harmonic_data', False) and result.fundamental_freq > 0:
+                self._toner_low_data_frames += 1
+            else:
+                self._toner_low_data_frames = 0
+
+            # Show/hide low-data overlay on descriptor gauges
+            if (self._toner_low_data_frames >= LOW_DATA_FRAME_THRESHOLD
+                    and not self._toner_low_data_shown):
+                self._toner_set_low_data_overlay(True)
+            elif (self._toner_low_data_frames == 0
+                    and self._toner_low_data_shown):
+                self._toner_set_low_data_overlay(False)
+
             self._toner_update_gauge('resonance', d['resonance'])
             self._toner_update_gauge('richness', d['richness'])
             self._toner_update_gauge('brightness', d['brightness'])

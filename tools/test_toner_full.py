@@ -25,6 +25,8 @@ from toner_engine import (
     SAMPLE_RATE, FFT_SIZE, MAX_HARMONICS, MIN_PROFILE_NOTES,
     CAPTURE_DELAY_S, DEFAULT_LIBRARY,
     average_captures, compute_fingerprint,
+    compute_session_fingerprint, compute_session_variation,
+    compute_group_fingerprint,
     load_tone_profiles, save_tone_profiles, flatten_profiles,
 )
 
@@ -590,6 +592,70 @@ test("Merge: duplicate date not added",
 
 # Cleanup
 shutil.rmtree(tmpdir)
+
+# ============================================================
+section("Session and group aggregation functions")
+
+# Build test sessions with known data
+def _make_session(date, notes_hz):
+    """Helper: build a session with one capture per (note, freq) pair."""
+    caps = []
+    for note, freq in notes_hz:
+        caps.append({
+            'note': note, 'fundamental_freq': freq,
+            'harmonics_db': [0.0, -3.0, -6.0, -10.0, -15.0, -20.0],
+            'harmonic_cents': [0.0, 1.0, -0.5, 0.3, -0.2, 0.8],
+            'method': 'free', 'n_frames': 30,
+            'timestamp': date,
+        })
+    return {'date': date, 'captures': caps, 'pitch_format': 'concert'}
+
+sess1 = _make_session("2026-03-20 10:00:00", [("A3", 220.0), ("D4", 293.66), ("G4", 392.0)])
+sess2 = _make_session("2026-03-21 10:00:00", [("A3", 220.0), ("D4", 293.66), ("A4", 440.0)])
+sess3 = _make_session("2026-03-22 10:00:00", [("A3", 220.0), ("G4", 392.0), ("A4", 440.0)])
+empty_sess = {'date': '2026-03-23', 'captures': []}
+
+# --- compute_session_fingerprint ---
+fp1 = compute_session_fingerprint(sess1, "Tenor")
+test("session_fp: returns dict", fp1 is not None and isinstance(fp1, dict))
+test("session_fp: has descriptors", 'descriptors' in fp1)
+test("session_fp: correct capture count", fp1['capture_count'] == 3)
+test("session_fp: correct note count", fp1['note_count'] == 3)
+test("session_fp: empty session returns None",
+     compute_session_fingerprint(empty_sess, "Tenor") is None)
+test("session_fp: None session returns None",
+     compute_session_fingerprint(None, "Tenor") is None)
+
+# --- compute_session_variation ---
+var = compute_session_variation([sess1, sess2, sess3], "Tenor")
+test("session_var: returns dict", var is not None and isinstance(var, dict))
+test("session_var: has 3 session fingerprints", var['session_count'] == 3)
+test("session_var: has descriptor_stats", 'descriptor_stats' in var)
+test("session_var: stats have brightness", 'brightness' in var['descriptor_stats'])
+stats_b = var['descriptor_stats']['brightness']
+test("session_var: brightness has mean", 'mean' in stats_b)
+test("session_var: brightness has stdev", 'stdev' in stats_b)
+test("session_var: brightness stdev >= 0", stats_b['stdev'] >= 0)
+test("session_var: brightness n == 3", stats_b['n'] == 3)
+test("session_var: 1 session returns None",
+     compute_session_variation([sess1], "Tenor") is None)
+test("session_var: empty sessions returns None",
+     compute_session_variation([empty_sess, empty_sess], "Tenor") is None)
+
+# --- compute_group_fingerprint ---
+prof_a = {'horn_type': 'Tenor', 'sessions': [sess1, sess2]}
+prof_b = {'horn_type': 'Tenor', 'sessions': [sess3]}
+grp = compute_group_fingerprint([("Horn A", prof_a), ("Horn B", prof_b)])
+test("group_fp: returns dict", isinstance(grp, dict))
+test("group_fp: profile_count == 2", grp['profile_count'] == 2)
+test("group_fp: has descriptors", 'descriptors' in grp)
+test("group_fp: has descriptor_stats", 'descriptor_stats' in grp)
+test("group_fp: has harmonics_db", len(grp['harmonics_db']) > 0)
+test("group_fp: has per_profile", len(grp['per_profile']) == 2)
+test("group_fp: total_captures correct", grp['total_captures'] == 9)  # 6 + 3
+# Empty profiles
+grp_empty = compute_group_fingerprint([("Empty", {'sessions': [empty_sess]})])
+test("group_fp: no-data profile gives count 0", grp_empty['profile_count'] == 0)
 
 # ============================================================
 # Final summary
