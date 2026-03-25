@@ -41,7 +41,7 @@ except ImportError:
 
 DEFAULT_FACEPLATE = "#1A1A1A"
 WHEEL_BG = "#0D0D0D"
-DIM_MULTIPLIER = 0.2      # Inactive wheel brightness
+DIM_MULTIPLIER = 0.08     # Inactive wheel brightness
 LABEL_COLOR = "#888888"
 LABEL_ACTIVE_COLOR = "#FFFFFF"
 FRAME_RATES = {"60": 16, "90": 11, "120": 8}
@@ -57,7 +57,7 @@ WEDGE_ANGLE = 80.0   # Total visible arc in degrees
 CENTER_GAP_FRACTION = 0.12       # Fraction of radius reserved as center gap
 RING_GAP_FRACTION = 0.05         # Fraction of ring width used as gap between rings
 MASK_EXTEND_PX = 8               # Pixels the mask extends beyond disc edge
-BRIGHTNESS_GAMMA = 0.6           # Gamma curve for magnitude → brightness mapping
+BRIGHTNESS_GAMMA = 0.45          # Gamma curve for magnitude → brightness mapping
 MAGNITUDE_THRESHOLD = 0.05       # Below this magnitude, brightness snaps to zero
 PHASE_CHANGE_THRESHOLD = 0.005   # Degrees — skip redraw below this (sub-pixel)
 LABEL_BRIGHTNESS_MIN = 0.35      # Minimum label brightness when signal detected
@@ -310,7 +310,6 @@ class StrobeWheel:
                 rm = min(1.0, ring_magnitudes[ring_idx])
                 rb = min(1.0, rm ** BRIGHTNESS_GAMMA) if rm > MAGNITUDE_THRESHOLD else 0.0
                 per_ring_factor = DIM_MULTIPLIER + rb * (1.0 - DIM_MULTIPLIER)
-                # Blend between uniform and per-ring based on ring_mix
                 blended = uniform_factor * (1.0 - ring_mix) + per_ring_factor * ring_mix
                 ring_fills.append(_scale_color(self.stripe_color, blended * overall_scale))
         else:

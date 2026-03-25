@@ -9,7 +9,7 @@ use wgpu;
 use crate::platform;
 
 const MAX_WHEELS: usize = 12;
-const BRIGHTNESS_GAMMA: f32 = 0.6;
+const BRIGHTNESS_GAMMA: f32 = 0.45;
 const MAGNITUDE_THRESHOLD: f32 = 0.05;
 
 // ── GPU data structures (must match shader.wgsl layout exactly) ─────

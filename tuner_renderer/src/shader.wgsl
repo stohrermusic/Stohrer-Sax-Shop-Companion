@@ -76,7 +76,7 @@ const CENTER_GAP: f32 = 0.12;          // center hole as fraction of radius
 const RING_GAP: f32 = 0.015;           // inter-ring gap as fraction of ring width
 const WEDGE_HALF_ANGLE: f32 = 0.6981;  // 40° in radians (80° total opening)
 const NUM_RINGS: f32 = 7.0;
-const DIM_MULTIPLIER: f32 = 0.2;       // minimum brightness for visible stripes
+const DIM_MULTIPLIER: f32 = 0.08;      // minimum brightness for visible stripes
 
 // Segment counts per ring (octaves 1-7, doubling frequency each ring)
 fn ring_segments(ring: u32) -> f32 {
