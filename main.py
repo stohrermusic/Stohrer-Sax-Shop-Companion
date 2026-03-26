@@ -2116,7 +2116,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 "The Toner is a real-time harmonic analyzer that captures the "
                 "frequency content of your sound — the fundamental and its "
-                "overtones — and translates that into descriptors like brightness, "
+                "overtones — and (hopefully eventually) translates that into descriptors like brightness, "
                 "complexity, and fullness.\n\n"
 
                 "HOW IT WORKS\n\n"
@@ -2134,7 +2134,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "real differences between horns and setups. But the scaling and "
                 "calibration of these gauges is still being refined. The numbers "
                 "you see today may shift as we gather more data and improve the "
-                "formulas. Think of them as directionally correct, not absolute.\n\n"
+                "formulas. Think of them as currently aspiring to be directionally "
+                "correct, not absolute. I need much, much more data, some hard "
+                "work, and a lot of luck to make these truly useful.\n\n"
 
                 "WHERE THE REAL VALUE IS\n\n"
 
