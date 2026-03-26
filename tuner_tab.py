@@ -403,6 +403,7 @@ class TunerTabMixin:
         self._tuner_faceplate_color = tuner_settings.get("faceplate_color", DEFAULT_FACEPLATE)
         self._tuner_ring_brightness = tuner_settings.get("ring_brightness", 100)
         self._tuner_overall_brightness = tuner_settings.get("overall_brightness", 80)
+        self._tuner_octave_boost = tuner_settings.get("octave_boost", 50)
         self._tuner_fps_var = tk.StringVar(
             value=str(tuner_settings.get("fps", "60")))
         self._tuner_show_fps = tk.BooleanVar(
@@ -459,22 +460,20 @@ class TunerTabMixin:
         ctrl_frame = tk.Frame(self._tuner_main_frame, bg=ctrl_bg, padx=6, pady=6)
         ctrl_frame._skip_theme = True
         ctrl_frame.pack(fill="x", padx=5, pady=(0, 4))
-        ctrl_frame.columnconfigure(0, weight=1)
-        ctrl_frame.columnconfigure(1, weight=1)
-        ctrl_frame.columnconfigure(2, weight=1)
+        ctrl_frame.columnconfigure(0, weight=0)  # DISP
+        ctrl_frame.columnconfigure(1, weight=0)  # PITCH
+        ctrl_frame.columnconfigure(2, weight=0)  # BIAS
+        ctrl_frame.columnconfigure(3, weight=1)  # center
+        ctrl_frame.columnconfigure(4, weight=1)  # VU
 
         eq_lbl_font = ("Helvetica", 7)
 
-        # ---- LEFT: Graphic EQ vertical sliders ----
-        eq_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
-        eq_frame._skip_theme = True
-        eq_frame.grid(row=0, column=0, sticky="ns", padx=(0, 8))
-
+        # ---- Shared slider builder ----
         def _make_vslider(parent, label, var, lo, hi, col, cmd=None,
                           resolution=1, value_fmt=None):
             ch = tk.Frame(parent, bg=ctrl_bg)
             ch._skip_theme = True
-            ch.grid(row=0, column=col, padx=3, sticky="ns")
+            ch.grid(row=0, column=col, padx=3, sticky="n")
             tk.Label(ch, text=label, bg=ctrl_bg, fg="#888888",
                      font=eq_lbl_font).pack(pady=(0, 2))
             tk.Scale(ch, variable=var, from_=hi, to=lo,
@@ -494,52 +493,40 @@ class TunerTabMixin:
                 var.trace_add("write", _upd)
                 _upd()
 
+        def _make_slider_group(parent, col, vert_label, padx=(8, 0)):
+            """Create a labeled slider group: vertical text + slider frame."""
+            grp = tk.Frame(parent, bg=ctrl_bg)
+            grp._skip_theme = True
+            grp.grid(row=0, column=col, sticky="ns", padx=padx)
+            tk.Label(grp, text="\n".join(vert_label), bg=ctrl_bg,
+                     fg="#888888", font=("Helvetica", 8, "bold"),
+                     justify="center").pack(side="left", padx=(0, 4),
+                                            anchor="center")
+            sliders = tk.Frame(grp, bg=ctrl_bg)
+            sliders._skip_theme = True
+            sliders.pack(side="left")
+            return sliders
+
+        # ---- DISP group: SENS, BRIGHT, FPS ----
+        disp_sliders = _make_slider_group(ctrl_frame, 0, "DISP", padx=(0, 14))
+
         self._tuner_sens_var = tk.IntVar(
             value=tuner_settings.get("sensitivity", 50))
-        _make_vslider(eq_frame, "SENS", self._tuner_sens_var, 0, 100, 0,
+        _make_vslider(disp_sliders, "SENS", self._tuner_sens_var, 0, 100, 0,
                       cmd=self._tuner_on_sensitivity_changed)
 
-        self._tuner_bias_var = tk.IntVar(value=self._tuner_ring_brightness)
-        _make_vslider(eq_frame, "BIAS", self._tuner_bias_var, 0, 100, 1,
-                      cmd=lambda v: setattr(self, '_tuner_ring_brightness', int(v)))
-
         self._tuner_bright_var = tk.IntVar(value=self._tuner_overall_brightness)
-        _make_vslider(eq_frame, "BRIGHT", self._tuner_bright_var, 10, 150, 2,
+        _make_vslider(disp_sliders, "BRIGHT", self._tuner_bright_var, 10, 150, 1,
                       cmd=lambda v: setattr(self, '_tuner_overall_brightness', int(v)))
-
-        # A= pitch slider (420–460 Hz)
-        self._tuner_pitch_var = tk.DoubleVar(
-            value=tuner_settings.get("reference_pitch", 440.0))
-        _make_vslider(eq_frame, "A =", self._tuner_pitch_var, 420, 460, 3,
-                      cmd=lambda v: self._tuner_on_pitch_changed(),
-                      resolution=1, value_fmt=lambda v: f"{v:.0f} Hz")
-
-        # Key slider (C / Bb / Eb / F mapped to 0–3)
-        _trans_migrate = {"concert": "C", "bb": "Bb", "eb": "Eb", "f": "F"}
-        saved_trans = tuner_settings.get("transposition", "C")
-        saved_trans = _trans_migrate.get(saved_trans, saved_trans)
-        self._tuner_transpose_var = tk.StringVar(value=saved_trans)
-
-        saved_key_idx = TRANSPOSITION_KEYS.index(saved_trans) if saved_trans in TRANSPOSITION_KEYS else 0
-        self._tuner_key_idx_var = tk.IntVar(value=saved_key_idx)
-
-        def _on_key_slider(v):
-            key = TRANSPOSITION_KEYS[int(float(v))]
-            self._tuner_transpose_var.set(key)
-            self._tuner_update_labels()
-
-        _make_vslider(eq_frame, "KEY", self._tuner_key_idx_var, 0, 3, 4,
-                      cmd=_on_key_slider,
-                      value_fmt=lambda v: TRANSPOSITION_KEYS[int(v)])
 
         # FPS 3-position switch (60/90/120)
         fps_values = ["60", "90", "120"]
         fps_idx = fps_values.index(self._tuner_fps_var.get()) if self._tuner_fps_var.get() in fps_values else 0
         fps_idx_var = tk.IntVar(value=fps_idx)
 
-        fps_ch = tk.Frame(eq_frame, bg=ctrl_bg)
+        fps_ch = tk.Frame(disp_sliders, bg=ctrl_bg)
         fps_ch._skip_theme = True
-        fps_ch.grid(row=0, column=5, padx=3, sticky="ns")
+        fps_ch.grid(row=0, column=2, padx=3, sticky="n")
         tk.Label(fps_ch, text="FPS", bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack(pady=(0, 2))
         tk.Scale(fps_ch, variable=fps_idx_var, from_=0, to=2,
@@ -559,7 +546,44 @@ class TunerTabMixin:
             fps_lbl.configure(text=fps_values[idx])
         fps_idx_var.trace_add("write", _on_fps_slider)
 
-        # ---- CENTER: Experimental / flat-pilot-sharp / ref button ----
+        # ---- PITCH group: A=, KEY ----
+        pitch_sliders = _make_slider_group(ctrl_frame, 1, "PITCH", padx=(0, 14))
+
+        self._tuner_pitch_var = tk.DoubleVar(
+            value=tuner_settings.get("reference_pitch", 440.0))
+        _make_vslider(pitch_sliders, "A =", self._tuner_pitch_var, 420, 460, 0,
+                      cmd=lambda v: self._tuner_on_pitch_changed(),
+                      resolution=1, value_fmt=lambda v: f"{v:.0f} Hz")
+
+        _trans_migrate = {"concert": "C", "bb": "Bb", "eb": "Eb", "f": "F"}
+        saved_trans = tuner_settings.get("transposition", "C")
+        saved_trans = _trans_migrate.get(saved_trans, saved_trans)
+        self._tuner_transpose_var = tk.StringVar(value=saved_trans)
+
+        saved_key_idx = TRANSPOSITION_KEYS.index(saved_trans) if saved_trans in TRANSPOSITION_KEYS else 0
+        self._tuner_key_idx_var = tk.IntVar(value=saved_key_idx)
+
+        def _on_key_slider(v):
+            key = TRANSPOSITION_KEYS[int(float(v))]
+            self._tuner_transpose_var.set(key)
+            self._tuner_update_labels()
+
+        _make_vslider(pitch_sliders, "KEY", self._tuner_key_idx_var, 0, 3, 1,
+                      cmd=_on_key_slider,
+                      value_fmt=lambda v: TRANSPOSITION_KEYS[int(v)])
+
+        # ---- BIAS group: NOTE, OCT. ----
+        bias_sliders = _make_slider_group(ctrl_frame, 2, "BIAS")
+
+        self._tuner_bias_var = tk.IntVar(value=self._tuner_ring_brightness)
+        _make_vslider(bias_sliders, "NOTE", self._tuner_bias_var, 0, 100, 0,
+                      cmd=lambda v: setattr(self, '_tuner_ring_brightness', int(v)))
+
+        self._tuner_boost_var = tk.IntVar(value=self._tuner_octave_boost)
+        _make_vslider(bias_sliders, "OCT.", self._tuner_boost_var, 0, 100, 1,
+                      cmd=lambda v: setattr(self, '_tuner_octave_boost', int(v)))
+
+        # ---- CENTER: flat-pilot-sharp / ref button ----
         self._tuner_ref_notes = _build_ref_notes(440.0)
         self._tuner_ref_note_var = tk.StringVar(value="A4")
         self._tuner_waveform_var = tk.StringVar(
@@ -567,16 +591,13 @@ class TunerTabMixin:
 
         center_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
         center_frame._skip_theme = True
-        center_frame.grid(row=0, column=1, padx=10, sticky="ns")
+        center_frame.grid(row=0, column=3, padx=10, sticky="ns")
 
         # Use grid inside center_frame so everything shares a single center axis
         center_frame.columnconfigure(0, weight=1)
         row = 0
 
-        script_font = self._tuner_get_script_font(11)
-        tk.Label(center_frame, text="Experimental", bg=ctrl_bg, fg="#666666",
-                 font=script_font).grid(row=row, column=0, pady=(0, 4))
-        row += 1
+        row += 1  # spacer where "Experimental" label used to be
 
         indicator_frame = tk.Frame(center_frame, bg=ctrl_bg)
         indicator_frame._skip_theme = True
@@ -609,7 +630,7 @@ class TunerTabMixin:
         # ---- RIGHT: VU meter (centered in its column) ----
         vu_frame = tk.Frame(ctrl_frame, bg=ctrl_bg)
         vu_frame._skip_theme = True
-        vu_frame.grid(row=0, column=2, sticky="ns", padx=8)
+        vu_frame.grid(row=0, column=4, sticky="ns", padx=8)
 
         self._vu_canvas = tk.Canvas(
             vu_frame, width=200, height=120,
@@ -1277,9 +1298,18 @@ class TunerTabMixin:
             sens = self._tuner_sens_var.get() / 100.0
             gain = GAIN_MIN + sens * GAIN_RANGE
 
+            # NOTE bias: per-wheel contrast (0=uniform, 100=steep curve)
+            note_bias = self._tuner_ring_brightness / 100.0
+            note_exp = 1.0 + note_bias * 2.0
+
+            # OCT. bias: per-ring contrast within each wheel
+            # (0=uniform across rings, 100=full per-ring brightness)
+            oct_pct = float(self._tuner_octave_boost)
+
             if self._tuner_use_gpu and self._gpu_renderer:
                 # ── GPU path: single call to Rust renderer ──
-                magnitudes = [min(1.0, result.magnitudes[i] * gain) for i in range(12)]
+                magnitudes = [min(1.0, (result.magnitudes[i] * gain) ** note_exp)
+                              for i in range(12)]
                 phases = []
                 spin_mags = []
                 for i in range(12):
@@ -1299,7 +1329,7 @@ class TunerTabMixin:
                 try:
                     self._gpu_renderer.render(
                         phases, spin_mags, ring_mags,
-                        float(self._tuner_ring_brightness),
+                        oct_pct,
                         float(self._tuner_overall_brightness),
                     )
                 except Exception:
@@ -1318,7 +1348,7 @@ class TunerTabMixin:
             elif self._tuner_wheels:
                 # ── Canvas path: update each StrobeWheel ──
                 for i, wheel in enumerate(self._tuner_wheels):
-                    mag = min(1.0, result.magnitudes[i] * gain)
+                    mag = min(1.0, (result.magnitudes[i] * gain) ** note_exp)
                     ring_mags = [min(1.0, rm * gain)
                                  for rm in result.ring_magnitudes[i]]
                     if mag > MAGNITUDE_THRESHOLD:
@@ -1331,7 +1361,7 @@ class TunerTabMixin:
                         phase,
                         mag,
                         ring_magnitudes=ring_mags,
-                        ring_brightness_pct=self._tuner_ring_brightness,
+                        ring_brightness_pct=oct_pct,
                         overall_brightness_pct=self._tuner_overall_brightness,
                     )
 
@@ -1554,6 +1584,7 @@ class TunerTabMixin:
             "fps": self._tuner_fps_var.get() if hasattr(self, '_tuner_fps_var') else "60",
             "ring_brightness": self._tuner_ring_brightness if hasattr(self, '_tuner_ring_brightness') else 100,
             "overall_brightness": self._tuner_overall_brightness if hasattr(self, '_tuner_overall_brightness') else 80,
+            "octave_boost": self._tuner_octave_boost if hasattr(self, '_tuner_octave_boost') else 50,
             "faceplate_color": self._tuner_faceplate_color if hasattr(self, '_tuner_faceplate_color') else DEFAULT_FACEPLATE,
             "show_fps": self._tuner_show_fps.get() if hasattr(self, '_tuner_show_fps') else False,
         }

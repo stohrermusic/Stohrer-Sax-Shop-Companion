@@ -362,7 +362,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         # --- Create Tab 7: Toner ---
         self.toner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.toner_tab_frame, text='Toner')
+        self.notebook.add(self.toner_tab_frame, text='Toner (beta)')
         self.create_toner_tab(self.toner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
@@ -2085,19 +2085,101 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                            font=("Helvetica", 10)).pack(anchor="w")
             check_vars[name] = var
 
+        def _show_toner_terms(parent_dlg):
+            """Show toner beta terms acceptance dialog. Returns True if accepted."""
+            terms = tk.Toplevel(parent_dlg)
+            terms.title("Toner — Beta Notice")
+            terms.resizable(True, True)
+            terms.transient(parent_dlg)
+            terms.grab_set()
+            terms.minsize(460, 400)
+
+            tbg = parent_dlg.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
+            frm = tk.Frame(terms, bg=tbg, padx=20, pady=15)
+            frm.pack(fill="both", expand=True)
+
+            tk.Label(frm, text="Harmonic Tone Analyzer", bg=tbg,
+                     font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+            txt_frame = tk.Frame(frm, bg=tbg)
+            txt_frame.pack(fill="both", expand=True)
+            txt = tk.Text(txt_frame, wrap="word", font=("Helvetica", 10),
+                          bg=tbg, relief="flat", highlightthickness=0,
+                          padx=8, pady=8, spacing3=4)
+            txt.pack(side="left", fill="both", expand=True)
+            sb = tk.Scrollbar(txt_frame, command=txt.yview)
+            sb.pack(side="right", fill="y")
+            txt.configure(yscrollcommand=sb.set)
+
+            content = (
+                "This feature is in beta.\n\n"
+
+                "The Toner is a real-time harmonic analyzer that captures the "
+                "frequency content of your sound — the fundamental and its "
+                "overtones — and translates that into descriptors like brightness, "
+                "complexity, and fullness.\n\n"
+
+                "HOW IT WORKS\n\n"
+
+                "A microphone picks up your sound, an FFT extracts the harmonic "
+                "series, and the gauges show you what's happening in real time. "
+                "You can capture snapshots, build profiles for different setups "
+                "(horn + mouthpiece + player + reed), and compare them side by "
+                "side.\n\n"
+
+                "WHAT THE GAUGES MEAN RIGHT NOW\n\n"
+
+                "The descriptor gauges (brightness, darkness, complexity, fullness, "
+                "resonance) are computed from real acoustic data, and they do track "
+                "real differences between horns and setups. But the scaling and "
+                "calibration of these gauges is still being refined. The numbers "
+                "you see today may shift as we gather more data and improve the "
+                "formulas. Think of them as directionally correct, not absolute.\n\n"
+
+                "WHERE THE REAL VALUE IS\n\n"
+
+                "The power of this tool is twofold:\n\n"
+
+                "1. Instant feedback — you can see in real time how changes in "
+                "your embouchure, air support, mouthpiece, or reed affect the "
+                "harmonic content of your sound. This is useful right now, today, "
+                "regardless of how the gauges are calibrated.\n\n"
+
+                "2. Long-term data — as more players capture profiles across "
+                "different horns, mouthpieces, and playing styles, the aggregated "
+                "data will help us understand what actually distinguishes one setup "
+                "from another. Over time, this should tease out meaningful patterns "
+                "about what different horns, mouthpieces, and players do to the "
+                "sound.\n\n"
+
+                "We need more data to make the descriptors better. Every profile "
+                "you capture helps."
+            )
+            txt.insert("1.0", content)
+            txt.configure(state="disabled")
+
+            result = {"accepted": False}
+
+            def accept():
+                result["accepted"] = True
+                terms.destroy()
+
+            btn_frame = tk.Frame(frm, bg=tbg)
+            btn_frame.pack(fill="x", pady=(10, 0))
+            tk.Button(btn_frame, text="I Understand — Enable Toner",
+                      command=accept).pack(side="left", padx=(0, 5))
+            tk.Button(btn_frame, text="Cancel",
+                      command=terms.destroy).pack(side="left")
+
+            terms.wait_window()
+            return result["accepted"]
+
         def apply():
             new_visible = {name: var.get() for name, var in check_vars.items()}
 
-            # Toner requires password if not previously unlocked
+            # Toner requires terms acceptance if not previously unlocked
             if new_visible.get("Toner") and not self.settings.get("toner_unlocked"):
-                pw = simpledialog.askstring("Toner Access",
-                    "The Toner is in early development.\n"
-                    "Enter the access code to enable it:",
-                    show="*", parent=dlg)
-                if pw != "iunderstand":
-                    if pw is not None:  # None = cancelled
-                        messagebox.showinfo("Access Denied",
-                            "That's not the right code.", parent=dlg)
+                if not _show_toner_terms(dlg):
                     new_visible["Toner"] = False
                     check_vars["Toner"].set(False)
                     return
