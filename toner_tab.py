@@ -1298,6 +1298,7 @@ class TonerTabMixin:
         dlg = tk.Toplevel(self.root)
         dlg.title("Tone Profiles")
         dlg.geometry("550x500")
+        dlg.minsize(400, 350)
         dlg.transient(self.root)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
@@ -2789,8 +2790,10 @@ class TonerTabMixin:
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Compare Tone Profile")
-        dlg.resizable(False, False)
+        dlg.title("Compare Tone Profiles")
+        dlg.geometry("600x520")
+        dlg.resizable(True, True)
+        dlg.minsize(500, 400)
         dlg.transient(self.root)
         dlg.grab_set()
 
@@ -2799,37 +2802,67 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select a profile to overlay on the spectrum.\n"
-                 "The ghost shows the saved harmonic profile in blue.",
+        tk.Label(frame, text="Select profiles to compare or overlay on the spectrum.",
                  bg=bg, fg=fg, font=("Helvetica", 10),
                  justify="left").pack(pady=(0, 5))
 
-        # Filter controls
-        filter_frame = tk.Frame(frame, bg=bg)
-        filter_frame.pack(fill="x", pady=(0, 5))
+        # Filter controls — Row 1: horn identity
+        filter_row1 = tk.Frame(frame, bg=bg)
+        filter_row1.pack(fill="x", pady=(0, 2))
 
         # Collect unique values for filters
         all_types = sorted(set(p.get('horn_type', '') for _, _, p in all_profiles if p.get('horn_type')))
+        all_makes = sorted(set(p.get('horn_make', '') for _, _, p in all_profiles if p.get('horn_make')))
+        all_models = sorted(set(p.get('horn_model', '') for _, _, p in all_profiles if p.get('horn_model')))
         all_players = sorted(set(p.get('player', '') for _, _, p in all_profiles if p.get('player')))
         all_mpcs = sorted(set(p.get('mouthpiece', '') for _, _, p in all_profiles if p.get('mouthpiece')))
 
         filter_type = tk.StringVar(value="All")
+        filter_make = tk.StringVar(value="All")
+        filter_model = tk.StringVar(value="All")
         filter_player = tk.StringVar(value="All")
         filter_mpc = tk.StringVar(value="All")
 
         for label, var, values in [
             ("Type:", filter_type, all_types),
+            ("Make:", filter_make, all_makes),
+            ("Model:", filter_model, all_models),
+        ]:
+            if values:
+                tk.Label(filter_row1, text=label, bg=bg, fg=fg,
+                         font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
+                cb = ttk.Combobox(filter_row1, textvariable=var,
+                                   values=["All"] + values,
+                                   state="readonly", width=12)
+                cb.pack(side="left", padx=(0, 6))
+                cb.bind("<<ComboboxSelected>>", lambda e: refresh_list())
+
+        # Filter controls — Row 2: setup + search
+        filter_row2 = tk.Frame(frame, bg=bg)
+        filter_row2.pack(fill="x", pady=(0, 5))
+
+        for label, var, values in [
             ("Player:", filter_player, all_players),
             ("Mpc:", filter_mpc, all_mpcs),
         ]:
             if values:
-                tk.Label(filter_frame, text=label, bg=bg, fg=fg,
+                tk.Label(filter_row2, text=label, bg=bg, fg=fg,
                          font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
-                cb = ttk.Combobox(filter_frame, textvariable=var,
+                cb = ttk.Combobox(filter_row2, textvariable=var,
                                    values=["All"] + values,
-                                   state="readonly", width=10)
+                                   state="readonly", width=12)
                 cb.pack(side="left", padx=(0, 6))
                 cb.bind("<<ComboboxSelected>>", lambda e: refresh_list())
+
+        # Text search
+        tk.Label(filter_row2, text="Search:", bg=bg, fg=fg,
+                 font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
+        search_var = tk.StringVar()
+        search_entry = tk.Entry(filter_row2, textvariable=search_var, width=16)
+        search_entry.pack(side="left", padx=(0, 2))
+        search_entry.bind("<KeyRelease>", lambda e: refresh_list())
+        tk.Button(filter_row2, text="\u00d7", font=("Helvetica", 8), width=2,
+                  command=lambda: (search_var.set(""), refresh_list())).pack(side="left")
 
         # Scrollable checkbox list
         list_outer = tk.Frame(frame, bg=bg)
@@ -2849,6 +2882,18 @@ class TonerTabMixin:
         list_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # Mousewheel scrolling
+        def _on_mousewheel(event):
+            if sys.platform == 'darwin':
+                list_canvas.yview_scroll(int(-1 * event.delta), "units")
+            else:
+                list_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        if sys.platform == 'linux':
+            dlg.bind('<Button-4>', lambda e: list_canvas.yview_scroll(-1, "units"))
+            dlg.bind('<Button-5>', lambda e: list_canvas.yview_scroll(1, "units"))
+        else:
+            dlg.bind('<MouseWheel>', _on_mousewheel)
+
         # Each item in check_items is a dict describing what the checkbox
         # represents: either an entire profile or a single session.
         # {'type': 'profile', 'lib': str, 'name': str, 'profile': dict}
@@ -2864,15 +2909,35 @@ class TonerTabMixin:
             check_items = []
             check_vars = []
             ft = filter_type.get()
+            fmk = filter_make.get()
+            fmd = filter_model.get()
             fp = filter_player.get()
             fm = filter_mpc.get()
+            search = search_var.get().strip().lower()
             for lib_name, prof_name, prof in all_profiles:
                 if ft != "All" and prof.get('horn_type', '') != ft:
+                    continue
+                if fmk != "All" and prof.get('horn_make', '') != fmk:
+                    continue
+                if fmd != "All" and prof.get('horn_model', '') != fmd:
                     continue
                 if fp != "All" and prof.get('player', '') != fp:
                     continue
                 if fm != "All" and prof.get('mouthpiece', '') != fm:
                     continue
+                if search:
+                    haystack = " ".join([
+                        prof_name,
+                        prof.get('horn_make', ''),
+                        prof.get('horn_model', ''),
+                        prof.get('serial', ''),
+                        prof.get('player', ''),
+                        prof.get('mouthpiece', ''),
+                        prof.get('reed', ''),
+                        prof.get('notes', ''),
+                    ]).lower()
+                    if search not in haystack:
+                        continue
                 sessions = [s for s in prof.get('sessions', [])
                             if s.get('captures')]
                 notes = set()
@@ -2890,12 +2955,22 @@ class TonerTabMixin:
                 check_vars.append(var)
                 check_items.append({'type': 'profile', 'lib': lib_name,
                                     'name': prof_name, 'profile': prof})
+                session_vars = []  # track child session vars
+
+                def _make_profile_toggle(pvar, svars):
+                    def _toggle():
+                        val = pvar.get()
+                        for sv in svars:
+                            sv.set(val)
+                    return _toggle
+
                 tk.Checkbutton(
                     list_inner,
                     text=f"[{lib_name}] {prof_name}  ({status})",
                     variable=var, bg=bg, fg=fg,
                     selectcolor=bg, activebackground=bg,
                     anchor="w", font=("Helvetica", 10),
+                    command=_make_profile_toggle(var, session_vars),
                 ).pack(fill="x", anchor="w")
 
                 # Session-level checkboxes (indented, only if 2+ sessions)
@@ -2907,20 +2982,34 @@ class TonerTabMixin:
                                       for c in sess.get('captures', []))
                         svar = tk.BooleanVar(value=False)
                         check_vars.append(svar)
+                        session_vars.append(svar)
                         check_items.append({
                             'type': 'session', 'lib': lib_name,
                             'name': prof_name, 'profile': prof,
                             'session': sess, 'date': date})
                         tk.Checkbutton(
                             list_inner,
-                            text=f"      {date}  ({n_caps} caps, "
+                            text=f"{date}  ({n_caps} caps, "
                                  f"{len(s_notes)} notes)",
                             variable=svar, bg=bg, fg="#555555",
                             selectcolor=bg, activebackground=bg,
                             anchor="w", font=("Helvetica", 9),
-                        ).pack(fill="x", anchor="w")
+                        ).pack(fill="x", anchor="w", padx=(25, 0))
 
         refresh_list()
+
+        sel_frame = tk.Frame(frame, bg=bg)
+        sel_frame.pack(fill="x", pady=(2, 5))
+        def _select_all():
+            for v in check_vars:
+                v.set(True)
+        def _deselect_all():
+            for v in check_vars:
+                v.set(False)
+        tk.Button(sel_frame, text="Select All", font=("Helvetica", 8),
+                  command=_select_all).pack(side="left", padx=(0, 4))
+        tk.Button(sel_frame, text="Deselect All", font=("Helvetica", 8),
+                  command=_deselect_all).pack(side="left")
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
