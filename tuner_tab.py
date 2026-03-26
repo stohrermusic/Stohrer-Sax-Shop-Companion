@@ -484,10 +484,10 @@ class TunerTabMixin:
                      sliderrelief="raised", sliderlength=18,
                      borderwidth=2,
                      command=cmd).pack()
+            val_lbl = tk.Label(ch, text="", bg=ctrl_bg, fg="#AAAAAA",
+                               font=eq_lbl_font)
+            val_lbl.pack(pady=(2, 0))
             if value_fmt:
-                val_lbl = tk.Label(ch, text="", bg=ctrl_bg, fg="#AAAAAA",
-                                   font=eq_lbl_font)
-                val_lbl.pack(pady=(2, 0))
                 def _upd(*_, _l=val_lbl, _f=value_fmt, _v=var):
                     _l.configure(text=_f(_v.get()))
                 var.trace_add("write", _upd)
