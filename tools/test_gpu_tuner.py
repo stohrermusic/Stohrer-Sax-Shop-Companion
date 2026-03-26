@@ -2,8 +2,8 @@
 Test script for GPU strobe tuner rendering integration.
 
 Tests: tuner_render module API, tuner_tab.py GPU/canvas dual path,
-layout computation, Stroboconn spin rates, phase direction, settings,
-fallback behavior, perf log compatibility, icon loading.
+layout computation, phase direction, settings, fallback behavior,
+perf log compatibility, icon loading.
 """
 
 import sys
@@ -62,46 +62,7 @@ import tuner_tab
 test("_HAS_GPU_RENDERER flag exists", hasattr(tuner_tab, '_HAS_GPU_RENDERER'))
 test("_HAS_GPU_RENDERER matches import", tuner_tab._HAS_GPU_RENDERER == _has_gpu)
 test("_TUNER_IMPORTS_OK flag exists", hasattr(tuner_tab, '_TUNER_IMPORTS_OK'))
-test("STROBOCONN_SPIN_RATES exists", hasattr(tuner_tab, 'STROBOCONN_SPIN_RATES'))
-test("TOP_ROW_PCS exists", hasattr(tuner_tab, 'TOP_ROW_PCS'))
-
-
-# ============================================================
-# 3. Stroboconn spin rates (US Patent 2,286,030)
-# ============================================================
-print("\n--- Stroboconn Spin Rates ---")
-
-rates = tuner_tab.STROBOCONN_SPIN_RATES
-test("12 spin rates defined", len(rates) == 12)
-
-# All rates should be positive
-test("All rates positive", all(r > 0 for r in rates))
-
-# Rates should increase monotonically (each semitone faster)
-test("Rates increase with pitch class", all(rates[i] < rates[i+1] for i in range(11)))
-
-# A (pc 9) should be 27.5 * 360 = 9900 deg/sec
-expected_a = 27.5 * 360.0
-test(f"A rate is 27.5 RPS = {expected_a} deg/s", abs(rates[9] - expected_a) < 0.1)
-
-# Ratio between adjacent semitones should be ~2^(1/12) ~= 1.05946
-for i in range(11):
-    ratio = rates[i+1] / rates[i]
-    expected_ratio = 2.0 ** (1.0 / 12.0)
-    test(f"pc {i}->{i+1} ratio ~= 2^(1/12) ({ratio:.5f})",
-         abs(ratio - expected_ratio) < 0.0001)
-
-# C should be ~half of C an octave up (verify octave relation)
-# pc 0 (C) rate * 2 should be much larger than pc 11 (B) —
-# actually B is 11 semitones above C, not 12. Let's just verify
-# the ratio from C to B is 2^(11/12)
-expected_c_to_b = 2.0 ** (11.0 / 12.0)
-actual_c_to_b = rates[11] / rates[0]
-test(f"C->B ratio = 2^(11/12) ({actual_c_to_b:.4f})",
-     abs(actual_c_to_b - expected_c_to_b) < 0.001)
-
-# TOP_ROW_PCS should be accidentals
-test("TOP_ROW_PCS = {1,3,6,8,10}", tuner_tab.TOP_ROW_PCS == {1, 3, 6, 8, 10})
+test("TRANSPOSITION_KEYS exists", hasattr(tuner_tab, 'TRANSPOSITION_KEYS'))
 
 
 # ============================================================
@@ -183,9 +144,9 @@ engine = TunerEngine()
 # The phase update is in analyze_buffer, not analyze
 import inspect
 src = inspect.getsource(engine.analyze_buffer)
-test("Engine: phase -= cents * drift (sharp -> decrease)",
-     'phase_offsets[pc] -= cents' in src or
-     '_phase_offsets[pc] -= cents' in src)
+test("Engine: phase += cents * drift (sharp -> increase -> CW)",
+     'phase_offsets[pc] += cents' in src or
+     '_phase_offsets[pc] += cents' in src)
 
 
 # ============================================================
@@ -200,9 +161,9 @@ test("RING_SEGMENTS has 7 entries", len(tuner_tab.RING_SEGMENTS) == 7)
 test("RING_SEGMENTS = [4,8,16,32,64,128,256]",
      tuner_tab.RING_SEGMENTS == [4, 8, 16, 32, 64, 128, 256])
 test("CENTER_GAP_FRACTION = 0.12", tuner_tab.CENTER_GAP_FRACTION == 0.12)
-test("BRIGHTNESS_GAMMA = 0.6", tuner_tab.BRIGHTNESS_GAMMA == 0.6)
+test("BRIGHTNESS_GAMMA = 0.45", tuner_tab.BRIGHTNESS_GAMMA == 0.45)
 test("MAGNITUDE_THRESHOLD = 0.05", tuner_tab.MAGNITUDE_THRESHOLD == 0.05)
-test("DIM_MULTIPLIER = 0.2", tuner_tab.DIM_MULTIPLIER == 0.2)
+test("DIM_MULTIPLIER = 0.08", tuner_tab.DIM_MULTIPLIER == 0.08)
 
 if os.path.exists(shader_path):
     with open(shader_path) as f:
@@ -210,7 +171,7 @@ if os.path.exists(shader_path):
     test("Shader CENTER_GAP = 0.12", 'CENTER_GAP: f32 = 0.12' in shader_src)
     test("Shader WEDGE_HALF_ANGLE ~= 40°",
          'WEDGE_HALF_ANGLE: f32 = 0.6981' in shader_src)
-    test("Shader DIM_MULTIPLIER = 0.2", 'DIM_MULTIPLIER: f32 = 0.2' in shader_src)
+    test("Shader DIM_MULTIPLIER = 0.08", 'DIM_MULTIPLIER: f32 = 0.08' in shader_src)
     test("Shader has 7 ring segment counts",
          all(f'return {float(s)}' in shader_src
              for s in [4, 8, 16, 32, 64, 128, 256]))
@@ -229,6 +190,7 @@ test("stripe_color default", ts.get("stripe_color") == "#00FF00")
 test("faceplate_color default", ts.get("faceplate_color") == "#1A1A1A")
 test("ring_brightness default", ts.get("ring_brightness") == 100)
 test("overall_brightness default", ts.get("overall_brightness") == 80)
+test("octave_boost default", ts.get("octave_boost") == 50)
 test("fps default", ts.get("fps") == "60")
 test("sensitivity default", ts.get("sensitivity") == 50)
 # show_fps is not in DEFAULT_SETTINGS — loaded via .get() with fallback in tuner_tab
@@ -236,10 +198,9 @@ test("show_fps loaded via .get() fallback",
      'tuner_settings.get("show_fps", False)' in
      open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tuner_tab.py')).read())
 
-# always_spinning may or may not be in defaults yet — it's loaded via .get() with default
-# Verify the tuner_tab code handles it gracefully
-test("always_spinning loaded with .get() fallback",
-     'tuner_settings.get("always_spinning", False)' in
+# octave_boost loaded from settings
+test("octave_boost loaded from tuner_settings",
+     'tuner_settings.get("octave_boost"' in
      open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tuner_tab.py')).read())
 
 
