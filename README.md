@@ -59,24 +59,22 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Kerf test pattern for calibrating your laser
 - Scrap mode for spreading dies across multiple sheets
 
-### Chromatic Strobe Tuner (Experimental)
+### Chromatic Strobe Tuner
 - 12-wheel stroboscopic tuner
 - GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
   - Automatic fallback to CPU canvas rendering if GPU unavailable
-- "Wheels always spinning" mechanical mode with per-pitch RPMs from US Patent 2,286,030
 - Per-ring octave brightness from real spectral data
-- Graphic EQ gain panel and vintage backlit VU meter with damped needle
+- Grouped slider panel (display, pitch, bias) and vintage backlit VU meter
 - Transposition support (Concert, Bb, Eb, F)
 - Reference tone player with adjustable pitch
 - Configurable frame rate (60/90/120 fps) and color themes
 - A quality microphone is recommended (e.g. Audio-Technica AT2020 USB)
 
-### Harmonic Tone Analyzer (Experimental)
+### Harmonic Tone Analyzer (Beta)
 - Real-time harmonic spectrum analyzer for saxophone
 - Detects fundamental pitch, extracts up to 12 harmonics
 - Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
-- Five VU-style gauges: intonation, resonance, richness, brightness, darkness
-- Brightness/darkness adapted per saxophone type using Benade spectral break frequencies
+- Live gauges: intonation, complexity (spectral flatness), warmth (H2 strength)
 - Supports all standard saxophone types including baritone
 - Tone profiles: capture harmonic fingerprints of individual horns
   - Free capture and guided calibration modes, plus WAV file import

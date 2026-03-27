@@ -2858,57 +2858,42 @@ class UserGuideWindow(tk.Toplevel):
 
         self._h2("Saxophone Type")
         self._body("The SAX selector in the control strip tells the Toner what size "
-                    "saxophone you're playing. This matters because the boundary between "
-                    "\"bright\" and \"dark\" harmonics depends on the instrument's physics.")
-        self._blank()
-        self._body("Every saxophone has a break frequency determined by its tone hole "
-                    "lattice \u2014 the array of open holes acts as a high-pass filter. "
-                    "Below this frequency, the body naturally amplifies harmonics. Above it, "
-                    "they roll off. This is real acoustics, measured by researchers at UNSW "
-                    "and described by Arthur Benade (JASA 1988).")
-        self._blank()
-        self._body("The Toner uses these break frequencies to define what counts as "
-                    "\"bright\" (harmonic energy above the break) versus \"dark\" "
-                    "(energy below the break). A bari's 3rd harmonic at 350 Hz is "
-                    "acoustically \"dark\" while an alto's 3rd harmonic at 1250 Hz "
-                    "is \"bright\" \u2014 and the gauges reflect that correctly when "
-                    "the right sax type is selected.")
+                    "saxophone you're playing. This controls the transposition of "
+                    "displayed note names (written pitch vs concert pitch) and is "
+                    "stored with each profile.")
         self._blank()
         self._body("When you load a profile for capture, the selector automatically "
                     "updates to match the profile's horn type.")
         self._blank()
 
         self._h2("Gauges")
-        self._body("Five VU-style gauges show different aspects of tone quality. "
+        self._body("Two VU-style gauges show aspects of tone quality that aren't "
+                    "easily seen in the spectrum bars alone. "
                     "These respond to your playing in real time \u2014 they reflect the "
                     "complete system (you + your setup), not just the horn.")
-        self._bullet("Intonation: flat/sharp meter with cents readout")
-        self._bullet("Dissonant / Resonant: how well the harmonics align to ideal "
-                      "integer ratios of the fundamental. Saxophone acoustics (mode "
-                      "locking) keeps this tight, so the scale is narrow. "
-                      "A well-built bore with a good setup reads high; misalignment "
-                      "from bore issues or unusual setups reads lower.")
+        self._bullet("Intonation: flat/sharp meter with cents readout. "
+                      "The IN TUNE lamp lights when pitch is within \u00b14 cents.")
         self._bullet("Pure / Complex: measures both how many harmonics are present and "
                       "how evenly the energy is spread among them (spectral flatness). "
                       "A tone with energy concentrated in the fundamental = pure. "
                       "Energy spread evenly across many harmonics = complex.")
-        self._bullet("Bright: strength of the \"presence\" harmonics (H3\u2013H5) "
-                      "relative to the fundamental. These mid harmonics are where "
-                      "the ear is most sensitive to brightness. Strong H3\u2013H5 = "
-                      "bright and present; weak = dark and muted.")
-        self._bullet("Dark: the inverse of brightness")
-        self._bullet("FULL lamp: lights up when both bright and dark are strong \u2014 "
-                      "a tone with balanced energy across the full harmonic range. "
-                      "Uses the Benade break frequency internally to measure the "
-                      "balance of upper vs lower harmonics.")
+        self._bullet("Thin / Warm: measures the strength of H2 (the octave harmonic) "
+                      "relative to the fundamental. A strong octave harmonic gives the "
+                      "tone a round, warm quality. A weak H2 sounds thinner and more "
+                      "focused.")
+        self._blank()
+        self._body("The spectrum bars show the full harmonic picture \u2014 the relative "
+                    "strength of each harmonic from H1 (fundamental) through H12. "
+                    "This is the raw data that the gauges are derived from, and it "
+                    "shows everything the gauges don't capture. Use the bars to see "
+                    "the complete harmonic shape of your sound.")
         self._blank()
 
         self._h2("Bias Sliders")
         self._body("Each descriptor gauge has a small bias slider underneath. These "
                     "let you offset the needle position to match your perception without "
-                    "affecting the captured data. If richness always reads lower than what "
-                    "you're hearing, nudge the slider right. If brightness seems pegged "
-                    "too high, pull it left.")
+                    "affecting the captured data. If complexity always reads lower than what "
+                    "you're hearing, nudge the slider right.")
         self._blank()
         self._body("The bias adjusts only the display \u2014 all captured profile data "
                     "uses the raw computed values, so your profiles stay comparable "
@@ -2925,9 +2910,9 @@ class UserGuideWindow(tk.Toplevel):
                     "Multiple sessions build a richer picture. Over time, patterns that "
                     "persist across sessions are more likely to reflect the equipment; "
                     "patterns that come and go are more likely the player, the reed, or "
-                    "the room. The tool never claims a horn \"is\" bright or dark \u2014 "
-                    "it shows what the data says across however many sessions you've "
-                    "recorded, and lets you draw your own conclusions.")
+                    "the room. The tool shows what the data says across however "
+                    "many sessions you've recorded, and lets you draw your own "
+                    "conclusions.")
         self._blank()
         self._bullet("Click Capture to start. Select or create a profile, then play.")
         self._bullet("The tool auto-detects steady tones: hold a note for ~1 second and "
