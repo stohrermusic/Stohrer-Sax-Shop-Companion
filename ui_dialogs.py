@@ -2739,7 +2739,7 @@ class UserGuideWindow(tk.Toplevel):
                     "visible through a wedge-shaped cutout. "
                     "An analog VU meter at the bottom shows the detected fundamental pitch and cents error.")
         self._bullet("When the input pitch matches the reference, the pattern freezes (appears stationary)")
-        self._bullet("Sharp: pattern turns clockwise. Flat: pattern turns counter-clockwise")
+        self._bullet("Sharp: pattern drifts right. Flat: pattern drifts left")
         self._bullet("Faster drift = farther from in-tune. Frozen = perfectly in tune")
         self._bullet("Multiple wheels respond simultaneously from harmonics in the sound \u2014 "
                       "this is real FFT analysis of the audio, not simulated")
