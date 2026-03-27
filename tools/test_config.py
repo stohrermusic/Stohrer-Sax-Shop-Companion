@@ -655,17 +655,15 @@ def test_gauge_bias_merge():
         path = os.path.join(tmpdir, "settings.json")
         _save_json(path, {
             "toner_settings": {
-                "gauge_bias": {"resonance": 5, "richness": -3},
-                # Missing: brightness, darkness
+                "gauge_bias": {"richness": -3},
+                # Missing: warmth — should be filled from defaults
             }
         })
         result = _load_with_file(path)
         gb = result["toner_settings"]["gauge_bias"]
-        assert_equal(gb["resonance"], 5)
         assert_equal(gb["richness"], -3)
         # Missing keys filled from defaults
-        assert_equal(gb["brightness"], DEFAULT_SETTINGS["toner_settings"]["gauge_bias"]["brightness"])
-        assert_equal(gb["darkness"], DEFAULT_SETTINGS["toner_settings"]["gauge_bias"]["darkness"])
+        assert_equal(gb["warmth"], DEFAULT_SETTINGS["toner_settings"]["gauge_bias"]["warmth"])
     finally:
         shutil.rmtree(tmpdir)
 

@@ -75,29 +75,18 @@ result = engine.analyze_buffer(audio)
 test("Richness is low", result.descriptors['richness'] < 0.3)
 
 # ================================================
-print("\n=== Test 5: Bright Tone (strong presence harmonics H3-H5) ===")
-# Brightness is based on H2-H6 presence strength (H3-H5 weighted highest).
-# Strong H3-H5 = bright/present, weak = dark/muted.
-harmonics = [(2, 0.6), (3, 0.8), (4, 0.7), (5, 0.6), (6, 0.4)]
+print("\n=== Test 5: Warm Tone (strong H2 octave harmonic) ===")
+harmonics = [(2, 0.9), (3, 0.5), (4, 0.3)]
 audio = make_audio(440.0, harmonics=harmonics)
 result = engine.analyze_buffer(audio)
-test("Brightness is high", result.descriptors['brightness'] > 0.3)
+test("Warmth is high", result.descriptors['warmth'] > 0.3)
 
 # ================================================
-print("\n=== Test 6: Dark Tone (weak upper harmonics) ===")
-# Only fundamental with very weak H2 — presence harmonics are absent.
-harmonics = [(2, 0.1)]
+print("\n=== Test 6: Thin Tone (weak H2) ===")
+harmonics = [(2, 0.05), (3, 0.3)]
 audio = make_audio(200.0, harmonics=harmonics)
 result = engine.analyze_buffer(audio)
-test("Darkness is high", result.descriptors['darkness'] > 0.4)
-
-# ================================================
-print("\n=== Test 7: Resonance (harmonics at exact integer multiples) ===")
-# Perfect harmonics = exact multiples, should be highly resonant
-harmonics = [(2, 0.7), (3, 0.5), (4, 0.4), (5, 0.3)]
-audio = make_audio(440.0, harmonics=harmonics)
-result = engine.analyze_buffer(audio)
-test("Resonance is high for perfect harmonics", result.descriptors['resonance'] > 0.7)
+test("Warmth is low", result.descriptors['warmth'] < 0.3)
 
 # ================================================
 print("\n=== Test 8: Harmonic bar data ===")
@@ -142,30 +131,14 @@ result = engine.analyze_buffer(audio)
 test("Detects high fundamental", result.fundamental_freq > 0)
 test("Fundamental near 1400 Hz", abs(result.fundamental_freq - 1400.0) < 10.0)
 
-# === Test 13: Brightness with sparse harmonics (H6 missing) ===
-# Regression test: brightness should not snap to 0 when fewer than 6 total
-# harmonics are detected. The weighted H2-H6 formula should compute from
-# whatever brightness-relevant harmonics are available.
-print(f"\n=== Test 13: Brightness with sparse harmonics (H6 missing) ===")
-# Bright tone: strong H2-H5, no H6 or higher
-audio_sparse = make_audio(440.0, harmonics=[
-    (2, 0.8),   # H2 strong
-    (3, 0.9),   # H3 very strong
-    (4, 0.7),   # H4 strong
-    (5, 0.5),   # H5 moderate
-    # H6+ absent — only 5 harmonics total
-])
-result_sparse = engine.analyze_buffer(audio_sparse)
-test("Brightness > 0 with only H1-H5", result_sparse.descriptors.get('brightness', 0) > 0)
-test("Brightness substantial with strong H3-H5",
-     result_sparse.descriptors.get('brightness', 0) > 0.2)
-# Compare: same tone but with H6 added — should be similar, not a huge jump
-audio_full = make_audio(440.0, harmonics=[
-    (2, 0.8), (3, 0.9), (4, 0.7), (5, 0.5), (6, 0.2),
-])
-result_full = engine.analyze_buffer(audio_full)
-diff = abs(result_full.descriptors.get('brightness', 0) - result_sparse.descriptors.get('brightness', 0))
-test("Adding weak H6 doesn't drastically change brightness (diff < 0.15)", diff < 0.15)
+# === Test 13: Warmth with varying H2 strength ===
+print(f"\n=== Test 13: Warmth with varying H2 strength ===")
+# Strong H2 = warm, weak H2 = thin
+audio_warm = make_audio(440.0, harmonics=[(2, 0.9), (3, 0.5)])
+audio_thin = make_audio(440.0, harmonics=[(2, 0.05), (3, 0.5)])
+result_warm = engine.analyze_buffer(audio_warm)
+result_thin = engine.analyze_buffer(audio_thin)
+test("Strong H2 gives higher warmth", result_warm.descriptors['warmth'] > result_thin.descriptors['warmth'])
 
 # === Test 14: low_harmonic_data flag ===
 print(f"\n=== Test 14: low_harmonic_data flag ===")

@@ -66,7 +66,7 @@ LABEL_BRIGHTNESS_RANGE = 0.65    # Additional brightness scaled by magnitude
 # --- VU meter behavior ---
 VU_NEEDLE_DAMPING = 0.18         # Lerp factor per frame (0=frozen, 1=instant)
 VU_SIGNAL_THRESHOLD = 0.08       # Minimum magnitude to register a pitch on VU
-VU_IN_TUNE_CENTS = 1.0           # Cents threshold for "IN TUNE" display
+VU_IN_TUNE_CENTS = 4.0           # Cents threshold for "IN TUNE" display
 VU_CENTS_RANGE = 50.0            # Max cents shown on VU scale (symmetric ±)
 VU_ARC_START_DEG = 155.0         # Needle arc start angle (degrees, left side)
 VU_ARC_END_DEG = 25.0            # Needle arc end angle (degrees, right side)

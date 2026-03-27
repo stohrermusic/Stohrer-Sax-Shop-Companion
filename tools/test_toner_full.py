@@ -176,14 +176,6 @@ if r.spectrum_db is not None:
     test("spectrum length > 0", len(r.spectrum_db) > 100)
 
 # ============================================================
-section("Descriptors - resonance")
-# Perfect harmonics = high resonance
-audio = make_audio(440.0, {2: 0.5, 3: 0.3, 4: 0.2})
-r = engine.analyze_buffer(audio)
-test("Perfect harmonics: high resonance", r.descriptors['resonance'] > 0.7,
-     f"got {r.descriptors['resonance']:.2f}")
-
-# ============================================================
 section("Descriptors - richness")
 # Pure: fundamental only
 audio = make_audio(440.0)
@@ -205,43 +197,18 @@ test("Moderate tone: mid richness", r.descriptors['richness'] > 0.05,
      f"got {r.descriptors['richness']:.2f}")
 
 # ============================================================
-section("Descriptors - brightness and darkness")
-# Bright: strong presence harmonics (H3-H5 drive brightness gauge)
-audio = make_audio(440.0, {2: 0.6, 3: 0.8, 4: 0.7, 5: 0.6, 6: 0.4})
+section("Descriptors - warmth")
+# Warm: strong H2 (octave harmonic)
+audio = make_audio(440.0, {2: 0.9, 3: 0.5, 4: 0.3})
 r = engine.analyze_buffer(audio)
-test("Bright tone", r.descriptors['brightness'] > 0.3,
-     f"got {r.descriptors['brightness']:.2f}")
+test("Warm tone: high warmth", r.descriptors['warmth'] > 0.3,
+     f"got {r.descriptors['warmth']:.2f}")
 
-# Dark: only weak H2, no presence harmonics — brightness should be low
-audio = make_audio(200.0, {2: 0.1})
+# Thin: weak H2
+audio = make_audio(200.0, {2: 0.05})
 r = engine.analyze_buffer(audio)
-test("Dark tone: dark > bright",
-     r.descriptors['darkness'] > r.descriptors['brightness'],
-     f"dark={r.descriptors['darkness']:.2f} bright={r.descriptors['brightness']:.2f}")
-
-# ============================================================
-section("Descriptors - fullness")
-# Fullness = balance of bright and dark energy. Peaks when both sides
-# contribute equally, drops when one dominates. At 440 Hz with default
-# break (750 Hz), H2+ are all bright, so even a harmonic-rich tone
-# reads as unbalanced (bright-heavy) and low fullness. This is correct.
-
-# Use a low fundamental (130 Hz = C3) where some harmonics fall below break
-# and others above — this CAN be a genuinely full tone.
-audio = make_audio(130.0, {2: 0.8, 3: 0.7, 4: 0.6, 5: 0.5,
-                            6: 0.5, 7: 0.45, 8: 0.4, 9: 0.35})
-r = engine.analyze_buffer(audio)
-test("Full tone (low note, balanced harmonics): high fullness",
-     r.descriptors['fullness'] > 0.3,
-     f"got {r.descriptors['fullness']:.2f}")
-
-# Very bright-heavy signal: strong upper harmonics swamp the fundamental
-audio = make_audio(440.0, {2: 1.2, 3: 1.0, 4: 0.9, 5: 0.8,
-                            6: 0.7, 7: 0.6, 8: 0.5, 9: 0.4})
-r = engine.analyze_buffer(audio)
-test("Bright-heavy high note: lower fullness than balanced low note",
-     r.descriptors['fullness'] < 0.4,
-     f"bright={r.descriptors['brightness']:.2f} full={r.descriptors['fullness']:.2f}")
+test("Thin tone: low warmth", r.descriptors['warmth'] < 0.3,
+     f"got {r.descriptors['warmth']:.2f}")
 
 # ============================================================
 section("Signal level")
@@ -322,23 +289,23 @@ test("Per-note has C5", 'C5' in fp['per_note'])
 test("A4 averaged from 2 captures",
      abs(fp['per_note']['A4']['harmonics_db'][1] - (-6.5)) < 0.01)
 test("Descriptors computed from harmonics",
-     'brightness' in fp['per_note']['A4'].get('descriptors', {}))
+     'richness' in fp['per_note']['A4'].get('descriptors', {}))
 test("Overall harmonics exist", len(fp['harmonics_db']) == 3)
-test("Overall descriptors computed", 'brightness' in fp['descriptors'])
+test("Overall descriptors computed", 'richness' in fp['descriptors'])
+test("Warmth in descriptors", 'warmth' in fp['descriptors'])
 
 # Backward compat: old captures with stored descriptors still work
-# (descriptors are ignored, recomputed from harmonics_db)
+# (stored descriptors are ignored, recomputed from harmonics_db)
 old_sessions = [
     {'captures': [
         {'note': 'A4', 'fundamental_freq': 440.0, 'harmonics_db': [0, -6, -12],
-         'descriptors': {'resonance': 0.99, 'richness': 0.99, 'brightness': 0.99,
-                         'darkness': 0.01, 'fullness': 0.99}},
+         'descriptors': {'richness': 0.99, 'warmth': 0.99}},
     ]},
 ]
 fp_old = compute_fingerprint(old_sessions)
 test("Old captures: descriptors recomputed (not 0.99)",
-     fp_old['descriptors']['brightness'] != 0.99,
-     f"got {fp_old['descriptors']['brightness']:.3f}")
+     fp_old['descriptors']['richness'] != 0.99,
+     f"got {fp_old['descriptors']['richness']:.3f}")
 
 # Empty sessions
 fp_empty = compute_fingerprint([])
@@ -363,9 +330,7 @@ profiles = {
             'notes': '',
             'created': '2026-03-17',
             'sessions': [{'date': '2026-03-17', 'captures': [
-                {'note': 'A4', 'harmonics_db': [0, -6], 'descriptors':
-                 {'resonance': 0.8, 'richness': 0.5, 'brightness': 0.3,
-                  'darkness': 0.5, 'fullness': 0.2}},
+                {'note': 'A4', 'harmonics_db': [0, -6]},
             ]}],
         }
     }
@@ -440,30 +405,29 @@ test("Prefixed duplicate exists", any("[Lib B]" in k for k in flat.keys()))
 section("Comparison - descriptor analysis")
 fp_a = {
     'harmonics_db': [0, -5, -10, -15, -20, -25],
-    'descriptors': {'resonance': 0.9, 'richness': 0.7, 'brightness': 0.6, 'darkness': 0.4, 'fullness': 0.3},
+    'descriptors': {'richness': 0.7, 'warmth': 0.6},
     'note_count': 10,
     'capture_count': 20,
     'per_note': {
-        'A4': {'harmonics_db': [0, -4, -8], 'descriptors': {'resonance': 0.85, 'richness': 0.65, 'brightness': 0.55, 'darkness': 0.45, 'fullness': 0.25}},
+        'A4': {'harmonics_db': [0, -4, -8], 'descriptors': {'richness': 0.65, 'warmth': 0.55}},
     },
 }
 fp_b = {
     'harmonics_db': [0, -8, -16, -24, -32, -40],
-    'descriptors': {'resonance': 0.6, 'richness': 0.3, 'brightness': 0.2, 'darkness': 0.7, 'fullness': 0.1},
+    'descriptors': {'richness': 0.3, 'warmth': 0.2},
     'note_count': 8,
     'capture_count': 15,
     'per_note': {
-        'A4': {'harmonics_db': [0, -10, -20], 'descriptors': {'resonance': 0.55, 'richness': 0.25, 'brightness': 0.15, 'darkness': 0.75, 'fullness': 0.05}},
+        'A4': {'harmonics_db': [0, -10, -20], 'descriptors': {'richness': 0.25, 'warmth': 0.15}},
     },
 }
 
 # Verify the fingerprints can be compared
-test("FP A brighter", fp_a['descriptors']['brightness'] > fp_b['descriptors']['brightness'])
-test("FP B darker", fp_b['descriptors']['darkness'] > fp_a['descriptors']['darkness'])
 test("FP A richer", fp_a['descriptors']['richness'] > fp_b['descriptors']['richness'])
+test("FP A warmer", fp_a['descriptors']['warmth'] > fp_b['descriptors']['warmth'])
 test("Per-note data accessible", 'A4' in fp_a['per_note'])
 test("Per-note descriptors differ",
-     fp_a['per_note']['A4']['descriptors']['brightness'] != fp_b['per_note']['A4']['descriptors']['brightness'])
+     fp_a['per_note']['A4']['descriptors']['richness'] != fp_b['per_note']['A4']['descriptors']['richness'])
 
 # ============================================================
 section("Scale mode - dB vs linear height")
@@ -523,7 +487,7 @@ test("1999 Hz detectable", r.fundamental_freq > 0,
 # ============================================================
 section("Edge cases - empty descriptors")
 empty_result = TonerResult()
-test("Empty result: default resonance", empty_result.descriptors['resonance'] == 0.5)
+test("Empty result: default richness", empty_result.descriptors['richness'] == 0.0)
 test("Empty result: default richness", empty_result.descriptors['richness'] == 0.0)
 
 # ============================================================
@@ -631,12 +595,12 @@ var = compute_session_variation([sess1, sess2, sess3], "Tenor")
 test("session_var: returns dict", var is not None and isinstance(var, dict))
 test("session_var: has 3 session fingerprints", var['session_count'] == 3)
 test("session_var: has descriptor_stats", 'descriptor_stats' in var)
-test("session_var: stats have brightness", 'brightness' in var['descriptor_stats'])
-stats_b = var['descriptor_stats']['brightness']
-test("session_var: brightness has mean", 'mean' in stats_b)
-test("session_var: brightness has stdev", 'stdev' in stats_b)
-test("session_var: brightness stdev >= 0", stats_b['stdev'] >= 0)
-test("session_var: brightness n == 3", stats_b['n'] == 3)
+test("session_var: stats have richness", 'richness' in var['descriptor_stats'])
+stats_r = var['descriptor_stats']['richness']
+test("session_var: richness has mean", 'mean' in stats_r)
+test("session_var: richness has stdev", 'stdev' in stats_r)
+test("session_var: richness stdev >= 0", stats_r['stdev'] >= 0)
+test("session_var: richness n == 3", stats_r['n'] == 3)
 test("session_var: 1 session returns None",
      compute_session_variation([sess1], "Tenor") is None)
 test("session_var: empty sessions returns None",

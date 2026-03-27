@@ -76,11 +76,9 @@ GAUGE_DESCRIPTOR_DAMPING = 0.15       # lerp factor per frame for descriptor nee
 GAUGE_INTONATION_DAMPING = 0.18       # lerp factor per frame for intonation needle
 
 # Animation / display thresholds
-IN_TUNE_CENTS_THRESHOLD = 1.0         # cents — below this, "in tune" lamp lights
+IN_TUNE_CENTS_THRESHOLD = 4.0         # cents — below this, "in tune" lamp lights
 INTONATION_RANGE_CENTS = 50.0         # cents — full deflection of intonation gauge
 SPECTRUM_MAX_FREQ = 8000.0            # Hz — right edge of spectrum display
-FULLNESS_BRIGHTNESS_THRESHOLD = 0.5   # brightness above this to trigger FULL lamp
-FULLNESS_DARKNESS_THRESHOLD = 0.6     # darkness above this to trigger FULL lamp
 SPECTRAL_CHECK_FRAME_COUNT = 25       # frames before mic quality check fires
 LOW_DATA_FRAME_THRESHOLD = 15         # frames (~0.5s) before "low data" overlay shows
 FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 fps
@@ -183,8 +181,7 @@ class TonerTabMixin:
         self._toner_bars_built = False
         # Smoothed descriptor values for damped needle movement
         self._toner_smooth = {
-            'resonance': 0.5, 'richness': 0.0,
-            'brightness': 0.0, 'darkness': 0.0, 'fullness': 0.0,
+            'richness': 0.0, 'warmth': 0.0,
         }
         # Low harmonic data tracking — grey out gauges when sustained
         self._toner_low_data_frames = 0
@@ -240,7 +237,7 @@ class TonerTabMixin:
         # Bias sliders: visual offset per descriptor (-50 to +50, display only)
         saved_bias = toner_settings.get("gauge_bias", {})
         self._toner_bias_vars = {}
-        for key in ("resonance", "richness", "brightness", "darkness"):
+        for key in ("richness", "warmth"):
             self._toner_bias_vars[key] = tk.IntVar(
                 value=saved_bias.get(key, 0))
 
@@ -285,8 +282,8 @@ class TonerTabMixin:
         #   row 0: [bias] [Intonation gauge] [Note + freq]
         #   row 1: [bias] [Resonance gauge]
         #   row 2: [bias] [Richness gauge]
-        #   row 3: [bias] [Brightness gauge] [bright]
-        #   row 4: [bias] [Darkness gauge]   [+ FULL]
+        #   row 1: [bias] [Complexity gauge]
+        #   row 2: [bias] [Warmth gauge]
         #                                     [dark ]
         # Outer frame fills the grid cell, inner frame centered via pack
         gauge_outer = tk.Frame(top_frame, bg=bg)
@@ -358,10 +355,8 @@ class TonerTabMixin:
         # --- Rows 1-4: Descriptor gauges with bias sliders ---
         self._toner_gauges = {}
         gauge_defs = [
-            ("resonance", "Dissonant", "Resonant"),
             ("richness", "Pure", "Complex"),
-            ("brightness", "", "Bright"),
-            ("darkness", "", "Dark"),
+            ("warmth", "Thin", "Warm"),
         ]
 
         for key, left_label, right_label in gauge_defs:
@@ -374,37 +369,7 @@ class TonerTabMixin:
             gauge_data = self._toner_build_gauge(cv, left_label, right_label)
             self._toner_gauges[key] = gauge_data
 
-            # Place FULL indicator to the right, spanning brightness+darkness
-            if key == "brightness":
-                full_frame = tk.Frame(gauge_frame, bg=bg)
-                full_frame._skip_theme = True
-                full_frame.grid(row=gauge_row, column=2, rowspan=2,
-                                sticky="", padx=(6, 2))
-
-                # "bright + dark = FULL" indicator
-                tk.Label(full_frame, text="bright", bg=bg, fg="#555555",
-                         font=("Helvetica", 7)).pack()
-                tk.Label(full_frame, text="+", bg=bg, fg="#555555",
-                         font=("Helvetica", 7)).pack()
-                tk.Label(full_frame, text="dark", bg=bg, fg="#555555",
-                         font=("Helvetica", 7)).pack()
-                tk.Label(full_frame, text="=", bg=bg, fg="#555555",
-                         font=("Helvetica", 7)).pack()
-
-                self._toner_full_canvas = tk.Canvas(
-                    full_frame, bg=bg, highlightthickness=0, width=30, height=30)
-                self._toner_full_canvas._dark_canvas = True
-                self._toner_full_canvas.pack(pady=(2, 0))
-
-                tk.Label(full_frame, text="FULL", bg=bg, fg=LABEL_DIM,
-                         font=("Helvetica", 8, "bold")).pack(pady=(2, 0))
-
             gauge_row += 1
-
-        self._toner_full_glow = self._toner_full_canvas.create_oval(
-            3, 3, 27, 27, fill="#1A0A00", outline="")
-        self._toner_full_lamp = self._toner_full_canvas.create_oval(
-            6, 6, 24, 24, fill="#331100", outline="#555555", width=1)
 
         # --- Capture status bar (hidden until active) ---
         self._toner_capture_frame = tk.Frame(self._toner_main_frame, bg="#333300")
@@ -1492,9 +1457,8 @@ class TonerTabMixin:
         desc_row.pack(fill="x", padx=10, pady=8)
 
         var_stats = variation['descriptor_stats'] if variation else {}
-        for label, key in [("Resonance", "resonance"), ("Complexity", "richness"),
-                           ("Brightness", "brightness"), ("Darkness", "darkness"),
-                           ("Fullness", "fullness")]:
+        for label, key in [("Complexity", "richness"),
+                           ("Warmth", "warmth")]:
             val = d.get(key, 0)
             col = tk.Frame(desc_row, bg=bg)
             col.pack(side="left", expand=True)
@@ -1529,8 +1493,7 @@ class TonerTabMixin:
             shdr = tk.Frame(sess_inner, bg=bg)
             shdr.pack(fill="x")
             for text, w in [("Date", 12), ("Caps", 5), ("Notes", 5),
-                            ("Res", 5), ("Cmplx", 5), ("Bri", 5),
-                            ("Drk", 5), ("Full", 5)]:
+                            ("Cmpx", 5), ("Warm", 5)]:
                 tk.Label(shdr, text=text, width=w, bg=bg, fg=fg,
                          font=("Helvetica", 8, "bold")).pack(side="left")
 
@@ -1545,8 +1508,7 @@ class TonerTabMixin:
                          bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
                 tk.Label(srow, text=str(sfp['note_count']), width=5,
                          bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
-                for key in ['resonance', 'richness', 'brightness',
-                           'darkness', 'fullness']:
+                for key in ['richness', 'warmth']:
                     tk.Label(srow, text=f"{sd.get(key, 0):.0%}", width=5,
                              bg=bg, fg=fg,
                              font=("Helvetica", 8)).pack(side="left")
@@ -1560,8 +1522,7 @@ class TonerTabMixin:
                      fg=fg, font=("Helvetica", 8, "bold")).pack(side="left")
             tk.Label(orow, text=str(fp['note_count']), width=5, bg=bg,
                      fg=fg, font=("Helvetica", 8, "bold")).pack(side="left")
-            for key in ['resonance', 'richness', 'brightness',
-                       'darkness', 'fullness']:
+            for key in ['richness', 'warmth']:
                 tk.Label(orow, text=f"{d.get(key, 0):.0%}", width=5,
                          bg=bg, fg=fg,
                          font=("Helvetica", 8, "bold")).pack(side="left")
@@ -1569,10 +1530,8 @@ class TonerTabMixin:
             # Variation summary text
             vs = variation['descriptor_stats']
             parts = []
-            for label, key in [("brightness", "brightness"),
-                               ("complexity", "richness"),
-                               ("resonance", "resonance"),
-                               ("fullness", "fullness")]:
+            for label, key in [("complexity", "richness"),
+                               ("warmth", "warmth")]:
                 sd = vs[key]['stdev']
                 if sd < 0.03:
                     word = "very consistent"
@@ -1688,8 +1647,7 @@ class TonerTabMixin:
             # Header
             hdr = tk.Frame(table_inner, bg=bg)
             hdr.pack(fill="x")
-            for text, w in [("Note", 6), ("Res", 5), ("Rich", 5),
-                            ("Bri", 5), ("Drk", 5), ("Full", 5)]:
+            for text, w in [("Note", 6), ("Cmpx", 5), ("Warm", 5)]:
                 tk.Label(hdr, text=text, width=w, bg=bg, fg=fg,
                          font=("Helvetica", 8, "bold")).pack(side="left")
 
@@ -1702,8 +1660,7 @@ class TonerTabMixin:
                 display_note = self._toner_display_note_for_profile(note, profile)
                 tk.Label(row, text=display_note, width=6, bg=bg, fg=fg,
                          font=("Helvetica", 8)).pack(side="left")
-                for key in ['resonance', 'richness', 'brightness',
-                           'darkness', 'fullness']:
+                for key in ['richness', 'warmth']:
                     val = nd.get(key, 0)
                     tk.Label(row, text=f"{val:.0%}", width=5, bg=bg, fg=fg,
                              font=("Helvetica", 8)).pack(side="left")
@@ -3280,11 +3237,8 @@ class TonerTabMixin:
         table_inner.pack(fill="x", padx=5, pady=5)
 
         desc_labels = [
-            ("Resonance", "resonance"),
             ("Complexity", "richness"),
-            ("Brightness", "brightness"),
-            ("Darkness", "darkness"),
-            ("Fullness", "fullness"),
+            ("Warmth", "warmth"),
         ]
 
         # --- Analysis text ---
@@ -3450,9 +3404,8 @@ class TonerTabMixin:
 
         gd = grp['descriptors']
         gs = grp['descriptor_stats']
-        for label, key in [("Resonance", "resonance"), ("Complexity", "richness"),
-                           ("Brightness", "brightness"), ("Darkness", "darkness"),
-                           ("Fullness", "fullness")]:
+        for label, key in [("Complexity", "richness"),
+                           ("Warmth", "warmth")]:
             val = gd.get(key, 0)
             col = tk.Frame(desc_row, bg=bg)
             col.pack(side="left", expand=True)
@@ -3579,7 +3532,7 @@ class TonerTabMixin:
         thdr = tk.Frame(tbl_inner, bg=bg)
         thdr.pack(fill="x")
         for text, w in [("Profile", 20), ("Sess", 5), ("Caps", 5),
-                        ("Notes", 5), ("Bri", 5), ("Cmplx", 5), ("Full", 5)]:
+                        ("Notes", 5), ("Cmpx", 5), ("Warm", 5)]:
             tk.Label(thdr, text=text, width=w, bg=bg, fg=fg,
                      font=("Helvetica", 8, "bold")).pack(side="left")
 
@@ -3603,7 +3556,7 @@ class TonerTabMixin:
                      fg=fg, font=("Helvetica", 8)).pack(side="left")
             tk.Label(trow, text=str(fp['note_count']), width=5, bg=bg,
                      fg=fg, font=("Helvetica", 8)).pack(side="left")
-            for key in ['brightness', 'richness', 'fullness']:
+            for key in ['richness', 'warmth']:
                 tk.Label(trow, text=f"{td.get(key, 0):.0%}", width=5,
                          bg=bg, fg=fg,
                          font=("Helvetica", 8)).pack(side="left")
@@ -3741,32 +3694,8 @@ class TonerTabMixin:
                     and self._toner_low_data_shown):
                 self._toner_set_low_data_overlay(False)
 
-            self._toner_update_gauge('resonance', d['resonance'])
-            self._toner_update_gauge('richness', d['richness'])
-            self._toner_update_gauge('brightness', d['brightness'])
-            self._toner_update_gauge('darkness', d['darkness'])
-
-            # Fullness lamp — lights when bright and dark both exceed thresholds
-            # (using the smoothed gauge values which include bias)
-            smooth_bright = self._toner_smooth.get('brightness', 0)
-            bright_bias = self._toner_bias_vars.get('brightness')
-            dark_bias = self._toner_bias_vars.get('darkness')
-            display_bright = smooth_bright + (bright_bias.get() / 100.0 if bright_bias else 0)
-            smooth_dark = self._toner_smooth.get('darkness', 0)
-            display_dark = smooth_dark + (dark_bias.get() / 100.0 if dark_bias else 0)
-            full_on = (display_bright > FULLNESS_BRIGHTNESS_THRESHOLD and
-                       display_dark > FULLNESS_DARKNESS_THRESHOLD)
-
-            if full_on:
-                self._toner_full_canvas.itemconfigure(
-                    self._toner_full_lamp, fill="#FF8800")
-                self._toner_full_canvas.itemconfigure(
-                    self._toner_full_glow, fill="#442200")
-            else:
-                self._toner_full_canvas.itemconfigure(
-                    self._toner_full_lamp, fill="#331100")
-                self._toner_full_canvas.itemconfigure(
-                    self._toner_full_glow, fill="#1A0A00")
+            self._toner_update_gauge('richness', d.get('richness', 0.0))
+            self._toner_update_gauge('warmth', d.get('warmth', 0.0))
 
             # Process capture if active
             self._toner_process_capture_frame(result)

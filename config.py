@@ -493,7 +493,7 @@ DEFAULT_SETTINGS = {
         "fps": "30",
         "view_mode": "spectrum",  # "spectrum" or "bars"
         "scale_mode": "linear",   # "linear" or "db"
-        "gauge_bias": {"resonance": 0, "richness": 0, "brightness": 0, "darkness": 0},
+        "gauge_bias": {"richness": 0, "warmth": 0},
         "sax_type": "Alto",
         "concert_pitch": False,
     },
