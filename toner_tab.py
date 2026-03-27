@@ -1839,6 +1839,20 @@ class TonerTabMixin:
                     side="left", fill="x", expand=True)
                 fields[key] = var
 
+        # Library selector (editable — type a new name or pick existing)
+        lib_row = tk.Frame(frame, bg=bg)
+        lib_row.pack(fill="x", pady=2)
+        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        existing_libs = [k for k in self._toner_profiles.keys()
+                        if isinstance(self._toner_profiles[k], dict)]
+        if not existing_libs:
+            existing_libs = [DEFAULT_LIBRARY]
+        lib_var = tk.StringVar(value=existing_libs[0])
+        ttk.Combobox(lib_row, textvariable=lib_var,
+                      values=existing_libs, width=20).pack(
+            side="left", fill="x", expand=True)
+
         add_field("Profile Name:", "name")
         add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
         add_field("Make:", "horn_make")
@@ -1863,8 +1877,7 @@ class TonerTabMixin:
                     "Please enter a profile name.", parent=dlg)
                 return
 
-            # Save into the default library
-            lib = DEFAULT_LIBRARY
+            lib = lib_var.get().strip() or DEFAULT_LIBRARY
             if lib not in self._toner_profiles:
                 self._toner_profiles[lib] = {}
             if name in self._toner_profiles[lib]:
