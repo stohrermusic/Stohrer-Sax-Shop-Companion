@@ -13,7 +13,6 @@ Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 """
 
 import math
-import threading
 import time
 import json
 import os
@@ -706,9 +705,8 @@ class TonerEngine:
     def _compute_descriptors(self, harmonics, f0=440.0):
         """Compute tone quality descriptors from harmonic data.
 
-        Brightness uses weighted harmonic presence strength (H3-H5
-        emphasis) rather than a frequency cutoff.  Calibrated against
-        Selmer SBA, BA, and Keilwerth Shadow tenors (2026-03-23).
+        Richness: spectral flatness (geometric/arithmetic mean ratio).
+        Warmth: H2 (octave harmonic) strength relative to fundamental.
         """
         if not harmonics:
             return {'richness': 0.0, 'warmth': 0.0,

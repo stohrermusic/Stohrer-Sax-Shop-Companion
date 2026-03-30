@@ -2976,11 +2976,11 @@ class UserGuideWindow(tk.Toplevel):
                     "profiles \u2014 not which one is \"better,\" but what "
                     "changed and where.")
         self._blank()
-        self._bullet("Compare... opens a picker with filters for horn "
-                      "type, player, and mouthpiece")
-        self._bullet("Select 2+ profiles for side-by-side analysis: "
-                      "harmonic chart, descriptor table, and "
-                      "auto-generated delta analysis")
+        self._bullet("Analyze... opens a picker with filters for horn "
+                      "type, player, mouthpiece, and mic type")
+        self._bullet("Select one or more profiles: single selection "
+                      "shows that profile's data; two or more shows "
+                      "side-by-side delta analysis")
         self._bullet("For two profiles, the Difference chart shows "
                       "a single curve of the harmonic-by-harmonic delta "
                       "\u2014 instantly shows where the sound diverges")

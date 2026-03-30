@@ -314,7 +314,7 @@ class TonerTabMixin:
 
         gauge_row += 1
 
-        # --- Rows 1-4: Descriptor gauges with bias sliders ---
+        # --- Descriptor gauges ---
         self._toner_gauges = {}
         gauge_defs = [
             ("richness", "Pure", "Complex"),    # Harmonic Spread
@@ -3409,7 +3409,7 @@ class TonerTabMixin:
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 8))
 
         # --- Descriptors with ± stdev ---
-        desc_frame = tk.LabelFrame(main, text="Group Tone Character",
+        desc_frame = tk.LabelFrame(main, text="Group Descriptors",
                                     bg=bg, fg=fg,
                                     font=("Helvetica", 10, "bold"))
         desc_frame.pack(fill="x", pady=(0, 8))
@@ -4279,7 +4279,6 @@ class TonerTabMixin:
             "fps": self._toner_fps_var.get() if hasattr(self, '_toner_fps_var') else "30",
             "view_mode": self._toner_view_var.get() if hasattr(self, '_toner_view_var') else "spectrum",
             "scale_mode": self._toner_scale_var.get() if hasattr(self, '_toner_scale_var') else "linear",
-            "gauge_bias": {},
             "sax_type": self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else "Alto",
             "concert_pitch": self._toner_concert_pitch.get() if hasattr(self, '_toner_concert_pitch') else False,
         }
