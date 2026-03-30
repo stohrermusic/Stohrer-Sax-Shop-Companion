@@ -497,6 +497,17 @@ DEFAULT_SETTINGS = {
         "sax_type": "Alto",
         "concert_pitch": False,
     },
+    "mic_type": "",        # "condenser", "ribbon", "dynamic", or ""
+    "mic_model": "",       # optional free-text, e.g. "AT2020 USB"
+    "visible_profile_fields": {
+        "serial": False,
+        "reed": True,
+        "ligature": False,
+        "room": False,
+        "preamp": False,
+        "mic_model": False,
+        "notes": True,
+    },
 
     # TOOLING SETTINGS (Die Inserts & Die Holders)
     "tooling_settings": {

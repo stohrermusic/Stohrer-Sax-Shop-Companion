@@ -109,6 +109,12 @@ SPECTRAL_QUALITY_THRESHOLD = 0.6
 # Low-freq energy must be below this fraction of mid-freq energy to count as weak
 LOW_FREQ_WEAKNESS_RATIO = 0.05
 
+# --- Recording quality (harmonic rolloff) ---
+# Average dB drop per harmonic from H2 to H12.  Good close-mic setups read
+# 1.0–2.0 dB/harmonic; a laptop mic across the room reads 3.0+.
+ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — warn above this
+ROLLOFF_MIN_CAPTURES = 5       # need this many before checking
+
 # Calibration capture: written chromatic scale Bb3 to F6
 # These are WRITTEN pitches — the transposition to concert pitch
 # happens using SAX_TRANSPOSITIONS when computing expected frequencies.
@@ -877,40 +883,6 @@ def _shift_note(note_name, semitones):
     return f"{PITCH_CLASSES[new_pc]}{new_octave}"
 
 
-def migrate_profile_to_concert(profile):
-    """Convert a profile's stored note names from written to concert pitch.
-
-    Uses the profile's horn_type to determine the reverse transposition.
-    Returns a new deep-copied profile with concert pitch note names.
-    Skips profiles already marked with pitch_format='concert'.
-    """
-    import copy
-    profile = copy.deepcopy(profile)
-
-    if profile.get('pitch_format') == 'concert':
-        return profile
-
-    sax_type = profile.get('horn_type', '')
-    if not sax_type:
-        # Can't migrate without knowing the horn type
-        profile['pitch_format'] = 'concert'
-        return profile
-
-    for session in profile.get('sessions', []):
-        if not isinstance(session, dict):
-            continue
-        for cap in session.get('captures', []):
-            if not isinstance(cap, dict):
-                continue
-            note = cap.get('note', '')
-            if note:
-                cap['note'] = reverse_transpose_note(note, sax_type)
-            # detected_as stays as-is (it's metadata about detector accuracy,
-            # compared against the written-pitch calibration prompt)
-
-    profile['pitch_format'] = 'concert'
-    return profile
-
 
 def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
                                harmonic_cents=None):
@@ -998,6 +970,22 @@ def average_captures(captures):
     return result
 
 
+def compute_rolloff_rate(harmonics_db):
+    """Return the average dB drop per harmonic from H2 to the highest available.
+
+    A low value (1.0–2.0) indicates a good close-mic setup.  A high value
+    (3.0+) suggests the mic or room is suppressing upper harmonics.
+    Returns None if fewer than 8 harmonics are present.
+    """
+    if not harmonics_db or len(harmonics_db) < 8:
+        return None
+    last_idx = min(11, len(harmonics_db) - 1)  # H12 = index 11
+    span = last_idx - 1  # number of steps from H2 (index 1) to last
+    if span <= 0:
+        return None
+    return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
+
+
 def compute_fingerprint(sessions, sax_type="Tenor"):
     """Compute an aggregate harmonic fingerprint from all sessions in a profile.
 
@@ -1070,12 +1058,24 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
     # Horn-level harmonics: still average all captures
     overall = average_captures(all_captures) if all_captures else None
 
+    overall_harmonics = overall['harmonics_db'] if overall else []
+
+    # Determine mic type from sessions (use most common non-empty value)
+    mic_types = [s.get('mic_type', '') for s in sessions if s.get('mic_type')]
+    if mic_types:
+        from collections import Counter
+        mic_type = Counter(mic_types).most_common(1)[0][0]
+    else:
+        mic_type = ''
+
     return {
-        'harmonics_db': overall['harmonics_db'] if overall else [],
+        'harmonics_db': overall_harmonics,
         'descriptors': horn_descriptors,
         'note_count': len(per_note),
         'capture_count': len(all_captures),
         'per_note': per_note_avg,
+        'rolloff_rate': compute_rolloff_rate(overall_harmonics),
+        'mic_type': mic_type,
     }
 
 

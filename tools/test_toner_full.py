@@ -572,7 +572,7 @@ def _make_session(date, notes_hz):
             'method': 'free', 'n_frames': 30,
             'timestamp': date,
         })
-    return {'date': date, 'captures': caps, 'pitch_format': 'concert'}
+    return {'date': date, 'captures': caps}
 
 sess1 = _make_session("2026-03-20 10:00:00", [("A3", 220.0), ("D4", 293.66), ("G4", 392.0)])
 sess2 = _make_session("2026-03-21 10:00:00", [("A3", 220.0), ("D4", 293.66), ("A4", 440.0)])

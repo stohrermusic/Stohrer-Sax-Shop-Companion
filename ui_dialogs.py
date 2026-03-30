@@ -2786,169 +2786,233 @@ class UserGuideWindow(tk.Toplevel):
     def _section_toner(self):
         self._h2("Toner \u2014 Tone Analyzer")
 
-        self._h2("How to Think About This Tool")
-        self._body("The Toner measures the harmonic fingerprint of your sound \u2014 but "
-                    "your sound is shaped by everything at once: your air, your embouchure, "
-                    "your reed, your mouthpiece, your horn, and the room you're in. No "
-                    "single reading can separate these. Instead, the tool works at "
-                    "different time scales, and each scale answers a different question:")
+        # === WHAT THIS TOOL IS ===
+        self._h2("What This Tool Does")
+        self._body("The Toner is a harmonic analyzer that shows you what's in "
+                    "your sound right now, and \u2014 more importantly \u2014 what "
+                    "changes when you change something. It detects your "
+                    "fundamental pitch and measures the strength of each "
+                    "harmonic overtone up to the 12th.")
         self._blank()
-        self._bullet("The live gauges (right now): \"What is my sound doing this second?\" "
-                      "Use them as biofeedback while practicing. The movement IS the "
-                      "information \u2014 it shows how your playing choices affect the "
-                      "sound in real time.")
-        self._bullet("A single session: \"How did I sound today on this setup?\" "
-                      "One capture session blends horn + mouthpiece + reed + player + "
-                      "room + mic. You can't separate those variables from one session.")
-        self._bullet("Many sessions, same setup: \"What does this setup tend to sound "
-                      "like?\" Day-to-day player variation averages out. What remains "
-                      "says more about the equipment.")
-        self._bullet("Many setups, same horn: \"What does this horn do across different "
-                      "players and mouthpieces?\" Only at this level can you start to "
-                      "make statements about a horn's character \u2014 and even then, "
-                      "with appropriate humility.")
-        self._blank()
-        self._body("The more data you collect, the more the tool can reveal. A single "
-                    "session shows that saxophones are flexible instruments with a wide "
-                    "tonal range depending on how they're played. Over many sessions, "
-                    "underlying differences between horns, mouthpieces, and players may "
-                    "emerge \u2014 but they emerge from the data, not from any single "
-                    "measurement. Be skeptical of strong claims from small samples.")
+        self._body("Every reading captures the whole signal chain at once: "
+                    "you + horn + mouthpiece + reed + mic + room. A single "
+                    "reading can't separate those. But when you change one "
+                    "variable and keep everything else the same, the "
+                    "difference in readings tells you exactly what that "
+                    "variable did.")
         self._blank()
 
-        self._h2("What It Measures")
-        self._body("A real-time harmonic analyzer for saxophone. Detects the fundamental pitch "
-                    "and shows the strength of each harmonic overtone, giving visual feedback "
-                    "on your tone quality. The saxophone is a conical bore instrument, so it "
-                    "produces both even and odd harmonics (unlike the clarinet, which emphasizes "
-                    "odd harmonics). The Toner analyzes up to 12 harmonics of whatever note "
-                    "you're playing.")
+        # === TWO WAYS TO USE IT ===
+        self._h2("Two Ways to Use It")
+
+        self._body("1. Live biofeedback while practicing")
+        self._bullet("The gauges and spectrum respond in real time. The "
+                      "movement is the information \u2014 it shows how your "
+                      "air, embouchure, and voicing choices affect the "
+                      "sound moment to moment.")
         self._blank()
 
-        self._h2("Microphone")
-        self._body("A quality microphone is essential for accurate readings. Laptop and "
-                    "built-in mics roll off low frequencies and add noise, which causes "
-                    "the pitch detector to misidentify notes \u2014 especially in the low "
-                    "register. A condenser mic or USB mic designed for music will give "
-                    "dramatically better results.")
-        self._bullet("The mic needs a flat frequency response down to at least 100 Hz "
-                      "and a sample rate of 44.1 kHz or higher. Without this, low "
-                      "register fundamentals are inaudible to the analyzer.")
-        self._bullet("Recommended: Audio-Technica AT2020 USB (no audio interface needed)")
-        self._bullet("Any condenser mic through an audio interface will also work well")
-        self._bullet("Laptop/built-in mics are not recommended for tone analysis")
-        self._bullet("Bluetooth headset mics do not work \u2014 their sample rate "
-                      "is too low (16 kHz) for harmonic analysis")
-        self._bullet("Select your mic via Options > Input Device")
-        self._bullet("Room acoustics and mic placement affect readings. Anomalies "
-                      "that appear on every horn in the same room are likely the room, "
-                      "not the horns. Compare across different environments to "
-                      "separate horn character from room character.")
+        self._body("2. Tracking changes over time")
+        self._bullet("Record a session, change one thing, record another. "
+                      "The comparison tool shows you exactly what moved "
+                      "and by how much. This works for any variable in "
+                      "the chain:")
+        self._bullet("\"What happens when I switch mouthpieces?\" "
+                      "\u2014 Same horn, same reed, same mic. "
+                      "The delta is the mouthpiece.")
+        self._bullet("\"How does my sound change day to day?\" "
+                      "\u2014 Same everything. The delta is you.")
+        self._bullet("\"How does my ribbon mic color the sound "
+                      "vs my condenser?\" \u2014 Same horn, same "
+                      "room. The delta is the recording chain.")
+        self._bullet("\"Is this horn different from that one?\" "
+                      "\u2014 Same player, same mouthpiece, same "
+                      "mic, same room. The delta is the horn.")
+        self._blank()
+        self._body("Over many sessions, the things that stay the "
+                    "same start to emerge from the things that drift. "
+                    "But that takes time and discipline about controlling "
+                    "what you change. Be skeptical of strong conclusions "
+                    "from small samples.")
         self._blank()
 
+        # === GETTING STARTED ===
+        self._h2("Getting Started")
+
+        self._body("Before your first capture, you need two things: a "
+                    "microphone and a profile.")
+        self._blank()
+
+        self._body("Microphone")
+        self._bullet("Set your mic type and model in Options \u2192 Input "
+                      "Device. Mic type is required before capturing.")
+        self._bullet("A condenser mic (e.g. Audio-Technica AT2020 USB) "
+                      "gives you the fullest picture \u2014 flat response "
+                      "captures upper harmonics accurately, which is "
+                      "where most of the interesting differences live.")
+        self._bullet("Ribbon and dynamic mics can still be used. Warmth "
+                      "(H2) reads accurately on any mic. But upper "
+                      "harmonics will be attenuated, so complexity and "
+                      "the full harmonic profile will be less reliable. "
+                      "The mic type is stored with your data so you "
+                      "always know what produced it.")
+        self._bullet("Laptop/built-in mics are not suitable \u2014 they "
+                      "roll off both low and high frequencies and add noise")
+        self._bullet("Bluetooth headset mics do not work \u2014 sample "
+                      "rate is too low (16 kHz) for harmonic analysis")
+        self._blank()
+
+        self._body("Mic placement")
+        self._bullet("Place the mic 2\u20133 feet (60\u201390 cm) from "
+                      "the bell, slightly off-axis")
+        self._bullet("Avoid very close placement (<1 foot) \u2014 "
+                      "proximity effect exaggerates low harmonics")
+        self._bullet("A quieter room is better \u2014 background noise "
+                      "masks upper harmonics")
+        self._bullet("Keep placement consistent between sessions. Moving "
+                      "the mic is another variable that shows up in the data.")
+        self._blank()
+
+        self._body("Profile")
+        self._bullet("A profile is one setup: horn + player + mouthpiece. "
+                      "Change any of those? That's a new profile.")
+        self._bullet("Click Capture, then create or load a profile. "
+                      "Fill in at least the required fields (make, "
+                      "model, player, mouthpiece). Optional fields "
+                      "like reed, room, and preamp can be enabled in "
+                      "Options \u2192 Profile Fields.")
+        self._bullet("The SAX selector sets the transposition and is "
+                      "stored with the profile. When you load a profile, "
+                      "it updates automatically.")
+        self._blank()
+
+        # === CAPTURING ===
+        self._h2("Capturing")
+        self._bullet("Click Capture, select or create a profile, then play.")
+        self._bullet("The tool auto-detects steady tones: hold a note "
+                      "for about a second and it triggers automatically. "
+                      "No button-pressing while playing.")
+        self._bullet("Move to the next note and it captures again. Play "
+                      "through the horn's range at your own pace.")
+        self._bullet("The first ~100ms of each note is automatically "
+                      "skipped \u2014 the attack transient doesn't represent "
+                      "the sustained tone.")
+        self._bullet("Capture at least 8 unique notes for a useful "
+                      "fingerprint. More is better.")
+        self._bullet("Click Stop when done. A coverage summary shows "
+                      "which notes you hit and where the gaps are.")
+        self._bullet("Every capture is timestamped. The session date "
+                      "is saved automatically, so you can track changes "
+                      "over time.")
+        self._blank()
+
+        # === THE DISPLAY ===
         self._h2("Display")
-        self._bullet("Spectrum view: full FFT frequency spectrum with harmonics highlighted "
-                      "in amber and the fundamental in green")
+        self._bullet("Spectrum view: full FFT frequency spectrum with "
+                      "harmonics highlighted in amber and the fundamental "
+                      "in green")
         self._bullet("Bars view: one bar per harmonic, clean and simple")
-        self._bullet("Scale: Linear (default) shows true amplitude ratios \u2014 a harmonic "
-                      "at half the fundamental's strength shows as half the bar height. "
-                      "dB shows the standard logarithmic audio scale, which compresses "
-                      "differences at the top (half amplitude = 90% bar height in dB).")
-        self._blank()
-
-        self._h2("Saxophone Type")
-        self._body("The SAX selector in the control strip tells the Toner what size "
-                    "saxophone you're playing. This controls the transposition of "
-                    "displayed note names (written pitch vs concert pitch) and is "
-                    "stored with each profile.")
-        self._blank()
-        self._body("When you load a profile for capture, the selector automatically "
-                    "updates to match the profile's horn type.")
+        self._bullet("Scale: Linear (default) shows true amplitude ratios. "
+                      "dB shows the logarithmic audio scale.")
         self._blank()
 
         self._h2("Gauges")
-        self._body("Two VU-style gauges show aspects of tone quality that aren't "
-                    "easily seen in the spectrum bars alone. "
-                    "These respond to your playing in real time \u2014 they reflect the "
-                    "complete system (you + your setup), not just the horn.")
+        self._body("Two gauges summarize aspects of the harmonic content "
+                    "in real time. Watch how they move as you play \u2014 "
+                    "the movement is more informative than any single reading.")
         self._bullet("Intonation: flat/sharp meter with cents readout. "
-                      "The IN TUNE lamp lights when pitch is within \u00b14 cents.")
-        self._bullet("Pure / Complex: measures both how many harmonics are present and "
-                      "how evenly the energy is spread among them (spectral flatness). "
-                      "A tone with energy concentrated in the fundamental = pure. "
-                      "Energy spread evenly across many harmonics = complex.")
-        self._bullet("Thin / Warm: measures the strength of H2 (the octave harmonic) "
-                      "relative to the fundamental. A strong octave harmonic gives the "
-                      "tone a round, warm quality. A weak H2 sounds thinner and more "
-                      "focused.")
+                      "The IN TUNE lamp lights within \u00b14 cents.")
+        self._bullet("Pure / Complex: spectral flatness \u2014 how evenly "
+                      "the energy is spread across the harmonics. Energy "
+                      "concentrated in the fundamental = pure. Energy "
+                      "spread evenly = complex.")
+        self._bullet("Thin / Warm: strength of H2 (the octave harmonic) "
+                      "relative to the fundamental. Strong H2 = warm, "
+                      "round quality. Weak H2 = thinner, more focused.")
         self._blank()
-        self._body("The spectrum bars show the full harmonic picture \u2014 the relative "
-                    "strength of each harmonic from H1 (fundamental) through H12. "
-                    "This is the raw data that the gauges are derived from, and it "
-                    "shows everything the gauges don't capture. Use the bars to see "
-                    "the complete harmonic shape of your sound.")
+        self._body("The spectrum bars show everything the gauges don't "
+                    "capture \u2014 the complete harmonic shape of your "
+                    "sound from H1 through H12.")
         self._blank()
-
-        self._h2("Bias Sliders")
-        self._body("Each descriptor gauge has a small bias slider underneath. These "
-                    "let you offset the needle position to match your perception without "
-                    "affecting the captured data. If complexity always reads lower than what "
-                    "you're hearing, nudge the slider right.")
-        self._blank()
-        self._body("The bias adjusts only the display \u2014 all captured profile data "
-                    "uses the raw computed values, so your profiles stay comparable "
-                    "even if you change the bias later. Settings are saved between sessions.")
+        self._body("Each gauge has a bias slider underneath. These offset "
+                    "the display to match your perception without affecting "
+                    "captured data. Display-only \u2014 your profiles stay "
+                    "comparable.")
         self._blank()
 
-        self._h2("Tone Profiles")
-        self._body("A profile is a unique setup: horn + player + mouthpiece + reed. "
-                    "If any variable changes, that's a new profile. This keeps the data "
-                    "clean \u2014 you can compare \"same horn, different mouthpiece\" or "
-                    "\"same player, different horn\" without muddying the results.")
+        # === COMPARING ===
+        self._h2("Comparing Sessions")
+        self._body("This is where the tool earns its keep. The comparison "
+                    "tool shows you what's different between two or more "
+                    "profiles \u2014 not which one is \"better,\" but what "
+                    "changed and where.")
         self._blank()
-        self._body("Each session captures a snapshot of how that setup sounded that day. "
-                    "Multiple sessions build a richer picture. Over time, patterns that "
-                    "persist across sessions are more likely to reflect the equipment; "
-                    "patterns that come and go are more likely the player, the reed, or "
-                    "the room. The tool shows what the data says across however "
-                    "many sessions you've recorded, and lets you draw your own "
-                    "conclusions.")
+        self._bullet("Compare... opens a picker with filters for horn "
+                      "type, player, and mouthpiece")
+        self._bullet("Select 2+ profiles for side-by-side analysis: "
+                      "harmonic chart, descriptor table, and "
+                      "auto-generated delta analysis")
+        self._bullet("For two profiles, the Difference chart shows "
+                      "a single curve of the harmonic-by-harmonic delta "
+                      "\u2014 instantly shows where the sound diverges")
+        self._bullet("Toggle between Horn Average and Per-Note to see "
+                      "whether differences are across the board or "
+                      "concentrated in certain registers")
+        self._bullet("\"Overlay on Spectrum\" loads a profile as a "
+                      "blue ghost behind the live display for real-time "
+                      "A/B comparison while playing")
         self._blank()
-        self._bullet("Click Capture to start. Select or create a profile, then play.")
-        self._bullet("The tool auto-detects steady tones: hold a note for ~1 second and "
-                      "it triggers automatically. After a 1-second settling period, it "
-                      "records and averages 5 seconds of data. No button-pressing while playing.")
-        self._bullet("Move to the next note and it captures again. Play through the "
-                      "horn's range at your own pace.")
-        self._bullet("The first ~100ms of each note is automatically skipped. "
-                      "The attack transient contains non-harmonic energy from "
-                      "tonguing that doesn't represent the horn's sustained tone "
-                      "character. All capture modes apply this skip.")
-        self._bullet("Capture at least 8 unique notes to build a harmonic fingerprint.")
-        self._bullet("Click Stop when done. Profiles are saved automatically.")
-        self._bullet("Use Edit Notes to annotate profiles with your subjective "
-                      "impressions: \"dark warm horn\", \"bright and edgy\", etc.")
-        self._blank()
-
-        self._h2("Comparison")
-        self._bullet("Compare... opens a multi-select picker with filters for horn type, "
-                      "player, and mouthpiece")
-        self._bullet("Select 2+ profiles for side-by-side analysis: harmonic chart, "
-                      "descriptor table, and auto-generated text analysis")
-        self._bullet("Toggle between Horn Average (overall fingerprint across all "
-                      "captured notes) and Per-Note (compare a specific note like "
-                      "middle D across different horns)")
-        self._bullet("\"Overlay on Spectrum\" loads one profile as a blue ghost behind "
-                      "the live display for real-time A/B comparison while playing")
+        self._body("The comparison table shows mic type and recording "
+                    "quality (rolloff rate) for each profile. If mic "
+                    "types differ, the analysis notes that harmonic "
+                    "differences may partly reflect the mic rather "
+                    "than the horn.")
         self._blank()
 
-        self._h2("File Menu")
-        self._bullet("Export Profiles: save all profiles to a JSON file for sharing or backup")
-        self._bullet("Import Profiles: merge profiles from a file into your library")
+        # === REPORTS ===
+        self._h2("Profile Reports")
+        self._body("The report view shows one profile's history: "
+                    "descriptors, session-by-session changes (with "
+                    "deltas from the previous session), harmonic "
+                    "curve, and per-note breakdown. Use it to see "
+                    "how your readings on a given setup have drifted "
+                    "over time.")
         self._blank()
 
-        self._body("The toner activates automatically when you switch to the Toner tab "
-                    "and stops when you leave it.")
+        # === RECORDING QUALITY ===
+        self._h2("Recording Quality")
+        self._body("The app measures harmonic rolloff \u2014 how quickly "
+                    "upper harmonics fade relative to the fundamental. "
+                    "This tells you how much of the signal your "
+                    "recording setup is capturing:")
+        self._bullet("1.0\u20132.0 dB/H: Condenser mic, close placement. "
+                      "Full harmonic detail.")
+        self._bullet("2.0\u20132.5 dB/H: Good mic, further away or "
+                      "reflective room.")
+        self._bullet("2.5+ dB/H: Ribbon, dynamic, built-in, or distant "
+                      "mic. Upper harmonics attenuated. The app warns "
+                      "you after the first few captures if this is "
+                      "detected.")
+        self._blank()
+        self._body("If you want to learn the most about your actual "
+                    "setup \u2014 what the horn and mouthpiece are doing "
+                    "\u2014 use a condenser mic. If you want to learn "
+                    "how your recording chain colors the sound, try "
+                    "different mics and compare. Both are valid uses.")
+        self._blank()
+
+        # === DATA MANAGEMENT ===
+        self._h2("Data & Transfer")
+        self._body("Profiles are saved automatically. Each session "
+                    "records the date, mic type, and mic model "
+                    "alongside the harmonic data.")
+        self._blank()
+        self._bullet("File \u2192 Transfer Data \u2192 Export/Import "
+                      "Profile Library: for backup or moving data "
+                      "between machines. Exported files are JSON.")
+        self._blank()
+        self._body("The toner activates automatically when you switch "
+                    "to the Toner tab and stops when you leave it.")
         self._blank()
 
     def _section_import_export(self):
@@ -2958,7 +3022,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Pad Presets: File > Export/Import Pad Presets to share saved pad size lists")
         self._bullet("Key Heights: File > Export/Import Key Heights to share measurement sets")
         self._bullet("Screw Specs: File > Export/Import Screw Specs to share thread data")
-        self._bullet("Tone Profiles: File > Export/Import Tone Profiles")
+        self._bullet("Tone Profiles: File > Transfer Data > Export/Import Profile Library")
         self._bullet("All Settings: File > Import Settings from Folder copies all config "
                       "files from another installation")
         self._body("Exported files are standard JSON and can be emailed or shared via any method.")

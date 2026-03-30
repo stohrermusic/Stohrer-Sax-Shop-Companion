@@ -281,13 +281,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
         toner_file_menu.add_command(label="Profiles...", command=self._toner_open_profile_dialog)
         toner_file_menu.add_separator()
-        toner_file_menu.add_command(label="Export Profiles...", command=self._toner_export_profiles)
-        toner_file_menu.add_command(label="Import Profiles...", command=self._toner_import_profiles)
+        toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
+        toner_file_menu.add_cascade(label="Transfer Data", menu=toner_transfer_menu)
+        toner_transfer_menu.add_command(label="Export Profile Library...", command=self._toner_export_profiles)
+        toner_transfer_menu.add_command(label="Import Profile Library...", command=self._toner_import_profiles)
 
         toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
         toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
         toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
+        toner_options_menu.add_command(label="Profile Fields...", command=self._open_profile_fields_dialog)
         toner_options_menu.add_separator()
         toner_options_menu.add_command(label="Reference Pitch (A=)...", command=self._toner_open_pitch_dialog)
         toner_options_menu.add_command(label="Display Pitch...", command=self._toner_open_pitch_display_dialog)
@@ -406,9 +409,58 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     # ------------------------------------------------------------------
 
     def create_pad_generator_tab(self, parent):
+        # Scrollable wrapper so the tab scrolls when content exceeds window
+        self._pad_tab_canvas = tk.Canvas(parent, highlightthickness=0,
+                                         bg=self.root.cget('bg'))
+        self._pad_tab_scrollbar = tk.Scrollbar(parent, orient="vertical",
+                                                command=self._pad_tab_canvas.yview)
+        self._pad_tab_inner = tk.Frame(self._pad_tab_canvas, bg=self.root.cget('bg'))
+
+        self._pad_tab_inner.bind("<Configure>",
+            lambda e: self._pad_tab_canvas.configure(
+                scrollregion=self._pad_tab_canvas.bbox("all")))
+        self._pad_tab_canvas_window = self._pad_tab_canvas.create_window(
+            (0, 0), window=self._pad_tab_inner, anchor="nw")
+        self._pad_tab_canvas.configure(yscrollcommand=self._pad_tab_scrollbar.set)
+
+        # Keep inner frame width in sync with canvas
+        def _sync_inner_width(event):
+            self._pad_tab_canvas.itemconfig(self._pad_tab_canvas_window,
+                                            width=event.width)
+        self._pad_tab_canvas.bind("<Configure>", _sync_inner_width)
+
+        self._pad_tab_canvas.pack(side="left", fill="both", expand=True)
+        self._pad_tab_scrollbar.pack(side="right", fill="y")
+
+        # Enable mousewheel scrolling on the canvas and all children
+        from ui_dialogs import bind_mousewheel
+        bind_mousewheel(self._pad_tab_canvas, self._pad_tab_canvas)
+        bind_mousewheel(self._pad_tab_inner, self._pad_tab_canvas)
+
+        # Redirect mousewheel from child widgets to the outer canvas
+        def _bind_children_mousewheel(frame):
+            for child in frame.winfo_children():
+                bind_mousewheel(child, self._pad_tab_canvas)
+                if isinstance(child, (tk.Frame, tk.LabelFrame, ttk.Frame, ttk.LabelFrame)):
+                    _bind_children_mousewheel(child)
+        # Defer until all children exist
+        self._pad_tab_bind_children_mousewheel = _bind_children_mousewheel
+
+        # All content goes into _pad_tab_inner instead of parent
+        parent = self._pad_tab_inner
+
         tk.Label(parent, text="Enter pad sizes (e.g. 42.0x3):", bg=self.root.cget('bg')).pack(pady=5)
         self.pad_entry = tk.Text(parent, height=10, undo=True, maxundo=-1)
         self.pad_entry.pack(fill="x", padx=10)
+
+        # Auto-resize text widget to fit content
+        def _auto_resize_pad_entry(event=None):
+            line_count = int(self.pad_entry.index("end-1c").split(".")[0])
+            new_height = max(10, min(line_count + 1, 30))
+            self.pad_entry.configure(height=new_height)
+        self.pad_entry.bind("<KeyRelease>", _auto_resize_pad_entry)
+        self.pad_entry.bind("<<Paste>>", lambda e: self.pad_entry.after(10, _auto_resize_pad_entry))
+        self._auto_resize_pad_entry = _auto_resize_pad_entry
 
         # Row 1: Library and preset dropdowns
         preset_select_frame = tk.Frame(parent, bg=self.root.cget('bg'))
@@ -620,6 +672,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             tk.Checkbutton(options_frame, text="Eject SD card after G-code export",
                            variable=self.eject_sd_var, bg=self.root.cget('bg'),
                            command=self._on_eject_sd_changed).pack(side="left")
+
+        # Now that all children exist, bind mousewheel on them
+        self._pad_tab_bind_children_mousewheel(self._pad_tab_inner)
 
     def toggle_custom_hole_entry(self):
         if self.hole_var.get() == "Custom":
@@ -1675,6 +1730,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             pads_text, _ = self._get_pad_preset_data(raw)
             self.pad_entry.delete("1.0", tk.END)
             self.pad_entry.insert(tk.END, pads_text)
+            self._auto_resize_pad_entry()
             self.pad_preset_loaded_library = lib_name
             self.pad_preset_loaded_name = preset_name
             self.pad_notes_btn.config(state="normal")
@@ -1715,6 +1771,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if save_presets(self.pad_presets, PAD_PRESET_FILE):
                     self.on_pad_library_selected()
                     self.pad_entry.delete("1.0", tk.END)
+                    self._auto_resize_pad_entry()
                     self.pad_preset_loaded_library = None
                     self.pad_preset_loaded_name = None
                     self.pad_notes_btn.config(state="disabled")
@@ -1915,12 +1972,62 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         listbox.selection_set(current_idx)
         listbox.see(current_idx)
 
+        # --- Mic type (required for toner) ---
+        sep = ttk.Separator(frame, orient="horizontal")
+        sep.pack(fill="x", pady=(10, 8))
+
+        mic_type_frame = tk.Frame(frame, bg=bg)
+        mic_type_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(mic_type_frame, text="Mic Type:", bg=bg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
+        MIC_TYPES = ["", "Condenser", "Ribbon", "Dynamic"]
+        mic_type_var = tk.StringVar(
+            value=self.settings.get("mic_type", "").capitalize() or "")
+        mic_type_combo = ttk.Combobox(mic_type_frame,
+            textvariable=mic_type_var, values=MIC_TYPES[1:],
+            state="readonly", width=15)
+        mic_type_combo.pack(side="left")
+        if not mic_type_var.get():
+            mic_type_combo.set("")
+
+        mic_model_frame = tk.Frame(frame, bg=bg)
+        mic_model_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(mic_model_frame, text="Mic Model:", bg=bg,
+                 font=("Helvetica", 10)).pack(side="left", padx=(0, 5))
+        mic_model_var = tk.StringVar(
+            value=self.settings.get("mic_model", ""))
+        tk.Entry(mic_model_frame, textvariable=mic_model_var,
+                 width=25, font=("Helvetica", 10)).pack(side="left")
+        tk.Label(mic_model_frame, text="(optional)", bg=bg, fg="#666666",
+                 font=("Helvetica", 8)).pack(side="left", padx=(5, 0))
+
+        _mic_type_warned = [False]
+
+        def _on_mic_type_changed(event=None):
+            val = mic_type_var.get().lower()
+            if val in ("ribbon", "dynamic") and not _mic_type_warned[0]:
+                _mic_type_warned[0] = True
+                messagebox.showinfo("Mic Type Note",
+                    f"A {val} mic can still be used with the Tone "
+                    f"Analyzer, but upper harmonics will be attenuated.\n\n"
+                    f"Warmth readings remain accurate. Complexity and "
+                    f"full harmonic profiles will be less reliable.\n\n"
+                    f"Profiles captured with a {val} mic can only be "
+                    f"meaningfully compared with other {val} mic "
+                    f"profiles.",
+                    parent=dlg)
+        mic_type_combo.bind("<<ComboboxSelected>>", _on_mic_type_changed)
+
         def apply():
             sel = listbox.curselection()
             if not sel:
                 return
             dev_idx = dev_indices[sel[0]]
             self.settings["audio_input_device"] = dev_idx
+
+            # Save mic type and model
+            self.settings["mic_type"] = mic_type_var.get().lower()
+            self.settings["mic_model"] = mic_model_var.get().strip()
             save_settings(self.settings)
 
             # Restart active audio engine with new device
@@ -1938,6 +2045,55 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
+        tk.Button(btn_frame, text="Apply", command=apply).pack(
+            side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+            side="left")
+
+    def _open_profile_fields_dialog(self):
+        """Let the user choose which optional profile fields to show."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Profile Fields")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = self.root.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Show these optional fields when\n"
+                 "creating tone profiles:",
+                 bg=bg, font=("Helvetica", 10), justify="left").pack(
+            pady=(0, 10), anchor="w")
+
+        field_labels = [
+            ("serial", "Serial #"),
+            ("reed", "Reed"),
+            ("ligature", "Ligature"),
+            ("room", "Room / Environment"),
+            ("preamp", "Preamp / Interface"),
+            ("mic_model", "Mic Model"),
+            ("notes", "Notes"),
+        ]
+
+        vis = self.settings.get("visible_profile_fields", {})
+        check_vars = {}
+        for key, label in field_labels:
+            var = tk.BooleanVar(value=vis.get(key, False))
+            tk.Checkbutton(frame, text=label, variable=var, bg=bg,
+                           font=("Helvetica", 10)).pack(anchor="w")
+            check_vars[key] = var
+
+        def apply():
+            for key, var in check_vars.items():
+                vis[key] = var.get()
+            self.settings["visible_profile_fields"] = vis
+            save_settings(self.settings)
+            dlg.destroy()
+
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x", pady=(10, 0))
         tk.Button(btn_frame, text="Apply", command=apply).pack(
             side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(

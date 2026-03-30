@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, '.')
 from toner_engine import (
     transpose_note, reverse_transpose_note, note_to_freq,
-    migrate_profile_to_concert, SAX_TRANSPOSITIONS, PITCH_CLASSES,
+    SAX_TRANSPOSITIONS, PITCH_CLASSES,
     CALIBRATION_NOTES, MIN_FUNDAMENTAL_HZ,
 )
 
@@ -106,43 +106,6 @@ test("Sopranino: concert C4 -> written A3",
 # Tenor: written A#3 (lowest cal note) -> concert G#2
 test("Tenor: written A#3 -> concert G#2",
      reverse_transpose_note("A#3", "Tenor") == "G#2")
-
-# ============================================================
-section("migrate_profile_to_concert")
-# ============================================================
-
-# Mock tenor profile with written-pitch notes
-mock_profile = {
-    'horn_type': 'Tenor',
-    'sessions': [{
-        'date': '2026-03-22',
-        'captures': [
-            {'note': 'A#3', 'fundamental_freq': 103.8, 'method': 'calibration'},
-            {'note': 'C4', 'fundamental_freq': 116.5, 'method': 'calibration'},
-            {'note': 'D5', 'fundamental_freq': 262.8, 'method': 'free'},
-        ]
-    }]
-}
-
-migrated = migrate_profile_to_concert(mock_profile)
-test("pitch_format set to 'concert'", migrated['pitch_format'] == 'concert')
-test("Original not mutated", mock_profile.get('pitch_format') is None)
-test("A#3 -> G#2", migrated['sessions'][0]['captures'][0]['note'] == 'G#2')
-test("C4 -> A#2", migrated['sessions'][0]['captures'][1]['note'] == 'A#2')
-test("D5 -> C4", migrated['sessions'][0]['captures'][2]['note'] == 'C4')
-
-# Already migrated profile should not double-migrate
-double = migrate_profile_to_concert(migrated)
-test("Already migrated: notes unchanged",
-     double['sessions'][0]['captures'][0]['note'] == 'G#2')
-
-# Profile without horn_type
-no_horn = {'sessions': [{'captures': [{'note': 'C4'}]}]}
-migrated_no_horn = migrate_profile_to_concert(no_horn)
-test("No horn_type: note unchanged",
-     migrated_no_horn['sessions'][0]['captures'][0]['note'] == 'C4')
-test("No horn_type: still marked concert",
-     migrated_no_horn['pitch_format'] == 'concert')
 
 # ============================================================
 section("Calibration notes detectable for all standard sax types")

@@ -30,11 +30,11 @@ try:
         ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         compute_session_fingerprint, compute_session_variation,
-        compute_group_fingerprint,
+        compute_group_fingerprint, compute_rolloff_rate,
+        ROLLOFF_WARN_THRESHOLD, ROLLOFF_MIN_CAPTURES,
         load_tone_profiles, save_tone_profiles,
         analyze_audio_file, check_mic_quality,
         transpose_note, reverse_transpose_note, note_to_freq,
-        migrate_profile_to_concert,
     )
     _TONER_IMPORTS_OK = True
 except ImportError:
@@ -241,19 +241,7 @@ class TonerTabMixin:
             self._toner_bias_vars[key] = tk.IntVar(
                 value=saved_bias.get(key, 0))
 
-        # Load profiles and auto-migrate any written-pitch profiles to concert
         self._toner_profiles = load_tone_profiles(TONE_PROFILES_FILE)
-        _any_migrated = False
-        for _lib in self._toner_profiles.values():
-            if not isinstance(_lib, dict):
-                continue
-            for _pname in list(_lib):
-                _pdata = _lib[_pname]
-                if isinstance(_pdata, dict) and _pdata.get('pitch_format') != 'concert':
-                    _lib[_pname] = migrate_profile_to_concert(_pdata)
-                    _any_migrated = True
-        if _any_migrated:
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
 
         bg = BG_COLOR
 
@@ -1307,12 +1295,9 @@ class TonerTabMixin:
         tk.Button(row1, text="Load for Capture",
                   command=lambda: self._toner_load_from_dialog(dlg)).pack(
                       side="left", padx=(0, 5))
-        tk.Button(row1, text="Report",
-                  command=self._toner_show_profile_report).pack(
-                      side="left", padx=(0, 5))
-        tk.Button(row1, text="Compare...",
+        tk.Button(row1, text="Analyze...",
                   command=lambda: [dlg.destroy(),
-                                   self._toner_open_compare_dialog()]).pack(
+                                   self._toner_open_analyze_dialog()]).pack(
                       side="left", padx=(0, 5))
         tk.Button(row1, text="Edit Notes...",
                   command=self._toner_edit_profile_notes).pack(
@@ -1373,323 +1358,6 @@ class TonerTabMixin:
         lib_name, prof_name = key
         profile = self._toner_profiles[lib_name][prof_name]
         self._prof_info_label.configure(text=_format_profile_info(profile))
-
-    def _toner_show_profile_report(self):
-        """Show a single-profile report window."""
-        sel = self._prof_listbox.curselection()
-        if not sel:
-            return
-        key = self._prof_list_keys[sel[0]]
-        if key is None:
-            return
-        lib_name, prof_name = key
-        profile = self._toner_profiles[lib_name][prof_name]
-
-        # Release the profile dialog's grab so the report is interactive
-        try:
-            self._prof_listbox.winfo_toplevel().grab_release()
-        except Exception:
-            pass
-
-        sessions = profile.get('sessions', [])
-        fp = compute_fingerprint(sessions, sax_type=profile.get('horn_type', 'Tenor'))
-        if fp['capture_count'] == 0:
-            messagebox.showinfo("No Data",
-                "This profile has no captures yet.")
-            return
-
-        from toner_engine import BREAK_FREQUENCIES
-
-        sax_type = profile.get('horn_type', 'Tenor')
-        variation = compute_session_variation(sessions, sax_type)
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title(f"Report \u2014 {prof_name}")
-        dlg.geometry("700x700")
-        dlg.transient(self.root)
-
-        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
-        fg = "black"
-
-        main = tk.Frame(dlg, bg=bg)
-        main.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # --- Header ---
-        horn_type = profile.get('horn_type', '?')
-        break_freq = BREAK_FREQUENCIES.get(horn_type, 750)
-        header = f"{profile.get('horn_make', '')} {profile.get('horn_model', '')}".strip()
-        if profile.get('serial'):
-            header += f"  (s/n {profile['serial']})"
-        tk.Label(main, text=header, bg=bg, fg=fg,
-                 font=("Helvetica", 13, "bold")).pack(anchor="w")
-
-        setup_parts = [horn_type]
-        if profile.get('player'):
-            setup_parts.append(profile['player'])
-        if profile.get('mouthpiece'):
-            setup_parts.append(profile['mouthpiece'])
-        if profile.get('reed'):
-            setup_parts.append(profile['reed'])
-        tk.Label(main, text=" | ".join(setup_parts), bg=bg, fg=fg,
-                 font=("Helvetica", 9)).pack(anchor="w")
-
-        n_sessions = len([s for s in sessions if s.get('captures')])
-        session_word = "session" if n_sessions == 1 else "sessions"
-        tk.Label(main, text=f"{fp['capture_count']} captures across "
-                 f"{n_sessions} {session_word}, "
-                 f"{fp['note_count']} notes  |  break freq: {break_freq} Hz",
-                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w")
-        # Date range
-        dates = [s.get('date', '')[:10] for s in sessions if s.get('captures')]
-        if len(dates) >= 2:
-            tk.Label(main, text=f"Sessions: {min(dates)} to {max(dates)}",
-                     bg=bg, fg=fg, font=("Helvetica", 8)).pack(anchor="w", pady=(0, 8))
-        else:
-            tk.Label(main, text="", bg=bg).pack(pady=(0, 4))
-
-        # --- Descriptors ---
-        desc_frame = tk.LabelFrame(main, text="Tone Character", bg=bg, fg=fg,
-                                    font=("Helvetica", 10, "bold"))
-        desc_frame.pack(fill="x", pady=(0, 8))
-
-        d = fp.get('descriptors', {})
-        desc_row = tk.Frame(desc_frame, bg=bg)
-        desc_row.pack(fill="x", padx=10, pady=8)
-
-        var_stats = variation['descriptor_stats'] if variation else {}
-        for label, key in [("Complexity", "richness"),
-                           ("Warmth", "warmth")]:
-            val = d.get(key, 0)
-            col = tk.Frame(desc_row, bg=bg)
-            col.pack(side="left", expand=True)
-            tk.Label(col, text=f"{val:.0%}", bg=bg, fg=fg,
-                     font=("Helvetica", 16, "bold")).pack()
-            if key in var_stats:
-                sd = var_stats[key]['stdev']
-                tk.Label(col, text=f"\u00b1{sd:.0%}", bg=bg, fg="#666666",
-                         font=("Helvetica", 8)).pack()
-            tk.Label(col, text=label, bg=bg, fg=fg,
-                     font=("Helvetica", 8)).pack()
-
-        # --- Session History (only if 2+ sessions) ---
-        if variation:
-            sess_frame = tk.LabelFrame(main, text="Session History", bg=bg,
-                                        fg=fg, font=("Helvetica", 10, "bold"))
-            sess_frame.pack(fill="x", pady=(0, 8))
-
-            sess_cv = tk.Canvas(sess_frame, bg=bg, highlightthickness=0,
-                                 height=90)
-            sess_sb = tk.Scrollbar(sess_frame, orient="vertical",
-                                    command=sess_cv.yview)
-            sess_inner = tk.Frame(sess_cv, bg=bg)
-            sess_inner.bind("<Configure>",
-                lambda e: sess_cv.configure(scrollregion=sess_cv.bbox("all")))
-            sess_cv.create_window((0, 0), window=sess_inner, anchor="nw")
-            sess_cv.configure(yscrollcommand=sess_sb.set)
-            sess_cv.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-            sess_sb.pack(side="right", fill="y")
-
-            # Header row
-            shdr = tk.Frame(sess_inner, bg=bg)
-            shdr.pack(fill="x")
-            for text, w in [("Date", 12), ("Caps", 5), ("Notes", 5),
-                            ("Cmpx", 5), ("Warm", 5)]:
-                tk.Label(shdr, text=text, width=w, bg=bg, fg=fg,
-                         font=("Helvetica", 8, "bold")).pack(side="left")
-
-            # One row per session
-            for date, sfp in variation['session_fingerprints']:
-                srow = tk.Frame(sess_inner, bg=bg)
-                srow.pack(fill="x")
-                sd = sfp.get('descriptors', {})
-                tk.Label(srow, text=date[:10], width=12, bg=bg, fg=fg,
-                         font=("Helvetica", 8)).pack(side="left")
-                tk.Label(srow, text=str(sfp['capture_count']), width=5,
-                         bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
-                tk.Label(srow, text=str(sfp['note_count']), width=5,
-                         bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
-                for key in ['richness', 'warmth']:
-                    tk.Label(srow, text=f"{sd.get(key, 0):.0%}", width=5,
-                             bg=bg, fg=fg,
-                             font=("Helvetica", 8)).pack(side="left")
-
-            # Overall row (bold)
-            orow = tk.Frame(sess_inner, bg=bg)
-            orow.pack(fill="x", pady=(2, 0))
-            tk.Label(orow, text="Overall", width=12, bg=bg, fg=fg,
-                     font=("Helvetica", 8, "bold")).pack(side="left")
-            tk.Label(orow, text=str(fp['capture_count']), width=5, bg=bg,
-                     fg=fg, font=("Helvetica", 8, "bold")).pack(side="left")
-            tk.Label(orow, text=str(fp['note_count']), width=5, bg=bg,
-                     fg=fg, font=("Helvetica", 8, "bold")).pack(side="left")
-            for key in ['richness', 'warmth']:
-                tk.Label(orow, text=f"{d.get(key, 0):.0%}", width=5,
-                         bg=bg, fg=fg,
-                         font=("Helvetica", 8, "bold")).pack(side="left")
-
-            # Variation summary text
-            vs = variation['descriptor_stats']
-            parts = []
-            for label, key in [("complexity", "richness"),
-                               ("warmth", "warmth")]:
-                sd = vs[key]['stdev']
-                if sd < 0.03:
-                    word = "very consistent"
-                elif sd < 0.07:
-                    word = "consistent"
-                elif sd < 0.12:
-                    word = "moderate variation"
-                else:
-                    word = "high variation"
-                parts.append((label, vs[key]['mean'], sd, word))
-            # Find most/least variable
-            most_var = max(parts, key=lambda p: p[2])
-            summary = (f"Across {variation['session_count']} sessions: "
-                       f"{most_var[0]} shows the most variation "
-                       f"(\u00b1{most_var[2]:.0%}, {most_var[3]}).")
-            tk.Label(sess_frame, text=summary, bg=bg, fg="#444444",
-                     font=("Helvetica", 8), wraplength=650,
-                     justify="left").pack(padx=10, pady=(0, 5), anchor="w")
-
-        elif n_sessions == 1:
-            tk.Label(main, text="Record more sessions to see consistency data.",
-                     bg=bg, fg="#888888",
-                     font=("Helvetica", 8, "italic")).pack(anchor="w", pady=(0, 8))
-
-        # --- Harmonic chart ---
-        chart_frame = tk.LabelFrame(main, text="Harmonic Profile (average)",
-                                     bg=bg, fg=fg,
-                                     font=("Helvetica", 10, "bold"))
-        chart_frame.pack(fill="both", expand=True, pady=(0, 8))
-
-        chart_cv = tk.Canvas(chart_frame, bg="white", highlightthickness=0,
-                              height=150)
-        chart_cv.pack(fill="both", expand=True, padx=5, pady=5)
-
-        def draw_chart(event=None):
-            chart_cv.delete("all")
-            w = chart_cv.winfo_width()
-            h = chart_cv.winfo_height()
-            if w < 50 or h < 50:
-                return
-
-            hdb = fp.get('harmonics_db', [])
-            if not hdb:
-                return
-
-            margin_l, margin_r, margin_t, margin_b = 40, 10, 10, 25
-            cw = w - margin_l - margin_r
-            ch = h - margin_t - margin_b
-            db_min, db_max = -60.0, 5.0
-            max_h = len(hdb)
-
-            # Grid
-            for db in range(-60, 6, 10):
-                y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
-                chart_cv.create_line(margin_l, y, w - margin_r, y,
-                                      fill="#DDDDDD", width=1)
-                chart_cv.create_text(margin_l - 4, y, text=f"{db}",
-                                      fill="#888888", font=("Helvetica", 7),
-                                      anchor="e")
-
-            # Zero line
-            y0 = margin_t + ch * (1.0 - (0 - db_min) / (db_max - db_min))
-            chart_cv.create_line(margin_l, y0, w - margin_r, y0,
-                                  fill="#AAAAAA", width=1, dash=(4, 2))
-
-            for hi in range(max_h):
-                x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
-                chart_cv.create_text(x, h - 5, text=f"H{hi+1}",
-                                      fill="#888888", font=("Helvetica", 7))
-
-            # Plot
-            color = "#2196F3"
-            points = []
-            for hi, db in enumerate(hdb):
-                x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
-                clamped = max(db_min, min(db_max, db))
-                y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
-                points.extend([x, y])
-
-            if len(points) >= 4:
-                chart_cv.create_line(*points, fill=color, width=2, smooth=True)
-                for j in range(0, len(points), 2):
-                    chart_cv.create_oval(
-                        points[j] - 4, points[j + 1] - 4,
-                        points[j] + 4, points[j + 1] + 4,
-                        fill=color, outline="")
-
-        chart_cv.bind("<Configure>", draw_chart)
-
-        # --- Per-note table ---
-        per_note = fp.get('per_note', {})
-        if per_note:
-            table_frame = tk.LabelFrame(main, text="Per-Note Descriptors",
-                                         bg=bg, fg=fg,
-                                         font=("Helvetica", 10, "bold"))
-            table_frame.pack(fill="x", pady=(0, 8))
-
-            # Scrollable
-            table_cv = tk.Canvas(table_frame, bg=bg, highlightthickness=0,
-                                  height=120)
-            table_sb = tk.Scrollbar(table_frame, orient="vertical",
-                                     command=table_cv.yview)
-            table_inner = tk.Frame(table_cv, bg=bg)
-
-            table_inner.bind("<Configure>",
-                lambda e: table_cv.configure(scrollregion=table_cv.bbox("all")))
-            table_cv.create_window((0, 0), window=table_inner, anchor="nw")
-            table_cv.configure(yscrollcommand=table_sb.set)
-
-            table_cv.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-            table_sb.pack(side="right", fill="y")
-
-            # Header
-            hdr = tk.Frame(table_inner, bg=bg)
-            hdr.pack(fill="x")
-            for text, w in [("Note", 6), ("Cmpx", 5), ("Warm", 5)]:
-                tk.Label(hdr, text=text, width=w, bg=bg, fg=fg,
-                         font=("Helvetica", 8, "bold")).pack(side="left")
-
-            sorted_notes = sorted(per_note.keys(), key=_note_sort_key)
-            for note in sorted_notes:
-                pn = per_note[note]
-                nd = pn.get('descriptors', {})
-                row = tk.Frame(table_inner, bg=bg)
-                row.pack(fill="x")
-                display_note = self._toner_display_note_for_profile(note, profile)
-                tk.Label(row, text=display_note, width=6, bg=bg, fg=fg,
-                         font=("Helvetica", 8)).pack(side="left")
-                for key in ['richness', 'warmth']:
-                    val = nd.get(key, 0)
-                    tk.Label(row, text=f"{val:.0%}", width=5, bg=bg, fg=fg,
-                             font=("Helvetica", 8)).pack(side="left")
-
-        # Context footer
-        ctx_parts = [f"Based on {fp['capture_count']} captures across "
-                     f"{n_sessions} {session_word}."]
-        if fp['capture_count'] < 20 or n_sessions < 2:
-            ctx_parts.append(
-                f"With only {fp['capture_count']} captures from "
-                f"{n_sessions} {session_word}, these readings may not "
-                f"be fully stable. More sessions will improve confidence.")
-        ctx_parts.append(
-            "Room acoustics, mic placement, and mic frequency response "
-            "all affect these readings.")
-        tk.Label(main, text=" ".join(ctx_parts), bg=bg, fg="#888888",
-                 font=("Helvetica", 7), wraplength=660,
-                 justify="left").pack(anchor="w", pady=(0, 8))
-
-        # Notes
-        if profile.get('notes'):
-            notes_frame = tk.LabelFrame(main, text="Notes", bg=bg, fg=fg,
-                                         font=("Helvetica", 10, "bold"))
-            notes_frame.pack(fill="x", pady=(0, 8))
-            tk.Label(notes_frame, text=profile['notes'], bg=bg, fg=fg,
-                     font=("Helvetica", 9), wraplength=600,
-                     justify="left").pack(padx=10, pady=5, anchor="w")
-
-        tk.Button(main, text="Close", command=dlg.destroy).pack(pady=(5, 0))
 
     def _toner_edit_profile_notes(self):
         """Edit the notes field of the selected profile."""
@@ -1761,6 +1429,120 @@ class TonerTabMixin:
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.minsize(400, 250)
 
+    def _toner_build_profile_fields(self, frame, bg, fg):
+        """Build profile form fields. Returns (fields_dict, lib_var, notes_text).
+
+        Required fields are always shown. Optional fields respect
+        the visible_profile_fields setting.
+        """
+        fields = {}
+        vis = self.settings.get("visible_profile_fields", {})
+
+        def add_field(label, key, default="", widget_type="entry",
+                      optional_key=None):
+            """Add a labeled field row. If optional_key is set, only show
+            when that key is enabled in visible_profile_fields."""
+            if optional_key and not vis.get(optional_key, False):
+                return
+            row = tk.Frame(frame, bg=bg)
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text=label, bg=bg, fg=fg, width=14,
+                     anchor="e", font=("Helvetica", 10)).pack(
+                side="left", padx=(0, 8))
+            if widget_type == "combo":
+                var = tk.StringVar(value=default)
+                ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
+                             state="readonly", width=20).pack(
+                    side="left", fill="x", expand=True)
+                fields[key] = var
+            else:
+                var = tk.StringVar(value=default)
+                tk.Entry(row, textvariable=var, width=25).pack(
+                    side="left", fill="x", expand=True)
+                fields[key] = var
+
+        # Library selector
+        lib_row = tk.Frame(frame, bg=bg)
+        lib_row.pack(fill="x", pady=2)
+        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(
+            side="left", padx=(0, 8))
+        existing_libs = [k for k in self._toner_profiles.keys()
+                        if isinstance(self._toner_profiles[k], dict)]
+        if not existing_libs:
+            existing_libs = [DEFAULT_LIBRARY]
+        lib_var = tk.StringVar(value=existing_libs[0])
+        ttk.Combobox(lib_row, textvariable=lib_var,
+                      values=existing_libs, width=20).pack(
+            side="left", fill="x", expand=True)
+
+        # Required fields
+        add_field("Profile Name:", "name")
+        add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
+        add_field("Make:", "horn_make")
+        add_field("Model:", "horn_model")
+        add_field("Player:", "player")
+        add_field("Mouthpiece:", "mouthpiece")
+
+        # Optional fields
+        add_field("Serial #:", "serial", optional_key="serial")
+        add_field("Reed:", "reed", optional_key="reed")
+        add_field("Ligature:", "ligature", optional_key="ligature")
+        add_field("Room:", "room", optional_key="room")
+        add_field("Preamp:", "preamp", optional_key="preamp")
+        add_field("Mic Model:", "mic_model_field",
+                  default=self.settings.get("mic_model", ""),
+                  optional_key="mic_model")
+
+        # Notes — multi-line (optional)
+        notes_text = None
+        if vis.get("notes", True):
+            notes_row = tk.Frame(frame, bg=bg)
+            notes_row.pack(fill="x", pady=2)
+            tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
+                     anchor="e", font=("Helvetica", 10)).pack(
+                side="left", padx=(0, 8), anchor="n")
+            notes_text = tk.Text(notes_row, height=3, width=25,
+                                 font=("Helvetica", 10), wrap="word")
+            notes_text.pack(side="left", fill="x", expand=True)
+
+        return fields, lib_var, notes_text
+
+    def _toner_validate_required_fields(self, fields, dlg):
+        """Check required fields are filled. Returns True if valid."""
+        required = [
+            ("name", "Profile Name"),
+            ("horn_make", "Make"),
+            ("horn_model", "Model"),
+            ("player", "Player"),
+            ("mouthpiece", "Mouthpiece"),
+        ]
+        for key, label in required:
+            if key in fields and not fields[key].get().strip():
+                messagebox.showwarning("Required Field",
+                    f"Please enter {label}.", parent=dlg)
+                return False
+        return True
+
+    def _toner_collect_profile_data(self, fields, notes_text):
+        """Collect profile data dict from form fields."""
+        data = {
+            'horn_type': fields.get("horn_type", tk.StringVar()).get(),
+            'horn_make': fields.get("horn_make", tk.StringVar()).get().strip(),
+            'horn_model': fields.get("horn_model", tk.StringVar()).get().strip(),
+            'serial': fields.get("serial", tk.StringVar()).get().strip() if "serial" in fields else "",
+            'player': fields.get("player", tk.StringVar()).get().strip(),
+            'mouthpiece': fields.get("mouthpiece", tk.StringVar()).get().strip(),
+            'reed': fields.get("reed", tk.StringVar()).get().strip() if "reed" in fields else "",
+            'ligature': fields.get("ligature", tk.StringVar()).get().strip() if "ligature" in fields else "",
+            'room': fields.get("room", tk.StringVar()).get().strip() if "room" in fields else "",
+            'preamp': fields.get("preamp", tk.StringVar()).get().strip() if "preamp" in fields else "",
+            'notes': notes_text.get("1.0", tk.END).strip() if notes_text else "",
+            'created': time.strftime("%Y-%m-%d"),
+            'sessions': [],
+        }
+        return data
+
     def _toner_new_profile(self, parent_dlg):
         """Create a new horn profile via guided dialog."""
         dlg = tk.Toplevel(parent_dlg)
@@ -1777,63 +1559,13 @@ class TonerTabMixin:
         tk.Label(frame, text="Create Tone Profile", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
 
-        fields = {}
-
-        def add_field(label, key, default="", widget_type="entry"):
-            row = tk.Frame(frame, bg=bg)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=label, bg=bg, fg=fg, width=14,
-                     anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-            if widget_type == "combo":
-                var = tk.StringVar(value=default)
-                w = ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
-                                 state="readonly", width=20)
-                w.pack(side="left", fill="x", expand=True)
-                fields[key] = var
-            else:
-                var = tk.StringVar(value=default)
-                tk.Entry(row, textvariable=var, width=25).pack(
-                    side="left", fill="x", expand=True)
-                fields[key] = var
-
-        # Library selector (editable — type a new name or pick existing)
-        lib_row = tk.Frame(frame, bg=bg)
-        lib_row.pack(fill="x", pady=2)
-        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        existing_libs = [k for k in self._toner_profiles.keys()
-                        if isinstance(self._toner_profiles[k], dict)]
-        if not existing_libs:
-            existing_libs = [DEFAULT_LIBRARY]
-        lib_var = tk.StringVar(value=existing_libs[0])
-        ttk.Combobox(lib_row, textvariable=lib_var,
-                      values=existing_libs, width=20).pack(
-            side="left", fill="x", expand=True)
-
-        add_field("Profile Name:", "name")
-        add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
-        add_field("Make:", "horn_make")
-        add_field("Model:", "horn_model")
-        add_field("Serial #:", "serial")
-        add_field("Player:", "player")
-        add_field("Mouthpiece:", "mouthpiece")
-        add_field("Reed:", "reed")
-
-        # Notes — multi-line
-        notes_row = tk.Frame(frame, bg=bg)
-        notes_row.pack(fill="x", pady=2)
-        tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
-        notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
-        notes_text.pack(side="left", fill="x", expand=True)
+        fields, lib_var, notes_text = self._toner_build_profile_fields(
+            frame, bg, fg)
 
         def save():
-            name = fields["name"].get().strip()
-            if not name:
-                messagebox.showwarning("Name Required",
-                    "Please enter a profile name.", parent=dlg)
+            if not self._toner_validate_required_fields(fields, dlg):
                 return
-
+            name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
             if lib not in self._toner_profiles:
                 self._toner_profiles[lib] = {}
@@ -1842,22 +1574,12 @@ class TonerTabMixin:
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_profiles[lib][name] = {
-                'horn_type': fields["horn_type"].get(),
-                'horn_make': fields["horn_make"].get().strip(),
-                'horn_model': fields["horn_model"].get().strip(),
-                'serial': fields["serial"].get().strip(),
-                'player': fields["player"].get().strip(),
-                'mouthpiece': fields["mouthpiece"].get().strip(),
-                'reed': fields["reed"].get().strip(),
-                'notes': notes_text.get("1.0", tk.END).strip(),
-                'created': time.strftime("%Y-%m-%d"),
-                'sessions': [],
-            }
+            self._toner_profiles[lib][name] = self._toner_collect_profile_data(
+                fields, notes_text)
             save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
             self._toner_active_library = lib
             self._toner_active_profile = name
-            self._toner_active_session = None  # Clear old session
+            self._toner_active_session = None
             self._toner_update_profile_label()
             self._toner_refresh_profile_list()
             dlg.destroy()
@@ -1994,91 +1716,27 @@ class TonerTabMixin:
         tk.Label(frame, text="Create Tone Profile", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
         tk.Label(frame, text="A profile is a unique setup: horn + player + "
-                 "mouthpiece + reed.\nChange any variable? That's a new profile.",
+                 "mouthpiece.\nChange any variable? That's a new profile.",
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
-        fields = {}
-
-        def add_field(label, key, default="", widget_type="entry"):
-            row = tk.Frame(frame, bg=bg)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=label, bg=bg, fg=fg, width=14,
-                     anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-            if widget_type == "combo":
-                var = tk.StringVar(value=default)
-                ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
-                             state="readonly", width=20).pack(
-                    side="left", fill="x", expand=True)
-                fields[key] = var
-            else:
-                var = tk.StringVar(value=default)
-                tk.Entry(row, textvariable=var, width=25).pack(
-                    side="left", fill="x", expand=True)
-                fields[key] = var
-
-        # Library selector
-        lib_row = tk.Frame(frame, bg=bg)
-        lib_row.pack(fill="x", pady=2)
-        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        existing_libs = [k for k in self._toner_profiles.keys()
-                        if isinstance(self._toner_profiles[k], dict)]
-        if not existing_libs:
-            existing_libs = [DEFAULT_LIBRARY]
-        lib_var = tk.StringVar(value=existing_libs[0])
-        lib_combo = ttk.Combobox(lib_row, textvariable=lib_var,
-                                  values=existing_libs, width=20)
-        lib_combo.pack(side="left", fill="x", expand=True)
-
-        add_field("Profile Name:", "name")
-        add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
-        add_field("Make:", "horn_make")
-        add_field("Model:", "horn_model")
-        add_field("Serial #:", "serial")
-        add_field("Player:", "player")
-        add_field("Mouthpiece:", "mouthpiece")
-        add_field("Reed:", "reed")
-
-        # Notes — multi-line
-        notes_row = tk.Frame(frame, bg=bg)
-        notes_row.pack(fill="x", pady=2)
-        tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
-        notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
-        notes_text.pack(side="left", fill="x", expand=True)
+        fields, lib_var, notes_text = self._toner_build_profile_fields(
+            frame, bg, fg)
 
         def save_and_start():
-            name = fields["name"].get().strip()
-            lib = lib_var.get().strip()
-            if not name:
-                messagebox.showwarning("Name Required",
-                    "Please enter a profile name.", parent=dlg)
+            if not self._toner_validate_required_fields(fields, dlg):
                 return
-            if not lib:
-                lib = DEFAULT_LIBRARY
-
-            # Ensure library exists
+            name = fields["name"].get().strip()
+            lib = lib_var.get().strip() or DEFAULT_LIBRARY
             if lib not in self._toner_profiles:
                 self._toner_profiles[lib] = {}
-
             if name in self._toner_profiles[lib]:
                 messagebox.showwarning("Duplicate Name",
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_profiles[lib][name] = {
-                'horn_type': fields["horn_type"].get(),
-                'horn_make': fields["horn_make"].get().strip(),
-                'horn_model': fields["horn_model"].get().strip(),
-                'serial': fields["serial"].get().strip(),
-                'player': fields["player"].get().strip(),
-                'mouthpiece': fields["mouthpiece"].get().strip(),
-                'reed': fields["reed"].get().strip(),
-                'notes': notes_text.get("1.0", tk.END).strip(),
-                'created': time.strftime("%Y-%m-%d"),
-                'sessions': [],
-            }
+            self._toner_profiles[lib][name] = self._toner_collect_profile_data(
+                fields, notes_text)
             save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
             self._toner_active_library = lib
             self._toner_active_profile = name
@@ -2236,6 +1894,17 @@ class TonerTabMixin:
 
     def _toner_start_new_session_and_listen(self):
         """Create a new session for the active profile and begin listening."""
+        # Prompt for mic type if not set
+        if not self.settings.get('mic_type'):
+            messagebox.showinfo("Mic Type Required",
+                "Please set your microphone type in Options \u2192 "
+                "Input Device before capturing.\n\n"
+                "A condenser mic is required for full harmonic "
+                "analysis. Ribbon and dynamic mics can still be "
+                "used but with reduced accuracy for upper harmonics.",
+                parent=self.root)
+            return
+
         self._toner_update_profile_label()
         # Sync sax type from profile to selector and engine
         if self._toner_active_library and self._toner_active_profile:
@@ -2251,8 +1920,10 @@ class TonerTabMixin:
         self._toner_active_session = {
             'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'captures': [],
-            'pitch_format': 'concert',
+            'mic_type': self.settings.get('mic_type', ''),
+            'mic_model': self.settings.get('mic_model', ''),
         }
+        self._toner_rolloff_warned = False
         self._toner_begin_listening()
 
     def _toner_stop_capture(self):
@@ -2260,6 +1931,18 @@ class TonerTabMixin:
         # Save any accumulated free-mode frames before stopping
         if self._toner_capture_mode == 'free' and self._toner_free_accumulator:
             self._toner_free_save_micro_capture()
+
+        # Compute and store recording quality metric for the session
+        if self._toner_active_session and self._toner_active_session.get('captures'):
+            rates = []
+            for cap in self._toner_active_session['captures']:
+                r = compute_rolloff_rate(cap.get('harmonics_db', []))
+                if r is not None:
+                    rates.append(r)
+            if rates:
+                self._toner_active_session['rolloff_rate'] = round(
+                    sum(rates) / len(rates), 2)
+                self._toner_save_active_session()
 
         self._toner_capture_state = None
         self._toner_capture_frames = []
@@ -2641,6 +2324,7 @@ class TonerTabMixin:
                     if self._toner_active_session is not None:
                         self._toner_active_session['captures'].append(capture_entry)
                         self._toner_save_active_session()
+                        self._toner_check_rolloff_warning()
 
                 # Transition to pause — wait for silence before next note
                 self._toner_cal_recording = False
@@ -2701,6 +2385,41 @@ class TonerTabMixin:
         if self._toner_active_session is not None:
             self._toner_active_session['captures'].append(capture_entry)
             self._toner_save_active_session()
+            self._toner_check_rolloff_warning()
+
+    def _toner_check_rolloff_warning(self):
+        """Check harmonic rolloff rate and warn if mic/room quality is poor."""
+        if getattr(self, '_toner_rolloff_warned', False):
+            return
+        session = self._toner_active_session
+        if not session:
+            return
+        captures = session.get('captures', [])
+        if len(captures) < ROLLOFF_MIN_CAPTURES:
+            return
+
+        rates = []
+        for cap in captures:
+            r = compute_rolloff_rate(cap.get('harmonics_db', []))
+            if r is not None:
+                rates.append(r)
+        if len(rates) < ROLLOFF_MIN_CAPTURES:
+            return
+
+        avg_rate = sum(rates) / len(rates)
+        if avg_rate > ROLLOFF_WARN_THRESHOLD:
+            self._toner_rolloff_warned = True
+            messagebox.showwarning(
+                "Recording Quality",
+                f"Upper harmonics are dropping off steeply "
+                f"({avg_rate:.1f} dB/harmonic).\n\n"
+                f"This usually means the microphone is too far from "
+                f"the bell, or a built-in laptop mic is being used.\n\n"
+                f"For best results:\n"
+                f"  \u2022  Use an external condenser mic (e.g. AT2020)\n"
+                f"  \u2022  Place it 2\u20133 feet from the bell\n"
+                f"  \u2022  See Help \u2192 User Guide for details",
+                parent=self.root)
 
     def _toner_save_active_session(self):
         """Save the active session to the active profile.
@@ -2742,8 +2461,8 @@ class TonerTabMixin:
     # COMPARISON
     # ------------------------------------------------------------------
 
-    def _toner_open_compare_dialog(self):
-        """Open dialog to select a profile for comparison overlay."""
+    def _toner_open_analyze_dialog(self):
+        """Open dialog to select profiles/sessions for analysis."""
         all_profiles = []
         for lib_name, lib_profiles in self._toner_profiles.items():
             if not isinstance(lib_profiles, dict):
@@ -2756,11 +2475,11 @@ class TonerTabMixin:
 
         if not all_profiles:
             messagebox.showinfo("No Profiles",
-                "No profiles with captures to compare.")
+                "No profiles with captures to analyze.")
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Compare Tone Profiles")
+        dlg.title("Analyze Tone Profiles")
         dlg.geometry("600x520")
         dlg.resizable(True, True)
         dlg.minsize(500, 400)
@@ -2772,7 +2491,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select profiles to compare or overlay on the spectrum.",
+        tk.Label(frame, text="Select one or more profiles to analyze, compare, or overlay.",
                  bg=bg, fg=fg, font=("Helvetica", 10),
                  justify="left").pack(pady=(0, 5))
 
@@ -2781,48 +2500,57 @@ class TonerTabMixin:
         filter_row1.pack(fill="x", pady=(0, 2))
 
         # Collect unique values for filters
-        all_types = sorted(set(p.get('horn_type', '') for _, _, p in all_profiles if p.get('horn_type')))
-        all_makes = sorted(set(p.get('horn_make', '') for _, _, p in all_profiles if p.get('horn_make')))
-        all_models = sorted(set(p.get('horn_model', '') for _, _, p in all_profiles if p.get('horn_model')))
-        all_players = sorted(set(p.get('player', '') for _, _, p in all_profiles if p.get('player')))
-        all_mpcs = sorted(set(p.get('mouthpiece', '') for _, _, p in all_profiles if p.get('mouthpiece')))
+        def _unique(field):
+            return sorted(set(p.get(field, '') for _, _, p in all_profiles
+                              if p.get(field)))
+        all_types = _unique('horn_type')
+        all_makes = _unique('horn_make')
+        all_models = _unique('horn_model')
+        all_players = _unique('player')
+        all_mpcs = _unique('mouthpiece')
+
+        # Mic types from sessions
+        all_mic_types = set()
+        for _, _, p in all_profiles:
+            for s in p.get('sessions', []):
+                mt = s.get('mic_type', '')
+                if mt:
+                    all_mic_types.add(mt.capitalize())
+        all_mic_types = sorted(all_mic_types)
 
         filter_type = tk.StringVar(value="All")
         filter_make = tk.StringVar(value="All")
         filter_model = tk.StringVar(value="All")
         filter_player = tk.StringVar(value="All")
         filter_mpc = tk.StringVar(value="All")
+        filter_mic_type = tk.StringVar(value="All")
 
-        for label, var, values in [
+        def _add_filters(parent, items):
+            for label, var, values in items:
+                if values:
+                    tk.Label(parent, text=label, bg=bg, fg=fg,
+                             font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
+                    cb = ttk.Combobox(parent, textvariable=var,
+                                       values=["All"] + values,
+                                       state="readonly", width=12)
+                    cb.pack(side="left", padx=(0, 6))
+                    cb.bind("<<ComboboxSelected>>", lambda e: refresh_list())
+
+        _add_filters(filter_row1, [
             ("Type:", filter_type, all_types),
             ("Make:", filter_make, all_makes),
             ("Model:", filter_model, all_models),
-        ]:
-            if values:
-                tk.Label(filter_row1, text=label, bg=bg, fg=fg,
-                         font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
-                cb = ttk.Combobox(filter_row1, textvariable=var,
-                                   values=["All"] + values,
-                                   state="readonly", width=12)
-                cb.pack(side="left", padx=(0, 6))
-                cb.bind("<<ComboboxSelected>>", lambda e: refresh_list())
+        ])
 
         # Filter controls — Row 2: setup + search
         filter_row2 = tk.Frame(frame, bg=bg)
         filter_row2.pack(fill="x", pady=(0, 5))
 
-        for label, var, values in [
+        _add_filters(filter_row2, [
             ("Player:", filter_player, all_players),
             ("Mpc:", filter_mpc, all_mpcs),
-        ]:
-            if values:
-                tk.Label(filter_row2, text=label, bg=bg, fg=fg,
-                         font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
-                cb = ttk.Combobox(filter_row2, textvariable=var,
-                                   values=["All"] + values,
-                                   state="readonly", width=12)
-                cb.pack(side="left", padx=(0, 6))
-                cb.bind("<<ComboboxSelected>>", lambda e: refresh_list())
+            ("Mic:", filter_mic_type, all_mic_types),
+        ])
 
         # Text search
         tk.Label(filter_row2, text="Search:", bg=bg, fg=fg,
@@ -2883,6 +2611,7 @@ class TonerTabMixin:
             fmd = filter_model.get()
             fp = filter_player.get()
             fm = filter_mpc.get()
+            fmt = filter_mic_type.get()
             search = search_var.get().strip().lower()
             for lib_name, prof_name, prof in all_profiles:
                 if ft != "All" and prof.get('horn_type', '') != ft:
@@ -2895,6 +2624,13 @@ class TonerTabMixin:
                     continue
                 if fm != "All" and prof.get('mouthpiece', '') != fm:
                     continue
+                if fmt != "All":
+                    prof_mic_types = set(
+                        s.get('mic_type', '').capitalize()
+                        for s in prof.get('sessions', [])
+                        if s.get('mic_type'))
+                    if fmt not in prof_mic_types:
+                        continue
                 if search:
                     haystack = " ".join([
                         prof_name,
@@ -2904,8 +2640,15 @@ class TonerTabMixin:
                         prof.get('player', ''),
                         prof.get('mouthpiece', ''),
                         prof.get('reed', ''),
+                        prof.get('ligature', ''),
+                        prof.get('room', ''),
+                        prof.get('preamp', ''),
                         prof.get('notes', ''),
                     ]).lower()
+                    # Also search session-level mic info
+                    for s in prof.get('sessions', []):
+                        haystack += " " + s.get('mic_type', '')
+                        haystack += " " + s.get('mic_model', '')
                     if search not in haystack:
                         continue
                 sessions = [s for s in prof.get('sessions', [])
@@ -3020,15 +2763,15 @@ class TonerTabMixin:
                     text=f"Overlay: {name} ({selected[0]['note_count']} notes)")
             dlg.destroy()
 
-        def compare_selected():
-            """Open multi-profile comparison analysis window."""
+        def analyze_selected():
+            """Open analysis window for selected profiles/sessions."""
             selected = get_selected()
-            if len(selected) < 2:
-                messagebox.showinfo("Select More",
-                    "Select at least 2 profiles to compare.", parent=dlg)
+            if not selected:
+                messagebox.showinfo("Select",
+                    "Select at least one profile or session.", parent=dlg)
                 return
             dlg.destroy()
-            self._toner_show_comparison_analysis(selected)
+            self._toner_show_analysis(selected)
 
         def clear_comparison():
             self._toner_comparison = None
@@ -3055,8 +2798,8 @@ class TonerTabMixin:
             dlg.destroy()
             self._toner_show_group_report(profile_list)
 
-        tk.Button(btn_frame, text="Compare Selected",
-                  command=compare_selected).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text="Analyze Selected",
+                  command=analyze_selected).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Average Selected",
                   command=average_selected).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Overlay on Spectrum",
@@ -3066,13 +2809,19 @@ class TonerTabMixin:
         tk.Button(btn_frame, text="Cancel",
                   command=dlg.destroy).pack(side="right")
 
-    def _toner_show_comparison_analysis(self, fingerprints):
-        """Show a multi-profile comparison window with chart and analysis.
+    def _toner_show_analysis(self, fingerprints):
+        """Show analysis window for one or more profiles/sessions.
 
-        Supports both horn-average and per-note views.
+        Single selection: profile view with chart, descriptors, per-note.
+        Multiple selections: comparison with delta analysis.
         """
+        is_single = len(fingerprints) == 1
+
         dlg = tk.Toplevel(self.root)
-        dlg.title("Tone Profile Comparison")
+        if is_single:
+            dlg.title(f"Analyze \u2014 {fingerprints[0].get('_name', '?')}")
+        else:
+            dlg.title("Analyze \u2014 Comparison")
         dlg.geometry("720x600")
         dlg.transient(self.root)
 
@@ -3098,6 +2847,22 @@ class TonerTabMixin:
                         value="per_note", bg=bg, fg=fg, selectcolor=bg,
                         font=("Helvetica", 10),
                         command=lambda: refresh_all()).pack(side="left", padx=(0, 10))
+
+        # Difference view toggle (only for 2-profile comparisons)
+        chart_mode = tk.StringVar(value="overlay")
+        diff_frame = tk.Frame(toggle_frame, bg=bg)
+        if len(fingerprints) == 2:
+            diff_frame.pack(side="right", padx=(10, 0))
+            tk.Label(diff_frame, text="Chart:", bg=bg, fg=fg,
+                     font=("Helvetica", 9)).pack(side="left", padx=(0, 4))
+            tk.Radiobutton(diff_frame, text="Overlay", variable=chart_mode,
+                            value="overlay", bg=bg, fg=fg, selectcolor=bg,
+                            font=("Helvetica", 9),
+                            command=lambda: refresh_all()).pack(side="left")
+            tk.Radiobutton(diff_frame, text="Difference", variable=chart_mode,
+                            value="difference", bg=bg, fg=fg, selectcolor=bg,
+                            font=("Helvetica", 9),
+                            command=lambda: refresh_all()).pack(side="left")
 
         # Note selector (shown only in per-note mode)
         note_frame = tk.Frame(toggle_frame, bg=bg)
@@ -3168,24 +2933,45 @@ class TonerTabMixin:
                 return
 
             data = get_data_for_view()
+            is_diff = (chart_mode.get() == "difference"
+                       and len(fingerprints) == 2)
 
             margin_l, margin_r, margin_t, margin_b = 40, 10, 10, 25
             cw = w - margin_l - margin_r
             ch = h - margin_t - margin_b
-            db_min, db_max = -60.0, 0.0
 
             all_db = [d.get('harmonics_db', []) for d in data]
             max_h = max((len(db) for db in all_db), default=2)
             max_h = max(max_h, 2)
 
-            # Grid
-            for db in range(-60, 1, 10):
-                y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
-                chart_cv.create_line(margin_l, y, w - margin_r, y,
-                                      fill="#DDDDDD", width=1)
-                chart_cv.create_text(margin_l - 4, y, text=f"{db}",
+            if is_diff:
+                # Difference mode: show delta between two profiles
+                db_min, db_max = -20.0, 20.0
+                # Grid with zero line
+                for db in range(-20, 21, 5):
+                    y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
+                    color = "#AAAAAA" if db == 0 else "#EEEEEE"
+                    width = 2 if db == 0 else 1
+                    chart_cv.create_line(margin_l, y, w - margin_r, y,
+                                          fill=color, width=width)
+                    chart_cv.create_text(margin_l - 4, y,
+                                          text=f"{db:+d}" if db != 0 else "0",
+                                          fill="#888888", font=("Helvetica", 7),
+                                          anchor="e")
+
+                # Axis label
+                chart_cv.create_text(8, h // 2, text="\u0394 dB",
                                       fill="#888888", font=("Helvetica", 7),
-                                      anchor="e")
+                                      angle=90)
+            else:
+                db_min, db_max = -60.0, 0.0
+                for db in range(-60, 1, 10):
+                    y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
+                    chart_cv.create_line(margin_l, y, w - margin_r, y,
+                                          fill="#DDDDDD", width=1)
+                    chart_cv.create_text(margin_l - 4, y, text=f"{db}",
+                                          fill="#888888", font=("Helvetica", 7),
+                                          anchor="e")
 
             for hi in range(max_h):
                 x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
@@ -3206,31 +2992,66 @@ class TonerTabMixin:
                         text=f"No data for {note}: {', '.join(missing)}",
                         fill="#CC0000", font=("Helvetica", 9))
 
-            for i, d in enumerate(data):
-                color = chart_colors[i % len(chart_colors)]
-                db_list = d.get('harmonics_db', [])
-                if len(db_list) < 2:
-                    continue
+            if is_diff:
+                # Draw single difference curve
+                db_a = data[0].get('harmonics_db', [])
+                db_b = data[1].get('harmonics_db', [])
+                n = min(len(db_a), len(db_b))
+                if n >= 2:
+                    points = []
+                    for hi in range(n):
+                        delta = db_a[hi] - db_b[hi]
+                        x = margin_l + cw * hi / (max_h - 1)
+                        clamped = max(db_min, min(db_max, delta))
+                        y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
+                        points.extend([x, y])
+                    if len(points) >= 4:
+                        chart_cv.create_line(*points, fill="#FF5722",
+                                              width=2, smooth=True)
+                        # Color dots by direction
+                        for j in range(0, len(points), 2):
+                            hi = j // 2
+                            delta = db_a[hi] - db_b[hi]
+                            dot_color = "#4CAF50" if delta >= 0 else "#2196F3"
+                            chart_cv.create_oval(
+                                points[j] - 4, points[j + 1] - 4,
+                                points[j] + 4, points[j + 1] + 4,
+                                fill=dot_color, outline="")
 
-                points = []
-                for hi, db in enumerate(db_list):
-                    x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
-                    clamped = max(db_min, min(db_max, db))
-                    y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
-                    points.extend([x, y])
+                    # Legend
+                    n1 = fingerprints[0]['_name'][:20]
+                    n2 = fingerprints[1]['_name'][:20]
+                    chart_cv.create_text(
+                        margin_l + 5, margin_t + 8,
+                        text=f"\u2191 {n1} stronger   \u2193 {n2} stronger",
+                        fill="#666666", font=("Helvetica", 7), anchor="w")
+            else:
+                for i, d in enumerate(data):
+                    color = chart_colors[i % len(chart_colors)]
+                    db_list = d.get('harmonics_db', [])
+                    if len(db_list) < 2:
+                        continue
 
-                if len(points) >= 4:
-                    chart_cv.create_line(*points, fill=color, width=2, smooth=True)
-                    for j in range(0, len(points), 2):
-                        chart_cv.create_oval(
-                            points[j] - 3, points[j + 1] - 3,
-                            points[j] + 3, points[j + 1] + 3,
-                            fill=color, outline="")
+                    points = []
+                    for hi, db in enumerate(db_list):
+                        x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
+                        clamped = max(db_min, min(db_max, db))
+                        y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
+                        points.extend([x, y])
+
+                    if len(points) >= 4:
+                        chart_cv.create_line(*points, fill=color, width=2, smooth=True)
+                        for j in range(0, len(points), 2):
+                            chart_cv.create_oval(
+                                points[j] - 3, points[j + 1] - 3,
+                                points[j] + 3, points[j + 1] + 3,
+                                fill=color, outline="")
 
         chart_cv.bind("<Configure>", draw_chart)
 
         # --- Descriptor table (rebuilt on view change) ---
-        table_frame = tk.LabelFrame(main, text="Descriptor Comparison", bg=bg, fg=fg,
+        table_label = "Descriptors" if is_single else "Descriptor Comparison"
+        table_frame = tk.LabelFrame(main, text=table_label, bg=bg, fg=fg,
                                      font=("Helvetica", 10, "bold"))
         table_frame.pack(fill="x", pady=(0, 6))
         table_inner = tk.Frame(table_frame, bg=bg)
@@ -3240,6 +3061,10 @@ class TonerTabMixin:
             ("Complexity", "richness"),
             ("Warmth", "warmth"),
         ]
+
+        # Rolloff rates and mic types for each profile (for table and mismatch check)
+        _rolloff_rates = [fp.get('rolloff_rate') for fp in fingerprints]
+        _mic_types = [fp.get('mic_type', '') for fp in fingerprints]
 
         # --- Analysis text ---
         analysis_frame = tk.LabelFrame(main, text="Analysis", bg=bg, fg=fg,
@@ -3288,6 +3113,31 @@ class TonerTabMixin:
                     tk.Label(row, text=text, width=12, bg=bg, fg=val_fg,
                              font=("Helvetica", 9), anchor="center").pack(side="left")
 
+            # Rolloff rate and mic type rows (only in horn average view)
+            if view_mode.get() == "average":
+                row = tk.Frame(table_inner, bg=bg)
+                row.pack(fill="x")
+                tk.Label(row, text="Rec. Quality", width=14, bg=bg, fg=fg,
+                         font=("Helvetica", 9), anchor="w").pack(side="left")
+                for rate in _rolloff_rates:
+                    if rate is None:
+                        text = "\u2014"
+                        val_fg = fg
+                    else:
+                        text = f"{rate:.1f} dB/H"
+                        val_fg = "#880000" if rate > ROLLOFF_WARN_THRESHOLD else fg
+                    tk.Label(row, text=text, width=12, bg=bg, fg=val_fg,
+                             font=("Helvetica", 9), anchor="center").pack(side="left")
+
+                row2 = tk.Frame(table_inner, bg=bg)
+                row2.pack(fill="x")
+                tk.Label(row2, text="Mic Type", width=14, bg=bg, fg=fg,
+                         font=("Helvetica", 9), anchor="w").pack(side="left")
+                for mt in _mic_types:
+                    text = mt.capitalize() if mt else "\u2014"
+                    tk.Label(row2, text=text, width=12, bg=bg, fg=fg,
+                             font=("Helvetica", 9), anchor="center").pack(side="left")
+
         def rebuild_analysis():
             data = get_data_for_view()
             analysis_text.configure(state="normal")
@@ -3306,39 +3156,117 @@ class TonerTabMixin:
                 return f"{fp['capture_count']} caps, {n_sess} sess"
 
             lines = []
-            # Context header
-            ctx_parts = [f"{fp['_name']} ({_prof_ctx(fp)})"
-                         for fp in fingerprints]
-            lines.append(f"Comparing: {', '.join(ctx_parts)}")
-            lines.append("")
+
+            if is_single:
+                # Single profile/session view
+                fp = fingerprints[0]
+                d = data[0].get('descriptors', {})
+                lines.append(f"{fp['_name']} ({_prof_ctx(fp)})")
+                lines.append("")
+                desc_parts = []
+                for label, key in desc_labels:
+                    val = d.get(key, 0)
+                    if val > 0:
+                        desc_parts.append(f"{label}: {val:.0%}")
+                if desc_parts:
+                    lines.append(prefix + ", ".join(desc_parts))
+                rr = fp.get('rolloff_rate')
+                mt = fp.get('mic_type', '')
+                if rr is not None or mt:
+                    parts = []
+                    if mt:
+                        parts.append(f"Mic: {mt}")
+                    if rr is not None:
+                        parts.append(f"Rolloff: {rr:.1f} dB/H")
+                    lines.append(" | ".join(parts))
+
+            else:
+                # Context header for multi-profile
+                ctx_parts = [f"{fp['_name']} ({_prof_ctx(fp)})"
+                             for fp in fingerprints]
+                lines.append(f"Comparing: {', '.join(ctx_parts)}")
+                lines.append("")
 
             if len(fingerprints) == 2:
+                n1 = fingerprints[0]['_name']
+                n2 = fingerprints[1]['_name']
                 da = data[0].get('descriptors', {})
                 db_d = data[1].get('descriptors', {})
+                h_a = data[0].get('harmonics_db', [])
+                h_b = data[1].get('harmonics_db', [])
+
                 if not da and not db_d:
                     lines.append(f"{prefix}No data for this note in either profile.")
                 else:
+                    # Descriptor deltas
+                    delta_parts = []
                     for label, key in desc_labels:
                         va = da.get(key, 0)
                         vb = db_d.get(key, 0)
                         diff = va - vb
                         if abs(diff) > 0.05:
-                            winner = fingerprints[0]['_name'] if diff > 0 else fingerprints[1]['_name']
-                            lines.append(f"{prefix}{winner} is more {label.lower()} "
-                                        f"({abs(diff):.0%} difference)")
-                    if len(lines) <= 2:  # only context header
-                        lines.append(f"{prefix}These profiles are very similar.")
-            else:
+                            sign = "+" if diff > 0 else ""
+                            delta_parts.append(f"{label.lower()} {sign}{diff:.0%}")
+                    if delta_parts:
+                        lines.append(f"{prefix}{n1} \u2192 {n2}: "
+                                     + ", ".join(delta_parts))
+                    else:
+                        lines.append(f"{prefix}Descriptors are very similar.")
+
+                    # Harmonic shift summary
+                    n = min(len(h_a), len(h_b), 12)
+                    if n >= 2:
+                        deltas = [(i, h_a[i] - h_b[i]) for i in range(1, n)]
+                        biggest = max(deltas, key=lambda x: abs(x[1]))
+                        if abs(biggest[1]) > 2.0:
+                            big = [i + 1 for i, d in deltas if abs(d) > 2.0]
+                            if len(big) >= 2:
+                                hrange = f"H{big[0]}\u2013H{big[-1]}"
+                            else:
+                                hrange = f"H{big[0]}"
+                            direction = n1 if biggest[1] > 0 else n2
+                            lines.append(
+                                f"{prefix}Biggest harmonic shifts at {hrange} "
+                                f"({direction} stronger by up to "
+                                f"{abs(biggest[1]):.1f} dB)")
+            elif len(fingerprints) > 2:
                 for label, key in desc_labels:
                     values = [(fingerprints[i]['_name'],
                               d.get('descriptors', {}).get(key, 0))
                              for i, d in enumerate(data)]
                     values.sort(key=lambda x: x[1], reverse=True)
-                    top_name, top_val = values[0]
-                    bot_name, bot_val = values[-1]
-                    if top_val - bot_val > 0.1:
-                        lines.append(f"{prefix}{label}: {top_name} highest "
-                                    f"({top_val:.0%}), {bot_name} lowest ({bot_val:.0%})")
+                    spread = values[0][1] - values[-1][1]
+                    if spread > 0.1:
+                        lines.append(
+                            f"{prefix}{label} spread: {spread:.0%} "
+                            f"({values[0][0]} highest, "
+                            f"{values[-1][0]} lowest)")
+
+            # Check for mic type and rolloff mismatches
+            if mode == "average":
+                # Mic type mismatch
+                known_types = [mt for mt in _mic_types if mt]
+                if len(set(known_types)) > 1:
+                    type_list = ", ".join(
+                        f"{fp['_name']}: {mt.capitalize()}"
+                        for fp, mt in zip(fingerprints, _mic_types) if mt)
+                    lines.append("")
+                    lines.append(
+                        f"\u26a0 Mic types differ ({type_list}). "
+                        "Differences in complexity may partly reflect "
+                        "the mic's frequency response rather than the horn.")
+
+                # Rolloff mismatch (still useful even with same mic type)
+                valid_rates = [r for r in _rolloff_rates if r is not None]
+                if len(valid_rates) >= 2:
+                    rate_spread = max(valid_rates) - min(valid_rates)
+                    if rate_spread > 1.0:
+                        lines.append("")
+                        lines.append(
+                            "\u26a0 Recording quality differs significantly "
+                            f"(rolloff spread: {rate_spread:.1f} dB/H). "
+                            "Complexity comparison may reflect mic/room "
+                            "differences rather than horn differences.")
 
             analysis_text.insert("1.0", "\n".join(lines) if lines else
                                  f"{prefix}Profiles are similar \u2014 no major differences.")
@@ -3843,6 +3771,8 @@ class TonerTabMixin:
                     'captures': [],
                     'source_notes': source_notes,
                     'method': 'file',
+                    'mic_type': self.settings.get('mic_type', ''),
+                    'mic_model': self.settings.get('mic_model', ''),
                 }
 
                 dlg.destroy()
@@ -4033,6 +3963,13 @@ class TonerTabMixin:
                 cap['source_notes'] = source_notes
 
         self._toner_active_session['captures'].extend(captures)
+        # Compute and store rolloff for file import session
+        rates = [compute_rolloff_rate(c.get('harmonics_db', []))
+                 for c in self._toner_active_session['captures']]
+        rates = [r for r in rates if r is not None]
+        if rates:
+            self._toner_active_session['rolloff_rate'] = round(
+                sum(rates) / len(rates), 2)
         self._toner_save_active_session()
 
         notes = set(c['note'] for c in captures)
@@ -4197,15 +4134,6 @@ class TonerTabMixin:
                         if session.get('date') not in existing_dates:
                             existing.setdefault('sessions', []).append(session)
                             count += 1
-
-        # Auto-migrate any imported profiles from written to concert pitch
-        for _lib in self._toner_profiles.values():
-            if not isinstance(_lib, dict):
-                continue
-            for _pname in list(_lib):
-                _pdata = _lib[_pname]
-                if isinstance(_pdata, dict) and _pdata.get('pitch_format') != 'concert':
-                    _lib[_pname] = migrate_profile_to_concert(_pdata)
 
         save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
         messagebox.showinfo("Import Complete",
