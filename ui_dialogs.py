@@ -2930,9 +2930,9 @@ class UserGuideWindow(tk.Toplevel):
                       "harmonic relative to the fundamental. Strong H2 = "
                       "warm, round quality. Weak H2 = thinner, more focused.")
         self._blank()
-        self._body("Each gauge has a bias slider underneath that offsets "
-                    "the display without affecting captured data.")
-        self._blank()
+        self._body("The spectrum bars show everything the gauges don't "
+                    "capture \u2014 the complete harmonic shape from "
+                    "H1 through H12.")
 
         self._h2("Delta Gauges")
         self._body("When you load a profile as an overlay (via Analyze \u2192 "

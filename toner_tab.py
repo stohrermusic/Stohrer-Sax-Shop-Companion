@@ -235,13 +235,6 @@ class TonerTabMixin:
         self._toner_concert_pitch = tk.BooleanVar(
             value=toner_settings.get("concert_pitch", False))
 
-        # Bias sliders: visual offset per descriptor (-50 to +50, display only)
-        saved_bias = toner_settings.get("gauge_bias", {})
-        self._toner_bias_vars = {}
-        for key in ("richness", "warmth"):
-            self._toner_bias_vars[key] = tk.IntVar(
-                value=saved_bias.get(key, 0))
-
         self._toner_profiles = load_tone_profiles(TONE_PROFILES_FILE)
 
         bg = BG_COLOR
@@ -267,14 +260,6 @@ class TonerTabMixin:
         self._toner_spectrum_canvas.bind("<Configure>", self._toner_on_canvas_resize)
 
         # --- RIGHT: Gauge panel (grid layout for compact vertical fit) ---
-        # Layout:
-        #   row 0: [bias] [Intonation gauge] [Note + freq]
-        #   row 1: [bias] [Resonance gauge]
-        #   row 2: [bias] [Richness gauge]
-        #   row 1: [bias] [Complexity gauge]
-        #   row 2: [bias] [Warmth gauge]
-        #                                     [dark ]
-        # Outer frame fills the grid cell, inner frame centered via pack
         gauge_outer = tk.Frame(top_frame, bg=bg)
         gauge_outer._skip_theme = True
         gauge_outer.grid(row=0, column=1, sticky="nsew")
@@ -284,18 +269,6 @@ class TonerTabMixin:
         gauge_frame.pack(expand=True)
 
         gauge_row = 0
-
-        def _make_bias_slider(parent, key, row):
-            """Create a vertical bias slider in column 0."""
-            sl = tk.Scale(parent, variable=self._toner_bias_vars[key],
-                          from_=50, to=-50, orient="vertical",
-                          length=60, width=8, showvalue=False,
-                          bg="#B0B0B0", fg="#888888",
-                          activebackground="#D0D0D0",
-                          troughcolor="#333333", highlightthickness=0,
-                          sliderrelief="raised", sliderlength=14,
-                          borderwidth=2)
-            sl.grid(row=row, column=0, padx=(0, 2), sticky="ns")
 
         # --- Row 0: Intonation gauge + note display ---
         self._toner_intonation_canvas = tk.Canvas(
@@ -349,8 +322,6 @@ class TonerTabMixin:
         ]
 
         for key, left_label, right_label in gauge_defs:
-            _make_bias_slider(gauge_frame, key, gauge_row)
-
             cv = tk.Canvas(gauge_frame, bg=bg, highlightthickness=0,
                            width=260, height=110)
             cv._dark_canvas = True
@@ -901,22 +872,14 @@ class TonerTabMixin:
                              fill=TICK_COLOR)
 
     def _toner_update_gauge(self, key, value):
-        """Update a descriptor gauge needle to the given 0.0-1.0 value with damping.
-
-        Applies the bias slider offset for display only. The bias shifts the
-        needle position without affecting captured data.
-        """
+        """Update a descriptor gauge needle to the given 0.0-1.0 value with damping."""
         gauge = self._toner_gauges.get(key)
         if not gauge:
             return
 
         damping = GAUGE_DESCRIPTOR_DAMPING
         self._toner_smooth[key] += (value - self._toner_smooth[key]) * damping
-
-        # Apply bias: slider range -50..+50 maps to -0.5..+0.5 offset
-        bias = self._toner_bias_vars.get(key)
-        offset = bias.get() / 100.0 if bias else 0.0
-        frac = max(0.0, min(1.0, self._toner_smooth[key] + offset))
+        frac = max(0.0, min(1.0, self._toner_smooth[key]))
 
         angle_deg = gauge['arc_start'] + (gauge['arc_end'] - gauge['arc_start']) * frac
         angle_rad = math.radians(angle_deg)
@@ -4311,7 +4274,7 @@ class TonerTabMixin:
             "fps": self._toner_fps_var.get() if hasattr(self, '_toner_fps_var') else "30",
             "view_mode": self._toner_view_var.get() if hasattr(self, '_toner_view_var') else "spectrum",
             "scale_mode": self._toner_scale_var.get() if hasattr(self, '_toner_scale_var') else "linear",
-            "gauge_bias": {k: v.get() for k, v in self._toner_bias_vars.items()} if hasattr(self, '_toner_bias_vars') else {},
+            "gauge_bias": {},
             "sax_type": self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else "Alto",
             "concert_pitch": self._toner_concert_pitch.get() if hasattr(self, '_toner_concert_pitch') else False,
         }
