@@ -508,6 +508,10 @@ DEFAULT_SETTINGS = {
         "mic_model": False,
         "notes": True,
     },
+    "visible_delta_gauges": {
+        "spectral_tilt": True,
+        "mid_harmonic": True,
+    },
 
     # TOOLING SETTINGS (Die Inserts & Die Holders)
     "tooling_settings": {

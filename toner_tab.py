@@ -31,6 +31,7 @@ try:
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         compute_session_fingerprint, compute_session_variation,
         compute_group_fingerprint, compute_rolloff_rate,
+        compute_delta_descriptors,
         ROLLOFF_WARN_THRESHOLD, ROLLOFF_MIN_CAPTURES,
         load_tone_profiles, save_tone_profiles,
         analyze_audio_file, check_mic_quality,
@@ -343,8 +344,8 @@ class TonerTabMixin:
         # --- Rows 1-4: Descriptor gauges with bias sliders ---
         self._toner_gauges = {}
         gauge_defs = [
-            ("richness", "Pure", "Complex"),
-            ("warmth", "Thin", "Warm"),
+            ("richness", "Pure", "Complex"),    # Harmonic Spread
+            ("warmth", "Thin", "Warm"),          # H2 Strength
         ]
 
         for key, left_label, right_label in gauge_defs:
@@ -358,6 +359,55 @@ class TonerTabMixin:
             self._toner_gauges[key] = gauge_data
 
             gauge_row += 1
+
+        # --- Delta mode toggle + comparison-only gauges ---
+        self._toner_delta_mode = tk.BooleanVar(value=False)
+        self._toner_delta_frame = tk.Frame(gauge_frame, bg=bg)
+        self._toner_delta_frame._skip_theme = True
+        # Hidden until an overlay is loaded
+        self._toner_delta_row = gauge_row
+
+        delta_toggle = tk.Checkbutton(
+            self._toner_delta_frame, text="\u0394 Delta",
+            variable=self._toner_delta_mode, bg=bg, fg=LABEL_DIM,
+            selectcolor="#333333", activebackground=bg,
+            activeforeground=LABEL_DIM,
+            font=("Helvetica", 8, "bold"))
+        delta_toggle.pack(side="left", padx=4)
+        gauge_row += 1
+
+        # Comparison-only gauges (spectral tilt, mid-harmonic)
+        self._toner_delta_gauges = {}
+        self._toner_delta_gauge_frames = {}
+        delta_vis = self.settings.get("visible_delta_gauges", {})
+        delta_gauge_defs = [
+            ("spectral_tilt", "Darker", "Brighter", "Spectral Tilt"),
+            ("mid_harmonic", "Weaker", "Stronger", "Mid-Harmonic (H3\u2013H6)"),
+        ]
+
+        for key, left_label, right_label, title in delta_gauge_defs:
+            frame = tk.Frame(gauge_frame, bg=bg)
+            frame._skip_theme = True
+            self._toner_delta_gauge_frames[key] = (frame, gauge_row)
+
+            # Title label above gauge
+            tk.Label(frame, text=title, bg=bg, fg=LABEL_DIM,
+                     font=("Helvetica", 7)).pack()
+
+            cv = tk.Canvas(frame, bg=bg, highlightthickness=0,
+                           width=260, height=100)
+            cv._dark_canvas = True
+            cv.pack()
+            gauge_data = self._toner_build_gauge(cv, left_label, right_label,
+                                                  centered=True)
+            self._toner_delta_gauges[key] = gauge_data
+            gauge_row += 1
+
+        # Initialize delta smooth values
+        self._toner_delta_smooth = {
+            'richness_delta': 0.0, 'warmth_delta': 0.0,
+            'spectral_tilt': 0.0, 'mid_harmonic': 0.0,
+        }
 
         # --- Capture status bar (hidden until active) ---
         self._toner_capture_frame = tk.Frame(self._toner_main_frame, bg="#333300")
@@ -597,8 +647,12 @@ class TonerTabMixin:
     # GAUGE BUILDER (VU-meter style)
     # ------------------------------------------------------------------
 
-    def _toner_build_gauge(self, cv, left_label, right_label):
-        """Draw a VU-style arc gauge and return dict with IDs for animation."""
+    def _toner_build_gauge(self, cv, left_label, right_label, centered=False):
+        """Draw a VU-style arc gauge and return dict with IDs for animation.
+
+        If centered=True, the gauge is a delta gauge: 0.5 = center/zero,
+        with a prominent center tick mark and "0" label.
+        """
         cv_w, cv_h = GAUGE_WIDTH, GAUGE_HEIGHT
         cv.configure(width=cv_w, height=cv_h)
         cx = cv_w // 2
@@ -644,6 +698,15 @@ class TonerTabMixin:
             ])
         cv.create_line(*arc_points, fill=tick_color, width=1, smooth=True)
 
+        # Center zero marker for delta gauges
+        if centered:
+            center_deg = (arc_start + arc_end) / 2
+            center_rad = math.radians(center_deg)
+            x_o = cx + (r + 3) * math.cos(center_rad)
+            y_o = cy - (r + 3) * math.sin(center_rad)
+            cv.create_text(x_o, y_o - 6, text="0",
+                           fill=tick_color, font=("Helvetica", 7, "bold"))
+
         label_font = ("Helvetica", 7)
         if left_label:
             left_angle = math.radians(arc_start + 5)
@@ -682,7 +745,7 @@ class TonerTabMixin:
             'canvas': cv, 'cx': cx, 'cy': cy,
             'needle_len': needle_len, 'needle_id': needle_id,
             'shadow_id': shadow_id, 'arc_start': arc_start, 'arc_end': arc_end,
-            'low_data_id': low_data_id,
+            'low_data_id': low_data_id, 'centered': centered,
         }
 
     def _toner_build_intonation_gauge(self, cv):
@@ -879,6 +942,60 @@ class TonerTabMixin:
                 cv.itemconfigure(gauge['low_data_id'], state=state)
             cv.itemconfigure(gauge['needle_id'], fill=needle_color)
             cv.itemconfigure(gauge['shadow_id'], fill=shadow_color)
+
+    def _toner_show_delta_gauges(self, show):
+        """Show or hide the delta toggle and comparison-only gauges."""
+        bg = BG_COLOR
+        if show:
+            self._toner_delta_frame.grid(
+                row=self._toner_delta_row, column=0, columnspan=3,
+                sticky="w", padx=5)
+            delta_vis = self.settings.get("visible_delta_gauges", {})
+            for key, (frame, row) in self._toner_delta_gauge_frames.items():
+                if delta_vis.get(key, True):
+                    frame.grid(row=row, column=0, columnspan=3, pady=(2, 0))
+        else:
+            self._toner_delta_frame.grid_forget()
+            for key, (frame, _) in self._toner_delta_gauge_frames.items():
+                frame.grid_forget()
+            self._toner_delta_mode.set(False)
+            # Reset delta gauge needles to center
+            for key, gauge in self._toner_delta_gauges.items():
+                self._toner_delta_smooth[key] = 0.0
+                center_angle = math.radians(
+                    (gauge['arc_start'] + gauge['arc_end']) / 2)
+                nx = gauge['cx'] + gauge['needle_len'] * math.cos(center_angle)
+                ny = gauge['cy'] - gauge['needle_len'] * math.sin(center_angle)
+                gauge['canvas'].coords(gauge['needle_id'],
+                                       gauge['cx'], gauge['cy'], nx, ny)
+                gauge['canvas'].coords(gauge['shadow_id'],
+                                       gauge['cx'] + 1, gauge['cy'] + 1,
+                                       nx + 1, ny + 1)
+
+    def _toner_update_delta_gauge(self, key, value):
+        """Update a delta gauge. Value is -1.0 to +1.0, mapped to 0.0-1.0."""
+        gauge = self._toner_delta_gauges.get(key)
+        if not gauge:
+            return
+        if value is None:
+            # No data — center the needle
+            frac = 0.5
+        else:
+            # Map -1..+1 to 0..1
+            self._toner_delta_smooth[key] += (
+                value - self._toner_delta_smooth[key]) * GAUGE_DESCRIPTOR_DAMPING
+            frac = max(0.0, min(1.0, 0.5 + self._toner_delta_smooth[key] * 0.5))
+
+        angle_deg = gauge['arc_start'] + (
+            gauge['arc_end'] - gauge['arc_start']) * frac
+        angle_rad = math.radians(angle_deg)
+        nx = gauge['cx'] + gauge['needle_len'] * math.cos(angle_rad)
+        ny = gauge['cy'] - gauge['needle_len'] * math.sin(angle_rad)
+
+        cv = gauge['canvas']
+        cv.coords(gauge['shadow_id'],
+                  gauge['cx'] + 1, gauge['cy'] + 1, nx + 1, ny + 1)
+        cv.coords(gauge['needle_id'], gauge['cx'], gauge['cy'], nx, ny)
 
     # ------------------------------------------------------------------
     # SPECTRUM RENDERING
@@ -2761,6 +2878,7 @@ class TonerTabMixin:
                 self._toner_spectrum_canvas.itemconfigure(
                     self._toner_compare_label,
                     text=f"Overlay: {name} ({selected[0]['note_count']} notes)")
+            self._toner_show_delta_gauges(True)
             dlg.destroy()
 
         def analyze_selected():
@@ -2780,6 +2898,7 @@ class TonerTabMixin:
                     self._toner_compare_label, text="")
             for g in self._toner_ghost_markers:
                 self._toner_spectrum_canvas.itemconfigure(g, state="hidden")
+            self._toner_show_delta_gauges(False)
             dlg.destroy()
 
         def average_selected():
@@ -3622,8 +3741,53 @@ class TonerTabMixin:
                     and self._toner_low_data_shown):
                 self._toner_set_low_data_overlay(False)
 
-            self._toner_update_gauge('richness', d.get('richness', 0.0))
-            self._toner_update_gauge('warmth', d.get('warmth', 0.0))
+            # Delta mode: compare live vs loaded baseline per-note
+            if (self._toner_delta_mode.get() and self._toner_comparison
+                    and result.fundamental_freq > 0):
+                note = result.fundamental_note
+                fp = self._toner_comparison
+                pn = fp.get('per_note', {})
+                baseline = pn.get(note) if note else None
+
+                if baseline and baseline.get('descriptors'):
+                    bd = baseline['descriptors']
+                    bh = baseline.get('harmonics_db', [])
+                    # Build live harmonics_db from result
+                    live_h = [h.magnitude_db for h in result.harmonics
+                              ] if result.harmonics else []
+                    deltas = compute_delta_descriptors(
+                        live_h, bh, d, bd)
+                    if deltas:
+                        # Existing gauges show delta (centered: 0.5 + delta/2)
+                        r_delta = deltas['richness_delta']
+                        w_delta = deltas['warmth_delta']
+                        self._toner_update_gauge(
+                            'richness', 0.5 + r_delta * 0.5)
+                        self._toner_update_gauge(
+                            'warmth', 0.5 + w_delta * 0.5)
+                        # Comparison-only gauges
+                        self._toner_update_delta_gauge(
+                            'spectral_tilt', deltas.get('spectral_tilt'))
+                        self._toner_update_delta_gauge(
+                            'mid_harmonic', deltas.get('mid_harmonic'))
+                    else:
+                        self._toner_update_gauge('richness', 0.5)
+                        self._toner_update_gauge('warmth', 0.5)
+                        self._toner_update_delta_gauge('spectral_tilt', None)
+                        self._toner_update_delta_gauge('mid_harmonic', None)
+                else:
+                    # No baseline data for this note
+                    self._toner_update_gauge('richness', 0.5)
+                    self._toner_update_gauge('warmth', 0.5)
+                    self._toner_update_delta_gauge('spectral_tilt', None)
+                    self._toner_update_delta_gauge('mid_harmonic', None)
+            else:
+                self._toner_update_gauge('richness', d.get('richness', 0.0))
+                self._toner_update_gauge('warmth', d.get('warmth', 0.0))
+                if self._toner_delta_mode.get():
+                    # No signal — center delta gauges
+                    self._toner_update_delta_gauge('spectral_tilt', None)
+                    self._toner_update_delta_gauge('mid_harmonic', None)
 
             # Process capture if active
             self._toner_process_capture_frame(result)

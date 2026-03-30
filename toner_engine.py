@@ -115,6 +115,11 @@ LOW_FREQ_WEAKNESS_RATIO = 0.05
 ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — warn above this
 ROLLOFF_MIN_CAPTURES = 5       # need this many before checking
 
+# --- Delta gauge scaling ---
+# Full gauge deflection ranges for comparison-only dials (in dB).
+SPECTRAL_TILT_RANGE = 15.0    # ±15 dB = full deflection for H7-H12 avg delta
+MID_HARMONIC_RANGE = 15.0     # ±15 dB = full deflection for H3-H6 avg delta
+
 # Calibration capture: written chromatic scale Bb3 to F6
 # These are WRITTEN pitches — the transposition to concert pitch
 # happens using SAX_TRANSPOSITIONS when computing expected frequencies.
@@ -984,6 +989,62 @@ def compute_rolloff_rate(harmonics_db):
     if span <= 0:
         return None
     return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
+
+
+def compute_delta_descriptors(live_harmonics_db, baseline_harmonics_db,
+                              live_descriptors, baseline_descriptors):
+    """Compute delta descriptors between live and baseline readings.
+
+    Returns dict with:
+        'richness_delta': signed difference (-1 to +1)
+        'warmth_delta': signed difference (-1 to +1)
+        'spectral_tilt': upper harmonic shift in dB (avg H7-H12 delta),
+                         normalized to -1..+1 using SPECTRAL_TILT_RANGE
+        'mid_harmonic': mid harmonic shift in dB (avg H3-H6 delta),
+                        normalized to -1..+1 using MID_HARMONIC_RANGE
+    Returns None if insufficient data.
+    """
+    if not live_harmonics_db or not baseline_harmonics_db:
+        return None
+    if not live_descriptors or not baseline_descriptors:
+        return None
+
+    result = {
+        'richness_delta': live_descriptors.get('richness', 0) -
+                          baseline_descriptors.get('richness', 0),
+        'warmth_delta': live_descriptors.get('warmth', 0) -
+                        baseline_descriptors.get('warmth', 0),
+    }
+
+    # Spectral tilt: average dB delta of H7-H12 (indices 6-11)
+    n = min(len(live_harmonics_db), len(baseline_harmonics_db))
+    if n >= 12:
+        upper_deltas = [live_harmonics_db[i] - baseline_harmonics_db[i]
+                        for i in range(6, 12)]
+        raw_tilt = sum(upper_deltas) / len(upper_deltas)
+        result['spectral_tilt'] = max(-1.0, min(1.0,
+            raw_tilt / SPECTRAL_TILT_RANGE))
+    elif n >= 8:
+        # Fewer harmonics available — use what we have
+        upper_deltas = [live_harmonics_db[i] - baseline_harmonics_db[i]
+                        for i in range(6, n)]
+        raw_tilt = sum(upper_deltas) / len(upper_deltas)
+        result['spectral_tilt'] = max(-1.0, min(1.0,
+            raw_tilt / SPECTRAL_TILT_RANGE))
+    else:
+        result['spectral_tilt'] = None
+
+    # Mid-harmonic balance: average dB delta of H3-H6 (indices 2-5)
+    if n >= 6:
+        mid_deltas = [live_harmonics_db[i] - baseline_harmonics_db[i]
+                      for i in range(2, 6)]
+        raw_mid = sum(mid_deltas) / len(mid_deltas)
+        result['mid_harmonic'] = max(-1.0, min(1.0,
+            raw_mid / MID_HARMONIC_RANGE))
+    else:
+        result['mid_harmonic'] = None
+
+    return result
 
 
 def compute_fingerprint(sessions, sax_type="Tenor"):

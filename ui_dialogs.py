@@ -2917,27 +2917,56 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("Gauges")
-        self._body("Two gauges summarize aspects of the harmonic content "
-                    "in real time. Watch how they move as you play \u2014 "
-                    "the movement is more informative than any single reading.")
+        self._body("Two always-visible gauges summarize aspects of the "
+                    "harmonic content in real time. Watch how they move "
+                    "as you play \u2014 the movement is more informative "
+                    "than any single reading.")
         self._bullet("Intonation: flat/sharp meter with cents readout. "
                       "The IN TUNE lamp lights within \u00b14 cents.")
-        self._bullet("Pure / Complex: spectral flatness \u2014 how evenly "
-                      "the energy is spread across the harmonics. Energy "
-                      "concentrated in the fundamental = pure. Energy "
-                      "spread evenly = complex.")
-        self._bullet("Thin / Warm: strength of H2 (the octave harmonic) "
-                      "relative to the fundamental. Strong H2 = warm, "
-                      "round quality. Weak H2 = thinner, more focused.")
+        self._bullet("Harmonic Spread (Pure \u2194 Complex): how evenly "
+                      "energy is spread across the harmonics. Concentrated "
+                      "in the fundamental = pure. Spread evenly = complex.")
+        self._bullet("H2 Strength (Thin \u2194 Warm): strength of the octave "
+                      "harmonic relative to the fundamental. Strong H2 = "
+                      "warm, round quality. Weak H2 = thinner, more focused.")
         self._blank()
-        self._body("The spectrum bars show everything the gauges don't "
-                    "capture \u2014 the complete harmonic shape of your "
-                    "sound from H1 through H12.")
+        self._body("Each gauge has a bias slider underneath that offsets "
+                    "the display without affecting captured data.")
         self._blank()
-        self._body("Each gauge has a bias slider underneath. These offset "
-                    "the display to match your perception without affecting "
-                    "captured data. Display-only \u2014 your profiles stay "
-                    "comparable.")
+
+        self._h2("Delta Gauges")
+        self._body("When you load a profile as an overlay (via Analyze \u2192 "
+                    "Overlay on Spectrum), a Delta toggle appears on the "
+                    "gauge panel. Enabling it switches the gauges from "
+                    "absolute readings to live comparison against the "
+                    "loaded baseline.")
+        self._blank()
+        self._body("In delta mode, the always-visible gauges show how "
+                    "your current sound differs from the baseline for "
+                    "the note you're playing. Center = no difference. "
+                    "The baseline is looked up per-note, so it adapts "
+                    "as you move through the range.")
+        self._blank()
+        self._body("Two comparison-only gauges also appear:")
+        self._bullet("Spectral Tilt (Darker \u2194 Brighter): average shift "
+                      "in the upper harmonics (H7\u2013H12) relative to "
+                      "baseline. Positive = more upper harmonic energy "
+                      "than the baseline had.")
+        self._bullet("Mid-Harmonic Balance (Weaker \u2194 Stronger): average "
+                      "shift in H3\u2013H6 relative to baseline. This is "
+                      "where mouthpiece and reed changes tend to show "
+                      "up most.")
+        self._blank()
+        self._body("These two gauges only exist as deltas \u2014 they're "
+                    "not shown in absolute mode because the absolute "
+                    "values depend too heavily on the recording setup "
+                    "to be meaningful on their own. As deltas against "
+                    "a baseline captured on the same setup, they're "
+                    "reliable.")
+        self._blank()
+        self._body("If you play a note that the baseline profile doesn't "
+                    "have data for, the gauges center at zero. Capture "
+                    "more notes in the baseline to fill gaps.")
         self._blank()
 
         # === COMPARING ===
