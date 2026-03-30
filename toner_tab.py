@@ -325,7 +325,7 @@ class TonerTabMixin:
             cv = tk.Canvas(gauge_frame, bg=bg, highlightthickness=0,
                            width=260, height=110)
             cv._dark_canvas = True
-            cv.grid(row=gauge_row, column=1, pady=(2, 0))
+            cv.grid(row=gauge_row, column=0, columnspan=3, pady=(2, 0))
             gauge_data = self._toner_build_gauge(cv, left_label, right_label)
             self._toner_gauges[key] = gauge_data
 
@@ -907,9 +907,14 @@ class TonerTabMixin:
             cv.itemconfigure(gauge['shadow_id'], fill=shadow_color)
 
     def _toner_show_delta_gauges(self, show):
-        """Show or hide the delta toggle and comparison-only gauges."""
+        """Show or hide the delta toggle and comparison-only gauges.
+
+        When showing, auto-enables delta mode. The user can uncheck
+        the toggle to return to absolute while keeping the overlay.
+        """
         bg = BG_COLOR
         if show:
+            self._toner_delta_mode.set(True)
             self._toner_delta_frame.grid(
                 row=self._toner_delta_row, column=0, columnspan=3,
                 sticky="w", padx=5)
