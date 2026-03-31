@@ -1129,6 +1129,87 @@ class TonerTabMixin:
             state = "disabled" if locked else "normal"
             self._toner_sax_scale_widget.configure(state=state)
 
+    def _toner_open_settings(self):
+        """Open toner settings dialog."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Tone Analyzer Settings")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        # --- Analysis Descriptors ---
+        desc_frame = tk.LabelFrame(frame, text="Analysis Descriptors", bg=bg,
+                                    fg=fg, padx=10, pady=8)
+        desc_frame.pack(fill="x", pady=(0, 10))
+
+        tk.Label(desc_frame, text="Choose which descriptors appear in the Analyze tool.",
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 6))
+
+        toner_settings = self.settings.get("toner_settings", {})
+        analysis_desc = toner_settings.get("analysis_descriptors", {})
+
+        descriptor_info = [
+            ("richness", "Complexity", None,
+             None),
+            ("warmth", "Warmth", None,
+             None),
+            ("even_odd", "Even/Odd Harmonic Balance", "beta",
+             "Measures the ratio of even harmonic energy (H2, H4, H6...) "
+             "to odd harmonic energy (H3, H5, H7...).\n\n"
+             "Higher values = more even-dominant (rounder quality).\n"
+             "Lower values = more odd-dominant (edgier, hollower quality).\n\n"
+             "This descriptor shows good differentiation across horns but "
+             "is not an established measurement in saxophone acoustics. "
+             "Treat it as experimental."),
+            ("rolloff_shape", "Rolloff Shape", "beta",
+             "Measures how smoothly harmonics decrease in strength "
+             "vs having bumps or peaks in the harmonic series.\n\n"
+             "Higher values = more spectral peaks that stick out.\n"
+             "Lower values = smooth, even rolloff.\n\n"
+             "This is a signal processing metric, not an established "
+             "measurement in saxophone acoustics. Treat it as experimental."),
+        ]
+
+        desc_vars = {}
+        for key, label, badge, info_text in descriptor_info:
+            row = tk.Frame(desc_frame, bg=bg)
+            row.pack(fill="x", pady=2)
+
+            var = tk.BooleanVar(value=analysis_desc.get(key, key in ("richness", "warmth")))
+            desc_vars[key] = var
+            tk.Checkbutton(row, variable=var, bg=bg).pack(side="left")
+
+            display = label
+            if badge:
+                display += f"  [{badge}]"
+            tk.Label(row, text=display, bg=bg, fg=fg,
+                     font=("Helvetica", 10)).pack(side="left")
+
+            if info_text:
+                def make_info_cmd(title=label, text=info_text):
+                    return lambda: messagebox.showinfo(title, text, parent=dlg)
+                tk.Button(row, text="?", width=2, font=("Helvetica", 8),
+                          command=make_info_cmd()).pack(side="left", padx=(6, 0))
+
+        # --- Buttons ---
+        btn_frame = tk.Frame(frame, bg=bg)
+        btn_frame.pack(fill="x", pady=(5, 0))
+
+        def save():
+            ts = self.settings.setdefault("toner_settings", {})
+            ts["analysis_descriptors"] = {k: v.get() for k, v in desc_vars.items()}
+            from config import save_settings
+            save_settings(self.settings)
+            dlg.destroy()
+
+        tk.Button(btn_frame, text="OK", width=10, command=save).pack(side="right", padx=(5, 0))
+        tk.Button(btn_frame, text="Cancel", width=10, command=dlg.destroy).pack(side="right")
+
     def _toner_open_pitch_dialog(self):
         """Open reference pitch (A=) dialog."""
         result = simpledialog.askfloat("Reference Pitch",
@@ -2884,7 +2965,7 @@ class TonerTabMixin:
             dlg.title(f"Analyze \u2014 {fingerprints[0].get('_name', '?')}")
         else:
             dlg.title("Analyze \u2014 Comparison")
-        dlg.geometry("720x600")
+        dlg.geometry("720x750")
         dlg.transient(self.root)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
@@ -3119,12 +3200,23 @@ class TonerTabMixin:
         table_inner = tk.Frame(table_frame, bg=bg)
         table_inner.pack(fill="x", padx=5, pady=5)
 
-        desc_labels = [
+        all_desc_labels = [
             ("Complexity", "richness"),
             ("Warmth", "warmth"),
-            ("Even/Odd", "even_odd"),
+            ("Even H. Bal.", "even_odd"),
             ("Rolloff Shape", "rolloff_shape"),
         ]
+        analysis_desc = self.settings.get("toner_settings", {}).get(
+            "analysis_descriptors", {"richness": True, "warmth": True})
+        desc_labels = [(label, key) for label, key in all_desc_labels
+                       if analysis_desc.get(key, key in ("richness", "warmth"))]
+        # Pole labels for descriptor direction (low% → high%)
+        desc_poles = {
+            "richness": ("pure", "complex"),
+            "warmth": ("thin", "warm"),
+            "even_odd": ("odd", "even"),
+            "rolloff_shape": ("smooth", "peaked"),
+        }
 
         # Rolloff rates and mic types for each preset (for table and mismatch check)
         _rolloff_rates = [fp.get('rolloff_rate') for fp in fingerprints]
@@ -3133,11 +3225,16 @@ class TonerTabMixin:
         # --- Analysis text ---
         analysis_frame = tk.LabelFrame(main, text="Analysis", bg=bg, fg=fg,
                                         font=("Helvetica", 10, "bold"))
-        analysis_frame.pack(fill="x")
-        analysis_text = tk.Text(analysis_frame, height=4, wrap="word",
+        analysis_frame.pack(fill="both", expand=True)
+        analysis_inner = tk.Frame(analysis_frame, bg=bg)
+        analysis_inner.pack(fill="both", expand=True, padx=5, pady=5)
+        analysis_text = tk.Text(analysis_inner, height=10, wrap="word",
                                  font=("Helvetica", 9), bg="white",
                                  relief="flat", padx=8, pady=5)
-        analysis_text.pack(fill="x", padx=5, pady=5)
+        analysis_scroll = tk.Scrollbar(analysis_inner, command=analysis_text.yview)
+        analysis_text.configure(yscrollcommand=analysis_scroll.set)
+        analysis_scroll.pack(side="right", fill="y")
+        analysis_text.pack(side="left", fill="both", expand=True)
 
         def rebuild_table():
             for w in table_inner.winfo_children():
@@ -3147,7 +3244,7 @@ class TonerTabMixin:
 
             header = tk.Frame(table_inner, bg=bg)
             header.pack(fill="x")
-            tk.Label(header, text="", width=14, bg=bg, fg=fg,
+            tk.Label(header, text="", width=20, bg=bg, fg=fg,
                      font=("Helvetica", 9, "bold"), anchor="w").pack(side="left")
             for fp in fingerprints:
                 tk.Label(header, text=fp['_name'][:15], width=12, bg=bg, fg=fg,
@@ -3156,7 +3253,9 @@ class TonerTabMixin:
             for label, key in desc_labels:
                 row = tk.Frame(table_inner, bg=bg)
                 row.pack(fill="x")
-                tk.Label(row, text=label, width=14, bg=bg, fg=fg,
+                poles = desc_poles.get(key)
+                row_label = f"{label} ({poles[0]}\u2194{poles[1]})" if poles else label
+                tk.Label(row, text=row_label, width=20, bg=bg, fg=fg,
                          font=("Helvetica", 9), anchor="w").pack(side="left")
 
                 values = [d.get('descriptors', {}).get(key, 0) for d in data]
@@ -3181,7 +3280,7 @@ class TonerTabMixin:
             if view_mode.get() == "average":
                 row = tk.Frame(table_inner, bg=bg)
                 row.pack(fill="x")
-                tk.Label(row, text="Rec. Quality", width=14, bg=bg, fg=fg,
+                tk.Label(row, text="Rec. Quality", width=20, bg=bg, fg=fg,
                          font=("Helvetica", 9), anchor="w").pack(side="left")
                 for rate in _rolloff_rates:
                     if rate is None:
@@ -3195,7 +3294,7 @@ class TonerTabMixin:
 
                 row2 = tk.Frame(table_inner, bg=bg)
                 row2.pack(fill="x")
-                tk.Label(row2, text="Mic Type", width=14, bg=bg, fg=fg,
+                tk.Label(row2, text="Mic Type", width=20, bg=bg, fg=fg,
                          font=("Helvetica", 9), anchor="w").pack(side="left")
                 for mt in _mic_types:
                     text = mt.capitalize() if mt else "\u2014"
@@ -3231,7 +3330,12 @@ class TonerTabMixin:
                 for label, key in desc_labels:
                     val = d.get(key, 0)
                     if val > 0:
-                        desc_parts.append(f"{label}: {val:.0%}")
+                        poles = desc_poles.get(key)
+                        if poles:
+                            pole = poles[1] if val >= 0.5 else poles[0]
+                            desc_parts.append(f"{label}: {val:.0%} ({pole})")
+                        else:
+                            desc_parts.append(f"{label}: {val:.0%}")
                 if desc_parts:
                     lines.append(prefix + ", ".join(desc_parts))
                 rr = fp.get('rolloff_rate')

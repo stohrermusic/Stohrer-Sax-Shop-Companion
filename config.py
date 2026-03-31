@@ -507,6 +507,12 @@ DEFAULT_SETTINGS = {
         "gauge_bias": {"richness": 0, "warmth": 0},
         "sax_type": "Alto",
         "concert_pitch": False,
+        "analysis_descriptors": {
+            "richness": True,
+            "warmth": True,
+            "even_odd": False,
+            "rolloff_shape": False,
+        },
     },
     "mic_type": "",        # "condenser", "ribbon", "dynamic", or ""
     "mic_model": "",       # optional free-text, e.g. "AT2020 USB"
