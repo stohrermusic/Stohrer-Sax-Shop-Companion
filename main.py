@@ -2097,6 +2097,57 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                            font=("Helvetica", 10)).pack(anchor="w")
             check_vars[key] = var
 
+        # Easter egg
+        _ns_var = tk.BooleanVar(value=False)
+        _ns_cb = tk.Checkbutton(frame, text="Heavy Mass Neck Screw",
+                                variable=_ns_var, bg=bg,
+                                font=("Helvetica", 10))
+        _ns_cb.pack(anchor="w")
+        _ns_msgs = ["No.", "Nope.", "Uh uh.", "I refuse.",
+                     "Forget it.", "Stop.", "Dude."]
+        _ns_idx = [0]
+
+        def _ns_remove():
+            pw = tk.Toplevel(dlg)
+            pw.title("Processing...")
+            pw.resizable(False, False)
+            pw.transient(dlg)
+            pw.grab_set()
+            pf = tk.Frame(pw, bg=bg, padx=20, pady=15)
+            pf.pack(fill="both", expand=True)
+            tk.Label(pf, text="Removing option...", bg=bg,
+                     font=("Helvetica", 10)).pack(pady=(0, 8))
+            pbar = ttk.Progressbar(pf, orient="horizontal",
+                                   length=250, mode="determinate")
+            pbar.pack()
+
+            def _tick(val):
+                pbar['value'] = val
+                if val < 100:
+                    if val < 70:
+                        delay = 40
+                    elif val < 90:
+                        delay = 200
+                    elif val < 99:
+                        delay = 500
+                    else:
+                        delay = 3000
+                    pw.after(delay, _tick, val + 1)
+                else:
+                    pw.after(300, lambda: (pw.destroy(), _ns_cb.pack_forget()))
+
+            _tick(0)
+
+        def _ns_click():
+            _ns_var.set(False)
+            if _ns_idx[0] < len(_ns_msgs):
+                messagebox.showinfo("", _ns_msgs[_ns_idx[0]], parent=dlg)
+                _ns_idx[0] += 1
+            if _ns_idx[0] >= len(_ns_msgs):
+                _ns_remove()
+
+        _ns_cb.configure(command=_ns_click)
+
         def apply():
             for key, var in check_vars.items():
                 vis[key] = var.get()
