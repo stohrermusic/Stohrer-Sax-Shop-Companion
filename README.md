@@ -1,6 +1,6 @@
 # Stohrer Sax Shop Companion
 
-A cross-platform desktop app for saxophone repair technicians. Generates SVG and G-code files for laser-cutting pad materials, provides reference databases for key heights, serial numbers, and screw specifications, and includes tooling generation, a chromatic strobe tuner, and a harmonic tone analyzer.
+A cross-platform desktop app for saxophone repair shops and saxophonists. Generates SVG and G-code files for laser-cutting pad materials, provides reference databases for key heights, serial numbers, and screw specifications, includes tooling generation for die inserts and holders, a chromatic strobe tuner, and a harmonic tone analyzer for studying your sound.
 
 ## Features
 
@@ -22,7 +22,8 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
   - Preview, edge bias, and custom polygons all work together in scrap mode
 - Max fill mode — use `18.0 x max` to fill remaining space with a size
 
-#### Engraving
+#### Sizing & Engraving
+- Per-size-range settings for sizing rules, dart/star cuts, engraving, and placement
 - Pad size labels on each disc, with per-material font size and position
 - Line mode (single-stroke) or filled mode (scan-line raster fill with overscan)
 - Auto-fit — shifts text toward center on small pads, scales only as last resort
@@ -60,29 +61,36 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner
-- 12-wheel stroboscopic tuner
+- 12-wheel stroboscopic tuner modeled after the Peterson Stroboconn
 - GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
   - Automatic fallback to CPU canvas rendering if GPU unavailable
 - Per-ring octave brightness from real spectral data
 - Grouped slider panel (display, pitch, bias) and vintage backlit VU meter
 - Transposition support (Concert, Bb, Eb, F)
 - Reference tone player with adjustable pitch
-- Configurable frame rate (60/90/120 fps) and color themes
+- Configurable frame rate (60/90/120 fps) and faceplate color
 - A quality microphone is recommended (e.g. Audio-Technica AT2020 USB)
 
-### Harmonic Tone Analyzer (Beta)
+### Harmonic Tone Analyzer
 - Real-time harmonic spectrum analyzer for saxophone
-- Detects fundamental pitch, extracts up to 12 harmonics
+- Detects fundamental pitch, extracts up to 20 harmonics with parabolic amplitude correction
 - Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
 - Live gauges: intonation, complexity (spectral flatness), warmth (H2 strength)
+- Five comparison descriptors: complexity, warmth, core tone (H2-H4 body character), even/odd harmonic ratio, rolloff shape
 - Supports all standard saxophone types including baritone
 - Tone profiles: capture harmonic fingerprints of individual horns
-  - Free capture and guided calibration modes, plus WAV file import
+  - Free capture and guided calibration modes, plus WAV file import (16/24/32-bit)
   - Profiles stored in concert pitch for cross-instrument comparison
   - Organized into libraries with import/export
-- Comparison tool with filtering, per-note and horn-average views
-- Auto-transposition by saxophone type with concert pitch toggle
+- Comparison tool with filtering, per-note and horn-average views, difference charts
+  - Harmonic-range interpretation suggests which component (body, neck, mouthpiece) may be driving differences
+  - Same-player and cross-player context notes
+- Delta gauges for live A/B comparison against a loaded baseline profile
+- Optional WAV recording during capture sessions for backup or re-analysis
+- Recording quality tracking (harmonic rolloff rate) with live warnings
+- Mic type and model stored per session for reproducibility
 - Coverage summary after capture sessions — shows note distribution and gaps
+- Auto-transposition by saxophone type with concert pitch toggle
 - A quality microphone is essential — laptop mics do not provide reliable results
 
 ### General
@@ -92,6 +100,7 @@ A cross-platform desktop app for saxophone repair technicians. Generates SVG and
 - macOS dark mode support
 - Platform-appropriate config storage with automatic migration
 - Import Settings from Folder for moving between machines
+- Error logging with Help > Open Log File for diagnostics
 
 ## Installation
 
@@ -140,6 +149,10 @@ Settings and presets are stored in platform-appropriate locations:
 - **macOS**: `~/Library/Application Support/StohrerSaxShopCompanion/`
 - **Linux**: `~/.config/StohrerSaxShopCompanion/`
 
+## Questions or Feedback
+
+Email: stohrermusic@gmail.com
+
 ---
 
-Made for saxophone techs, by a saxophone tech.
+Made for saxophone repair shops and saxophonists, by a saxophone tech.
