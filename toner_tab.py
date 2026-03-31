@@ -498,7 +498,23 @@ class TonerTabMixin:
             4, 4, 20, 20, fill="#332200", outline="#444444", width=1)
 
         tk.Label(right_col, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
-                 font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 10))
+                 font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 6))
+
+        # Mic status indicator (clickable to open settings)
+        mic_type = self.settings.get("mic_type", "")
+        mic_model = self.settings.get("mic_model", "")
+        if mic_type:
+            mic_text = mic_model if mic_model else mic_type.capitalize()
+            mic_fg = "#AAAAAA"
+        else:
+            mic_text = "mic not set"
+            mic_fg = "#FF8800"
+        self._toner_mic_label = tk.Label(
+            right_col, text=mic_text, bg=ctrl_bg, fg=mic_fg,
+            font=("Helvetica", 7), cursor="hand2")
+        self._toner_mic_label._skip_theme = True
+        self._toner_mic_label.pack(side="left", padx=(0, 10))
+        self._toner_mic_label.bind("<Button-1>", lambda e: self._toner_open_settings())
 
         # Profile indicator + Load/Unload toggle
         self._toner_preset_label = tk.Label(
@@ -1466,6 +1482,15 @@ class TonerTabMixin:
             ts["analysis_descriptors"] = {k: v.get() for k, v in desc_vars.items()}
 
             save_settings(self.settings)
+
+            # Update mic status label
+            mt = self.settings.get("mic_type", "")
+            mm = self.settings.get("mic_model", "")
+            if mt:
+                self._toner_mic_label.configure(
+                    text=mm if mm else mt.capitalize(), fg="#AAAAAA")
+            else:
+                self._toner_mic_label.configure(text="mic not set", fg="#FF8800")
 
             # Restart audio engine if device changed
             if devices and sys.platform != 'linux':
