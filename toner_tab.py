@@ -2208,7 +2208,7 @@ class TonerTabMixin:
         if not self.settings.get('mic_type'):
             messagebox.showinfo("Mic Type Required",
                 "Please set your microphone type in Options \u2192 "
-                "Input Device before capturing.\n\n"
+                "Settings before capturing.\n\n"
                 "A condenser mic is required for full harmonic "
                 "analysis. Ribbon and dynamic mics can still be "
                 "used but with reduced accuracy for upper harmonics.",
