@@ -1227,7 +1227,8 @@ class TonerTabMixin:
             tk.Label(input_frame, text="No audio input devices found.",
                      bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
 
-        tk.Label(input_frame, text="Mic type and model are set per preset.",
+        tk.Label(input_frame, text="Mic type and model are set per preset\n"
+                 "in File \u2192 Presets.",
                  bg=bg, fg="#888888", font=("Helvetica", 8)).pack(anchor="w", pady=(4, 0))
 
         # --- Recording ---
@@ -1435,8 +1436,6 @@ class TonerTabMixin:
 
             # Recording
             self.settings["toner_record_wav"] = record_var.get()
-            if hasattr(self, '_toner_record_wav_var'):
-                self._toner_record_wav_var.set(record_var.get())
             folder = folder_label.cget("text")
             if folder and folder != current_dir:
                 self.settings["toner_recording_dir"] = folder

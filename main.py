@@ -290,7 +290,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
         toner_options_menu.add_command(label="Settings...", command=self._toner_open_settings)
         toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
-        self._toner_record_wav_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
 
         # --- Add Help menu to all tab menus ---
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
@@ -1975,62 +1974,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         listbox.selection_set(current_idx)
         listbox.see(current_idx)
 
-        # --- Mic type (required for toner) ---
-        sep = ttk.Separator(frame, orient="horizontal")
-        sep.pack(fill="x", pady=(10, 8))
-
-        mic_type_frame = tk.Frame(frame, bg=bg)
-        mic_type_frame.pack(fill="x", pady=(0, 4))
-        tk.Label(mic_type_frame, text="Mic Type:", bg=bg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        MIC_TYPES = ["", "Condenser", "Ribbon", "Dynamic"]
-        mic_type_var = tk.StringVar(
-            value=self.settings.get("mic_type", "").capitalize() or "")
-        mic_type_combo = ttk.Combobox(mic_type_frame,
-            textvariable=mic_type_var, values=MIC_TYPES[1:],
-            state="readonly", width=15)
-        mic_type_combo.pack(side="left")
-        if not mic_type_var.get():
-            mic_type_combo.set("")
-
-        mic_model_frame = tk.Frame(frame, bg=bg)
-        mic_model_frame.pack(fill="x", pady=(0, 4))
-        tk.Label(mic_model_frame, text="Mic Model:", bg=bg,
-                 font=("Helvetica", 10)).pack(side="left", padx=(0, 5))
-        mic_model_var = tk.StringVar(
-            value=self.settings.get("mic_model", ""))
-        tk.Entry(mic_model_frame, textvariable=mic_model_var,
-                 width=25, font=("Helvetica", 10)).pack(side="left")
-        tk.Label(mic_model_frame, text="(optional)", bg=bg, fg="#666666",
-                 font=("Helvetica", 8)).pack(side="left", padx=(5, 0))
-
-        _mic_type_warned = [False]
-
-        def _on_mic_type_changed(event=None):
-            val = mic_type_var.get().lower()
-            if val in ("ribbon", "dynamic") and not _mic_type_warned[0]:
-                _mic_type_warned[0] = True
-                messagebox.showinfo("Mic Type Note",
-                    f"A {val} mic can still be used with the Tone "
-                    f"Analyzer, but upper harmonics will be attenuated.\n\n"
-                    f"Warmth readings remain accurate. Complexity and "
-                    f"full harmonic data will be less reliable.\n\n"
-                    f"Sessions captured with a {val} mic can only be "
-                    f"meaningfully compared with other {val} mic "
-                    f"sessions.",
-                    parent=dlg)
-        mic_type_combo.bind("<<ComboboxSelected>>", _on_mic_type_changed)
-
         def apply():
             sel = listbox.curselection()
             if not sel:
                 return
             dev_idx = dev_indices[sel[0]]
             self.settings["audio_input_device"] = dev_idx
-
-            # Save mic type and model
-            self.settings["mic_type"] = mic_type_var.get().lower()
-            self.settings["mic_model"] = mic_model_var.get().strip()
             save_settings(self.settings)
 
             # Restart active audio engine with new device
@@ -2052,123 +2001,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
             side="left")
-
-    def _open_preset_fields_dialog(self):
-        """Let the user choose which optional preset fields to show."""
-        dlg = tk.Toplevel(self.root)
-        dlg.title("Preset Fields")
-        dlg.resizable(False, False)
-        dlg.transient(self.root)
-        dlg.grab_set()
-
-        bg = self.root.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
-        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
-        frame.pack(fill="both", expand=True)
-
-        tk.Label(frame, text="Show these optional fields when\n"
-                 "creating tone presets:",
-                 bg=bg, font=("Helvetica", 10), justify="left").pack(
-            pady=(0, 10), anchor="w")
-
-        field_labels = [
-            ("serial", "Serial #"),
-            ("reed", "Reed"),
-            ("ligature", "Ligature"),
-            ("room", "Room / Environment"),
-            ("preamp", "Preamp / Interface"),
-            ("mic_model", "Mic Model"),
-            ("notes", "Notes"),
-        ]
-
-        vis = self.settings.get("visible_preset_fields", {})
-        check_vars = {}
-        for key, label in field_labels:
-            var = tk.BooleanVar(value=vis.get(key, False))
-            tk.Checkbutton(frame, text=label, variable=var, bg=bg,
-                           font=("Helvetica", 10)).pack(anchor="w")
-            check_vars[key] = var
-
-        # Easter egg
-        _ns_var = tk.BooleanVar(value=False)
-        _ns_cb = tk.Checkbutton(frame, text="Heavy Mass Neck Screw",
-                                variable=_ns_var, bg=bg,
-                                font=("Helvetica", 10))
-        _ns_cb.pack(anchor="w")
-        _ns_msgs = ["No.", "Nope.", "Uh uh.", "I refuse.",
-                     "Forget it.", "Stop.", "Dude."]
-        _ns_idx = [0]
-
-        def _ns_remove():
-            pw = tk.Toplevel(dlg)
-            pw.title("Processing...")
-            pw.resizable(False, False)
-            pw.transient(dlg)
-            pw.grab_set()
-            pf = tk.Frame(pw, bg=bg, padx=20, pady=15)
-            pf.pack(fill="both", expand=True)
-            tk.Label(pf, text="Removing option...", bg=bg,
-                     font=("Helvetica", 10)).pack(pady=(0, 8))
-            pbar = ttk.Progressbar(pf, orient="horizontal",
-                                   length=250, mode="determinate")
-            pbar.pack()
-
-            def _tick(val):
-                pbar['value'] = val
-                if val < 100:
-                    if val < 70:
-                        delay = 40
-                    elif val < 90:
-                        delay = 200
-                    elif val < 99:
-                        delay = 500
-                    else:
-                        delay = 3000
-                    pw.after(delay, _tick, val + 1)
-                else:
-                    pw.after(300, lambda: (pw.destroy(), _ns_cb.pack_forget()))
-
-            _tick(0)
-
-        def _ns_click():
-            _ns_var.set(False)
-            if _ns_idx[0] < len(_ns_msgs):
-                messagebox.showinfo("", _ns_msgs[_ns_idx[0]], parent=dlg)
-                _ns_idx[0] += 1
-            if _ns_idx[0] >= len(_ns_msgs):
-                _ns_remove()
-
-        _ns_cb.configure(command=_ns_click)
-
-        def apply():
-            for key, var in check_vars.items():
-                vis[key] = var.get()
-            self.settings["visible_preset_fields"] = vis
-            save_settings(self.settings)
-            dlg.destroy()
-
-        btn_frame = tk.Frame(frame, bg=bg)
-        btn_frame.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_frame, text="Apply", command=apply).pack(
-            side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
-            side="left")
-
-    def _on_toner_record_wav_toggle(self):
-        """Toggle WAV recording setting."""
-        self.settings["toner_record_wav"] = self._toner_record_wav_var.get()
-        save_settings(self.settings)
-
-    def _open_toner_recording_dir(self):
-        """Let user choose where WAV recordings are saved."""
-        current = self.settings.get("toner_recording_dir", "")
-        if not current:
-            current = self._toner_get_recording_dir()
-        chosen = filedialog.askdirectory(
-            title="Choose Recording Folder",
-            initialdir=current if os.path.isdir(current) else os.path.expanduser("~"))
-        if chosen:
-            self.settings["toner_recording_dir"] = chosen
-            save_settings(self.settings)
 
     def _open_capture_threshold(self):
         """Open capture threshold dialog with live level meter."""

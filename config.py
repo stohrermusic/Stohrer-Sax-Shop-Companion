@@ -514,15 +514,12 @@ DEFAULT_SETTINGS = {
             "rolloff_shape": False,
         },
     },
-    "mic_type": "",        # "condenser", "ribbon", "dynamic", or ""
-    "mic_model": "",       # optional free-text, e.g. "AT2020 USB"
     "visible_preset_fields": {
         "serial": False,
         "reed": True,
         "ligature": False,
         "room": False,
         "preamp": False,
-        "mic_model": False,
         "notes": True,
     },
 
