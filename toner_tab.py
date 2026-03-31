@@ -1852,6 +1852,7 @@ class TonerTabMixin:
             ("player", "Player"),
             ("mouthpiece", "Mouthpiece"),
             ("mic_type", "Mic Type"),
+            ("mic_model", "Mic Model"),
         ]
         for key, label in required:
             if key in fields and not fields[key].get().strip():
