@@ -484,6 +484,7 @@ DEFAULT_SETTINGS = {
         "overall_brightness": 80,    # Overall brightness 0-100
         "octave_boost": 50,          # Dominant octave ring boost 0-100 (0=off, 50=1.5x, 100=2.0x)
         "faceplate_color": "#1A1A1A",  # Background/faceplate color
+        "show_fps": False,             # Show FPS counter on tuner display
     },
 
     # TONER SETTINGS (Tone Analyzer)
@@ -556,6 +557,7 @@ DEFAULT_SETTINGS = {
 
     # NESTING PREVIEW
     "show_preview": False,
+    "seen_preview_tutorial": False,
 
     # LAST USED LIBRARIES
     "last_pad_library": "My Presets",

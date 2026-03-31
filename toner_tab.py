@@ -994,13 +994,13 @@ class TonerTabMixin:
             self._toner_spectrum_bars.append(rect)
 
         # Harmonic markers
-        for i in range(12):
+        for i in range(MAX_HARMONICS):
             marker = cv.create_rectangle(0, 0, 0, 0, fill=HARMONIC_COLOR,
                                          outline="", width=0, state="hidden")
             self._toner_harmonic_markers.append(marker)
 
         # Ghost overlay markers (for comparison profile)
-        for i in range(12):
+        for i in range(MAX_HARMONICS):
             ghost = cv.create_line(0, 0, 0, 0, fill=GHOST_COLOR,
                                    width=2, state="hidden")
             self._toner_ghost_markers.append(ghost)
@@ -2269,12 +2269,15 @@ class TonerTabMixin:
                     self._toner_stable_count += 1
                     # Skip first few frames (attack transient ~100ms)
                     if self._toner_stable_count > ATTACK_SKIP_FRAMES:
-                        self._toner_free_accumulator.append({
+                        frame = {
                             'note': note,  # concert pitch (raw from engine)
                             'freq': result.fundamental_freq,
                             'harmonics_db': [h.magnitude_db for h in result.harmonics],
                             'harmonic_cents': [h.cents_deviation for h in result.harmonics],
-                        })
+                            'signal_level': result.signal_level,
+                            'spectral_centroid': result.spectral_centroid,
+                        }
+                        self._toner_free_accumulator.append(frame)
                 else:
                     # Note changed — save accumulated if enough, start new
                     self._toner_free_save_micro_capture()
@@ -2372,6 +2375,8 @@ class TonerTabMixin:
                     'freq': result.fundamental_freq,
                     'harmonics_db': [h.magnitude_db for h in result.harmonics],
                     'harmonic_cents': [h.cents_deviation for h in result.harmonics],
+                    'signal_level': result.signal_level,
+                    'spectral_centroid': result.spectral_centroid,
                 })
 
             remaining = CALIBRATION_DURATION_S - elapsed
@@ -2394,6 +2399,13 @@ class TonerTabMixin:
                         for f in self._toner_capture_frames)
                     top_detected = detected.most_common(1)[0][0] if detected else "?"
 
+                    # Average signal level and spectral centroid from frames
+                    _frames = self._toner_capture_frames
+                    _sigs = [f.get('signal_level', 0) for f in _frames if f.get('signal_level')]
+                    _avg_sig = round(sum(_sigs) / len(_sigs), 3) if _sigs else 0.0
+                    _scs = [f.get('spectral_centroid', 0) for f in _frames if f.get('spectral_centroid')]
+                    _avg_sc = round(sum(_scs) / len(_scs), 1) if _scs else 0.0
+
                     capture_entry = {
                         'note': concert_note,  # concert pitch (storage)
                         'written_note': display_note,  # written pitch (for reference)
@@ -2404,6 +2416,8 @@ class TonerTabMixin:
                         'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
                         'n_frames': len(self._toner_capture_frames),
                         'method': 'calibration',
+                        'signal_level': _avg_sig,
+                        'spectral_centroid': _avg_sc,
                     }
 
                     if self._toner_active_session is not None:
@@ -2457,6 +2471,12 @@ class TonerTabMixin:
         averaged = average_captures(note_frames)
         avg_freq = sum(f['freq'] for f in note_frames) / len(note_frames)
 
+        # Average signal level and spectral centroid from accumulated frames
+        sig_levels = [f.get('signal_level', 0) for f in note_frames if f.get('signal_level')]
+        avg_signal = round(sum(sig_levels) / len(sig_levels), 3) if sig_levels else 0.0
+        sc_vals = [f.get('spectral_centroid', 0) for f in note_frames if f.get('spectral_centroid')]
+        avg_sc = round(sum(sc_vals) / len(sc_vals), 1) if sc_vals else 0.0
+
         capture_entry = {
             'note': dominant_note,
             'fundamental_freq': round(avg_freq, 2),
@@ -2465,6 +2485,8 @@ class TonerTabMixin:
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'n_frames': len(note_frames),
             'method': 'free',
+            'signal_level': avg_signal,
+            'spectral_centroid': avg_sc,
         }
 
         if self._toner_active_session is not None:
@@ -3301,7 +3323,7 @@ class TonerTabMixin:
                         lines.append(f"{prefix}Descriptors are very similar.")
 
                     # Harmonic shift summary
-                    n = min(len(h_a), len(h_b), 12)
+                    n = min(len(h_a), len(h_b))
                     if n >= 2:
                         deltas = [(i, h_a[i] - h_b[i]) for i in range(1, n)]
                         biggest = max(deltas, key=lambda x: abs(x[1]))
@@ -3761,7 +3783,10 @@ class TonerTabMixin:
             self._toner_process_capture_frame(result)
 
         interval = FRAME_RATES.get(self._toner_fps_var.get(), 33)
-        self._toner_anim_id = self.root.after(interval, self._toner_animate)
+        try:
+            self._toner_anim_id = self.root.after(interval, self._toner_animate)
+        except tk.TclError:
+            pass  # Root window destroyed during shutdown
 
     def _toner_show_stream_error(self, error_msg):
         """Show audio stream error on the spectrum canvas with a retry option."""

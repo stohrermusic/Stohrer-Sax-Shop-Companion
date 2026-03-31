@@ -2792,7 +2792,7 @@ class UserGuideWindow(tk.Toplevel):
                     "your sound right now, and \u2014 more importantly \u2014 what "
                     "changes when you change something. It detects your "
                     "fundamental pitch and measures the strength of each "
-                    "harmonic overtone up to the 12th.")
+                    "harmonic overtone up to the 20th.")
         self._blank()
         self._body("Every reading captures the whole signal chain at once: "
                     "you + horn + mouthpiece + reed + mic + room. A single "
@@ -2932,7 +2932,7 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
         self._body("The spectrum bars show everything the gauges don't "
                     "capture \u2014 the complete harmonic shape from "
-                    "H1 through H12.")
+                    "H1 through H20.")
 
         self._h2("Delta Gauges")
         self._body("When you load a profile as an overlay (via Analyze \u2192 "
@@ -3044,6 +3044,105 @@ class UserGuideWindow(tk.Toplevel):
                     "to the Toner tab and stops when you leave it.")
         self._blank()
 
+        # === NERD INFO ===
+        self._h2("Nerd Info \u2014 How It Works Under the Hood")
+        self._body("For the technically curious, here's what's actually "
+                    "happening when you see those bars and gauges moving.")
+        self._blank()
+
+        self._body("FFT Pipeline")
+        self._bullet("The audio stream is analyzed using a 16,384-sample "
+                      "Fast Fourier Transform (FFT) at 44,100 Hz sample "
+                      "rate, giving 2.69 Hz frequency resolution \u2014 "
+                      "fine enough to resolve individual harmonics even "
+                      "on the lowest baritone notes.")
+        self._bullet("A Hann window is applied before the FFT to control "
+                      "spectral leakage. This is the standard window for "
+                      "harmonic analysis, providing good frequency "
+                      "resolution with \u221231.6 dB sidelobe suppression.")
+        self._blank()
+
+        self._body("Pitch Detection")
+        self._bullet("The fundamental is found by peak-picking with "
+                      "sub-harmonic verification. On saxophone, the 2nd "
+                      "or 3rd harmonic is often louder than the "
+                      "fundamental (especially in the low register), so "
+                      "the detector checks whether a strong peak might "
+                      "actually be H2, H3, H4, or H5 of a lower note "
+                      "by looking for that candidate's own harmonic "
+                      "series. This prevents octave errors.")
+        self._bullet("Temporal hysteresis prevents the detector from "
+                      "jumping between octaves frame-to-frame.")
+        self._blank()
+
+        self._body("Harmonic Measurement")
+        self._bullet("For each harmonic (up to the 20th), the algorithm "
+                      "finds the actual spectral peak within \u00b13 bins "
+                      "of the expected position, then refines both "
+                      "frequency and amplitude using parabolic "
+                      "interpolation (the standard CCRMA method). This "
+                      "corrects for up to 1.42 dB of scalloping loss "
+                      "that occurs when a harmonic falls between FFT bins.")
+        self._bullet("Harmonics are measured in dB relative to the "
+                      "fundamental. This normalizes out differences in "
+                      "volume and mic gain, so the harmonic shape is "
+                      "what you played, not how loud you were.")
+        self._bullet("Harmonics weaker than \u221260 dB relative to the "
+                      "fundamental are discarded as noise.")
+        self._blank()
+
+        self._body("Descriptors")
+        self._bullet("Complexity uses spectral flatness (the ratio of "
+                      "geometric mean to arithmetic mean of harmonic "
+                      "amplitudes). A pure tone has low flatness; a "
+                      "complex tone with many strong harmonics has high "
+                      "flatness. The coverage of significant harmonics "
+                      "(those above \u221235 dB) is factored in.")
+        self._bullet("Warmth measures the strength of the 2nd harmonic "
+                      "(the octave). A strong H2 produces a round, warm "
+                      "quality. This is consistent with acoustic "
+                      "research on even/odd harmonic ratios in wind "
+                      "instruments.")
+        self._bullet("Descriptors are never stored \u2014 they are always "
+                      "recomputed from raw harmonic data using the "
+                      "current formulas. This means improvements to the "
+                      "formulas apply retroactively to all historical "
+                      "captures.")
+        self._blank()
+
+        self._body("What Gets Saved")
+        self._bullet("Each capture stores the raw harmonic amplitudes "
+                      "(dB relative to fundamental), harmonic cents "
+                      "deviations, fundamental frequency, spectral "
+                      "centroid, and signal level. This is the raw "
+                      "measurement data \u2014 everything else is "
+                      "derived from it.")
+        self._bullet("Captures are averaged per-note first, then across "
+                      "notes with equal weight. This prevents register "
+                      "skew \u2014 a profile with 20 high-note captures "
+                      "and 3 low-note captures still represents the "
+                      "whole horn evenly.")
+        self._bullet("The first ~100 ms of each note is automatically "
+                      "skipped. The attack transient contains broadband "
+                      "non-harmonic energy that doesn't represent the "
+                      "sustained tone character (Saldanha & Corso 1964).")
+        self._blank()
+
+        self._body("Why Raw Data Matters")
+        self._bullet("The spectral centroid (amplitude-weighted center "
+                      "frequency of the harmonic series) is stored per "
+                      "capture as future-proofing. It is the single "
+                      "most validated acoustic correlate of perceived "
+                      "brightness in the research literature.")
+        self._bullet("Harmonics are stored up to the 20th, even though "
+                      "the current gauges only use the first few. Low "
+                      "register saxophone can produce 20+ audible "
+                      "harmonics, and future analysis tools may use "
+                      "the full picture.")
+        self._bullet("All of this means your captures today will be "
+                      "fully usable by better analysis tools tomorrow.")
+        self._blank()
+
     def _section_import_export(self):
         self._h2("Import / Export & Sharing")
         self._body("Each data tab supports importing and exporting so you can share "
@@ -3066,29 +3165,86 @@ class UserGuideWindow(tk.Toplevel):
 
 
 class AboutDialog(tk.Toplevel):
-    """Simple About dialog."""
+    """About dialog with feature summary and contact info."""
 
     def __init__(self, parent):
+        import webbrowser
         super().__init__(parent)
         self.title("About")
-        self.geometry("380x240")
+        self.geometry("440x520")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
         self.resizable(False, False)
 
         tk.Label(self, text="Stohrer Sax Shop Companion", bg=DIALOG_BG,
-                 font=("Helvetica", 14, "bold")).pack(pady=(20, 5))
+                 font=("Helvetica", 14, "bold")).pack(pady=(18, 3))
         tk.Label(self, text="by Matt Stohrer", bg=DIALOG_BG,
                  font=("Helvetica", 11)).pack()
         tk.Label(self, text="~Salingeresque Sax Repair Techno-poet~", bg=DIALOG_BG,
                  font=("Helvetica", 9, "italic")).pack()
         tk.Label(self, text=f"Version {APP_VERSION}  \u2022  Built {APP_BUILD_DATE}",
                  bg=DIALOG_BG, font=("Helvetica", 9)).pack(pady=(2, 0))
-        tk.Label(self, text="Pad cutting, key heights, serial lookup,\nand screw specs for saxophone technicians.",
-                 bg=DIALOG_BG, font=("Helvetica", 10), justify="center").pack(pady=10)
 
-        tk.Button(self, text="OK", command=self.destroy, width=10).pack(pady=10)
+        # Feature summary
+        features = (
+            "\u2022  SVG & G-code generation for laser-cut pads\n"
+            "\u2022  Key height library with import/export\n"
+            "\u2022  Serial number lookup\n"
+            "\u2022  OEM screw & rod specifications\n"
+            "\u2022  Die insert & die holder tooling\n"
+            "\u2022  Chromatic strobe tuner\n"
+            "\u2022  Harmonic tone analyzer"
+        )
+        tk.Label(self, text=features, bg=DIALOG_BG,
+                 font=("Helvetica", 10), justify="left",
+                 anchor="w").pack(padx=40, pady=(10, 0), fill="x")
+
+        # Separator
+        sep = tk.Frame(self, height=1, bg="#CCCCCC")
+        sep.pack(fill="x", padx=30, pady=10)
+
+        # Contact
+        tk.Label(self, text="Questions or feedback:",
+                 bg=DIALOG_BG, font=("Helvetica", 10)).pack()
+        tk.Label(self, text="stohrermusic@gmail.com",
+                 bg=DIALOG_BG, font=("Helvetica", 10, "bold")).pack()
+
+        # Separator
+        sep2 = tk.Frame(self, height=1, bg="#CCCCCC")
+        sep2.pack(fill="x", padx=30, pady=10)
+
+        # Donate section
+        tk.Label(self, text="Like this app? Want to say thanks?",
+                 bg=DIALOG_BG, font=("Helvetica", 10)).pack()
+        donate_text = (
+            "PayPal: stohrermusic@gmail.com\n"
+            "Venmo: @matthew-stohrer"
+        )
+        tk.Label(self, text=donate_text, bg=DIALOG_BG,
+                 font=("Helvetica", 10), justify="center").pack(pady=(4, 0))
+
+        # YouTube link
+        yt_frame = tk.Frame(self, bg=DIALOG_BG)
+        yt_frame.pack(pady=(2, 0))
+        tk.Label(yt_frame, text="Join my ", bg=DIALOG_BG,
+                 font=("Helvetica", 10)).pack(side="left")
+        yt_link = tk.Label(yt_frame, text="YouTube channel",
+                           bg=DIALOG_BG, fg="#0066CC",
+                           font=("Helvetica", 10, "underline"),
+                           cursor="hand2")
+        yt_link.pack(side="left")
+        yt_link.bind("<Button-1>",
+                     lambda e: webbrowser.open("https://www.youtube.com/@StohrerMusic"))
+        tk.Label(yt_frame, text=" as a paying member", bg=DIALOG_BG,
+                 font=("Helvetica", 10)).pack(side="left")
+
+        tk.Label(self, text="Or email me for my address to send a six-pack,\n"
+                 "some old tools, or whatever!",
+                 bg=DIALOG_BG, font=("Helvetica", 10),
+                 justify="center").pack(pady=(4, 0))
+
+        tk.Button(self, text="OK", command=self.destroy, width=10).pack(pady=(12, 15))
 
 
 class PadNotesWindow(tk.Toplevel):

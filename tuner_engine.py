@@ -218,11 +218,12 @@ class TunerEngine:
         """
         result = TunerResult()
 
-        if not self._running or self._ring_buffer is None:
+        buf = self._ring_buffer
+        if not self._running or buf is None:
             return result
 
         # Check stream health
-        if self._ring_buffer.is_stale():
+        if buf.is_stale():
             self._stale_count += 1
             if self._stale_count > STALE_RESTART_THRESHOLD:
                 self._stale_count = 0
@@ -231,7 +232,7 @@ class TunerEngine:
         else:
             self._stale_count = 0
 
-        audio = self._ring_buffer.read()
+        audio = buf.read()
         if audio is None:
             return result
 

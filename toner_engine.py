@@ -6,7 +6,7 @@ harmonic extraction, and tone descriptor computation. Pure math/audio —
 no tkinter dependency.
 
 Saxophone-specific: analyzes both even and odd harmonics (conical bore),
-up to the 12th harmonic, in the range relevant to saxophone (Bb2–F#6
+up to the 20th harmonic, in the range relevant to saxophone (Bb2–F#6
 fundamentals, harmonics up to ~8kHz).
 
 Requires: numpy, sounddevice (imported with try/except for graceful fallback)
@@ -39,7 +39,7 @@ BUFFER_SECONDS = 0.4          # 400ms for better low-frequency resolution
 BUFFER_SIZE = int(SAMPLE_RATE * BUFFER_SECONDS)
 FFT_SIZE = 16384              # ~370ms, ~2.69 Hz bin resolution
 
-MAX_HARMONICS = 12            # Analyze up to 12th harmonic
+MAX_HARMONICS = 20            # Analyze up to 20th harmonic
 SPECTRUM_MAX_HZ = 8000        # Display range for spectrum
 
 PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -156,6 +156,7 @@ class TonerResult:
         'harmonic_bars',         # list of (freq, magnitude_db) for bar-only mode
         'descriptors',           # dict: richness, warmth
         'signal_level',          # 0.0-1.0, RMS input level
+        'spectral_centroid',     # Hz, amplitude-weighted center of harmonic series
     ]
 
     def __init__(self):
@@ -172,6 +173,7 @@ class TonerResult:
             'low_harmonic_data': False,
         }
         self.signal_level = 0.0
+        self.spectral_centroid = 0.0
 
 
 # ============================================
@@ -314,11 +316,12 @@ class TonerEngine:
         """
         result = TonerResult()
 
-        if not self._running or self._ring_buffer is None:
+        buf = self._ring_buffer
+        if not self._running or buf is None:
             return result
 
         # Check stream health: if buffer is stale, the callback may have died
-        if self._ring_buffer.is_stale():
+        if buf.is_stale():
             self._stale_count += 1
             if self._stale_count > TONER_STALE_RESTART_THRESHOLD:
                 self._stale_count = 0
@@ -327,7 +330,7 @@ class TonerEngine:
         else:
             self._stale_count = 0
 
-        audio = self._ring_buffer.read()
+        audio = buf.read()
         if audio is None:
             return result
 
@@ -455,6 +458,14 @@ class TonerEngine:
         result.harmonic_bars = []
         for h in harmonics:
             result.harmonic_bars.append((h.expected_freq, h.magnitude_db))
+
+        # --- Spectral centroid of harmonic series ---
+        # Amplitude-weighted center frequency: sum(f * A) / sum(A)
+        if harmonics:
+            linear_amps = [10.0 ** (h.magnitude_db / 20.0) for h in harmonics]
+            freq_sum = sum(h.actual_freq * a for h, a in zip(harmonics, linear_amps))
+            amp_sum = sum(linear_amps)
+            result.spectral_centroid = freq_sum / amp_sum if amp_sum > 0 else 0.0
 
         # --- Compute descriptors ---
         result.descriptors = self._compute_descriptors(harmonics, f0)
@@ -620,7 +631,7 @@ class TonerEngine:
             local_peak_bin = search_lo + int(np.argmax(mags[search_lo:search_hi + 1]))
             peak_mag = float(mags[local_peak_bin])
 
-            # Parabolic interpolation
+            # Parabolic interpolation for frequency and amplitude
             if local_peak_bin > 0 and local_peak_bin < len(mags) - 1:
                 alpha = float(mags[local_peak_bin - 1])
                 beta = float(mags[local_peak_bin])
@@ -629,6 +640,10 @@ class TonerEngine:
                 if abs(denom) > 1e-10 and beta > 0:
                     p = 0.5 * (alpha - gamma) / denom
                     actual_freq = (local_peak_bin + p) * bin_freq
+                    # Amplitude correction: interpolated peak magnitude
+                    corrected = beta - 0.25 * (alpha - gamma) * p
+                    if corrected > 0:
+                        peak_mag = corrected
                 else:
                     actual_freq = local_peak_bin * bin_freq
             else:
@@ -1291,16 +1306,27 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
         n_frames = wf.getnframes()
         raw = wf.readframes(n_frames)
 
-    # Convert to float32 mono
+    # Convert to float32 mono (16-bit, 24-bit, 32-bit int, 32-bit float)
+    n_samples = n_frames * n_channels
     if sampwidth == 2:
-        samples = np.array(struct.unpack(f'<{n_frames * n_channels}h', raw),
+        samples = np.array(struct.unpack(f'<{n_samples}h', raw),
                           dtype=np.float32) / 32768.0
-    elif sampwidth == 4:
-        samples = np.array(struct.unpack(f'<{n_frames * n_channels}i', raw),
+    elif sampwidth == 3:
+        # 24-bit audio: pad each 3-byte sample to 4 bytes (sign-extend)
+        padded = bytearray(4 * n_samples)
+        for i in range(n_samples):
+            padded[i * 4 + 1] = raw[i * 3]
+            padded[i * 4 + 2] = raw[i * 3 + 1]
+            padded[i * 4 + 3] = raw[i * 3 + 2]
+        samples = np.array(struct.unpack(f'<{n_samples}i', bytes(padded)),
                           dtype=np.float32) / 2147483648.0
-    elif sampwidth == 1:
-        samples = np.array(struct.unpack(f'{n_frames * n_channels}B', raw),
-                          dtype=np.float32) / 128.0 - 1.0
+    elif sampwidth == 4:
+        # Try 32-bit float first (common DAW export), fall back to 32-bit int
+        samples = np.frombuffer(raw, dtype=np.float32).copy()
+        if np.any(np.abs(samples) > 2.0):
+            # Values > 2.0 means it's 32-bit int, not float
+            samples = np.array(struct.unpack(f'<{n_samples}i', raw),
+                              dtype=np.float32) / 2147483648.0
     else:
         return []
 
@@ -1360,7 +1386,7 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
         avg = average_captures(frames)
         if avg:
             avg_freq = sum(f['freq'] for f in frames) / len(frames)
-            return {
+            capture = {
                 'note': seg_note,
                 'fundamental_freq': round(avg_freq, 2),
                 'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
@@ -1368,6 +1394,18 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
                 'n_frames': len(frames),
                 'method': 'file',
             }
+            if avg.get('harmonic_cents'):
+                capture['harmonic_cents'] = [round(c, 2) for c in avg['harmonic_cents']]
+            # Spectral centroid from harmonics
+            h_db = avg['harmonics_db']
+            if h_db and avg_freq > 0:
+                lin = [10.0 ** (db / 20.0) for db in h_db]
+                freqs = [avg_freq * (i + 1) for i in range(len(h_db))]
+                amp_sum = sum(lin)
+                if amp_sum > 0:
+                    capture['spectral_centroid'] = round(
+                        sum(f * a for f, a in zip(freqs, lin)) / amp_sum, 1)
+            return capture
         return None
 
     for i in range(1, len(results)):

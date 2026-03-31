@@ -179,7 +179,7 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - **GPU/Canvas constant alignment**: Brightness constants (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) exist in three places that must stay in sync: `tuner_tab.py` (Python canvas path), `tuner_renderer/src/shader.wgsl` (GPU shader), and `tuner_renderer/src/renderer.rs` (GPU host). If you change one, change all three.
 
 **Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
-- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 12th harmonic (noise floor cutoff at -60 dB), descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
+- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
 - `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Profile management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Two live gauges: Complexity (spectral flatness — Pure ↔ Complex) and Warmth (H2 octave harmonic strength — Thin ↔ Warm). Brightness/darkness/resonance/fullness were removed after data analysis showed the labels didn't match player vocabulary and some descriptors didn't differentiate between horns.
@@ -223,9 +223,11 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 Profiles use nested library format: `{library_name: {profile_name: profile_data}}`. Each profile is a fixed setup (horn + player + mouthpiece + reed). Changing any variable means creating a new profile.
 
 A profile contains sessions (date + captures). **Captures store only raw measurement data** — no pre-computed descriptors:
-- `harmonics_db`: list of dB values relative to fundamental (index 0 = fundamental)
-- `harmonic_cents`: list of cents deviations from ideal harmonic positions (stored for future use)
+- `harmonics_db`: list of dB values relative to fundamental (up to 20 harmonics, index 0 = fundamental)
+- `harmonic_cents`: list of cents deviations from ideal harmonic positions
 - `fundamental_freq`: detected fundamental frequency in Hz
+- `spectral_centroid`: amplitude-weighted center frequency of the harmonic series (Hz)
+- `signal_level`: RMS signal level at capture time (0.0-1.0)
 - `note`: concert-pitch note name
 - `method`: "free", "calibration", or "file"
 - `n_frames`, `timestamp`, and other metadata

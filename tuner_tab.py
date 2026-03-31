@@ -1437,7 +1437,10 @@ class TunerTabMixin:
                 self._tuner_fps_last_update = 0.0
 
         interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
-        self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
+        try:
+            self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
+        except tk.TclError:
+            pass  # Root window destroyed during shutdown
 
     def _tuner_dump_perf_log(self):
         """Write collected perf samples to a debug log file."""

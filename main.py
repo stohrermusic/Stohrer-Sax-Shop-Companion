@@ -1127,10 +1127,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if hole_option == "3.0mm": return 3.0
         if hole_option == "Custom":
             try:
-                return float(self.custom_hole_entry.get())
+                val = float(self.custom_hole_entry.get())
             except (ValueError, TypeError):
                 messagebox.showerror("Invalid Input", "Custom hole size must be a valid number.")
                 return None
+            if val <= 0:
+                messagebox.showerror("Invalid Input", "Custom hole size must be greater than zero.")
+                return None
+            return val
         return 0
 
     def _prepare_generation(self):
@@ -1601,7 +1605,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if qty_str == 'max':
                     pad_list.append({'size': size, 'qty': 'max'})
                 else:
-                    pad_list.append({'size': size, 'qty': int(float(qty_str))})
+                    qty = int(float(qty_str))
+                    if qty > 0:
+                        pad_list.append({'size': size, 'qty': qty})
             except ValueError:
                 continue
         return pad_list
