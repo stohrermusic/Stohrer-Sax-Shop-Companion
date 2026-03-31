@@ -1585,8 +1585,8 @@ class TonerTabMixin:
         """Open the preset management dialog — central hub for all preset operations."""
         dlg = tk.Toplevel(self.root)
         dlg.title("Tone Presets")
-        dlg.geometry("550x500")
-        dlg.minsize(400, 350)
+        dlg.geometry("550x580")
+        dlg.minsize(400, 450)
         dlg.transient(self.root)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
@@ -1611,13 +1611,17 @@ class TonerTabMixin:
 
         self._toner_refresh_preset_list()
 
-        # Info display
-        self._preset_info_label = tk.Label(frame, text="Select a preset to see details.",
-                                          bg=bg, fg=fg,
-                                          font=("Helvetica", 9),
-                                          justify="left", anchor="w",
-                                          wraplength=500)
-        self._preset_info_label.pack(fill="x", pady=(0, 10))
+        # Info display (fixed height so long notes don't push buttons off screen)
+        info_frame = tk.Frame(frame, bg=bg)
+        info_frame.pack(fill="both", expand=True, pady=(0, 10))
+        self._preset_info_text = tk.Text(info_frame, height=8, wrap="word",
+                                          font=("Helvetica", 9), bg=bg, fg=fg,
+                                          relief="flat", padx=4, pady=4,
+                                          state="disabled")
+        info_scroll = tk.Scrollbar(info_frame, command=self._preset_info_text.yview)
+        self._preset_info_text.configure(yscrollcommand=info_scroll.set)
+        info_scroll.pack(side="right", fill="y")
+        self._preset_info_text.pack(side="left", fill="both", expand=True)
 
         self._preset_listbox.bind("<<ListboxSelect>>",
                                 lambda e: self._toner_on_preset_selected())
@@ -1691,11 +1695,16 @@ class TonerTabMixin:
             return
         key = self._preset_list_keys[sel[0]]
         if key is None:
-            self._preset_info_label.configure(text="")
+            self._preset_info_text.configure(state="normal")
+            self._preset_info_text.delete("1.0", tk.END)
+            self._preset_info_text.configure(state="disabled")
             return  # Library header
         lib_name, preset_name = key
         preset = self._toner_presets[lib_name][preset_name]
-        self._preset_info_label.configure(text=_format_preset_info(preset))
+        self._preset_info_text.configure(state="normal")
+        self._preset_info_text.delete("1.0", tk.END)
+        self._preset_info_text.insert("1.0", _format_preset_info(preset))
+        self._preset_info_text.configure(state="disabled")
 
     def _toner_edit_preset_notes(self):
         """Edit the notes field of the selected preset."""
@@ -1750,7 +1759,7 @@ class TonerTabMixin:
             preset['notes'] = new_notes
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             # Refresh info display if preset dialog is open
-            if hasattr(self, '_preset_info_label'):
+            if hasattr(self, '_preset_info_text'):
                 try:
                     self._toner_on_preset_selected()
                 except Exception:
@@ -2021,7 +2030,9 @@ class TonerTabMixin:
                 self._toner_active_preset = None
                 self._toner_active_session = None
             self._toner_refresh_preset_list()
-            self._preset_info_label.configure(text="")
+            self._preset_info_text.configure(state="normal")
+            self._preset_info_text.delete("1.0", tk.END)
+            self._preset_info_text.configure(state="disabled")
 
     # ------------------------------------------------------------------
     # CAPTURE SYSTEM (auto-detect stable tones)
