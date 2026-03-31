@@ -271,19 +271,22 @@ class TonerTabMixin:
         gauge_row = 0
 
         # --- Row 0: Intonation gauge + note display ---
+        intonation_row = tk.Frame(gauge_frame, bg=bg)
+        intonation_row._skip_theme = True
+        intonation_row.grid(row=gauge_row, column=0, columnspan=3, pady=(2, 0))
+
         self._toner_intonation_canvas = tk.Canvas(
-            gauge_frame, bg=bg, highlightthickness=0, width=240, height=100)
+            intonation_row, bg=bg, highlightthickness=0, width=240, height=100)
         self._toner_intonation_canvas._dark_canvas = True
-        self._toner_intonation_canvas.grid(row=gauge_row, column=1,
-                                            pady=(2, 0))
+        self._toner_intonation_canvas.pack(side="left", expand=True)
         self._toner_intonation_gauge = self._toner_build_intonation_gauge(
             self._toner_intonation_canvas)
         self._toner_smooth_cents = 0.0
 
         # Note display + in-tune lamp to the right of intonation gauge
-        note_frame = tk.Frame(gauge_frame, bg=bg)
+        note_frame = tk.Frame(intonation_row, bg=bg)
         note_frame._skip_theme = True
-        note_frame.grid(row=gauge_row, column=2, sticky="ns", padx=(4, 2))
+        note_frame.pack(side="left", padx=(4, 2))
 
         self._toner_note_label = tk.Label(
             note_frame, text="\u2014", bg=bg, fg=LABEL_DIM,
