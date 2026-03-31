@@ -1870,6 +1870,27 @@ class TonerTabMixin:
             if d.get('notes'):
                 notes_text.insert("1.0", d['notes'])
 
+        # Mic status (read-only, from global settings)
+        mic_row = tk.Frame(frame, bg=bg)
+        mic_row.pack(fill="x", pady=(6, 0))
+        mic_type = self.settings.get("mic_type", "")
+        mic_model = self.settings.get("mic_model", "")
+        if mic_type:
+            mic_text = f"{mic_type.capitalize()}"
+            if mic_model:
+                mic_text += f" ({mic_model})"
+            mic_fg = "#666666"
+        else:
+            mic_text = "not set"
+            mic_fg = "#CC6600"
+        tk.Label(mic_row, text="Mic:", bg=bg, fg=fg, width=14,
+                 anchor="e", font=("Helvetica", 10)).pack(
+            side="left", padx=(0, 8))
+        mic_label = tk.Label(mic_row, text=mic_text, bg=bg, fg=mic_fg,
+                             font=("Helvetica", 10), cursor="hand2")
+        mic_label.pack(side="left")
+        mic_label.bind("<Button-1>", lambda e: self._toner_open_settings())
+
         return fields, lib_var, notes_text
 
     def _toner_validate_required_fields(self, fields, dlg):
