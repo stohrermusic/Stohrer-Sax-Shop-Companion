@@ -144,6 +144,8 @@ build.py               → Cross-platform PyInstaller build script
 
 Key difference: dart ranges return None on no match (opt-in), while the other three always return a dict (every pad needs values).
 
+**Darted leather engraving**: Leather pads with darts use the `darted_leather` key in `engraving_location` for placement (default 2.5mm from outside), separate from regular `leather` placement. The dart config's `engraving_on` flag still controls whether darted leather is engraved at all.
+
 **Nesting Algorithm**: `_nest_discs()` implements greedy circle-packing, shared by both `can_all_pads_fit()` and `generate_svg()`. Supports both rectangular sheets and custom polygon shapes. `nest_pads()` is the public API for the preview window. Edge bias controls scan direction: cardinal (N/S/E/W) scan linearly from the edge, corners (NW/NE/SW/SE) use distance-from-corner scoring with smallest-first sort order for efficient corner packing.
 
 **Nesting Preview**: `NestingPreviewWindow` in ui_dialogs.py shows the nested layout before file generation. Works in standard mode (one material at a time) and scrap mode. The generate flow nests first via `nest_pads()`, shows the preview, then writes files via `generate_svg_from_placed()` / `generate_gcode_from_placed()` — no double-nesting.
@@ -179,7 +181,7 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - **GPU/Canvas constant alignment**: `DIM_MULTIPLIER` exists in three places that must stay in sync: `tuner_tab.py` (Python canvas path), `tuner_renderer/src/shader.wgsl` (GPU shader), and `tuner_renderer/src/renderer.rs` (GPU host). `BRIGHTNESS_GAMMA` exists in two places: `tuner_tab.py` and `renderer.rs` (applied in host code, not the shader). If you change either constant, update all locations.
 
 **Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
-- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Preset storage uses `load_tone_presets()`/`save_tone_presets()` with nested library format `{library: {preset: data}}`.
+- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Preset storage uses `load_tone_presets()`/`save_tone_presets()` with `TONER_DATA_FILE` (`toner_data.json`, auto-migrated from old `tone_profiles.json`).
 - `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Preset management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Two live gauges: Complexity (spectral flatness — Pure ↔ Complex) and Warmth (H2 octave harmonic strength — Thin ↔ Warm). Brightness/darkness/resonance/fullness were removed after data analysis showed the labels didn't match player vocabulary and some descriptors didn't differentiate between horns.
@@ -188,8 +190,10 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
 - Spectrum overlay: a preset can be loaded as a ghost overlay on the live spectrum (via Analyze > single preset or group average > Overlay on Spectrum). Blue ghost bars update per-note as you play. Live delta gauges were removed — the analyze tool (both sides averaged) is where comparison actually works.
 - Recording quality: `compute_rolloff_rate()` measures harmonic rolloff (dB/harmonic). Live warning if rolloff > 2.5 dB/H. Stored per session and in fingerprints. Comparison tool warns on mismatch.
-- Mic type/model: required `mic_type` (condenser/ribbon/dynamic) set in Options > Input Device, stamped on every session. Comparison tool filters by mic type.
-- Analyze tool (renamed from Compare): handles single preset view, two-preset delta analysis with difference chart, and multi-preset spread analysis. Replaces the old separate Report tool.
+- Mic type/model: `mic_type` (condenser/ribbon/dynamic, required) and `mic_model` (required) are preset fields, same as mouthpiece and reed. Sessions snapshot mic from the preset at creation time. The control strip shows the loaded preset's mic info. Comparison tool filters by mic type and warns on mismatches. Migration: presets without mic fields get backfilled from their sessions' most common mic_type on first load.
+- Analyze tool (renamed from Compare): handles single preset view, two-preset delta analysis with difference chart, and multi-preset spread analysis. Replaces the old separate Report tool. Analysis descriptors (complexity, warmth, even/odd, rolloff shape) are user-configurable in Options > Settings > Analysis tab. Even/odd and rolloff shape default to off and are marked [beta].
+- Mutate preset: duplicates a preset with all fields pre-filled (name cleared), letting users change one variable (mouthpiece, mic, reed) and save as a new preset. Streamlines A/B testing workflows.
+- Settings dialog: Options > Settings opens a tabbed dialog (General: input device, recording, pitch; Analysis: preset fields, descriptor visibility). Capture Threshold stays as a standalone menu item due to its live level meter.
 - Three capture modes: "free" (0.5s stability, continuous micro-captures while playing naturally), "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
 - Auto-transposition: SAX selector sets both the break frequency and the displayed note names. Written pitch is shown by default (alto shows A4 when concert C4 is played). "Concert" checkbox overrides to concert pitch.
 - Coverage summary dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
@@ -218,11 +222,11 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `pad_presets.json` - Saved pad size lists
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
-- `toner_data.json` - Tone analyzer presets and sessions (nested library format, migrated from `tone_profiles.json`)
+- `toner_data.json` - Tone analyzer presets and sessions (nested library format; auto-migrated from old `tone_profiles.json`)
 
 ### Tone Preset Data Model
 
-Presets use nested library format: `{library_name: {preset_name: preset_data}}`. A preset saves setup details (horn + player + mouthpiece + reed) and pre-fills session metadata for quick capture start. Sessions store their own copy of the metadata at creation time.
+Presets use nested library format: `{library_name: {preset_name: preset_data}}`. A preset saves setup details (horn + player + mouthpiece + reed + mic type + mic model) and pre-fills session metadata for quick capture start. Sessions store their own copy of the metadata at creation time.
 
 A preset contains sessions (date + captures). **Captures store only raw measurement data** — no pre-computed descriptors:
 - `harmonics_db`: list of dB values relative to fundamental (up to 20 harmonics, index 0 = fundamental)
