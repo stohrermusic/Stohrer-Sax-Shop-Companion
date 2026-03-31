@@ -1627,20 +1627,20 @@ class TonerTabMixin:
                                 lambda e: self._toner_on_preset_selected())
 
         # --- Action buttons: two rows ---
-        # Row 1: preset operations
+        # Row 1: preset operations (need selection)
         row1 = tk.Frame(frame, bg=bg)
         row1.pack(fill="x", pady=(0, 5))
 
-        tk.Button(row1, text="Load for Capture",
-                  command=lambda: self._toner_load_from_dialog(dlg)).pack(
-                      side="left", padx=(0, 5))
-        tk.Button(row1, text="Analyze...",
+        btn_load = tk.Button(row1, text="Load for Capture", state="disabled",
+                  command=lambda: self._toner_load_from_dialog(dlg))
+        btn_load.pack(side="left", padx=(0, 5))
+        btn_analyze = tk.Button(row1, text="Analyze...", state="disabled",
                   command=lambda: [dlg.destroy(),
-                                   self._toner_open_analyze_dialog()]).pack(
-                      side="left", padx=(0, 5))
-        tk.Button(row1, text="Edit Notes...",
-                  command=self._toner_edit_preset_notes).pack(
-                      side="left", padx=(0, 5))
+                                   self._toner_open_analyze_dialog()])
+        btn_analyze.pack(side="left", padx=(0, 5))
+        btn_notes = tk.Button(row1, text="Edit Notes...", state="disabled",
+                  command=self._toner_edit_preset_notes)
+        btn_notes.pack(side="left", padx=(0, 5))
 
         # Row 2: create, import, delete, close
         row2 = tk.Frame(frame, bg=bg)
@@ -1649,18 +1649,21 @@ class TonerTabMixin:
         tk.Button(row2, text="New Preset...",
                   command=lambda: self._toner_new_preset(dlg)).pack(
                       side="left", padx=(0, 5))
-        tk.Button(row2, text="Mutate...",
-                  command=self._toner_mutate_preset).pack(
-                      side="left", padx=(0, 5))
+        btn_mutate = tk.Button(row2, text="Mutate...", state="disabled",
+                  command=self._toner_mutate_preset)
+        btn_mutate.pack(side="left", padx=(0, 5))
         tk.Button(row2, text="Import Audio File...",
                   command=lambda: [dlg.destroy(),
                                    self._toner_import_audio_file()]).pack(
                       side="left", padx=(0, 5))
-        tk.Button(row2, text="Delete",
-                  command=self._toner_delete_preset).pack(
-                      side="left", padx=(0, 5))
+        btn_delete = tk.Button(row2, text="Delete", state="disabled",
+                  command=self._toner_delete_preset)
+        btn_delete.pack(side="left", padx=(0, 5))
         tk.Button(row2, text="Close",
                   command=dlg.destroy).pack(side="right")
+
+        self._preset_selection_btns = [btn_load, btn_analyze, btn_notes,
+                                        btn_mutate, btn_delete]
 
     def _toner_refresh_preset_list(self):
         """Refresh the preset listbox (nested library structure)."""
@@ -1698,6 +1701,8 @@ class TonerTabMixin:
             self._preset_info_text.configure(state="normal")
             self._preset_info_text.delete("1.0", tk.END)
             self._preset_info_text.configure(state="disabled")
+            for btn in self._preset_selection_btns:
+                btn.configure(state="disabled")
             return  # Library header
         lib_name, preset_name = key
         preset = self._toner_presets[lib_name][preset_name]
@@ -1705,6 +1710,8 @@ class TonerTabMixin:
         self._preset_info_text.delete("1.0", tk.END)
         self._preset_info_text.insert("1.0", _format_preset_info(preset))
         self._preset_info_text.configure(state="disabled")
+        for btn in self._preset_selection_btns:
+            btn.configure(state="normal")
 
     def _toner_edit_preset_notes(self):
         """Edit the notes field of the selected preset."""
