@@ -1155,9 +1155,17 @@ class TonerTabMixin:
 
         descriptor_info = [
             ("richness", "Complexity", None,
-             None),
+             "Spectral flatness — how evenly energy is spread "
+             "across the harmonic series.\n\n"
+             "Higher values = many harmonics at similar strength "
+             "(complex, rich tone).\n"
+             "Lower values = energy concentrated in fewer harmonics "
+             "(purer, simpler tone)."),
             ("warmth", "Warmth", None,
-             None),
+             "Strength of the second harmonic (H2, one octave above "
+             "the fundamental) relative to the fundamental.\n\n"
+             "Higher values = strong octave harmonic (warm, full tone).\n"
+             "Lower values = weak octave harmonic (thinner tone)."),
             ("even_odd", "Even/Odd Harmonic Balance", "beta",
              "Measures the ratio of even harmonic energy (H2, H4, H6...) "
              "to odd harmonic energy (H3, H5, H7...).\n\n"
@@ -1190,11 +1198,10 @@ class TonerTabMixin:
             tk.Label(row, text=display, bg=bg, fg=fg,
                      font=("Helvetica", 10)).pack(side="left")
 
-            if info_text:
-                def make_info_cmd(title=label, text=info_text):
-                    return lambda: messagebox.showinfo(title, text, parent=dlg)
-                tk.Button(row, text="?", width=2, font=("Helvetica", 8),
-                          command=make_info_cmd()).pack(side="left", padx=(6, 0))
+            def make_info_cmd(title=label, text=info_text):
+                return lambda: messagebox.showinfo(title, text, parent=dlg)
+            tk.Button(row, text="?", width=2, font=("Helvetica", 8),
+                      command=make_info_cmd()).pack(side="left", padx=(6, 0))
 
         # --- Buttons ---
         btn_frame = tk.Frame(frame, bg=bg)
