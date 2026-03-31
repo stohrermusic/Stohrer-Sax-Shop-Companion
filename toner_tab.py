@@ -3351,17 +3351,23 @@ class TonerTabMixin:
                             # Shifts concentrated in upper harmonics
                             if low_shift < 2.0:
                                 lines.append(
-                                    f"{prefix}Shifts concentrated in upper harmonics "
-                                    "\u2014 consistent with neck or mouthpiece differences. "
-                                    "Low harmonics are similar (body/bore is comparable).")
+                                    f"{prefix}Shifts concentrated in upper harmonics. "
+                                    "Based on limited data, this pattern may suggest "
+                                    "neck or mouthpiece differences, though other "
+                                    "factors could contribute. Low harmonics are "
+                                    "relatively similar.")
                             else:
                                 lines.append(
-                                    f"{prefix}Broadband shifts across H2\u2013H12 "
-                                    "\u2014 consistent with a mouthpiece or player difference.")
+                                    f"{prefix}Broadband shifts across H2\u2013H12. "
+                                    "This pattern is often associated with mouthpiece "
+                                    "or player differences, but the causes of harmonic "
+                                    "variation are not fully understood.")
                         elif low_shift > 2.0 and low_shift > mid_shift:
                             lines.append(
-                                f"{prefix}Shifts concentrated in low harmonics (H2\u2013H4) "
-                                "\u2014 this range is shaped primarily by the bore.")
+                                f"{prefix}Shifts concentrated in low harmonics "
+                                "(H2\u2013H4). Research suggests this range is "
+                                "influenced more by the bore than by the mouthpiece, "
+                                "but we are still learning what drives these differences.")
 
                     # Player context
                     p1 = fingerprints[0].get('_profile', {}).get('player', '')
@@ -3369,14 +3375,17 @@ class TonerTabMixin:
                     if p1 and p2:
                         if p1.lower() == p2.lower():
                             lines.append(
-                                f"\nSame player ({p1}) \u2014 differences reflect "
-                                "horn, neck, mouthpiece, or reed, not embouchure.")
+                                f"\nSame player ({p1}) \u2014 differences likely "
+                                "reflect horn, neck, mouthpiece, or reed rather "
+                                "than embouchure, though day-to-day variation in "
+                                "a player's sound is always a factor.")
                         else:
                             lines.append(
                                 f"\nDifferent players ({p1} vs {p2}) \u2014 "
-                                "cannot fully separate horn effect from "
-                                "player/mouthpiece effect. Use Core Tone (H2\u2013H4) "
-                                "for the most player-independent comparison.")
+                                "player and mouthpiece effects can be as large as "
+                                "horn differences. Core Tone (H2\u2013H4) tends to "
+                                "be more stable across players, but treat all "
+                                "cross-player comparisons as suggestive, not definitive.")
             elif len(fingerprints) > 2:
                 for label, key in desc_labels:
                     values = [(fingerprints[i]['_name'],
