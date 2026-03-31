@@ -500,7 +500,7 @@ DEFAULT_SETTINGS = {
     },
     "mic_type": "",        # "condenser", "ribbon", "dynamic", or ""
     "mic_model": "",       # optional free-text, e.g. "AT2020 USB"
-    "visible_profile_fields": {
+    "visible_preset_fields": {
         "serial": False,
         "reed": True,
         "ligature": False,
@@ -508,10 +508,6 @@ DEFAULT_SETTINGS = {
         "preamp": False,
         "mic_model": False,
         "notes": True,
-    },
-    "visible_delta_gauges": {
-        "spectral_tilt": True,
-        "mid_harmonic": True,
     },
 
     # TOOLING SETTINGS (Die Inserts & Die Holders)

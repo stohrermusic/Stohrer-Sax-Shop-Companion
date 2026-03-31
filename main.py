@@ -279,18 +279,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
-        toner_file_menu.add_command(label="Profiles...", command=self._toner_open_profile_dialog)
+        toner_file_menu.add_command(label="Presets...", command=self._toner_open_profile_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
         toner_file_menu.add_cascade(label="Transfer Data", menu=toner_transfer_menu)
-        toner_transfer_menu.add_command(label="Export Profile Library...", command=self._toner_export_profiles)
-        toner_transfer_menu.add_command(label="Import Profile Library...", command=self._toner_import_profiles)
+        toner_transfer_menu.add_command(label="Export Preset Library...", command=self._toner_export_profiles)
+        toner_transfer_menu.add_command(label="Import Preset Library...", command=self._toner_import_profiles)
 
         toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
         toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
         toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
-        toner_options_menu.add_command(label="Profile Fields...", command=self._open_profile_fields_dialog)
+        toner_options_menu.add_command(label="Preset Fields...", command=self._open_profile_fields_dialog)
         self._toner_record_wav_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
         toner_options_menu.add_checkbutton(label="Record WAV During Capture",
                                             variable=self._toner_record_wav_var,
@@ -2023,10 +2023,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     f"A {val} mic can still be used with the Tone "
                     f"Analyzer, but upper harmonics will be attenuated.\n\n"
                     f"Warmth readings remain accurate. Complexity and "
-                    f"full harmonic profiles will be less reliable.\n\n"
-                    f"Profiles captured with a {val} mic can only be "
+                    f"full harmonic data will be less reliable.\n\n"
+                    f"Sessions captured with a {val} mic can only be "
                     f"meaningfully compared with other {val} mic "
-                    f"profiles.",
+                    f"sessions.",
                     parent=dlg)
         mic_type_combo.bind("<<ComboboxSelected>>", _on_mic_type_changed)
 
@@ -2065,7 +2065,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _open_profile_fields_dialog(self):
         """Let the user choose which optional profile fields to show."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("Profile Fields")
+        dlg.title("Preset Fields")
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -2075,7 +2075,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         frame.pack(fill="both", expand=True)
 
         tk.Label(frame, text="Show these optional fields when\n"
-                 "creating tone profiles:",
+                 "creating tone presets:",
                  bg=bg, font=("Helvetica", 10), justify="left").pack(
             pady=(0, 10), anchor="w")
 
@@ -2089,7 +2089,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             ("notes", "Notes"),
         ]
 
-        vis = self.settings.get("visible_profile_fields", {})
+        vis = self.settings.get("visible_preset_fields", {})
         check_vars = {}
         for key, label in field_labels:
             var = tk.BooleanVar(value=vis.get(key, False))
@@ -2151,7 +2151,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         def apply():
             for key, var in check_vars.items():
                 vis[key] = var.get()
-            self.settings["visible_profile_fields"] = vis
+            self.settings["visible_preset_fields"] = vis
             save_settings(self.settings)
             dlg.destroy()
 
@@ -2359,7 +2359,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 "A microphone picks up your sound, an FFT extracts the harmonic "
                 "series, and the gauges show you what's happening in real time. "
-                "You can capture snapshots, build profiles for different setups "
+                "You can capture sessions, save presets for different setups "
                 "(horn + mouthpiece + player + reed), and compare them side by "
                 "side.\n\n"
 
@@ -2389,7 +2389,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "what that variable did. Over time, the things that stay the same "
                 "start to emerge from the things that drift.\n\n"
 
-                "We need more data to make the descriptors better. Every profile "
+                "We need more data to make the descriptors better. Every session "
                 "you capture helps."
             )
             txt.insert("1.0", content)

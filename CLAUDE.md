@@ -176,7 +176,7 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - `tuner_tab.py`: All tkinter UI — `StrobeWheel` class renders one disc (annular sector polygons with wedge mask), `TunerTabMixin` builds the tab with control panel: three labeled slider groups (DISP: SENS/BRIGHT/FPS | PITCH: A=/KEY | BIAS: NOTE per-wheel/OCT. per-ring), flat/pilot/sharp indicator, vintage backlit VU meter. The VU needle has damped movement (lerp toward target each frame). Sensitivity uses a quadratic gain curve (`sens**2`) so the low end of the slider has fine control. Theme walker is bypassed via `_skip_theme` and `_dark_canvas` flags on all dark widgets.
 - The tuner auto-starts/stops when switching tabs (`_tuner_start`/`_tuner_stop` called from `on_tab_changed` in main.py).
 - Transposition support: wheel labels and VU readout both apply the shift from TRANSPOSITION_SHIFTS, with octave correction when the shift wraps past C.
-- **GPU/Canvas constant alignment**: Brightness constants (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) exist in three places that must stay in sync: `tuner_tab.py` (Python canvas path), `tuner_renderer/src/shader.wgsl` (GPU shader), and `tuner_renderer/src/renderer.rs` (GPU host). If you change one, change all three.
+- **GPU/Canvas constant alignment**: `DIM_MULTIPLIER` exists in three places that must stay in sync: `tuner_tab.py` (Python canvas path), `tuner_renderer/src/shader.wgsl` (GPU shader), and `tuner_renderer/src/renderer.rs` (GPU host). `BRIGHTNESS_GAMMA` exists in two places: `tuner_tab.py` and `renderer.rs` (applied in host code, not the shader). If you change either constant, update all locations.
 
 **Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
 - `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
@@ -275,7 +275,7 @@ A web form at https://www.stohrermusic.com/articles/screw-specs-library/ (Submit
 
 After reviewing submissions in the Google Sheet:
 
-1. **Update the app's screw_specs.json**: Edit `C:\code\saxshopcompanion\static\data\screw_specs.json` (or the user's local config file) to add verified entries. Format:
+1. **Update the app's screw_specs.json**: Edit the user's local config file (platform config directory) to add verified entries. Format:
    ```json
    "Manufacturer": {
      "Model": {

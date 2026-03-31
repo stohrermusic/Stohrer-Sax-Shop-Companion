@@ -31,7 +31,7 @@ try:
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         compute_session_fingerprint, compute_session_variation,
         compute_group_fingerprint, compute_rolloff_rate,
-        compute_delta_descriptors,
+
         ROLLOFF_WARN_THRESHOLD, ROLLOFF_MIN_CAPTURES,
         load_tone_profiles, save_tone_profiles,
         analyze_audio_file, check_mic_quality,
@@ -271,22 +271,19 @@ class TonerTabMixin:
         gauge_row = 0
 
         # --- Row 0: Intonation gauge + note display ---
-        intonation_row = tk.Frame(gauge_frame, bg=bg)
-        intonation_row._skip_theme = True
-        intonation_row.grid(row=gauge_row, column=0, columnspan=3, pady=(2, 0))
-
         self._toner_intonation_canvas = tk.Canvas(
-            intonation_row, bg=bg, highlightthickness=0, width=240, height=100)
+            gauge_frame, bg=bg, highlightthickness=0,
+            width=GAUGE_WIDTH, height=GAUGE_HEIGHT)
         self._toner_intonation_canvas._dark_canvas = True
-        self._toner_intonation_canvas.pack(side="left", expand=True)
+        self._toner_intonation_canvas.grid(row=gauge_row, column=0, pady=(2, 0))
         self._toner_intonation_gauge = self._toner_build_intonation_gauge(
             self._toner_intonation_canvas)
         self._toner_smooth_cents = 0.0
 
         # Note display + in-tune lamp to the right of intonation gauge
-        note_frame = tk.Frame(intonation_row, bg=bg)
+        note_frame = tk.Frame(gauge_frame, bg=bg)
         note_frame._skip_theme = True
-        note_frame.pack(side="left", padx=(4, 2))
+        note_frame.grid(row=gauge_row, column=1, sticky="w", padx=(4, 2))
 
         self._toner_note_label = tk.Label(
             note_frame, text="\u2014", bg=bg, fg=LABEL_DIM,
@@ -328,60 +325,11 @@ class TonerTabMixin:
             cv = tk.Canvas(gauge_frame, bg=bg, highlightthickness=0,
                            width=260, height=110)
             cv._dark_canvas = True
-            cv.grid(row=gauge_row, column=0, columnspan=3, pady=(2, 0))
+            cv.grid(row=gauge_row, column=0, pady=(2, 0))
             gauge_data = self._toner_build_gauge(cv, left_label, right_label)
             self._toner_gauges[key] = gauge_data
 
             gauge_row += 1
-
-        # --- Delta mode toggle + comparison-only gauges ---
-        self._toner_delta_mode = tk.BooleanVar(value=False)
-        self._toner_delta_frame = tk.Frame(gauge_frame, bg=bg)
-        self._toner_delta_frame._skip_theme = True
-        # Hidden until an overlay is loaded
-        self._toner_delta_row = gauge_row
-
-        delta_toggle = tk.Checkbutton(
-            self._toner_delta_frame, text="\u0394 Delta",
-            variable=self._toner_delta_mode, bg=bg, fg=LABEL_DIM,
-            selectcolor="#333333", activebackground=bg,
-            activeforeground=LABEL_DIM,
-            font=("Helvetica", 8, "bold"))
-        delta_toggle.pack(side="left", padx=4)
-        gauge_row += 1
-
-        # Comparison-only gauges (spectral tilt, mid-harmonic)
-        self._toner_delta_gauges = {}
-        self._toner_delta_gauge_frames = {}
-        delta_vis = self.settings.get("visible_delta_gauges", {})
-        delta_gauge_defs = [
-            ("spectral_tilt", "Darker", "Brighter", "Spectral Tilt"),
-            ("mid_harmonic", "Weaker", "Stronger", "Mid-Harmonic (H3\u2013H6)"),
-        ]
-
-        for key, left_label, right_label, title in delta_gauge_defs:
-            frame = tk.Frame(gauge_frame, bg=bg)
-            frame._skip_theme = True
-            self._toner_delta_gauge_frames[key] = (frame, gauge_row)
-
-            # Title label above gauge
-            tk.Label(frame, text=title, bg=bg, fg=LABEL_DIM,
-                     font=("Helvetica", 7)).pack()
-
-            cv = tk.Canvas(frame, bg=bg, highlightthickness=0,
-                           width=260, height=100)
-            cv._dark_canvas = True
-            cv.pack()
-            gauge_data = self._toner_build_gauge(cv, left_label, right_label,
-                                                  centered=True)
-            self._toner_delta_gauges[key] = gauge_data
-            gauge_row += 1
-
-        # Initialize delta smooth values
-        self._toner_delta_smooth = {
-            'richness_delta': 0.0, 'warmth_delta': 0.0,
-            'spectral_tilt': 0.0, 'mid_harmonic': 0.0,
-        }
 
         # --- Capture status bar (hidden until active) ---
         self._toner_capture_frame = tk.Frame(self._toner_main_frame, bg="#333300")
@@ -554,7 +502,7 @@ class TonerTabMixin:
 
         # Profile indicator + Load/Unload toggle
         self._toner_profile_label = tk.Label(
-            right_col, text="no profile", bg=ctrl_bg, fg="#666666",
+            right_col, text="no preset", bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 8))
         self._toner_profile_label.pack(side="left", padx=(0, 4))
 
@@ -909,64 +857,26 @@ class TonerTabMixin:
             cv.itemconfigure(gauge['needle_id'], fill=needle_color)
             cv.itemconfigure(gauge['shadow_id'], fill=shadow_color)
 
-    def _toner_show_delta_gauges(self, show):
-        """Show or hide the delta toggle and comparison-only gauges.
+    def _toner_set_overlay(self, fingerprint, name):
+        """Set a fingerprint as the live spectrum ghost overlay."""
+        self._toner_comparison = fingerprint
+        if hasattr(self, '_toner_compare_label'):
+            note_count = fingerprint.get('note_count', 0)
+            captures = fingerprint.get('capture_count',
+                                       fingerprint.get('total_captures', 0))
+            detail = f"{note_count} notes" if note_count else f"{captures} captures"
+            self._toner_spectrum_canvas.itemconfigure(
+                self._toner_compare_label,
+                text=f"Overlay: {name} ({detail})")
 
-        When showing, auto-enables delta mode. The user can uncheck
-        the toggle to return to absolute while keeping the overlay.
-        """
-        bg = BG_COLOR
-        if show:
-            self._toner_delta_mode.set(True)
-            self._toner_delta_frame.grid(
-                row=self._toner_delta_row, column=0, columnspan=3,
-                sticky="w", padx=5)
-            delta_vis = self.settings.get("visible_delta_gauges", {})
-            for key, (frame, row) in self._toner_delta_gauge_frames.items():
-                if delta_vis.get(key, True):
-                    frame.grid(row=row, column=0, columnspan=3, pady=(2, 0))
-        else:
-            self._toner_delta_frame.grid_forget()
-            for key, (frame, _) in self._toner_delta_gauge_frames.items():
-                frame.grid_forget()
-            self._toner_delta_mode.set(False)
-            # Reset delta gauge needles to center
-            for key, gauge in self._toner_delta_gauges.items():
-                self._toner_delta_smooth[key] = 0.0
-                center_angle = math.radians(
-                    (gauge['arc_start'] + gauge['arc_end']) / 2)
-                nx = gauge['cx'] + gauge['needle_len'] * math.cos(center_angle)
-                ny = gauge['cy'] - gauge['needle_len'] * math.sin(center_angle)
-                gauge['canvas'].coords(gauge['needle_id'],
-                                       gauge['cx'], gauge['cy'], nx, ny)
-                gauge['canvas'].coords(gauge['shadow_id'],
-                                       gauge['cx'] + 1, gauge['cy'] + 1,
-                                       nx + 1, ny + 1)
-
-    def _toner_update_delta_gauge(self, key, value):
-        """Update a delta gauge. Value is -1.0 to +1.0, mapped to 0.0-1.0."""
-        gauge = self._toner_delta_gauges.get(key)
-        if not gauge:
-            return
-        if value is None:
-            # No data — center the needle
-            frac = 0.5
-        else:
-            # Map -1..+1 to 0..1
-            self._toner_delta_smooth[key] += (
-                value - self._toner_delta_smooth[key]) * GAUGE_DESCRIPTOR_DAMPING
-            frac = max(0.0, min(1.0, 0.5 + self._toner_delta_smooth[key] * 0.5))
-
-        angle_deg = gauge['arc_start'] + (
-            gauge['arc_end'] - gauge['arc_start']) * frac
-        angle_rad = math.radians(angle_deg)
-        nx = gauge['cx'] + gauge['needle_len'] * math.cos(angle_rad)
-        ny = gauge['cy'] - gauge['needle_len'] * math.sin(angle_rad)
-
-        cv = gauge['canvas']
-        cv.coords(gauge['shadow_id'],
-                  gauge['cx'] + 1, gauge['cy'] + 1, nx + 1, ny + 1)
-        cv.coords(gauge['needle_id'], gauge['cx'], gauge['cy'], nx, ny)
+    def _toner_clear_overlay(self):
+        """Remove the live spectrum ghost overlay."""
+        self._toner_comparison = None
+        if hasattr(self, '_toner_compare_label'):
+            self._toner_spectrum_canvas.itemconfigure(
+                self._toner_compare_label, text="")
+        for g in self._toner_ghost_markers:
+            self._toner_spectrum_canvas.itemconfigure(g, state="hidden")
 
     # ------------------------------------------------------------------
     # SPECTRUM RENDERING
@@ -1337,7 +1247,7 @@ class TonerTabMixin:
     def _toner_open_profile_dialog(self):
         """Open the profile management dialog — central hub for all profile operations."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("Tone Profiles")
+        dlg.title("Tone Presets")
         dlg.geometry("550x500")
         dlg.minsize(400, 350)
         dlg.transient(self.root)
@@ -1347,7 +1257,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Tone Profiles", bg=bg, fg=fg,
+        tk.Label(frame, text="Tone Presets", bg=bg, fg=fg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
 
         # Profile list
@@ -1365,7 +1275,7 @@ class TonerTabMixin:
         self._toner_refresh_profile_list()
 
         # Info display
-        self._prof_info_label = tk.Label(frame, text="Select a profile to see details.",
+        self._prof_info_label = tk.Label(frame, text="Select a preset to see details.",
                                           bg=bg, fg=fg,
                                           font=("Helvetica", 9),
                                           justify="left", anchor="w",
@@ -1395,7 +1305,7 @@ class TonerTabMixin:
         row2 = tk.Frame(frame, bg=bg)
         row2.pack(fill="x")
 
-        tk.Button(row2, text="New Profile...",
+        tk.Button(row2, text="New Preset...",
                   command=lambda: self._toner_new_profile(dlg)).pack(
                       side="left", padx=(0, 5))
         tk.Button(row2, text="Import Audio File...",
@@ -1521,15 +1431,15 @@ class TonerTabMixin:
         """Build profile form fields. Returns (fields_dict, lib_var, notes_text).
 
         Required fields are always shown. Optional fields respect
-        the visible_profile_fields setting.
+        the visible_preset_fields setting.
         """
         fields = {}
-        vis = self.settings.get("visible_profile_fields", {})
+        vis = self.settings.get("visible_preset_fields", {})
 
         def add_field(label, key, default="", widget_type="entry",
                       optional_key=None):
             """Add a labeled field row. If optional_key is set, only show
-            when that key is enabled in visible_profile_fields."""
+            when that key is enabled in visible_preset_fields."""
             if optional_key and not vis.get(optional_key, False):
                 return
             row = tk.Frame(frame, bg=bg)
@@ -1565,7 +1475,7 @@ class TonerTabMixin:
             side="left", fill="x", expand=True)
 
         # Required fields
-        add_field("Profile Name:", "name")
+        add_field("Preset Name:", "name")
         add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
         add_field("Make:", "horn_make")
         add_field("Model:", "horn_model")
@@ -1599,7 +1509,7 @@ class TonerTabMixin:
     def _toner_validate_required_fields(self, fields, dlg):
         """Check required fields are filled. Returns True if valid."""
         required = [
-            ("name", "Profile Name"),
+            ("name", "Preset Name"),
             ("horn_make", "Make"),
             ("horn_model", "Model"),
             ("player", "Player"),
@@ -1634,7 +1544,7 @@ class TonerTabMixin:
     def _toner_new_profile(self, parent_dlg):
         """Create a new horn profile via guided dialog."""
         dlg = tk.Toplevel(parent_dlg)
-        dlg.title("New Tone Profile")
+        dlg.title("New Tone Preset")
         dlg.resizable(False, False)
         dlg.transient(parent_dlg)
         dlg.grab_set()
@@ -1644,7 +1554,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Create Tone Profile", bg=bg, fg=fg,
+        tk.Label(frame, text="Create Tone Preset", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
 
         fields, lib_var, notes_text = self._toner_build_profile_fields(
@@ -1686,8 +1596,8 @@ class TonerTabMixin:
         if key is None:
             return  # Library header
         lib_name, prof_name = key
-        if messagebox.askyesno("Delete Profile",
-                f"Delete profile '{prof_name}' from '{lib_name}'?"):
+        if messagebox.askyesno("Delete Preset",
+                f"Delete preset '{prof_name}' from '{lib_name}'?"):
             del self._toner_profiles[lib_name][prof_name]
             # Remove empty libraries
             if not self._toner_profiles[lib_name]:
@@ -1714,10 +1624,10 @@ class TonerTabMixin:
 
         # Need a profile loaded
         if not self._toner_active_profile:
-            messagebox.showinfo("No Profile Loaded",
-                "Load a profile first to capture data.\n\n"
+            messagebox.showinfo("No Preset Loaded",
+                "Load a preset first to capture data.\n\n"
                 "Use Load... on the control strip, or\n"
-                "File > Profiles to create and manage profiles.")
+                "File > Presets to create and manage presets.")
             self._toner_open_profile_dialog()
             return
 
@@ -1791,7 +1701,7 @@ class TonerTabMixin:
     def _toner_new_profile_flow(self):
         """Create a new profile (complete setup identity), then start capturing."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("New Tone Profile")
+        dlg.title("New Tone Preset")
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1801,10 +1711,10 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Create Tone Profile", bg=bg, fg=fg,
+        tk.Label(frame, text="Create Tone Preset", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        tk.Label(frame, text="A profile is a unique setup: horn + player + "
-                 "mouthpiece.\nChange any variable? That's a new profile.",
+        tk.Label(frame, text="A preset saves your setup details: horn + player + "
+                 "mouthpiece.\nIt pre-fills session metadata for quick capture start.",
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
@@ -1842,7 +1752,7 @@ class TonerTabMixin:
         """Load the selected profile from the profile dialog."""
         sel = self._prof_listbox.curselection()
         if not sel:
-            messagebox.showinfo("Select Profile", "Select a profile first.")
+            messagebox.showinfo("Select Preset", "Select a preset first.")
             return
         key = self._prof_list_keys[sel[0]]
         if key is None:
@@ -1891,12 +1801,12 @@ class TonerTabMixin:
                 all_profiles.append((lib_name, prof_name, prof_data))
 
         if not all_profiles:
-            messagebox.showinfo("No Profiles",
-                "No profiles yet. Create one in File > Profiles.")
+            messagebox.showinfo("No Presets",
+                "No presets yet. Create one in File > Presets.")
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Load Profile")
+        dlg.title("Load Preset")
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1977,7 +1887,7 @@ class TonerTabMixin:
                 display = name[:PROFILE_NAME_MAX_DISPLAY] + "..." if len(name) > PROFILE_NAME_MAX_DISPLAY else name
                 self._toner_profile_label.configure(text=display, fg="#AAAAAA")
             else:
-                self._toner_profile_label.configure(text="no profile", fg="#666666")
+                self._toner_profile_label.configure(text="no preset", fg="#666666")
         self._toner_update_load_unload_btn()
 
     def _toner_start_new_session_and_listen(self):
@@ -2005,11 +1915,24 @@ class TonerTabMixin:
                 if self._toner_engine:
                     self._toner_engine.set_sax_type(sax_type)
 
+        # Copy preset metadata into session so each session owns its data
+        preset = {}
+        if self._toner_active_library and self._toner_active_profile:
+            lib = self._toner_profiles.get(self._toner_active_library, {})
+            preset = lib.get(self._toner_active_profile, {})
+
         self._toner_active_session = {
             'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'captures': [],
             'mic_type': self.settings.get('mic_type', ''),
             'mic_model': self.settings.get('mic_model', ''),
+            'horn_type': preset.get('horn_type', ''),
+            'horn_make': preset.get('horn_make', ''),
+            'horn_model': preset.get('horn_model', ''),
+            'serial': preset.get('serial', ''),
+            'player': preset.get('player', ''),
+            'mouthpiece': preset.get('mouthpiece', ''),
+            'reed': preset.get('reed', ''),
         }
         self._toner_rolloff_warned = False
 
@@ -2633,12 +2556,12 @@ class TonerTabMixin:
                     all_profiles.append((lib_name, prof_name, prof_data))
 
         if not all_profiles:
-            messagebox.showinfo("No Profiles",
-                "No profiles with captures to analyze.")
+            messagebox.showinfo("No Presets",
+                "No presets with captures to analyze.")
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Analyze Tone Profiles")
+        dlg.title("Analyze Tone Data")
         dlg.geometry("600x520")
         dlg.resizable(True, True)
         dlg.minsize(500, 400)
@@ -2650,7 +2573,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select one or more profiles to analyze, compare, or overlay.",
+        tk.Label(frame, text="Select one or more presets or sessions to analyze, compare, or overlay.",
                  bg=bg, fg=fg, font=("Helvetica", 10),
                  justify="left").pack(pady=(0, 5))
 
@@ -2909,38 +2832,18 @@ class TonerTabMixin:
                     results.append(fp_val)
             return results
 
-        def load_overlay():
-            """Load first selected profile as live ghost overlay."""
-            selected = get_selected()
-            if not selected:
-                return
-            self._toner_comparison = selected[0]
-            name = selected[0]['_name']
-            if hasattr(self, '_toner_compare_label'):
-                self._toner_spectrum_canvas.itemconfigure(
-                    self._toner_compare_label,
-                    text=f"Overlay: {name} ({selected[0]['note_count']} notes)")
-            self._toner_show_delta_gauges(True)
-            dlg.destroy()
-
         def analyze_selected():
             """Open analysis window for selected profiles/sessions."""
             selected = get_selected()
             if not selected:
                 messagebox.showinfo("Select",
-                    "Select at least one profile or session.", parent=dlg)
+                    "Select at least one preset or session.", parent=dlg)
                 return
             dlg.destroy()
             self._toner_show_analysis(selected)
 
         def clear_comparison():
-            self._toner_comparison = None
-            if hasattr(self, '_toner_compare_label'):
-                self._toner_spectrum_canvas.itemconfigure(
-                    self._toner_compare_label, text="")
-            for g in self._toner_ghost_markers:
-                self._toner_spectrum_canvas.itemconfigure(g, state="hidden")
-            self._toner_show_delta_gauges(False)
+            self._toner_clear_overlay()
             dlg.destroy()
 
         def average_selected():
@@ -2952,7 +2855,7 @@ class TonerTabMixin:
                     profile_list.append((item['name'], item['profile']))
             if len(profile_list) < 2:
                 messagebox.showinfo("Select More",
-                    "Select at least 2 profiles to average.\n"
+                    "Select at least 2 presets to average.\n"
                     "(Individual sessions are not included in group averages.)",
                     parent=dlg)
                 return
@@ -2963,9 +2866,7 @@ class TonerTabMixin:
                   command=analyze_selected).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Average Selected",
                   command=average_selected).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Overlay on Spectrum",
-                  command=load_overlay).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Clear",
+        tk.Button(btn_frame, text="Clear Overlay",
                   command=clear_comparison).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Cancel",
                   command=dlg.destroy).pack(side="right")
@@ -3050,7 +2951,7 @@ class TonerTabMixin:
         note_combo.bind("<<ComboboxSelected>>", lambda e: refresh_all())
 
         # --- Harmonic chart ---
-        chart_frame = tk.LabelFrame(main, text="Harmonic Profiles", bg=bg, fg=fg,
+        chart_frame = tk.LabelFrame(main, text="Harmonic Data", bg=bg, fg=fg,
                                      font=("Helvetica", 10, "bold"))
         chart_frame.pack(fill="both", expand=True, pady=(0, 6))
 
@@ -3221,7 +3122,6 @@ class TonerTabMixin:
         desc_labels = [
             ("Complexity", "richness"),
             ("Warmth", "warmth"),
-            ("Core Tone", "core_tone"),
             ("Even/Odd", "even_odd"),
             ("Rolloff Shape", "rolloff_shape"),
         ]
@@ -3360,7 +3260,7 @@ class TonerTabMixin:
                 h_b = data[1].get('harmonics_db', [])
 
                 if not da and not db_d:
-                    lines.append(f"{prefix}No data for this note in either profile.")
+                    lines.append(f"{prefix}No data for this note in either preset.")
                 else:
                     # Descriptor deltas
                     delta_parts = []
@@ -3478,7 +3378,7 @@ class TonerTabMixin:
                             "differences rather than horn differences.")
 
             analysis_text.insert("1.0", "\n".join(lines) if lines else
-                                 f"{prefix}Profiles are similar \u2014 no major differences.")
+                                 f"{prefix}Presets are similar \u2014 no major differences.")
             analysis_text.configure(state="disabled")
 
         def refresh_all():
@@ -3490,7 +3390,19 @@ class TonerTabMixin:
         rebuild_table()
         rebuild_analysis()
 
-        tk.Button(main, text="Close", command=dlg.destroy).pack(pady=(5, 0))
+        btn_row = tk.Frame(main, bg=bg)
+        btn_row.pack(pady=(5, 0))
+
+        if is_single:
+            def overlay_from_analysis():
+                fp = fingerprints[0]
+                self._toner_set_overlay(fp, fp.get('_name', 'Analysis'))
+                dlg.destroy()
+            tk.Button(btn_row, text="Overlay on Spectrum",
+                      command=overlay_from_analysis).pack(
+                          side="left", padx=(0, 5))
+        tk.Button(btn_row, text="Close",
+                  command=dlg.destroy).pack(side="left")
 
     # ------------------------------------------------------------------
     # GROUP REPORT
@@ -3505,7 +3417,7 @@ class TonerTabMixin:
         grp = compute_group_fingerprint(profile_list)
         if grp['profile_count'] == 0:
             messagebox.showinfo("No Data",
-                "Selected profiles have no captures.")
+                "Selected presets have no captures.")
             return
 
         dlg = tk.Toplevel(self.root)
@@ -3520,7 +3432,7 @@ class TonerTabMixin:
         main.pack(fill="both", expand=True, padx=10, pady=10)
 
         # --- Header ---
-        tk.Label(main, text=f"Group Average: {grp['profile_count']} profiles",
+        tk.Label(main, text=f"Group Average: {grp['profile_count']} presets",
                  bg=bg, fg=fg,
                  font=("Helvetica", 13, "bold")).pack(anchor="w")
         names = [n for n, _ in profile_list]
@@ -3556,7 +3468,7 @@ class TonerTabMixin:
                      font=("Helvetica", 8)).pack()
 
         # --- Harmonic chart: group average + individual profiles ---
-        chart_frame = tk.LabelFrame(main, text="Harmonic Profiles",
+        chart_frame = tk.LabelFrame(main, text="Harmonic Data",
                                      bg=bg, fg=fg,
                                      font=("Helvetica", 10, "bold"))
         chart_frame.pack(fill="both", expand=True, pady=(0, 8))
@@ -3650,7 +3562,7 @@ class TonerTabMixin:
         chart_cv.bind("<Configure>", draw_group_chart)
 
         # --- Per-profile breakdown table ---
-        tbl_frame = tk.LabelFrame(main, text="Per-Profile Breakdown",
+        tbl_frame = tk.LabelFrame(main, text="Per-Preset Breakdown",
                                    bg=bg, fg=fg,
                                    font=("Helvetica", 10, "bold"))
         tbl_frame.pack(fill="x", pady=(0, 8))
@@ -3668,7 +3580,7 @@ class TonerTabMixin:
         # Header
         thdr = tk.Frame(tbl_inner, bg=bg)
         thdr.pack(fill="x")
-        for text, w in [("Profile", 20), ("Sess", 5), ("Caps", 5),
+        for text, w in [("Preset", 20), ("Sess", 5), ("Caps", 5),
                         ("Notes", 5), ("Cmpx", 5), ("Warm", 5)]:
             tk.Label(thdr, text=text, width=w, bg=bg, fg=fg,
                      font=("Helvetica", 8, "bold")).pack(side="left")
@@ -3699,15 +3611,40 @@ class TonerTabMixin:
                          font=("Helvetica", 8)).pack(side="left")
 
         # Context text
-        ctx = (f"Group average across {grp['profile_count']} profiles "
+        ctx = (f"Group average across {grp['profile_count']} presets "
                f"({grp['total_captures']} total captures). "
-               f"\u00b1 values reflect variation across profiles, "
-               f"not measurement noise within a profile.")
+               f"\u00b1 values reflect variation across presets, "
+               f"not measurement noise within a preset.")
         tk.Label(main, text=ctx, bg=bg, fg="#888888",
                  font=("Helvetica", 7), wraplength=680,
                  justify="left").pack(anchor="w", pady=(0, 4))
 
-        tk.Button(main, text="Close", command=dlg.destroy).pack(pady=(5, 0))
+        btn_row = tk.Frame(main, bg=bg)
+        btn_row.pack(pady=(5, 0))
+
+        def overlay_pick():
+            menu = tk.Menu(dlg, tearoff=0)
+            # Group average option
+            menu.add_command(
+                label=f"Group Average ({grp['profile_count']} presets)",
+                command=lambda: [
+                    self._toner_set_overlay(
+                        grp, f"Group avg ({grp['profile_count']} presets)"),
+                    dlg.destroy()])
+            menu.add_separator()
+            # Individual profiles
+            for pname, fp in grp['per_profile']:
+                menu.add_command(
+                    label=pname,
+                    command=lambda f=fp, n=pname: [
+                        self._toner_set_overlay(f, n), dlg.destroy()])
+            menu.tk_popup(btn_row.winfo_rootx(),
+                          btn_row.winfo_rooty() - menu.index("end") * 20)
+
+        tk.Button(btn_row, text="Overlay on Spectrum...",
+                  command=overlay_pick).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text="Close",
+                  command=dlg.destroy).pack(side="left")
 
     # ------------------------------------------------------------------
     # ANIMATION LOOP
@@ -3831,53 +3768,9 @@ class TonerTabMixin:
                     and self._toner_low_data_shown):
                 self._toner_set_low_data_overlay(False)
 
-            # Delta mode: compare live vs loaded baseline per-note
-            if (self._toner_delta_mode.get() and self._toner_comparison
-                    and result.fundamental_freq > 0):
-                note = result.fundamental_note
-                fp = self._toner_comparison
-                pn = fp.get('per_note', {})
-                baseline = pn.get(note) if note else None
-
-                if baseline and baseline.get('descriptors'):
-                    bd = baseline['descriptors']
-                    bh = baseline.get('harmonics_db', [])
-                    # Build live harmonics_db from result
-                    live_h = [h.magnitude_db for h in result.harmonics
-                              ] if result.harmonics else []
-                    deltas = compute_delta_descriptors(
-                        live_h, bh, d, bd)
-                    if deltas:
-                        # Existing gauges show delta (centered: 0.5 + delta/2)
-                        r_delta = deltas['richness_delta']
-                        w_delta = deltas['warmth_delta']
-                        self._toner_update_gauge(
-                            'richness', 0.5 + r_delta * 0.5)
-                        self._toner_update_gauge(
-                            'warmth', 0.5 + w_delta * 0.5)
-                        # Comparison-only gauges
-                        self._toner_update_delta_gauge(
-                            'spectral_tilt', deltas.get('spectral_tilt'))
-                        self._toner_update_delta_gauge(
-                            'mid_harmonic', deltas.get('mid_harmonic'))
-                    else:
-                        self._toner_update_gauge('richness', 0.5)
-                        self._toner_update_gauge('warmth', 0.5)
-                        self._toner_update_delta_gauge('spectral_tilt', None)
-                        self._toner_update_delta_gauge('mid_harmonic', None)
-                else:
-                    # No baseline data for this note
-                    self._toner_update_gauge('richness', 0.5)
-                    self._toner_update_gauge('warmth', 0.5)
-                    self._toner_update_delta_gauge('spectral_tilt', None)
-                    self._toner_update_delta_gauge('mid_harmonic', None)
-            else:
-                self._toner_update_gauge('richness', d.get('richness', 0.0))
-                self._toner_update_gauge('warmth', d.get('warmth', 0.0))
-                if self._toner_delta_mode.get():
-                    # No signal — center delta gauges
-                    self._toner_update_delta_gauge('spectral_tilt', None)
-                    self._toner_update_delta_gauge('mid_harmonic', None)
+            # Update descriptor gauges (always absolute values)
+            self._toner_update_gauge('richness', d.get('richness', 0.0))
+            self._toner_update_gauge('warmth', d.get('warmth', 0.0))
 
             # Process capture if active
             self._toner_process_capture_frame(result)
@@ -3951,7 +3844,7 @@ class TonerTabMixin:
 
         tk.Label(frame, text=f"Import: {filename}", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        tk.Label(frame, text="Select a profile for this recording, or create one.\n"
+        tk.Label(frame, text="Select a preset for this recording, or create one.\n"
                  "Add notes about the source (who, when, where recorded).",
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
@@ -3970,7 +3863,7 @@ class TonerTabMixin:
         use_existing = tk.BooleanVar(value=bool(all_profiles))
 
         if all_profiles:
-            tk.Radiobutton(profile_frame, text="Existing profile:",
+            tk.Radiobutton(profile_frame, text="Existing preset:",
                            variable=use_existing, value=True,
                            bg=bg, fg=fg, font=("Helvetica", 10)).pack(
                                anchor="w")
@@ -3982,7 +3875,7 @@ class TonerTabMixin:
                                       width=40)
             prof_combo.pack(anchor="w", padx=(20, 0), pady=(0, 5))
 
-        tk.Radiobutton(profile_frame, text="Create new profile...",
+        tk.Radiobutton(profile_frame, text="Create new preset...",
                        variable=use_existing, value=False,
                        bg=bg, fg=fg, font=("Helvetica", 10)).pack(anchor="w")
 
@@ -4007,8 +3900,8 @@ class TonerTabMixin:
                         selected = (lib, name)
                         break
                 if not selected:
-                    messagebox.showinfo("Select Profile",
-                        "Select a profile from the list.", parent=dlg)
+                    messagebox.showinfo("Select Preset",
+                        "Select a preset from the list.", parent=dlg)
                     return
 
                 self._toner_active_library = selected[0]
@@ -4052,7 +3945,7 @@ class TonerTabMixin:
         """Create a new profile, then import the pending file."""
         # Reuse the existing new profile flow but override the callback
         dlg = tk.Toplevel(self.root)
-        dlg.title("New Tone Profile")
+        dlg.title("New Tone Preset")
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -4062,7 +3955,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Create Tone Profile for Audio Import", bg=bg, fg=fg,
+        tk.Label(frame, text="Create Tone Preset for Audio Import", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
         tk.Label(frame, text="Describe the horn and setup heard in the recording.",
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(pady=(0, 10))
@@ -4100,7 +3993,7 @@ class TonerTabMixin:
                       values=existing_libs, width=20).pack(
             side="left", fill="x", expand=True)
 
-        add_field("Profile Name:", "name")
+        add_field("Preset Name:", "name")
         add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
         add_field("Make:", "horn_make")
         add_field("Model:", "horn_model")
@@ -4122,7 +4015,7 @@ class TonerTabMixin:
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
             if not name:
                 messagebox.showwarning("Name Required",
-                    "Please enter a profile name.", parent=dlg)
+                    "Please enter a preset name.", parent=dlg)
                 return
 
             if lib not in self._toner_profiles:
@@ -4240,7 +4133,7 @@ class TonerTabMixin:
         messagebox.showinfo("File Imported",
             f"Extracted {len(captures)} note segments from '{filename}'.\n"
             f"Notes found: {', '.join(display_notes)}\n\n"
-            f"Profile now has {len(total_notes)} unique notes total.")
+            f"Preset now has {len(total_notes)} unique notes total.")
 
     def _toner_export_profiles(self):
         """Export selected tone profiles to a JSON file."""
@@ -4255,12 +4148,12 @@ class TonerTabMixin:
                 all_profiles.append((lib_name, prof_name, prof_data))
 
         if not all_profiles:
-            messagebox.showinfo("Nothing to Export", "No tone profiles to export.")
+            messagebox.showinfo("Nothing to Export", "No tone presets to export.")
             return
 
         # Selection dialog
         dlg = tk.Toplevel(self.root)
-        dlg.title("Export Tone Profiles")
+        dlg.title("Export Tone Presets")
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -4270,7 +4163,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select profiles to export:", bg=bg, fg=fg,
+        tk.Label(frame, text="Select presets to export:", bg=bg, fg=fg,
                  font=("Helvetica", 10)).pack(pady=(0, 5))
 
         # Checkboxes
@@ -4311,13 +4204,13 @@ class TonerTabMixin:
 
             if not export:
                 messagebox.showinfo("Nothing Selected",
-                    "Select at least one profile to export.", parent=dlg)
+                    "Select at least one preset to export.", parent=dlg)
                 return
 
             dlg.destroy()
 
             filepath = filedialog.asksaveasfilename(
-                title="Export Tone Profiles",
+                title="Export Tone Presets",
                 defaultextension=".json",
                 filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
                 initialfile="tone_profiles_export.json"
@@ -4330,7 +4223,7 @@ class TonerTabMixin:
                 with open(filepath, 'w') as f:
                     json.dump(export, f, indent=2)
                 messagebox.showinfo("Export Successful",
-                    f"Exported {count} profiles to:\n{filepath}")
+                    f"Exported {count} presets to:\n{filepath}")
             except Exception as e:
                 messagebox.showerror("Export Error", f"Could not export:\n{e}")
 
@@ -4347,7 +4240,7 @@ class TonerTabMixin:
         import json
 
         filepath = filedialog.askopenfilename(
-            title="Import Tone Profiles",
+            title="Import Tone Presets",
             filetypes=(("JSON files", "*.json"), ("All files", "*.*"))
         )
         if not filepath:
@@ -4361,7 +4254,7 @@ class TonerTabMixin:
             return
 
         if not isinstance(imported, dict):
-            messagebox.showerror("Invalid Format", "File is not a valid tone profiles export.")
+            messagebox.showerror("Invalid Format", "File is not a valid tone presets export.")
             return
 
         # Check if flat (old format) or nested (library format)
@@ -4394,7 +4287,7 @@ class TonerTabMixin:
 
         save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
         messagebox.showinfo("Import Complete",
-            f"Imported {count} new profiles/sessions.")
+            f"Imported {count} new presets/sessions.")
 
     def _toner_save_settings(self):
         """Save toner settings to the settings dict."""

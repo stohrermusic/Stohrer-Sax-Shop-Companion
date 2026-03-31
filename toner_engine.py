@@ -114,11 +114,6 @@ LOW_FREQ_WEAKNESS_RATIO = 0.05
 ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — warn above this
 ROLLOFF_MIN_CAPTURES = 5       # need this many before checking
 
-# --- Delta gauge scaling ---
-# Full gauge deflection ranges for comparison-only dials (in dB).
-SPECTRAL_TILT_RANGE = 15.0    # ±15 dB = full deflection for H7-H12 avg delta
-MID_HARMONIC_RANGE = 15.0     # ±15 dB = full deflection for H3-H6 avg delta
-
 # Calibration capture: written chromatic scale Bb3 to F6
 # These are WRITTEN pitches — the transposition to concert pitch
 # happens using SAX_TRANSPOSITIONS when computing expected frequencies.
@@ -752,7 +747,7 @@ class TonerEngine:
         Warmth: H2 (octave harmonic) strength relative to fundamental.
         """
         if not harmonics:
-            return {'richness': 0.0, 'warmth': 0.0, 'core_tone': 0.0,
+            return {'richness': 0.0, 'warmth': 0.0,
                     'even_odd': 0.0, 'rolloff_shape': 0.0,
                     'low_harmonic_data': False}
 
@@ -794,24 +789,13 @@ class TonerEngine:
         warmth = max(0.0, min(1.0,
             (h2_db - WARMTH_DB_FLOOR) / WARMTH_DB_RANGE))
 
-        # --- Core Tone: Tristimulus T2 (H2-H4 energy weight) ---
-        # Measures the proportion of total energy in the body harmonics.
-        # H2-H4 are below the tone hole cutoff frequency, so they're shaped
-        # primarily by the bore — the most player-independent metric we have.
-        # T2 = (|H2| + |H3| + |H4|) / sum(|all|)
-        all_lin = {h.harmonic_number: 10.0 ** (h.magnitude_db / 20.0) for h in harmonics}
-        total_lin = sum(all_lin.values())
-        if total_lin > 0 and all(n in all_lin for n in (2, 3, 4)):
-            core_tone = (all_lin[2] + all_lin[3] + all_lin[4]) / total_lin
-        else:
-            core_tone = 0.0
-
         # --- Even/Odd Ratio ---
         # Ratio of even harmonic energy to odd harmonic energy (H2+ only).
         # Even harmonics (H2,H4,H6...) produce round/warm quality;
         # odd harmonics (H3,H5,H7...) produce edgier/hollower quality.
         # Conical bore sax produces both, but the ratio varies by horn.
         # Scaled: 0.8 → 0%, 1.8 → 100%  (observed range from 47 profiles).
+        all_lin = {h.harmonic_number: 10.0 ** (h.magnitude_db / 20.0) for h in harmonics}
         even_sum = sum(all_lin.get(n, 0) for n in range(2, 22, 2))
         odd_sum = sum(all_lin.get(n, 0) for n in range(3, 22, 2))
         if odd_sum > 0:
@@ -849,7 +833,6 @@ class TonerEngine:
         return {
             'richness': richness,
             'warmth': warmth,
-            'core_tone': core_tone,
             'even_odd': even_odd,
             'rolloff_shape': rolloff_shape,
             'low_harmonic_data': low_harmonic_data,
@@ -1005,7 +988,7 @@ def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
         dict with richness, warmth (0.0-1.0) and low_harmonic_data flag
     """
     if not harmonics_db or f0 <= 0:
-        return {'richness': 0.0, 'warmth': 0.0, 'core_tone': 0.0,
+        return {'richness': 0.0, 'warmth': 0.0,
                 'even_odd': 0.0, 'rolloff_shape': 0.0,
                 'low_harmonic_data': False}
     # Lightweight engine instance for _compute_descriptors
@@ -1089,62 +1072,6 @@ def compute_rolloff_rate(harmonics_db):
     return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
 
 
-def compute_delta_descriptors(live_harmonics_db, baseline_harmonics_db,
-                              live_descriptors, baseline_descriptors):
-    """Compute delta descriptors between live and baseline readings.
-
-    Returns dict with:
-        'richness_delta': signed difference (-1 to +1)
-        'warmth_delta': signed difference (-1 to +1)
-        'spectral_tilt': upper harmonic shift in dB (avg H7-H12 delta),
-                         normalized to -1..+1 using SPECTRAL_TILT_RANGE
-        'mid_harmonic': mid harmonic shift in dB (avg H3-H6 delta),
-                        normalized to -1..+1 using MID_HARMONIC_RANGE
-    Returns None if insufficient data.
-    """
-    if not live_harmonics_db or not baseline_harmonics_db:
-        return None
-    if not live_descriptors or not baseline_descriptors:
-        return None
-
-    result = {
-        'richness_delta': live_descriptors.get('richness', 0) -
-                          baseline_descriptors.get('richness', 0),
-        'warmth_delta': live_descriptors.get('warmth', 0) -
-                        baseline_descriptors.get('warmth', 0),
-    }
-
-    # Spectral tilt: average dB delta of H7-H12 (indices 6-11)
-    n = min(len(live_harmonics_db), len(baseline_harmonics_db))
-    if n >= 12:
-        upper_deltas = [live_harmonics_db[i] - baseline_harmonics_db[i]
-                        for i in range(6, 12)]
-        raw_tilt = sum(upper_deltas) / len(upper_deltas)
-        result['spectral_tilt'] = max(-1.0, min(1.0,
-            raw_tilt / SPECTRAL_TILT_RANGE))
-    elif n >= 8:
-        # Fewer harmonics available — use what we have
-        upper_deltas = [live_harmonics_db[i] - baseline_harmonics_db[i]
-                        for i in range(6, n)]
-        raw_tilt = sum(upper_deltas) / len(upper_deltas)
-        result['spectral_tilt'] = max(-1.0, min(1.0,
-            raw_tilt / SPECTRAL_TILT_RANGE))
-    else:
-        result['spectral_tilt'] = None
-
-    # Mid-harmonic balance: average dB delta of H3-H6 (indices 2-5)
-    if n >= 6:
-        mid_deltas = [live_harmonics_db[i] - baseline_harmonics_db[i]
-                      for i in range(2, 6)]
-        raw_mid = sum(mid_deltas) / len(mid_deltas)
-        result['mid_harmonic'] = max(-1.0, min(1.0,
-            raw_mid / MID_HARMONIC_RANGE))
-    else:
-        result['mid_harmonic'] = None
-
-    return result
-
-
 def compute_fingerprint(sessions, sax_type="Tenor"):
     """Compute an aggregate harmonic fingerprint from all sessions in a profile.
 
@@ -1190,7 +1117,7 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         per_note_avg[note] = avg
 
     # Horn-level descriptors: average the per-note descriptors (equal weight per note)
-    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
+    desc_keys = ['richness', 'warmth', 'even_odd', 'rolloff_shape']
     if per_note_avg:
         horn_descriptors = {}
         for key in desc_keys:
@@ -1268,7 +1195,7 @@ def compute_session_variation(sessions, sax_type="Tenor"):
     if len(fps) < 2:
         return None
 
-    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
+    desc_keys = ['richness', 'warmth', 'even_odd', 'rolloff_shape']
     stats = {}
     for key in desc_keys:
         values = [fp['descriptors'].get(key, 0.0) for _, fp in fps]
@@ -1322,7 +1249,7 @@ def compute_group_fingerprint(profiles, sax_type=None):
             'per_profile': [],
         }
 
-    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
+    desc_keys = ['richness', 'warmth', 'even_odd', 'rolloff_shape']
 
     # Average descriptors across profiles (equal weight per profile)
     avg_desc = {}
@@ -1353,6 +1280,40 @@ def compute_group_fingerprint(profiles, sax_type=None):
 
     total_caps = sum(fp['capture_count'] for _, fp in per_profile)
 
+    # Average per-note data across profiles (for ghost overlay)
+    all_notes = set()
+    for _, fp in per_profile:
+        all_notes.update(fp.get('per_note', {}).keys())
+
+    per_note = {}
+    for note in all_notes:
+        note_hdb_lists = []
+        note_freqs = []
+        for _, fp in per_profile:
+            pn = fp.get('per_note', {}).get(note)
+            if pn and pn.get('harmonics_db'):
+                note_hdb_lists.append(pn['harmonics_db'])
+                if pn.get('fundamental_freq'):
+                    note_freqs.append(pn['fundamental_freq'])
+        if not note_hdb_lists:
+            continue
+        # Average harmonics_db across profiles for this note
+        n_max = max(len(h) for h in note_hdb_lists)
+        avg_note_hdb = [0.0] * n_max
+        note_counts = [0] * n_max
+        for hdb in note_hdb_lists:
+            for i, db in enumerate(hdb):
+                avg_note_hdb[i] += db
+                note_counts[i] += 1
+        for i in range(n_max):
+            if note_counts[i] > 0:
+                avg_note_hdb[i] /= note_counts[i]
+        per_note[note] = {
+            'harmonics_db': avg_note_hdb,
+            'fundamental_freq': (sum(note_freqs) / len(note_freqs)
+                                 if note_freqs else 0),
+        }
+
     return {
         'descriptors': avg_desc,
         'harmonics_db': avg_hdb,
@@ -1360,6 +1321,8 @@ def compute_group_fingerprint(profiles, sax_type=None):
         'profile_count': len(per_profile),
         'total_captures': total_caps,
         'per_profile': per_profile,
+        'per_note': per_note,
+        'note_count': len(per_note),
     }
 
 

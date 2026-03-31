@@ -2840,7 +2840,7 @@ class UserGuideWindow(tk.Toplevel):
         self._h2("Getting Started")
 
         self._body("Before your first capture, you need two things: a "
-                    "microphone and a profile.")
+                    "microphone and a preset.")
         self._blank()
 
         self._body("Microphone")
@@ -2853,7 +2853,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Ribbon and dynamic mics can still be used. Warmth "
                       "(H2) reads accurately on any mic. But upper "
                       "harmonics will be attenuated, so complexity and "
-                      "the full harmonic profile will be less reliable. "
+                      "the full harmonic data will be less reliable. "
                       "The mic type is stored with your data so you "
                       "always know what produced it.")
         self._bullet("Laptop/built-in mics are not suitable \u2014 they "
@@ -2873,22 +2873,22 @@ class UserGuideWindow(tk.Toplevel):
                       "the mic is another variable that shows up in the data.")
         self._blank()
 
-        self._body("Profile")
-        self._bullet("A profile is one setup: horn + player + mouthpiece. "
-                      "Change any of those? That's a new profile.")
-        self._bullet("Click Capture, then create or load a profile. "
+        self._body("Preset")
+        self._bullet("A preset saves your setup details: horn + player + mouthpiece. "
+                      "It pre-fills session metadata for quick capture start.")
+        self._bullet("Click Capture, then create or load a preset. "
                       "Fill in at least the required fields (make, "
                       "model, player, mouthpiece). Optional fields "
                       "like reed, room, and preamp can be enabled in "
-                      "Options \u2192 Profile Fields.")
+                      "Options \u2192 Preset Fields.")
         self._bullet("The SAX selector sets the transposition and is "
-                      "stored with the profile. When you load a profile, "
+                      "stored with the preset. When you load a preset, "
                       "it updates automatically.")
         self._blank()
 
         # === CAPTURING ===
         self._h2("Capturing")
-        self._bullet("Click Capture, select or create a profile, then play.")
+        self._bullet("Click Capture, select or create a preset, then play.")
         self._bullet("The tool auto-detects steady tones: hold a note "
                       "for about a second and it triggers automatically. "
                       "No button-pressing while playing.")
@@ -2934,65 +2934,43 @@ class UserGuideWindow(tk.Toplevel):
                     "capture \u2014 the complete harmonic shape from "
                     "H1 through H20.")
 
-        self._h2("Delta Gauges")
-        self._body("When you load a profile as an overlay (via Analyze \u2192 "
-                    "Overlay on Spectrum), a Delta toggle appears on the "
-                    "gauge panel. Enabling it switches the gauges from "
-                    "absolute readings to live comparison against the "
-                    "loaded baseline.")
+        self._h2("Spectrum Overlay")
+        self._body("You can load a preset as a ghost overlay on the "
+                    "live spectrum. From the Analyze tool, view a single "
+                    "preset or a group average, then click \"Overlay on "
+                    "Spectrum.\" Blue ghost bars appear behind the live "
+                    "display, updating per-note as you play.")
         self._blank()
-        self._body("In delta mode, the always-visible gauges show how "
-                    "your current sound differs from the baseline for "
-                    "the note you're playing. Center = no difference. "
-                    "The baseline is looked up per-note, so it adapts "
-                    "as you move through the range.")
-        self._blank()
-        self._body("Two comparison-only gauges also appear:")
-        self._bullet("Spectral Tilt (Darker \u2194 Brighter): average shift "
-                      "in the upper harmonics (H7\u2013H12) relative to "
-                      "baseline. Positive = more upper harmonic energy "
-                      "than the baseline had.")
-        self._bullet("Mid-Harmonic Balance (Weaker \u2194 Stronger): average "
-                      "shift in H3\u2013H6 relative to baseline. This is "
-                      "where mouthpiece and reed changes tend to show "
-                      "up most.")
-        self._blank()
-        self._body("These two gauges only exist as deltas \u2014 they're "
-                    "not shown in absolute mode because the absolute "
-                    "values depend too heavily on the recording setup "
-                    "to be meaningful on their own. As deltas against "
-                    "a baseline captured on the same setup, they're "
-                    "reliable.")
-        self._blank()
-        self._body("If you play a note that the baseline profile doesn't "
-                    "have data for, the gauges center at zero. Capture "
-                    "more notes in the baseline to fill gaps.")
+        self._body("This lets you eyeball how your live sound compares "
+                    "to a stored reference \u2014 useful for quick A/B "
+                    "checks. For rigorous comparison, use the Analyze "
+                    "tool where both sides are averaged data.")
         self._blank()
 
         # === COMPARING ===
         self._h2("Comparing Sessions")
         self._body("This is where the tool earns its keep. The comparison "
                     "tool shows you what's different between two or more "
-                    "profiles \u2014 not which one is \"better,\" but what "
+                    "presets \u2014 not which one is \"better,\" but what "
                     "changed and where.")
         self._blank()
         self._bullet("Analyze... opens a picker with filters for horn "
                       "type, player, mouthpiece, and mic type")
-        self._bullet("Select one or more profiles: single selection "
-                      "shows that profile's data; two or more shows "
+        self._bullet("Select one or more presets: single selection "
+                      "shows that preset's data; two or more shows "
                       "side-by-side delta analysis")
-        self._bullet("For two profiles, the Difference chart shows "
+        self._bullet("For two presets, the Difference chart shows "
                       "a single curve of the harmonic-by-harmonic delta "
                       "\u2014 instantly shows where the sound diverges")
         self._bullet("Toggle between Horn Average and Per-Note to see "
                       "whether differences are across the board or "
                       "concentrated in certain registers")
-        self._bullet("\"Overlay on Spectrum\" loads a profile as a "
+        self._bullet("\"Overlay on Spectrum\" loads a preset as a "
                       "blue ghost behind the live display for real-time "
                       "A/B comparison while playing")
         self._blank()
         self._body("The comparison table shows mic type and recording "
-                    "quality (rolloff rate) for each profile. If mic "
+                    "quality (rolloff rate) for each preset. If mic "
                     "types differ, the analysis notes that harmonic "
                     "differences may partly reflect the mic rather "
                     "than the horn.")
@@ -3002,18 +2980,7 @@ class UserGuideWindow(tk.Toplevel):
         self._h2("Comparison Descriptors")
         self._body("In addition to the two live gauges, the comparison "
                     "tool computes three additional descriptors that are "
-                    "most useful when comparing profiles side by side.")
-        self._blank()
-
-        self._body("Core Tone (H2\u2013H4 energy weight)")
-        self._bullet("Measures the proportion of total energy in the "
-                      "2nd, 3rd, and 4th harmonics. Research suggests "
-                      "these low harmonics are influenced more by the "
-                      "bore than by the mouthpiece. In our data so far, "
-                      "this descriptor shows less variation when the "
-                      "player or mouthpiece changes compared to other "
-                      "descriptors \u2014 but we have limited data and "
-                      "this could change as we learn more.")
+                    "most useful when comparing presets side by side.")
         self._blank()
 
         self._body("Even/Odd Ratio")
@@ -3040,7 +3007,7 @@ class UserGuideWindow(tk.Toplevel):
 
         # === WHERE DIFFERENCES COME FROM ===
         self._h2("Where Differences Come From")
-        self._body("When comparing two profiles, the analysis text "
+        self._body("When comparing two presets, the analysis text "
                     "tells you which harmonic range has the biggest "
                     "shifts. Acoustic research and our own data suggest "
                     "that different parts of the saxophone tend to "
@@ -3055,7 +3022,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("H7\u2013H13 (upper harmonics): In our neck-swap "
                       "data, this is where different necks show the "
                       "biggest effect. Mouthpiece changes also show "
-                      "up here. When both profiles used the same "
+                      "up here. When both presets used the same "
                       "mouthpiece, neck differences may be a factor.")
         self._bullet("H3\u2013H12 broadband (everything shifts): In "
                       "our data, mouthpiece and player changes tend "
@@ -3069,15 +3036,15 @@ class UserGuideWindow(tk.Toplevel):
                     "make definitive claims about what caused a "
                     "difference.")
         self._blank()
-        self._body("When two profiles share the same player, "
+        self._body("When two presets share the same player, "
                     "differences are more likely to reflect the "
                     "equipment. When players differ, it's harder to "
                     "separate the horn signal from the player signal.")
         self._blank()
 
         # === REPORTS ===
-        self._h2("Profile Reports")
-        self._body("The report view shows one profile's history: "
+        self._h2("Preset Reports")
+        self._body("The report view shows one preset's history: "
                     "descriptors, session-by-session changes (with "
                     "deltas from the previous session), harmonic "
                     "curve, and per-note breakdown. Use it to see "
@@ -3109,12 +3076,12 @@ class UserGuideWindow(tk.Toplevel):
 
         # === DATA MANAGEMENT ===
         self._h2("Data & Transfer")
-        self._body("Profiles are saved automatically. Each session "
-                    "records the date, mic type, and mic model "
-                    "alongside the harmonic data.")
+        self._body("Presets and sessions are saved automatically. Each "
+                    "session records the date, setup details, mic type, "
+                    "and mic model alongside the harmonic data.")
         self._blank()
         self._bullet("File \u2192 Transfer Data \u2192 Export/Import "
-                      "Profile Library: for backup or moving data "
+                      "Preset Library: for backup or moving data "
                       "between machines. Exported files are JSON.")
         self._blank()
 
@@ -3123,7 +3090,7 @@ class UserGuideWindow(tk.Toplevel):
                     "WAV audio file alongside each capture session. "
                     "This is entirely optional \u2014 the toner does "
                     "not need the WAV file. All harmonic data is "
-                    "captured and stored in the profile automatically.")
+                    "captured and stored in the session automatically.")
         self._blank()
         self._body("Reasons you might want it:")
         self._bullet("As a backup of the original audio, in case you "
@@ -3138,7 +3105,7 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
         self._body("Use Options \u2192 Recording Folder to choose "
                     "where files are saved. Each file is named with "
-                    "the profile name and session date so you can "
+                    "the preset name and session date so you can "
                     "find it later.")
         self._blank()
         self._body("The toner activates automatically when you switch "
@@ -3220,7 +3187,7 @@ class UserGuideWindow(tk.Toplevel):
                       "derived from it.")
         self._bullet("Captures are averaged per-note first, then across "
                       "notes with equal weight. This prevents register "
-                      "skew \u2014 a profile with 20 high-note captures "
+                      "skew \u2014 a preset with 20 high-note captures "
                       "and 3 low-note captures still represents the "
                       "whole horn evenly.")
         self._bullet("The first ~100 ms of each note is automatically "
@@ -3251,7 +3218,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Pad Presets: File > Export/Import Pad Presets to share saved pad size lists")
         self._bullet("Key Heights: File > Export/Import Key Heights to share measurement sets")
         self._bullet("Screw Specs: File > Export/Import Screw Specs to share thread data")
-        self._bullet("Tone Profiles: File > Transfer Data > Export/Import Profile Library")
+        self._bullet("Tone Presets: File > Transfer Data > Export/Import Preset Library")
         self._bullet("All Settings: File > Import Settings from Folder copies all config "
                       "files from another installation")
         self._body("Exported files are standard JSON and can be emailed or shared via any method.")
