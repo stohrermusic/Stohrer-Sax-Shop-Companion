@@ -19,7 +19,7 @@ from toner_engine import (
     load_tone_presets, compute_fingerprint, MIN_PRESET_NOTES,
     BREAK_FREQUENCIES,
 )
-from config import TONE_PRESETS_FILE
+from config import TONER_DATA_FILE
 
 
 def _note_sort_key(note_name):
@@ -214,7 +214,7 @@ def report(profile_name, profile_data):
 
 
 def main():
-    profiles = load_tone_presets(TONE_PRESETS_FILE)
+    profiles = load_tone_presets(TONER_DATA_FILE)
     if not profiles:
         print("No profiles found.")
         return

@@ -218,7 +218,7 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `pad_presets.json` - Saved pad size lists
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
-- `tone_profiles.json` - Tone analyzer presets and sessions (nested library format)
+- `toner_data.json` - Tone analyzer presets and sessions (nested library format, migrated from `tone_profiles.json`)
 
 ### Tone Preset Data Model
 

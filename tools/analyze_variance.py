@@ -12,10 +12,10 @@ from toner_engine import (
     load_tone_presets, compute_fingerprint,
     descriptors_from_harmonics,
 )
-from config import TONE_PRESETS_FILE
+from config import TONER_DATA_FILE
 import numpy as np
 
-profiles = load_tone_presets(TONE_PRESETS_FILE)
+profiles = load_tone_presets(TONER_DATA_FILE)
 
 
 def fp(lib, name):

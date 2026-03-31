@@ -363,7 +363,7 @@ def test_tone_profiles_roundtrip():
         raise AssertionError("SKIP: toner_engine not available")
     tmpdir = tempfile.mkdtemp()
     try:
-        path = os.path.join(tmpdir, "tone_profiles.json")
+        path = os.path.join(tmpdir, "toner_data.json")
         profiles = {
             "My Library": {
                 "Test Horn": {
@@ -450,17 +450,17 @@ def test_tone_profiles_flat_migration():
 # TESTS: Migration helpers
 # ============================================================================
 
-def test_find_config_files_includes_tone_profiles():
-    """find_config_files_in_directory() includes tone_profiles.json."""
+def test_find_config_files_includes_toner_data():
+    """find_config_files_in_directory() includes toner_data.json and legacy tone_profiles.json."""
     tmpdir = tempfile.mkdtemp()
     try:
-        # Create all expected config files
+        # Create all expected config files (new name)
         for fn in ["app_settings.json", "pad_presets.json", "key_height_library.json",
-                    "screw_specs.json", "tone_profiles.json"]:
+                    "screw_specs.json", "toner_data.json"]:
             with open(os.path.join(tmpdir, fn), 'w') as f:
                 f.write("{}")
         found = find_config_files_in_directory(tmpdir)
-        assert_in("tone_profiles.json", found)
+        assert_in("toner_data.json", found)
         assert_in("app_settings.json", found)
         assert_in("screw_specs.json", found)
         assert_equal(len(found), 5)
@@ -484,12 +484,12 @@ def test_find_config_files_partial():
     try:
         with open(os.path.join(tmpdir, "app_settings.json"), 'w') as f:
             f.write("{}")
-        with open(os.path.join(tmpdir, "tone_profiles.json"), 'w') as f:
+        with open(os.path.join(tmpdir, "toner_data.json"), 'w') as f:
             f.write("{}")
         found = find_config_files_in_directory(tmpdir)
         assert_equal(len(found), 2)
         assert_in("app_settings.json", found)
-        assert_in("tone_profiles.json", found)
+        assert_in("toner_data.json", found)
     finally:
         shutil.rmtree(tmpdir)
 
@@ -735,7 +735,7 @@ def main():
             ("Flat format migration", test_tone_profiles_flat_migration),
         ]),
         ("Migration Helpers", [
-            ("find_config_files includes tone_profiles.json", test_find_config_files_includes_tone_profiles),
+            ("find_config_files includes toner_data.json", test_find_config_files_includes_toner_data),
             ("find_config_files on empty dir", test_find_config_files_empty_dir),
             ("find_config_files partial", test_find_config_files_partial),
         ]),

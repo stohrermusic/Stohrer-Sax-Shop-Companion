@@ -250,7 +250,8 @@ def migrate_legacy_files():
         "key_height_library.json",
         "app_settings.json",
         "screw_specs.json",
-        "tone_profiles.json"
+        "tone_profiles.json",
+        "toner_data.json",
     ]
 
     migrated = []
@@ -283,7 +284,8 @@ def find_config_files_in_directory(directory):
         "pad_presets.json",
         "key_height_library.json",
         "screw_specs.json",
-        "tone_profiles.json"
+        "toner_data.json",
+        "tone_profiles.json",
     ]
     found = []
     for filename in config_files:
@@ -310,7 +312,15 @@ PAD_PRESET_FILE = os.path.join(_CONFIG_DIR, "pad_presets.json")
 KEY_PRESET_FILE = os.path.join(_CONFIG_DIR, "key_height_library.json")
 SETTINGS_FILE = os.path.join(_CONFIG_DIR, "app_settings.json")
 SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
-TONE_PRESETS_FILE = os.path.join(_CONFIG_DIR, "tone_profiles.json")
+TONER_DATA_FILE = os.path.join(_CONFIG_DIR, "toner_data.json")
+
+# Auto-migrate old filename → new
+_old_toner_file = os.path.join(_CONFIG_DIR, "tone_profiles.json")
+if os.path.exists(_old_toner_file) and not os.path.exists(TONER_DATA_FILE):
+    try:
+        os.rename(_old_toner_file, TONER_DATA_FILE)
+    except OSError:
+        pass  # fallback: load_tone_presets will try old path
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"

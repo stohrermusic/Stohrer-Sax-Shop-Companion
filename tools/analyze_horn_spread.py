@@ -27,7 +27,7 @@ import math
 from toner_engine import (
     load_tone_presets, compute_fingerprint, MIN_PRESET_NOTES,
 )
-from config import TONE_PRESETS_FILE
+from config import TONER_DATA_FILE
 
 
 def main():
@@ -35,7 +35,7 @@ def main():
     print("HORN SPREAD ANALYSIS")
     print("=" * 65)
 
-    profiles = load_tone_presets(TONE_PRESETS_FILE)
+    profiles = load_tone_presets(TONER_DATA_FILE)
     if not profiles:
         print("\nNo profiles found.")
         return

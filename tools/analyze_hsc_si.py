@@ -36,16 +36,16 @@ from toner_engine import (
 # ============================================
 
 def get_profiles_path():
-    """Get the tone_profiles.json path for the current platform."""
+    """Get the toner_data.json path for the current platform."""
     if sys.platform == 'win32':
         base = os.environ.get('APPDATA', '')
-        return os.path.join(base, 'StohrerSaxShopCompanion', 'tone_profiles.json')
+        return os.path.join(base, 'StohrerSaxShopCompanion', 'toner_data.json')
     elif sys.platform == 'darwin':
         return os.path.expanduser(
-            '~/Library/Application Support/StohrerSaxShopCompanion/tone_profiles.json')
+            '~/Library/Application Support/StohrerSaxShopCompanion/toner_data.json')
     else:
         base = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
-        return os.path.join(base, 'StohrerSaxShopCompanion', 'tone_profiles.json')
+        return os.path.join(base, 'StohrerSaxShopCompanion', 'toner_data.json')
 
 
 def load_all_profiles():

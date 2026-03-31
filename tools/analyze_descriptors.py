@@ -2,7 +2,7 @@
 """
 Deep analysis of tone profile descriptor data.
 
-Reads tone_profiles.json and computes:
+Reads toner_data.json and computes:
   a) Per-capture descriptors + spectral metrics
   b) Per-note variation within profiles (measurement noise)
   c) Per-note variation across profiles (between-horn signal)
@@ -31,7 +31,7 @@ from toner_engine import (
     FULLNESS_BASE_WEIGHT, FULLNESS_ENERGY_WEIGHT, FULLNESS_ENERGY_DIVISOR,
     flatten_presets,
 )
-from config import TONE_PRESETS_FILE
+from config import TONER_DATA_FILE
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -153,14 +153,14 @@ print("TONE PROFILE DESCRIPTOR ANALYSIS")
 print("=" * 80)
 print()
 
-if not os.path.exists(TONE_PRESETS_FILE):
-    print(f"ERROR: Tone profiles file not found: {TONE_PRESETS_FILE}")
+if not os.path.exists(TONER_DATA_FILE):
+    print(f"ERROR: Tone profiles file not found: {TONER_DATA_FILE}")
     sys.exit(1)
 
-profiles_nested = load_tone_presets(TONE_PRESETS_FILE)
+profiles_nested = load_tone_presets(TONER_DATA_FILE)
 profiles_flat = flatten_presets(profiles_nested)
 
-print(f"Profiles file: {TONE_PRESETS_FILE}")
+print(f"Profiles file: {TONER_DATA_FILE}")
 print(f"Libraries: {len(profiles_nested)}")
 print(f"Total profiles: {len(profiles_flat)}")
 print()

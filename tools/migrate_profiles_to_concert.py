@@ -10,7 +10,7 @@ from toner_engine import migrate_profile_to_concert
 PROFILES_PATH = os.path.join(
     os.environ.get('APPDATA', ''),
     'StohrerSaxShopCompanion',
-    'tone_profiles.json'
+    'toner_data.json'
 )
 
 def main():

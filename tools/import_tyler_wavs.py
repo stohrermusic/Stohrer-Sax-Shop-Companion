@@ -18,7 +18,7 @@ from toner_engine import (
     TonerEngine, analyze_audio_file,
     load_tone_presets, save_tone_presets,
 )
-from config import TONE_PRESETS_FILE
+from config import TONER_DATA_FILE
 
 LIBRARY = "Tyler Anderson"
 PLAYER = "Tyler Anderson"
@@ -144,7 +144,7 @@ def import_file(filepath, horn_type, make, model, serial, mpc, profiles):
 
 
 def main():
-    profile_path = TONE_PRESETS_FILE
+    profile_path = TONER_DATA_FILE
     profiles = load_tone_presets(profile_path)
 
     total_captures = 0

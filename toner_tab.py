@@ -44,9 +44,9 @@ except ImportError:
     PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 try:
-    from config import TONE_PRESETS_FILE, save_settings
+    from config import TONER_DATA_FILE, save_settings
 except ImportError:
-    TONE_PRESETS_FILE = "tone_profiles.json"
+    TONER_DATA_FILE = "toner_data.json"
 
 
 # ============================================
@@ -235,7 +235,7 @@ class TonerTabMixin:
         self._toner_concert_pitch = tk.BooleanVar(
             value=toner_settings.get("concert_pitch", False))
 
-        self._toner_presets = load_tone_presets(TONE_PRESETS_FILE)
+        self._toner_presets = load_tone_presets(TONER_DATA_FILE)
 
         bg = BG_COLOR
 
@@ -1408,7 +1408,7 @@ class TonerTabMixin:
         def save():
             new_notes = notes_text.get("1.0", tk.END).strip()
             preset['notes'] = new_notes
-            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             # Refresh info display if preset dialog is open
             if hasattr(self, '_preset_info_label'):
                 try:
@@ -1574,7 +1574,7 @@ class TonerTabMixin:
 
             self._toner_presets[lib][name] = self._toner_collect_preset_data(
                 fields, notes_text)
-            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
             self._toner_active_session = None
@@ -1602,7 +1602,7 @@ class TonerTabMixin:
             # Remove empty libraries
             if not self._toner_presets[lib_name]:
                 del self._toner_presets[lib_name]
-            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             if (self._toner_active_library == lib_name and
                     self._toner_active_preset == preset_name):
                 self._toner_active_library = None
@@ -1735,7 +1735,7 @@ class TonerTabMixin:
 
             self._toner_presets[lib][name] = self._toner_collect_preset_data(
                 fields, notes_text)
-            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
             dlg.destroy()
@@ -2196,7 +2196,7 @@ class TonerTabMixin:
                         sessions = preset.get('sessions', [])
                         preset['sessions'] = [s for s in sessions
                                                if s.get('date') != session_date]
-                        save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+                        save_tone_presets(self._toner_presets, TONER_DATA_FILE)
                 self._toner_active_session = None
                 dlg.destroy()
 
@@ -2537,7 +2537,7 @@ class TonerTabMixin:
         if not found:
             sessions.append(session_copy)
 
-        save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+        save_tone_presets(self._toner_presets, TONER_DATA_FILE)
 
     # ------------------------------------------------------------------
     # COMPARISON
@@ -4037,7 +4037,7 @@ class TonerTabMixin:
                 'created': time.strftime("%Y-%m-%d"),
                 'sessions': [],
             }
-            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
             self._toner_active_session = None  # Clear old session
@@ -4213,7 +4213,7 @@ class TonerTabMixin:
                 title="Export Tone Presets",
                 defaultextension=".json",
                 filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
-                initialfile="tone_profiles_export.json"
+                initialfile="toner_data_export.json"
             )
             if not filepath:
                 return
@@ -4285,7 +4285,7 @@ class TonerTabMixin:
                             existing.setdefault('sessions', []).append(session)
                             count += 1
 
-        save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+        save_tone_presets(self._toner_presets, TONER_DATA_FILE)
         messagebox.showinfo("Import Complete",
             f"Imported {count} new presets/sessions.")
 
@@ -4302,4 +4302,4 @@ class TonerTabMixin:
         }
         # Also save any pending session
         if self._toner_active_session and self._toner_active_preset:
-            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
