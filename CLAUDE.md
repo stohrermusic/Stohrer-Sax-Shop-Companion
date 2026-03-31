@@ -183,6 +183,8 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Profile management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Two live gauges: Complexity (spectral flatness — Pure ↔ Complex) and Warmth (H2 octave harmonic strength — Thin ↔ Warm). Brightness/darkness/resonance/fullness were removed after data analysis showed the labels didn't match player vocabulary and some descriptors didn't differentiate between horns.
+- Three comparison descriptors (shown in analysis tool, not live gauges): Core Tone (Tristimulus T2, H2-H4 energy weight — most player-independent metric), Even/Odd Ratio (even vs odd harmonic balance), Rolloff Shape (nonlinearity of harmonic rolloff — spectral peaks/bumps).
+- Comparison analysis includes harmonic-range interpretation: H1-H4 shifts = bore, H7-H13 shifts = neck/mpc, broadband = mpc/player. Same-player comparisons noted as more reliable.
 - Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
 - Delta gauges: when an overlay profile is loaded, existing gauges toggle to delta mode (live vs baseline per-note). Two comparison-only gauges appear: Spectral Tilt (H7-H12 delta) and Mid-Harmonic Balance (H3-H6 delta). These only work as deltas — absolute values are too mic-dependent.
 - Recording quality: `compute_rolloff_rate()` measures harmonic rolloff (dB/harmonic). Live warning if rolloff > 2.5 dB/H. Stored per session and in fingerprints. Comparison tool warns on mismatch.

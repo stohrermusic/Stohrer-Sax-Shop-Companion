@@ -2998,6 +2998,73 @@ class UserGuideWindow(tk.Toplevel):
                     "than the horn.")
         self._blank()
 
+        # === COMPARISON DESCRIPTORS ===
+        self._h2("Comparison Descriptors")
+        self._body("In addition to the two live gauges, the comparison "
+                    "tool computes three additional descriptors that are "
+                    "most useful when comparing profiles side by side.")
+        self._blank()
+
+        self._body("Core Tone (H2\u2013H4 energy weight)")
+        self._bullet("Measures the proportion of total energy in the "
+                      "2nd, 3rd, and 4th harmonics. These low harmonics "
+                      "are shaped primarily by the bore of the horn, "
+                      "below the tone hole cutoff frequency. This is "
+                      "the most player-independent descriptor \u2014 it "
+                      "stays relatively stable even when the mouthpiece "
+                      "or player changes. If two horns have different "
+                      "Core Tone, the bodies are acoustically different.")
+        self._blank()
+
+        self._body("Even/Odd Ratio")
+        self._bullet("The balance between even harmonics (H2, H4, "
+                      "H6...) and odd harmonics (H3, H5, H7...). Even "
+                      "harmonics produce a round, warm quality; odd "
+                      "harmonics produce an edgier, hollower quality. "
+                      "Conical bore instruments like saxophone produce "
+                      "both, but the ratio varies between horns. This "
+                      "captures something that Warmth alone doesn't "
+                      "\u2014 the full even-to-odd balance across the "
+                      "entire harmonic series, not just H2.")
+        self._blank()
+
+        self._body("Rolloff Shape")
+        self._bullet("How smoothly the harmonics roll off from strong "
+                      "to weak. A low value means a clean, linear "
+                      "rolloff \u2014 each harmonic fades a consistent "
+                      "amount. A high value means there are bumps or "
+                      "peaks in the rolloff \u2014 certain harmonics "
+                      "stick out. This may correspond to what players "
+                      "describe as \"presence\" or \"projection.\"")
+        self._blank()
+
+        # === WHERE DIFFERENCES COME FROM ===
+        self._h2("Where Differences Come From")
+        self._body("When comparing two profiles, the analysis text "
+                    "tells you which harmonic range has the biggest "
+                    "shifts. This matters because different parts of "
+                    "the saxophone affect different harmonics:")
+        self._blank()
+        self._bullet("H1\u2013H4 (low harmonics): Shaped primarily by "
+                      "the bore \u2014 the body of the horn. If "
+                      "differences are concentrated here, the horns "
+                      "themselves are acoustically different.")
+        self._bullet("H7\u2013H13 (upper harmonics): Most affected by "
+                      "neck geometry and mouthpiece. If the same "
+                      "mouthpiece was used, this range reveals neck "
+                      "differences.")
+        self._bullet("H3\u2013H12 broadband (everything shifts): "
+                      "Consistent with a mouthpiece or player change. "
+                      "The mouthpiece lifts or suppresses the entire "
+                      "upper harmonic series.")
+        self._blank()
+        self._body("When two profiles share the same player, the "
+                    "analysis notes this \u2014 differences must be "
+                    "horn, neck, mouthpiece, or reed. When players "
+                    "differ, the tool warns that the horn signal "
+                    "can't be fully separated from the player signal.")
+        self._blank()
+
         # === REPORTS ===
         self._h2("Profile Reports")
         self._body("The report view shows one profile's history: "

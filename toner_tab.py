@@ -3169,6 +3169,9 @@ class TonerTabMixin:
         desc_labels = [
             ("Complexity", "richness"),
             ("Warmth", "warmth"),
+            ("Core Tone", "core_tone"),
+            ("Even/Odd", "even_odd"),
+            ("Rolloff Shape", "rolloff_shape"),
         ]
 
         # Rolloff rates and mic types for each profile (for table and mismatch check)
@@ -3322,7 +3325,7 @@ class TonerTabMixin:
                     else:
                         lines.append(f"{prefix}Descriptors are very similar.")
 
-                    # Harmonic shift summary
+                    # Harmonic shift summary with component interpretation
                     n = min(len(h_a), len(h_b))
                     if n >= 2:
                         deltas = [(i, h_a[i] - h_b[i]) for i in range(1, n)]
@@ -3338,6 +3341,42 @@ class TonerTabMixin:
                                 f"{prefix}Biggest harmonic shifts at {hrange} "
                                 f"({direction} stronger by up to "
                                 f"{abs(biggest[1]):.1f} dB)")
+
+                        # Component interpretation based on where shifts concentrate
+                        low_shift = sum(abs(d) for i, d in deltas if i < 6) / max(1, min(5, n - 1))
+                        mid_shift = sum(abs(d) for i, d in deltas if 6 <= i < 12) / max(1, len([d for i, d in deltas if 6 <= i < 12]))
+                        hi_shift = sum(abs(d) for i, d in deltas if i >= 12) / max(1, len([d for i, d in deltas if i >= 12])) if n > 12 else 0
+
+                        if mid_shift > 3.0 and mid_shift > low_shift * 1.5:
+                            # Shifts concentrated in upper harmonics
+                            if low_shift < 2.0:
+                                lines.append(
+                                    f"{prefix}Shifts concentrated in upper harmonics "
+                                    "\u2014 consistent with neck or mouthpiece differences. "
+                                    "Low harmonics are similar (body/bore is comparable).")
+                            else:
+                                lines.append(
+                                    f"{prefix}Broadband shifts across H2\u2013H12 "
+                                    "\u2014 consistent with a mouthpiece or player difference.")
+                        elif low_shift > 2.0 and low_shift > mid_shift:
+                            lines.append(
+                                f"{prefix}Shifts concentrated in low harmonics (H2\u2013H4) "
+                                "\u2014 this range is shaped primarily by the bore.")
+
+                    # Player context
+                    p1 = fingerprints[0].get('_profile', {}).get('player', '')
+                    p2 = fingerprints[1].get('_profile', {}).get('player', '')
+                    if p1 and p2:
+                        if p1.lower() == p2.lower():
+                            lines.append(
+                                f"\nSame player ({p1}) \u2014 differences reflect "
+                                "horn, neck, mouthpiece, or reed, not embouchure.")
+                        else:
+                            lines.append(
+                                f"\nDifferent players ({p1} vs {p2}) \u2014 "
+                                "cannot fully separate horn effect from "
+                                "player/mouthpiece effect. Use Core Tone (H2\u2013H4) "
+                                "for the most player-independent comparison.")
             elif len(fingerprints) > 2:
                 for label, key in desc_labels:
                     values = [(fingerprints[i]['_name'],

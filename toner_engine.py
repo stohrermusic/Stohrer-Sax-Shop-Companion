@@ -724,7 +724,8 @@ class TonerEngine:
         Warmth: H2 (octave harmonic) strength relative to fundamental.
         """
         if not harmonics:
-            return {'richness': 0.0, 'warmth': 0.0,
+            return {'richness': 0.0, 'warmth': 0.0, 'core_tone': 0.0,
+                    'even_odd': 0.0, 'rolloff_shape': 0.0,
                     'low_harmonic_data': False}
 
         # --- Richness: spectral flatness of significant harmonics ---
@@ -765,9 +766,64 @@ class TonerEngine:
         warmth = max(0.0, min(1.0,
             (h2_db - WARMTH_DB_FLOOR) / WARMTH_DB_RANGE))
 
+        # --- Core Tone: Tristimulus T2 (H2-H4 energy weight) ---
+        # Measures the proportion of total energy in the body harmonics.
+        # H2-H4 are below the tone hole cutoff frequency, so they're shaped
+        # primarily by the bore — the most player-independent metric we have.
+        # T2 = (|H2| + |H3| + |H4|) / sum(|all|)
+        all_lin = {h.harmonic_number: 10.0 ** (h.magnitude_db / 20.0) for h in harmonics}
+        total_lin = sum(all_lin.values())
+        if total_lin > 0 and all(n in all_lin for n in (2, 3, 4)):
+            core_tone = (all_lin[2] + all_lin[3] + all_lin[4]) / total_lin
+        else:
+            core_tone = 0.0
+
+        # --- Even/Odd Ratio ---
+        # Ratio of even harmonic energy to odd harmonic energy (H2+ only).
+        # Even harmonics (H2,H4,H6...) produce round/warm quality;
+        # odd harmonics (H3,H5,H7...) produce edgier/hollower quality.
+        # Conical bore sax produces both, but the ratio varies by horn.
+        # Scaled: 0.8 → 0%, 1.8 → 100%  (observed range from 47 profiles).
+        even_sum = sum(all_lin.get(n, 0) for n in range(2, 22, 2))
+        odd_sum = sum(all_lin.get(n, 0) for n in range(3, 22, 2))
+        if odd_sum > 0:
+            raw_eo = even_sum / odd_sum
+            even_odd = max(0.0, min(1.0, (raw_eo - 0.8) / 1.0))
+        else:
+            even_odd = 0.0
+
+        # --- Rolloff Shape (nonlinearity) ---
+        # How smoothly harmonics roll off vs having bumps/peaks.
+        # Linear regression of H2-Hmax dB values, then average residual.
+        # Low = smooth rolloff. High = spectral peaks that stick out.
+        # May correspond to "presence" or "projection."
+        # Per-note raw range: 1.0-5.0.  Maps 1.0-5.0 → 0-100%.
+        upper_db = [(h.harmonic_number, h.magnitude_db)
+                    for h in harmonics if h.harmonic_number >= 2]
+        if len(upper_db) >= 4:
+            x_vals = [n for n, _ in upper_db]
+            y_vals = [db for _, db in upper_db]
+            x_mean = sum(x_vals) / len(x_vals)
+            y_mean = sum(y_vals) / len(y_vals)
+            denom = sum((x - x_mean) ** 2 for x in x_vals)
+            if denom > 0:
+                slope = sum((x - x_mean) * (y - y_mean)
+                           for x, y in zip(x_vals, y_vals)) / denom
+                predicted = [y_mean + slope * (x - x_mean) for x in x_vals]
+                residuals = [abs(y - p) for y, p in zip(y_vals, predicted)]
+                raw_nonlin = sum(residuals) / len(residuals)
+                rolloff_shape = max(0.0, min(1.0, (raw_nonlin - 1.0) / 4.0))
+            else:
+                rolloff_shape = 0.0
+        else:
+            rolloff_shape = 0.0
+
         return {
             'richness': richness,
             'warmth': warmth,
+            'core_tone': core_tone,
+            'even_odd': even_odd,
+            'rolloff_shape': rolloff_shape,
             'low_harmonic_data': low_harmonic_data,
         }
 
@@ -921,7 +977,8 @@ def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
         dict with richness, warmth (0.0-1.0) and low_harmonic_data flag
     """
     if not harmonics_db or f0 <= 0:
-        return {'richness': 0.0, 'warmth': 0.0,
+        return {'richness': 0.0, 'warmth': 0.0, 'core_tone': 0.0,
+                'even_odd': 0.0, 'rolloff_shape': 0.0,
                 'low_harmonic_data': False}
     # Lightweight engine instance for _compute_descriptors
     engine = TonerEngine.__new__(TonerEngine)
@@ -1105,7 +1162,7 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         per_note_avg[note] = avg
 
     # Horn-level descriptors: average the per-note descriptors (equal weight per note)
-    desc_keys = ['richness', 'warmth']
+    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
     if per_note_avg:
         horn_descriptors = {}
         for key in desc_keys:
@@ -1183,7 +1240,7 @@ def compute_session_variation(sessions, sax_type="Tenor"):
     if len(fps) < 2:
         return None
 
-    desc_keys = ['richness', 'warmth']
+    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
     stats = {}
     for key in desc_keys:
         values = [fp['descriptors'].get(key, 0.0) for _, fp in fps]
@@ -1237,7 +1294,7 @@ def compute_group_fingerprint(profiles, sax_type=None):
             'per_profile': [],
         }
 
-    desc_keys = ['richness', 'warmth']
+    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
 
     # Average descriptors across profiles (equal weight per profile)
     avg_desc = {}
