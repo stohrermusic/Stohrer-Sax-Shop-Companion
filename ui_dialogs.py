@@ -3117,6 +3117,30 @@ class UserGuideWindow(tk.Toplevel):
                       "Profile Library: for backup or moving data "
                       "between machines. Exported files are JSON.")
         self._blank()
+
+        self._h2("WAV Recording")
+        self._body("Options \u2192 Record WAV During Capture saves a "
+                    "WAV audio file alongside each capture session. "
+                    "This is entirely optional \u2014 the toner does "
+                    "not need the WAV file. All harmonic data is "
+                    "captured and stored in the profile automatically.")
+        self._blank()
+        self._body("Reasons you might want it:")
+        self._bullet("As a backup of the original audio, in case you "
+                      "ever want to re-analyze it with different "
+                      "settings or a future version of the tool")
+        self._bullet("To share recordings with others for their own "
+                      "analysis or import")
+        self._bullet("To listen back and correlate what you hear with "
+                      "what the data shows")
+        self._bullet("To keep a record of how a horn sounds on a "
+                      "given day")
+        self._blank()
+        self._body("Use Options \u2192 Recording Folder to choose "
+                    "where files are saved. Each file is named with "
+                    "the profile name and session date so you can "
+                    "find it later.")
+        self._blank()
         self._body("The toner activates automatically when you switch "
                     "to the Toner tab and stops when you leave it.")
         self._blank()
