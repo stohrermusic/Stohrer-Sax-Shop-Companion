@@ -1130,32 +1130,251 @@ class TonerTabMixin:
             self._toner_sax_scale_widget.configure(state=state)
 
     def _toner_open_settings(self):
-        """Open toner settings dialog."""
+        """Open consolidated toner settings dialog."""
+        from config import get_input_devices, save_settings
+        from tkinter import filedialog
+
         dlg = tk.Toplevel(self.root)
         dlg.title("Tone Analyzer Settings")
-        dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
         fg = "black"
-        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
-        frame.pack(fill="both", expand=True)
+
+        notebook = ttk.Notebook(dlg)
+        notebook.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+
+        # ==================================================================
+        # GENERAL TAB
+        # ==================================================================
+        gen_frame = tk.Frame(notebook, bg=bg, padx=15, pady=10)
+        notebook.add(gen_frame, text="General")
+
+        # --- Input Device ---
+        input_frame = tk.LabelFrame(gen_frame, text="Input Device", bg=bg,
+                                     fg=fg, padx=10, pady=8)
+        input_frame.pack(fill="x", pady=(0, 8))
+
+        devices = get_input_devices()
+        dev_indices = [None]
+        dev_names = ["System Default"]
+        mic_var = tk.StringVar(value="System Default")
+
+        if sys.platform == 'linux':
+            tk.Label(input_frame, text="System Default (set in system audio settings)",
+                     bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
+        elif devices:
+            dev_names += [name for _, name in devices]
+            dev_indices += [idx for idx, _ in devices]
+
+            current_dev = self.settings.get("audio_input_device")
+            if current_dev is not None:
+                for idx, name in devices:
+                    if idx == current_dev:
+                        mic_var.set(name)
+                        break
+
+            listbox = tk.Listbox(input_frame, height=min(6, len(dev_names)),
+                                  width=45, font=("Helvetica", 9))
+            listbox.pack(fill="x", pady=(0, 6))
+            for name in dev_names:
+                listbox.insert(tk.END, name)
+            current_idx = 0
+            if current_dev is not None:
+                for i, (idx, _) in enumerate(devices):
+                    if idx == current_dev:
+                        current_idx = i + 1
+                        break
+            listbox.selection_set(current_idx)
+            listbox.see(current_idx)
+        else:
+            tk.Label(input_frame, text="No audio input devices found.",
+                     bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
+
+        # Mic type/model
+        mic_row = tk.Frame(input_frame, bg=bg)
+        mic_row.pack(fill="x", pady=(4, 2))
+        tk.Label(mic_row, text="Mic Type:", bg=bg, fg=fg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
+        MIC_TYPES = ["Condenser", "Ribbon", "Dynamic"]
+        mic_type_var = tk.StringVar(
+            value=self.settings.get("mic_type", "").capitalize() or "")
+        mic_type_combo = ttk.Combobox(mic_row, textvariable=mic_type_var,
+            values=MIC_TYPES, state="readonly", width=12)
+        mic_type_combo.pack(side="left")
+        if not mic_type_var.get():
+            mic_type_combo.set("")
+
+        mic_model_row = tk.Frame(input_frame, bg=bg)
+        mic_model_row.pack(fill="x", pady=(2, 0))
+        tk.Label(mic_model_row, text="Mic Model:", bg=bg, fg=fg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(0, 3))
+        mic_model_var = tk.StringVar(value=self.settings.get("mic_model", ""))
+        tk.Entry(mic_model_row, textvariable=mic_model_var,
+                 width=25, font=("Helvetica", 9)).pack(side="left")
+        tk.Label(mic_model_row, text="(optional)", bg=bg, fg="#888888",
+                 font=("Helvetica", 8)).pack(side="left", padx=(5, 0))
+
+        _mic_type_warned = [False]
+        def _on_mic_type_changed(event=None):
+            val = mic_type_var.get().lower()
+            if val in ("ribbon", "dynamic") and not _mic_type_warned[0]:
+                _mic_type_warned[0] = True
+                messagebox.showinfo("Mic Type Note",
+                    f"A {val} mic can still be used with the Tone "
+                    f"Analyzer, but upper harmonics will be attenuated.\n\n"
+                    f"Warmth readings remain accurate. Complexity and "
+                    f"full harmonic data will be less reliable.\n\n"
+                    f"Sessions captured with a {val} mic can only be "
+                    f"meaningfully compared with other {val} mic sessions.",
+                    parent=dlg)
+        mic_type_combo.bind("<<ComboboxSelected>>", _on_mic_type_changed)
+
+        # --- Recording ---
+        rec_frame = tk.LabelFrame(gen_frame, text="Recording", bg=bg,
+                                   fg=fg, padx=10, pady=8)
+        rec_frame.pack(fill="x", pady=(0, 8))
+
+        record_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
+        tk.Checkbutton(rec_frame, text="Record WAV during capture",
+                       variable=record_var, bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w")
+
+        folder_frame = tk.Frame(rec_frame, bg=bg)
+        folder_frame.pack(fill="x", pady=(2, 0))
+        current_dir = self.settings.get("toner_recording_dir", "") or self._toner_get_recording_dir()
+        folder_label = tk.Label(folder_frame, text=current_dir, bg=bg, fg="#666666",
+                                font=("Helvetica", 8), anchor="w")
+        def choose_folder():
+            chosen = filedialog.askdirectory(
+                title="Choose Recording Folder",
+                initialdir=current_dir if os.path.isdir(current_dir) else os.path.expanduser("~"),
+                parent=dlg)
+            if chosen:
+                folder_label.configure(text=chosen)
+        tk.Button(folder_frame, text="Folder...", font=("Helvetica", 8),
+                  command=choose_folder).pack(side="left", padx=(0, 5))
+        folder_label.pack(side="left", fill="x")
+
+        # --- Pitch ---
+        pitch_frame = tk.LabelFrame(gen_frame, text="Pitch", bg=bg,
+                                     fg=fg, padx=10, pady=8)
+        pitch_frame.pack(fill="x", pady=(0, 8))
+
+        pitch_row = tk.Frame(pitch_frame, bg=bg)
+        pitch_row.pack(fill="x", pady=(0, 4))
+        tk.Label(pitch_row, text="Reference pitch  A =", bg=bg, fg=fg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
+        ref_pitch_var = tk.DoubleVar(value=self._toner_pitch_var.get())
+        tk.Entry(pitch_row, textvariable=ref_pitch_var, width=6,
+                 font=("Helvetica", 9)).pack(side="left")
+        tk.Label(pitch_row, text="Hz", bg=bg, fg=fg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(3, 0))
+
+        display_pitch_var = tk.StringVar(
+            value="concert" if self._toner_concert_pitch.get() else "written")
+        tk.Radiobutton(pitch_frame, text="Written pitch (what the player fingers)",
+                       variable=display_pitch_var, value="written", bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w")
+        tk.Radiobutton(pitch_frame, text="Concert pitch (actual sounding frequency)",
+                       variable=display_pitch_var, value="concert", bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w")
+
+        # ==================================================================
+        # ANALYSIS TAB
+        # ==================================================================
+        ana_frame = tk.Frame(notebook, bg=bg, padx=15, pady=10)
+        notebook.add(ana_frame, text="Analysis")
+
+        # --- Preset Fields ---
+        pf_frame = tk.LabelFrame(ana_frame, text="Preset Fields", bg=bg,
+                                  fg=fg, padx=10, pady=8)
+        pf_frame.pack(fill="x", pady=(0, 8))
+
+        tk.Label(pf_frame, text="Show these optional fields when creating presets.",
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 4))
+
+        field_labels = [
+            ("serial", "Serial #"),
+            ("reed", "Reed"),
+            ("ligature", "Ligature"),
+            ("room", "Room / Environment"),
+            ("preamp", "Preamp / Interface"),
+            ("mic_model", "Mic Model"),
+            ("notes", "Notes"),
+        ]
+        vis = self.settings.get("visible_preset_fields", {})
+        field_vars = {}
+        for key, label in field_labels:
+            var = tk.BooleanVar(value=vis.get(key, False))
+            tk.Checkbutton(pf_frame, text=label, variable=var, bg=bg, fg=fg,
+                           font=("Helvetica", 9)).pack(anchor="w")
+            field_vars[key] = var
+
+        # Easter egg
+        _ns_var = tk.BooleanVar(value=False)
+        _ns_cb = tk.Checkbutton(pf_frame, text="Heavy Mass Neck Screw",
+                                variable=_ns_var, bg=bg, fg=fg,
+                                font=("Helvetica", 9))
+        _ns_cb.pack(anchor="w")
+        _ns_msgs = ["No.", "Nope.", "Uh uh.", "I refuse.",
+                     "Forget it.", "Stop.", "Dude."]
+        _ns_idx = [0]
+
+        def _ns_remove():
+            pw = tk.Toplevel(dlg)
+            pw.title("Processing...")
+            pw.resizable(False, False)
+            pw.transient(dlg)
+            pw.grab_set()
+            pf = tk.Frame(pw, bg=bg, padx=20, pady=15)
+            pf.pack(fill="both", expand=True)
+            tk.Label(pf, text="Removing option...", bg=bg,
+                     font=("Helvetica", 10)).pack(pady=(0, 8))
+            pbar = ttk.Progressbar(pf, orient="horizontal",
+                                   length=250, mode="determinate")
+            pbar.pack()
+
+            def _tick(val):
+                pbar['value'] = val
+                if val < 100:
+                    if val < 70:
+                        delay = 40
+                    elif val < 90:
+                        delay = 200
+                    elif val < 99:
+                        delay = 500
+                    else:
+                        delay = 3000
+                    pw.after(delay, _tick, val + 1)
+                else:
+                    pw.after(300, lambda: (pw.destroy(), _ns_cb.pack_forget()))
+            _tick(0)
+
+        def _ns_click():
+            _ns_var.set(False)
+            if _ns_idx[0] < len(_ns_msgs):
+                messagebox.showinfo("", _ns_msgs[_ns_idx[0]], parent=dlg)
+                _ns_idx[0] += 1
+            if _ns_idx[0] >= len(_ns_msgs):
+                _ns_remove()
+        _ns_cb.configure(command=_ns_click)
 
         # --- Analysis Descriptors ---
-        desc_frame = tk.LabelFrame(frame, text="Analysis Descriptors", bg=bg,
+        desc_frame = tk.LabelFrame(ana_frame, text="Analysis Descriptors", bg=bg,
                                     fg=fg, padx=10, pady=8)
-        desc_frame.pack(fill="x", pady=(0, 10))
+        desc_frame.pack(fill="x", pady=(0, 8))
 
         tk.Label(desc_frame, text="Choose which descriptors appear in the Analyze tool.",
-                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 6))
+                 bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 4))
 
         toner_settings = self.settings.get("toner_settings", {})
         analysis_desc = toner_settings.get("analysis_descriptors", {})
 
         descriptor_info = [
             ("richness", "Complexity", None,
-             "Spectral flatness — how evenly energy is spread "
+             "Spectral flatness \u2014 how evenly energy is spread "
              "across the harmonic series.\n\n"
              "Higher values = many harmonics at similar strength "
              "(complex, rich tone).\n"
@@ -1196,67 +1415,72 @@ class TonerTabMixin:
             if badge:
                 display += f"  [{badge}]"
             tk.Label(row, text=display, bg=bg, fg=fg,
-                     font=("Helvetica", 10)).pack(side="left")
+                     font=("Helvetica", 9)).pack(side="left")
 
             def make_info_cmd(title=label, text=info_text):
                 return lambda: messagebox.showinfo(title, text, parent=dlg)
             tk.Button(row, text="?", width=2, font=("Helvetica", 8),
                       command=make_info_cmd()).pack(side="left", padx=(6, 0))
 
-        # --- Buttons ---
-        btn_frame = tk.Frame(frame, bg=bg)
-        btn_frame.pack(fill="x", pady=(5, 0))
+        # ==================================================================
+        # OK / CANCEL
+        # ==================================================================
+        btn_frame = tk.Frame(dlg, bg=bg)
+        btn_frame.pack(fill="x", padx=10, pady=(5, 10))
 
         def save():
+            # Input device
+            if devices and sys.platform != 'linux':
+                sel = listbox.curselection()
+                if sel:
+                    self.settings["audio_input_device"] = dev_indices[sel[0]]
+            self.settings["mic_type"] = mic_type_var.get().lower()
+            self.settings["mic_model"] = mic_model_var.get().strip()
+
+            # Recording
+            self.settings["toner_record_wav"] = record_var.get()
+            if hasattr(self, '_toner_record_wav_var'):
+                self._toner_record_wav_var.set(record_var.get())
+            folder = folder_label.cget("text")
+            if folder and folder != current_dir:
+                self.settings["toner_recording_dir"] = folder
+
+            # Pitch
+            try:
+                new_pitch = ref_pitch_var.get()
+                if 420 <= new_pitch <= 460:
+                    self._toner_pitch_var.set(new_pitch)
+                    self._toner_on_pitch_changed()
+            except (tk.TclError, ValueError):
+                pass
+            self._toner_concert_pitch.set(display_pitch_var.get() == "concert")
+            self._toner_update_pitch_mode_label()
+
+            # Preset fields
+            for key, var in field_vars.items():
+                vis[key] = var.get()
+            self.settings["visible_preset_fields"] = vis
+
+            # Analysis descriptors
             ts = self.settings.setdefault("toner_settings", {})
             ts["analysis_descriptors"] = {k: v.get() for k, v in desc_vars.items()}
-            from config import save_settings
+
             save_settings(self.settings)
+
+            # Restart audio engine if device changed
+            if devices and sys.platform != 'linux':
+                sel = listbox.curselection()
+                if sel:
+                    new_dev = dev_indices[sel[0]]
+                    if new_dev != self.settings.get("_prev_audio_device"):
+                        if hasattr(self, '_toner_engine') and self._toner_engine and self._toner_engine.is_running:
+                            self._toner_stop()
+                            self._toner_start()
+
             dlg.destroy()
 
         tk.Button(btn_frame, text="OK", width=10, command=save).pack(side="right", padx=(5, 0))
         tk.Button(btn_frame, text="Cancel", width=10, command=dlg.destroy).pack(side="right")
-
-    def _toner_open_pitch_dialog(self):
-        """Open reference pitch (A=) dialog."""
-        result = simpledialog.askfloat("Reference Pitch",
-            "A = ? Hz", initialvalue=self._toner_pitch_var.get(),
-            minvalue=420, maxvalue=460, parent=self.root)
-        if result is not None:
-            self._toner_pitch_var.set(result)
-            self._toner_on_pitch_changed()
-
-    def _toner_open_pitch_display_dialog(self):
-        """Toggle between written and concert pitch display."""
-        current = "concert" if self._toner_concert_pitch.get() else "written"
-        dlg = tk.Toplevel(self.root)
-        dlg.title("Display Pitch")
-        dlg.resizable(False, False)
-        dlg.transient(self.root)
-        dlg.grab_set()
-
-        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
-        fg = "black"
-        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
-        frame.pack(fill="both", expand=True)
-
-        tk.Label(frame, text="Note Display", bg=bg, fg=fg,
-                 font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
-
-        var = tk.StringVar(value=current)
-        tk.Radiobutton(frame, text="Written pitch (what the player fingers)",
-                       variable=var, value="written", bg=bg, fg=fg,
-                       font=("Helvetica", 10)).pack(anchor="w")
-        tk.Radiobutton(frame, text="Concert pitch (actual sounding frequency)",
-                       variable=var, value="concert", bg=bg, fg=fg,
-                       font=("Helvetica", 10)).pack(anchor="w")
-
-        def apply():
-            self._toner_concert_pitch.set(var.get() == "concert")
-            self._toner_update_pitch_mode_label()
-            dlg.destroy()
-
-        tk.Button(frame, text="OK", command=apply, width=10).pack(pady=(10, 0))
 
     def _toner_transpose_note(self, concert_note):
         """Transpose a concert pitch note name to written pitch for display.

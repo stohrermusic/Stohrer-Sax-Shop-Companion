@@ -289,18 +289,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
         toner_options_menu.add_command(label="Settings...", command=self._toner_open_settings)
-        toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
         toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
-        toner_options_menu.add_command(label="Preset Fields...", command=self._open_preset_fields_dialog)
         self._toner_record_wav_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
-        toner_options_menu.add_checkbutton(label="Record WAV During Capture",
-                                            variable=self._toner_record_wav_var,
-                                            command=self._on_toner_record_wav_toggle)
-        toner_options_menu.add_command(label="Recording Folder...",
-                                       command=self._open_toner_recording_dir)
-        toner_options_menu.add_separator()
-        toner_options_menu.add_command(label="Reference Pitch (A=)...", command=self._toner_open_pitch_dialog)
-        toner_options_menu.add_command(label="Display Pitch...", command=self._toner_open_pitch_display_dialog)
 
         # --- Add Help menu to all tab menus ---
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
