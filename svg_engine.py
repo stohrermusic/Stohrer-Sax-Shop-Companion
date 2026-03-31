@@ -611,7 +611,7 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
 
         if is_dart_pad:
             if dart_cfg.get("engraving_on", True):
-                engraving_settings = dart_cfg.get("engraving_loc", {"mode": "from_outside", "value": 2.5})
+                engraving_settings = plc_cfg.get("engraving_location", {}).get("darted_leather", {"mode": "from_outside", "value": 2.5})
                 should_engrave = True
         else:
             if eng_cfg.get("engraving_on", True):

@@ -607,6 +607,7 @@ DEFAULT_SETTINGS = {
         "felt": {"mode": "from_inside", "value": 4.0},
         "card": {"mode": "from_inside", "value": 4.0},
         "leather": {"mode": "from_outside", "value": 1.0},
+        "darted_leather": {"mode": "from_outside", "value": 2.5},
         "exact_size": {"mode": "from_inside", "value": 4.0}
     },
     "layer_colors": {

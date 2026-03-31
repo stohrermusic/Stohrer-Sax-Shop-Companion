@@ -173,8 +173,6 @@ class OptionsWindow:
         self.range_freq_mult_var = tk.DoubleVar(value=1.0)
         self.range_shape_factor_var = tk.DoubleVar(value=0.0)
         self.range_engraving_on_var = tk.BooleanVar(value=True)
-        self.range_engraving_mode_var = tk.StringVar(value="from_outside")
-        self.range_engraving_val_var = tk.DoubleVar(value=2.5)
 
         self.engraving_on_var = tk.BooleanVar(value=self.settings["engraving_on"])
         self.compatibility_mode_var = tk.BooleanVar(value=self.settings.get("compatibility_mode", False))
@@ -183,8 +181,6 @@ class OptionsWindow:
 
         # Dart Engraving Vars (universal mode)
         self.dart_engraving_on_var = tk.BooleanVar(value=self.settings.get("dart_engraving_on", True))
-        self.dart_engraving_mode_var = tk.StringVar(value=self.settings.get("dart_engraving_loc", {}).get("mode", "from_outside"))
-        self.dart_engraving_val_var = tk.DoubleVar(value=self.settings.get("dart_engraving_loc", {}).get("value", 2.5))
 
         # Sizing range mode vars
         self.sizing_range_mode_var = tk.StringVar(value=self.settings.get("sizing_range_mode", "universal"))
@@ -319,14 +315,6 @@ class OptionsWindow:
         tk.Label(self.dart_universal_frame, text="-------------------------", bg=DIALOG_BG).grid(row=5, column=0, columnspan=2, pady=5)
         tk.Checkbutton(self.dart_universal_frame, text="Show Label on Star Pads", variable=self.dart_engraving_on_var, bg=DIALOG_BG).grid(row=6, column=0, columnspan=2, sticky='w', pady=2)
 
-        star_loc_frame = tk.Frame(self.dart_universal_frame, bg=DIALOG_BG)
-        star_loc_frame.grid(row=7, column=0, columnspan=2, sticky='ew', pady=2)
-        tk.Radiobutton(star_loc_frame, text="outside", variable=self.dart_engraving_mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
-        tk.Radiobutton(star_loc_frame, text="inside", variable=self.dart_engraving_mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
-        tk.Radiobutton(star_loc_frame, text="center", variable=self.dart_engraving_mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
-        tk.Entry(star_loc_frame, textvariable=self.dart_engraving_val_var, width=5).pack(side="left", padx=5)
-        tk.Label(star_loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
-
         # === RANGE SUB-FRAME ===
         self.dart_range_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
         self.dart_range_frame.columnconfigure(1, weight=1)
@@ -366,14 +354,6 @@ class OptionsWindow:
 
         tk.Label(self.dart_range_frame, text="-------------------------", bg=DIALOG_BG).grid(row=7, column=0, columnspan=2, pady=5)
         tk.Checkbutton(self.dart_range_frame, text="Show Label on Star Pads", variable=self.range_engraving_on_var, bg=DIALOG_BG).grid(row=8, column=0, columnspan=2, sticky='w', pady=2)
-
-        range_loc_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
-        range_loc_frame.grid(row=9, column=0, columnspan=2, sticky='ew', pady=2)
-        tk.Radiobutton(range_loc_frame, text="outside", variable=self.range_engraving_mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
-        tk.Radiobutton(range_loc_frame, text="inside", variable=self.range_engraving_mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
-        tk.Radiobutton(range_loc_frame, text="center", variable=self.range_engraving_mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
-        tk.Entry(range_loc_frame, textvariable=self.range_engraving_val_var, width=5).pack(side="left", padx=5)
-        tk.Label(range_loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
 
         # Range action buttons
         btn_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
@@ -453,13 +433,17 @@ class OptionsWindow:
                        value="range", bg=DIALOG_BG, command=self._toggle_eng_placement_mode).pack(side="left")
 
         # === Engraving Placement Universal ===
+        placement_materials = ['leather', 'darted_leather', 'felt', 'card', 'exact_size']
+        placement_labels = {'darted_leather': 'Darted leather', 'exact_size': 'Exact size'}
         self.eng_placement_universal_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
-        for mat in materials:
+        for mat in placement_materials:
             frame = tk.Frame(self.eng_placement_universal_frame, bg=DIALOG_BG)
             frame.pack(fill='x', pady=2)
-            tk.Label(frame, text=mat.replace('_', ' ').capitalize() + ":", bg=DIALOG_BG, width=10, anchor='w').pack(side="left")
-            mode_var = tk.StringVar(value=self.settings["engraving_location"][mat]['mode'])
-            val_var = tk.DoubleVar(value=self.settings["engraving_location"][mat]['value'])
+            label = placement_labels.get(mat, mat.capitalize())
+            tk.Label(frame, text=label + ":", bg=DIALOG_BG, width=15, anchor='w').pack(side="left")
+            loc = self.settings["engraving_location"].get(mat, {"mode": "from_outside", "value": 2.5})
+            mode_var = tk.StringVar(value=loc['mode'])
+            val_var = tk.DoubleVar(value=loc['value'])
             self.engraving_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
             tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
             tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
@@ -485,10 +469,11 @@ class OptionsWindow:
 
         epr_loc = tk.Frame(self.eng_placement_range_frame, bg=DIALOG_BG)
         epr_loc.grid(row=3, column=0, columnspan=2, sticky='ew', pady=2)
-        for mat in materials:
+        for mat in placement_materials:
             frame = tk.Frame(epr_loc, bg=DIALOG_BG)
             frame.pack(fill='x', pady=2)
-            tk.Label(frame, text=mat.replace('_', ' ').capitalize() + ":", bg=DIALOG_BG, width=10, anchor='w').pack(side="left")
+            label = placement_labels.get(mat, mat.capitalize())
+            tk.Label(frame, text=label + ":", bg=DIALOG_BG, width=15, anchor='w').pack(side="left")
             mode_var = tk.StringVar(value="from_outside")
             val_var = tk.DoubleVar(value=2.5)
             self.eng_placement_range_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
@@ -554,9 +539,6 @@ class OptionsWindow:
         self.range_freq_mult_var.set(r.get("frequency_multiplier", 1.0))
         self.range_shape_factor_var.set(r.get("shape_factor", 0.0))
         self.range_engraving_on_var.set(r.get("engraving_on", True))
-        eng_loc = r.get("engraving_loc", {"mode": "from_outside", "value": 2.5})
-        self.range_engraving_mode_var.set(eng_loc.get("mode", "from_outside"))
-        self.range_engraving_val_var.set(eng_loc.get("value", 2.5))
 
     def _read_range_fields(self):
         """Read current editing fields into a range dict."""
@@ -568,10 +550,6 @@ class OptionsWindow:
             "frequency_multiplier": self.range_freq_mult_var.get(),
             "shape_factor": self.range_shape_factor_var.get(),
             "engraving_on": self.range_engraving_on_var.get(),
-            "engraving_loc": {
-                "mode": self.range_engraving_mode_var.get(),
-                "value": self.range_engraving_val_var.get(),
-            },
         }
 
     def _add_range(self):
@@ -907,10 +885,6 @@ class OptionsWindow:
 
         # STAR ENGRAVING SAVE
         self.settings["dart_engraving_on"] = self.dart_engraving_on_var.get()
-        self.settings["dart_engraving_loc"] = {
-            "mode": self.dart_engraving_mode_var.get(),
-            "value": self.dart_engraving_val_var.get()
-        }
             
         # Export
         self.settings["compatibility_mode"] = self.compatibility_mode_var.get()
@@ -965,8 +939,6 @@ class OptionsWindow:
                  
             # Revert Star Engraving
             self.dart_engraving_on_var.set(True)
-            self.dart_engraving_mode_var.set("from_outside")
-            self.dart_engraving_val_var.set(2.5)
 
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
