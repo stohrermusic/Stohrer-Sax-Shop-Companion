@@ -128,6 +128,13 @@ def _format_preset_info(p):
         parts.append(p['reed'])
     if parts:
         info += f"\nSetup: {', '.join(parts)}"
+    mic_parts = []
+    if p.get('mic_type'):
+        mic_parts.append(p['mic_type'].capitalize())
+    if p.get('mic_model'):
+        mic_parts.append(p['mic_model'])
+    if mic_parts:
+        info += f"\nMic: {' — '.join(mic_parts)}"
     sessions = p.get('sessions', [])
     total_caps = 0
     notes = set()
@@ -236,6 +243,27 @@ class TonerTabMixin:
             value=toner_settings.get("concert_pitch", False))
 
         self._toner_presets = load_tone_presets(TONER_DATA_FILE)
+
+        # Migrate: backfill mic_type/mic_model from sessions into presets
+        _migrated = False
+        for _lib in self._toner_presets.values():
+            if not isinstance(_lib, dict):
+                continue
+            for _preset in _lib.values():
+                if not isinstance(_preset, dict) or _preset.get('mic_type'):
+                    continue
+                # Find most common mic_type from sessions
+                from collections import Counter
+                _mics = [s.get('mic_type', '') for s in _preset.get('sessions', [])
+                         if s.get('mic_type')]
+                if _mics:
+                    _preset['mic_type'] = Counter(_mics).most_common(1)[0][0]
+                    _models = [s.get('mic_model', '') for s in _preset.get('sessions', [])
+                               if s.get('mic_model')]
+                    _preset['mic_model'] = _models[0] if _models else ''
+                    _migrated = True
+        if _migrated:
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
 
         bg = BG_COLOR
 
@@ -500,21 +528,12 @@ class TonerTabMixin:
         tk.Label(right_col, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
                  font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 6))
 
-        # Mic status indicator (clickable to open settings)
-        mic_type = self.settings.get("mic_type", "")
-        mic_model = self.settings.get("mic_model", "")
-        if mic_type:
-            mic_text = mic_model if mic_model else mic_type.capitalize()
-            mic_fg = "#AAAAAA"
-        else:
-            mic_text = "mic not set"
-            mic_fg = "#FF8800"
+        # Mic status indicator (shows loaded preset's mic)
         self._toner_mic_label = tk.Label(
-            right_col, text=mic_text, bg=ctrl_bg, fg=mic_fg,
-            font=("Helvetica", 7), cursor="hand2")
+            right_col, text="no preset", bg=ctrl_bg, fg="#666666",
+            font=("Helvetica", 7))
         self._toner_mic_label._skip_theme = True
         self._toner_mic_label.pack(side="left", padx=(0, 10))
-        self._toner_mic_label.bind("<Button-1>", lambda e: self._toner_open_settings())
 
         # Profile indicator + Load/Unload toggle
         self._toner_preset_label = tk.Label(
@@ -1208,44 +1227,8 @@ class TonerTabMixin:
             tk.Label(input_frame, text="No audio input devices found.",
                      bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
 
-        # Mic type/model
-        mic_row = tk.Frame(input_frame, bg=bg)
-        mic_row.pack(fill="x", pady=(4, 2))
-        tk.Label(mic_row, text="Mic Type:", bg=bg, fg=fg,
-                 font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
-        MIC_TYPES = ["Condenser", "Ribbon", "Dynamic"]
-        mic_type_var = tk.StringVar(
-            value=self.settings.get("mic_type", "").capitalize() or "")
-        mic_type_combo = ttk.Combobox(mic_row, textvariable=mic_type_var,
-            values=MIC_TYPES, state="readonly", width=12)
-        mic_type_combo.pack(side="left")
-        if not mic_type_var.get():
-            mic_type_combo.set("")
-
-        mic_model_row = tk.Frame(input_frame, bg=bg)
-        mic_model_row.pack(fill="x", pady=(2, 0))
-        tk.Label(mic_model_row, text="Mic Model:", bg=bg, fg=fg,
-                 font=("Helvetica", 9)).pack(side="left", padx=(0, 3))
-        mic_model_var = tk.StringVar(value=self.settings.get("mic_model", ""))
-        tk.Entry(mic_model_row, textvariable=mic_model_var,
-                 width=25, font=("Helvetica", 9)).pack(side="left")
-        tk.Label(mic_model_row, text="(optional)", bg=bg, fg="#888888",
-                 font=("Helvetica", 8)).pack(side="left", padx=(5, 0))
-
-        _mic_type_warned = [False]
-        def _on_mic_type_changed(event=None):
-            val = mic_type_var.get().lower()
-            if val in ("ribbon", "dynamic") and not _mic_type_warned[0]:
-                _mic_type_warned[0] = True
-                messagebox.showinfo("Mic Type Note",
-                    f"A {val} mic can still be used with the Tone "
-                    f"Analyzer, but upper harmonics will be attenuated.\n\n"
-                    f"Warmth readings remain accurate. Complexity and "
-                    f"full harmonic data will be less reliable.\n\n"
-                    f"Sessions captured with a {val} mic can only be "
-                    f"meaningfully compared with other {val} mic sessions.",
-                    parent=dlg)
-        mic_type_combo.bind("<<ComboboxSelected>>", _on_mic_type_changed)
+        tk.Label(input_frame, text="Mic type and model are set per preset.",
+                 bg=bg, fg="#888888", font=("Helvetica", 8)).pack(anchor="w", pady=(4, 0))
 
         # --- Recording ---
         rec_frame = tk.LabelFrame(gen_frame, text="Recording", bg=bg,
@@ -1317,7 +1300,6 @@ class TonerTabMixin:
             ("ligature", "Ligature"),
             ("room", "Room / Environment"),
             ("preamp", "Preamp / Interface"),
-            ("mic_model", "Mic Model"),
             ("notes", "Notes"),
         ]
         vis = self.settings.get("visible_preset_fields", {})
@@ -1450,8 +1432,6 @@ class TonerTabMixin:
                 sel = listbox.curselection()
                 if sel:
                     self.settings["audio_input_device"] = dev_indices[sel[0]]
-            self.settings["mic_type"] = mic_type_var.get().lower()
-            self.settings["mic_model"] = mic_model_var.get().strip()
 
             # Recording
             self.settings["toner_record_wav"] = record_var.get()
@@ -1482,15 +1462,6 @@ class TonerTabMixin:
             ts["analysis_descriptors"] = {k: v.get() for k, v in desc_vars.items()}
 
             save_settings(self.settings)
-
-            # Update mic status label
-            mt = self.settings.get("mic_type", "")
-            mm = self.settings.get("mic_model", "")
-            if mt:
-                self._toner_mic_label.configure(
-                    text=mm if mm else mt.capitalize(), fg="#AAAAAA")
-            else:
-                self._toner_mic_label.configure(text="mic not set", fg="#FF8800")
 
             # Restart audio engine if device changed
             if devices and sys.platform != 'linux':
@@ -1798,6 +1769,8 @@ class TonerTabMixin:
         vis = self.settings.get("visible_preset_fields", {})
         d = defaults or {}
 
+        MIC_TYPES = ["Condenser", "Ribbon", "Dynamic"]
+
         def add_field(label, key, default="", widget_type="entry",
                       optional_key=None, data_key=None):
             """Add a labeled field row. If optional_key is set, only show
@@ -1813,6 +1786,12 @@ class TonerTabMixin:
             if widget_type == "combo":
                 var = tk.StringVar(value=val)
                 ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
+                             state="readonly", width=20).pack(
+                    side="left", fill="x", expand=True)
+                fields[key] = var
+            elif widget_type == "mic_combo":
+                var = tk.StringVar(value=val.capitalize() if val else "")
+                ttk.Combobox(row, textvariable=var, values=MIC_TYPES,
                              state="readonly", width=20).pack(
                     side="left", fill="x", expand=True)
                 fields[key] = var
@@ -1845,16 +1824,8 @@ class TonerTabMixin:
         add_field("Model:", "horn_model")
         add_field("Player:", "player")
         add_field("Mouthpiece:", "mouthpiece")
-
-        # Optional fields
-        add_field("Serial #:", "serial", optional_key="serial")
-        add_field("Reed:", "reed", optional_key="reed")
-        add_field("Ligature:", "ligature", optional_key="ligature")
-        add_field("Room:", "room", optional_key="room")
-        add_field("Preamp:", "preamp", optional_key="preamp")
-        add_field("Mic Model:", "mic_model_field",
-                  default=self.settings.get("mic_model", ""),
-                  optional_key="mic_model")
+        add_field("Mic Type:", "mic_type", "", widget_type="mic_combo")
+        add_field("Mic Model:", "mic_model", "")
 
         # Notes — multi-line (optional)
         notes_text = None
@@ -1870,27 +1841,6 @@ class TonerTabMixin:
             if d.get('notes'):
                 notes_text.insert("1.0", d['notes'])
 
-        # Mic status (read-only, from global settings)
-        mic_row = tk.Frame(frame, bg=bg)
-        mic_row.pack(fill="x", pady=(6, 0))
-        mic_type = self.settings.get("mic_type", "")
-        mic_model = self.settings.get("mic_model", "")
-        if mic_type:
-            mic_text = f"{mic_type.capitalize()}"
-            if mic_model:
-                mic_text += f" ({mic_model})"
-            mic_fg = "#666666"
-        else:
-            mic_text = "not set"
-            mic_fg = "#CC6600"
-        tk.Label(mic_row, text="Mic:", bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(
-            side="left", padx=(0, 8))
-        mic_label = tk.Label(mic_row, text=mic_text, bg=bg, fg=mic_fg,
-                             font=("Helvetica", 10), cursor="hand2")
-        mic_label.pack(side="left")
-        mic_label.bind("<Button-1>", lambda e: self._toner_open_settings())
-
         return fields, lib_var, notes_text
 
     def _toner_validate_required_fields(self, fields, dlg):
@@ -1901,6 +1851,7 @@ class TonerTabMixin:
             ("horn_model", "Model"),
             ("player", "Player"),
             ("mouthpiece", "Mouthpiece"),
+            ("mic_type", "Mic Type"),
         ]
         for key, label in required:
             if key in fields and not fields[key].get().strip():
@@ -1922,6 +1873,8 @@ class TonerTabMixin:
             'ligature': fields.get("ligature", tk.StringVar()).get().strip() if "ligature" in fields else "",
             'room': fields.get("room", tk.StringVar()).get().strip() if "room" in fields else "",
             'preamp': fields.get("preamp", tk.StringVar()).get().strip() if "preamp" in fields else "",
+            'mic_type': fields.get("mic_type", tk.StringVar()).get().lower(),
+            'mic_model': fields.get("mic_model", tk.StringVar()).get().strip(),
             'notes': notes_text.get("1.0", tk.END).strip() if notes_text else "",
             'created': time.strftime("%Y-%m-%d"),
             'sessions': [],
@@ -2331,7 +2284,7 @@ class TonerTabMixin:
                 cv.itemconfigure(self._toner_cal_status, state="hidden")
 
     def _toner_update_preset_label(self):
-        """Update the active preset indicator and Load/Unload button."""
+        """Update the active preset indicator, mic label, and Load/Unload button."""
         if hasattr(self, '_toner_preset_label'):
             name = self._toner_active_preset or ""
             if name:
@@ -2339,18 +2292,34 @@ class TonerTabMixin:
                 self._toner_preset_label.configure(text=display, fg="#AAAAAA")
             else:
                 self._toner_preset_label.configure(text="no preset", fg="#666666")
+        if hasattr(self, '_toner_mic_label'):
+            preset = {}
+            if self._toner_active_library and self._toner_active_preset:
+                lib = self._toner_presets.get(self._toner_active_library, {})
+                preset = lib.get(self._toner_active_preset, {})
+            mt = preset.get('mic_type', '')
+            mm = preset.get('mic_model', '')
+            if mt:
+                mic_text = mm if mm else mt.capitalize()
+                self._toner_mic_label.configure(text=mic_text, fg="#AAAAAA")
+            elif self._toner_active_preset:
+                self._toner_mic_label.configure(text="mic not set", fg="#FF8800")
+            else:
+                self._toner_mic_label.configure(text="no preset", fg="#666666")
         self._toner_update_load_unload_btn()
 
     def _toner_start_new_session_and_listen(self):
         """Create a new session for the active preset and begin listening."""
-        # Prompt for mic type if not set
-        if not self.settings.get('mic_type'):
+        # Prompt for mic type if not set on preset
+        preset_check = {}
+        if self._toner_active_library and self._toner_active_preset:
+            lib = self._toner_presets.get(self._toner_active_library, {})
+            preset_check = lib.get(self._toner_active_preset, {})
+        if not preset_check.get('mic_type'):
             messagebox.showinfo("Mic Type Required",
-                "Please set your microphone type in Options \u2192 "
-                "Settings before capturing.\n\n"
-                "A condenser mic is required for full harmonic "
-                "analysis. Ribbon and dynamic mics can still be "
-                "used but with reduced accuracy for upper harmonics.",
+                "This preset has no mic type set.\n\n"
+                "Use Mutate in File \u2192 Presets to add mic info,\n"
+                "or create a new preset with mic type specified.",
                 parent=self.root)
             return
 
@@ -2375,8 +2344,8 @@ class TonerTabMixin:
         self._toner_active_session = {
             'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'captures': [],
-            'mic_type': self.settings.get('mic_type', ''),
-            'mic_model': self.settings.get('mic_model', ''),
+            'mic_type': preset.get('mic_type', ''),
+            'mic_model': preset.get('mic_model', ''),
             'horn_type': preset.get('horn_type', ''),
             'horn_make': preset.get('horn_make', ''),
             'horn_model': preset.get('horn_model', ''),
@@ -4395,8 +4364,8 @@ class TonerTabMixin:
                     'captures': [],
                     'source_notes': source_notes,
                     'method': 'file',
-                    'mic_type': self.settings.get('mic_type', ''),
-                    'mic_model': self.settings.get('mic_model', ''),
+                    'mic_type': preset.get('mic_type', ''),
+                    'mic_model': preset.get('mic_model', ''),
                 }
 
                 dlg.destroy()
