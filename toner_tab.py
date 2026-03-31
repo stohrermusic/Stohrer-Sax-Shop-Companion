@@ -1645,6 +1645,9 @@ class TonerTabMixin:
         tk.Button(row2, text="New Preset...",
                   command=lambda: self._toner_new_preset(dlg)).pack(
                       side="left", padx=(0, 5))
+        tk.Button(row2, text="Mutate...",
+                  command=self._toner_mutate_preset).pack(
+                      side="left", padx=(0, 5))
         tk.Button(row2, text="Import Audio File...",
                   command=lambda: [dlg.destroy(),
                                    self._toner_import_audio_file()]).pack(
@@ -1764,34 +1767,41 @@ class TonerTabMixin:
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.minsize(400, 250)
 
-    def _toner_build_preset_fields(self, frame, bg, fg):
+    def _toner_build_preset_fields(self, frame, bg, fg, defaults=None,
+                                    default_lib=None):
         """Build preset form fields. Returns (fields_dict, lib_var, notes_text).
 
         Required fields are always shown. Optional fields respect
         the visible_preset_fields setting.
+
+        Args:
+            defaults: dict of preset data to pre-fill fields from (for mutate)
+            default_lib: library name to pre-select
         """
         fields = {}
         vis = self.settings.get("visible_preset_fields", {})
+        d = defaults or {}
 
         def add_field(label, key, default="", widget_type="entry",
-                      optional_key=None):
+                      optional_key=None, data_key=None):
             """Add a labeled field row. If optional_key is set, only show
             when that key is enabled in visible_preset_fields."""
             if optional_key and not vis.get(optional_key, False):
                 return
+            val = d.get(data_key or key, default)
             row = tk.Frame(frame, bg=bg)
             row.pack(fill="x", pady=2)
             tk.Label(row, text=label, bg=bg, fg=fg, width=14,
                      anchor="e", font=("Helvetica", 10)).pack(
                 side="left", padx=(0, 8))
             if widget_type == "combo":
-                var = tk.StringVar(value=default)
+                var = tk.StringVar(value=val)
                 ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
                              state="readonly", width=20).pack(
                     side="left", fill="x", expand=True)
                 fields[key] = var
             else:
-                var = tk.StringVar(value=default)
+                var = tk.StringVar(value=val)
                 tk.Entry(row, textvariable=var, width=25).pack(
                     side="left", fill="x", expand=True)
                 fields[key] = var
@@ -1806,7 +1816,8 @@ class TonerTabMixin:
                         if isinstance(self._toner_presets[k], dict)]
         if not existing_libs:
             existing_libs = [DEFAULT_LIBRARY]
-        lib_var = tk.StringVar(value=existing_libs[0])
+        lib_val = default_lib if default_lib and default_lib in existing_libs else existing_libs[0]
+        lib_var = tk.StringVar(value=lib_val)
         ttk.Combobox(lib_row, textvariable=lib_var,
                       values=existing_libs, width=20).pack(
             side="left", fill="x", expand=True)
@@ -1840,6 +1851,8 @@ class TonerTabMixin:
             notes_text = tk.Text(notes_row, height=3, width=25,
                                  font=("Helvetica", 10), wrap="word")
             notes_text.pack(side="left", fill="x", expand=True)
+            if d.get('notes'):
+                notes_text.insert("1.0", d['notes'])
 
         return fields, lib_var, notes_text
 
@@ -1922,6 +1935,68 @@ class TonerTabMixin:
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
         tk.Button(btn_row, text="Create", command=save).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
+
+    def _toner_mutate_preset(self):
+        """Duplicate selected preset with editable fields, save as new."""
+        sel = self._preset_listbox.curselection()
+        if not sel:
+            return
+        key = self._preset_list_keys[sel[0]]
+        if key is None:
+            return
+        lib_name, preset_name = key
+        source = self._toner_presets[lib_name][preset_name]
+
+        parent = self._preset_listbox.winfo_toplevel()
+        dlg = tk.Toplevel(parent)
+        dlg.title("Mutate Preset")
+        dlg.resizable(False, False)
+        dlg.transient(parent)
+        dlg.grab_set()
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Mutate Preset", bg=bg, fg=fg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(0, 2))
+        tk.Label(frame, text="Change what you need, save as a new preset.",
+                 bg=bg, fg="#666666", font=("Helvetica", 9)).pack(pady=(0, 10))
+
+        # Pre-fill from source, clear the name so they must enter a new one
+        defaults = dict(source)
+        defaults['name'] = ""
+
+        fields, lib_var, notes_text = self._toner_build_preset_fields(
+            frame, bg, fg, defaults=defaults, default_lib=lib_name)
+
+        def save():
+            if not self._toner_validate_required_fields(fields, dlg):
+                return
+            name = fields["name"].get().strip()
+            lib = lib_var.get().strip() or DEFAULT_LIBRARY
+            if lib not in self._toner_presets:
+                self._toner_presets[lib] = {}
+            if name in self._toner_presets[lib]:
+                messagebox.showwarning("Duplicate Name",
+                    f"'{name}' already exists in '{lib}'.", parent=dlg)
+                return
+
+            self._toner_presets[lib][name] = self._toner_collect_preset_data(
+                fields, notes_text)
+            save_tone_presets(self._toner_presets, TONER_DATA_FILE)
+            self._toner_active_library = lib
+            self._toner_active_preset = name
+            self._toner_active_session = None
+            self._toner_update_preset_label()
+            self._toner_refresh_preset_list()
+            dlg.destroy()
+
+        btn_row = tk.Frame(frame, bg=bg)
+        btn_row.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_row, text="Save as New", command=save).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
 
     def _toner_delete_preset(self):
