@@ -228,6 +228,7 @@ class TonerEngine:
         self._mic_quality_warned = False  # Only warn once per session
         self._spectral_check_frames = 0  # Count frames for spectral quality check
         self._low_energy_frames = 0  # Frames where low freqs are suspiciously weak
+        self._recording_chunks = None  # list of numpy arrays when recording
 
     def check_spectral_quality(self):
         """Check if the mic shows poor low-frequency response.
@@ -300,6 +301,31 @@ class TonerEngine:
             self._stream = None
         self._ring_buffer = None
 
+    def start_recording(self):
+        """Begin accumulating raw audio for WAV export."""
+        self._recording_chunks = []
+
+    def stop_recording(self):
+        """Stop accumulating audio. Returns the chunks list, or None."""
+        chunks = self._recording_chunks
+        self._recording_chunks = None
+        return chunks
+
+    @staticmethod
+    def save_recording(chunks, filepath):
+        """Write accumulated audio chunks to a 16-bit WAV file."""
+        import wave
+        if not chunks:
+            return
+        audio = np.concatenate(chunks)
+        # Convert float32 [-1,1] to int16
+        int_data = np.clip(audio * 32767, -32768, 32767).astype(np.int16)
+        with wave.open(filepath, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(SAMPLE_RATE)
+            wf.writeframes(int_data.tobytes())
+
     @property
     def is_running(self):
         return self._running
@@ -307,6 +333,8 @@ class TonerEngine:
     def _audio_callback(self, indata, frames, time_info, status):
         if self._ring_buffer is not None:
             self._ring_buffer.write(indata[:, 0])
+        if self._recording_chunks is not None:
+            self._recording_chunks.append(indata[:, 0].copy())
 
     def analyze(self):
         """Analyze current audio buffer. Returns TonerResult.

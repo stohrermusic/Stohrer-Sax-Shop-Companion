@@ -2009,6 +2009,11 @@ class TonerTabMixin:
             'mic_model': self.settings.get('mic_model', ''),
         }
         self._toner_rolloff_warned = False
+
+        # Start WAV recording if enabled
+        if self.settings.get('toner_record_wav') and self._toner_engine:
+            self._toner_engine.start_recording()
+
         self._toner_begin_listening()
 
     def _toner_stop_capture(self):
@@ -2016,6 +2021,12 @@ class TonerTabMixin:
         # Save any accumulated free-mode frames before stopping
         if self._toner_capture_mode == 'free' and self._toner_free_accumulator:
             self._toner_free_save_micro_capture()
+
+        # Save WAV recording if active
+        if self._toner_engine:
+            chunks = self._toner_engine.stop_recording()
+            if chunks and self._toner_active_session:
+                self._toner_save_wav_recording(chunks)
 
         # Compute and store recording quality metric for the session
         if self._toner_active_session and self._toner_active_session.get('captures'):
@@ -2047,6 +2058,44 @@ class TonerTabMixin:
         if (self._toner_active_session and
                 self._toner_active_session.get('captures')):
             self._toner_show_coverage_summary()
+
+    def _toner_get_recording_dir(self):
+        """Return the directory for WAV recordings, creating it if needed."""
+        rec_dir = self.settings.get('toner_recording_dir', '')
+        if not rec_dir:
+            # Default: Music/StohrerSaxShopCompanion or Documents fallback
+            music = os.path.join(os.path.expanduser('~'), 'Music')
+            if not os.path.isdir(music):
+                music = os.path.join(os.path.expanduser('~'), 'Documents')
+            rec_dir = os.path.join(music, 'StohrerSaxShopCompanion')
+        os.makedirs(rec_dir, exist_ok=True)
+        return rec_dir
+
+    def _toner_save_wav_recording(self, chunks):
+        """Save recorded audio chunks to a WAV file correlated with the session."""
+        try:
+            rec_dir = self._toner_get_recording_dir()
+            # Build filename from profile name and session date
+            profile_name = ''
+            if self._toner_active_profile:
+                profile_name = self._toner_active_profile
+            # Sanitize for filesystem
+            safe_name = "".join(c if c.isalnum() or c in ' -_' else '_'
+                                for c in profile_name).strip() or 'session'
+            session_date = self._toner_active_session.get('date', '')
+            safe_date = session_date.replace(':', '-').replace(' ', '_')
+            filename = f"{safe_name}_{safe_date}.wav"
+            filepath = os.path.join(rec_dir, filename)
+
+            from toner_engine import TonerEngine
+            TonerEngine.save_recording(chunks, filepath)
+
+            # Store reference in session
+            self._toner_active_session['recording_file'] = filename
+            self._toner_save_active_session()
+        except Exception as e:
+            messagebox.showwarning("Recording",
+                f"Could not save WAV recording:\n{e}")
 
     def _toner_show_coverage_summary(self):
         """Show a coverage summary with note distribution and resume option."""

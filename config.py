@@ -548,6 +548,8 @@ DEFAULT_SETTINGS = {
     # AUDIO INPUT
     "audio_input_device": None,  # None = system default, or device index
     "capture_threshold": 50,     # 0-100, how loud a signal must be to trigger capture
+    "toner_record_wav": False,   # Record WAV audio during toner capture sessions
+    "toner_recording_dir": "",   # Directory for WAV recordings (empty = Music/StohrerSaxShopCompanion)
 
     # VISIBLE SAX TYPES (for toner sax selector)
     "visible_sax_types": None,  # None = all types, or list of type names

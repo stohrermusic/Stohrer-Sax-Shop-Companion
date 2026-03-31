@@ -291,6 +291,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
         toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
         toner_options_menu.add_command(label="Profile Fields...", command=self._open_profile_fields_dialog)
+        self._toner_record_wav_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
+        toner_options_menu.add_checkbutton(label="Record WAV During Capture",
+                                            variable=self._toner_record_wav_var,
+                                            command=self._on_toner_record_wav_toggle)
+        toner_options_menu.add_command(label="Recording Folder...",
+                                       command=self._open_toner_recording_dir)
         toner_options_menu.add_separator()
         toner_options_menu.add_command(label="Reference Pitch (A=)...", command=self._toner_open_pitch_dialog)
         toner_options_menu.add_command(label="Display Pitch...", command=self._toner_open_pitch_display_dialog)
@@ -2105,6 +2111,23 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
             side="left")
 
+    def _on_toner_record_wav_toggle(self):
+        """Toggle WAV recording setting."""
+        self.settings["toner_record_wav"] = self._toner_record_wav_var.get()
+        save_settings(self.settings)
+
+    def _open_toner_recording_dir(self):
+        """Let user choose where WAV recordings are saved."""
+        current = self.settings.get("toner_recording_dir", "")
+        if not current:
+            current = self._toner_get_recording_dir()
+        chosen = filedialog.askdirectory(
+            title="Choose Recording Folder",
+            initialdir=current if os.path.isdir(current) else os.path.expanduser("~"))
+        if chosen:
+            self.settings["toner_recording_dir"] = chosen
+            save_settings(self.settings)
+
     def _open_capture_threshold(self):
         """Open capture threshold dialog with live level meter."""
         dlg = tk.Toplevel(self.root)
@@ -2278,8 +2301,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 "The Toner is a real-time harmonic analyzer that captures the "
                 "frequency content of your sound — the fundamental and its "
-                "overtones — and (hopefully eventually) translates that into descriptors like brightness, "
-                "complexity, and fullness.\n\n"
+                "overtones — and translates that into descriptors like "
+                "complexity and warmth.\n\n"
 
                 "HOW IT WORKS\n\n"
 
@@ -2289,16 +2312,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "(horn + mouthpiece + player + reed), and compare them side by "
                 "side.\n\n"
 
-                "WHAT THE GAUGES MEAN RIGHT NOW\n\n"
+                "WHAT THE GAUGES MEAN\n\n"
 
-                "The descriptor gauges (brightness, darkness, complexity, fullness, "
-                "resonance) are computed from real acoustic data, and they do track "
-                "real differences between horns and setups. But the scaling and "
-                "calibration of these gauges is still being refined. The numbers "
-                "you see today may shift as we gather more data and improve the "
-                "formulas. Think of them as currently aspiring to be directionally "
-                "correct, not absolute. I need much, much more data, some hard "
-                "work, and a lot of luck to make these truly useful.\n\n"
+                "Two live gauges — Complexity (how evenly energy spreads across "
+                "harmonics) and Warmth (strength of the octave harmonic) — track "
+                "real differences between horns and setups. The comparison tool "
+                "adds Core Tone, Even/Odd balance, and Rolloff Shape for deeper "
+                "analysis.\n\n"
+
+                "The formulas and scaling may still shift as we gather more data. "
+                "The raw harmonic measurements are always saved, so improvements "
+                "apply retroactively to all your historical captures.\n\n"
 
                 "WHERE THE REAL VALUE IS\n\n"
 
@@ -2307,14 +2331,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "1. Instant feedback — you can see in real time how changes in "
                 "your embouchure, air support, mouthpiece, or reed affect the "
                 "harmonic content of your sound. This is useful right now, today, "
-                "regardless of how the gauges are calibrated.\n\n"
+                "regardless of how the descriptors are calibrated.\n\n"
 
-                "2. Long-term data — as more players capture profiles across "
-                "different horns, mouthpieces, and playing styles, the aggregated "
-                "data will help us understand what actually distinguishes one setup "
-                "from another. Over time, this should tease out meaningful patterns "
-                "about what different horns, mouthpieces, and players do to the "
-                "sound.\n\n"
+                "2. Controlled comparison — change one variable, keep everything "
+                "else the same, and the difference in readings tells you exactly "
+                "what that variable did. Over time, the things that stay the same "
+                "start to emerge from the things that drift.\n\n"
 
                 "We need more data to make the descriptors better. Every profile "
                 "you capture helps."
