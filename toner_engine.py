@@ -794,7 +794,7 @@ class TonerEngine:
         # Even harmonics (H2,H4,H6...) produce round/warm quality;
         # odd harmonics (H3,H5,H7...) produce edgier/hollower quality.
         # Conical bore sax produces both, but the ratio varies by horn.
-        # Scaled: 0.8 → 0%, 1.8 → 100%  (observed range from 47 profiles).
+        # Scaled: 0.8 → 0%, 1.8 → 100%  (observed range from 47 presets).
         all_lin = {h.harmonic_number: 10.0 ** (h.magnitude_db / 20.0) for h in harmonics}
         even_sum = sum(all_lin.get(n, 0) for n in range(2, 22, 2))
         odd_sum = sum(all_lin.get(n, 0) for n in range(3, 22, 2))
@@ -840,11 +840,11 @@ class TonerEngine:
 
 
 # ============================================
-# TONE PROFILES — capture, storage, comparison
+# TONE PRESETS — capture, storage, comparison
 # ============================================
 
-# Minimum unique notes to consider a profile "complete"
-MIN_PROFILE_NOTES = 8
+# Minimum unique notes to consider a preset "complete"
+MIN_PRESET_NOTES = 8
 
 # Attack transient skip — applied to ALL capture modes.
 # Saxophone attacks are 40-120ms depending on articulation. The attack
@@ -1073,7 +1073,7 @@ def compute_rolloff_rate(harmonics_db):
 
 
 def compute_fingerprint(sessions, sax_type="Tenor"):
-    """Compute an aggregate harmonic fingerprint from all sessions in a profile.
+    """Compute an aggregate harmonic fingerprint from all sessions in a preset.
 
     Descriptors are always recomputed from harmonics_db using current
     formulas — stored descriptors (if present) are ignored.  This means
@@ -1179,7 +1179,7 @@ def compute_session_fingerprint(session, sax_type="Tenor"):
 
 
 def compute_session_variation(sessions, sax_type="Tenor"):
-    """Compute descriptor variation across sessions within a profile.
+    """Compute descriptor variation across sessions within a preset.
 
     Returns dict with:
         'session_fingerprints': list of (date, fingerprint) tuples
@@ -1214,48 +1214,48 @@ def compute_session_variation(sessions, sax_type="Tenor"):
     }
 
 
-def compute_group_fingerprint(profiles, sax_type=None):
-    """Compute an aggregate fingerprint across multiple profiles.
+def compute_group_fingerprint(presets, sax_type=None):
+    """Compute an aggregate fingerprint across multiple presets.
 
     Args:
-        profiles: list of (name, profile_data) tuples
-        sax_type: if None, uses each profile's own horn_type
+        presets: list of (name, preset_data) tuples
+        sax_type: if None, uses each preset's own horn_type
 
-    Averages per-profile fingerprints with equal weight per profile.
+    Averages per-preset fingerprints with equal weight per preset.
 
     Returns dict with:
-        'descriptors': averaged descriptors across profiles
+        'descriptors': averaged descriptors across presets
         'harmonics_db': averaged harmonic curve
         'descriptor_stats': {key: {mean, stdev, min, max, n}}
-        'profile_count': int
+        'preset_count': int
         'total_captures': int
-        'per_profile': list of (name, fingerprint)
+        'per_preset': list of (name, fingerprint)
     """
-    per_profile = []
-    for name, pdata in profiles:
+    per_preset = []
+    for name, pdata in presets:
         st = sax_type or pdata.get('horn_type', 'Tenor')
         fp = compute_fingerprint(pdata.get('sessions', []), st)
         if fp['capture_count'] > 0:
-            per_profile.append((name, fp))
+            per_preset.append((name, fp))
 
-    if not per_profile:
+    if not per_preset:
         return {
             'descriptors': {k: 0.0 for k in
                            ['richness', 'warmth']},
             'harmonics_db': [],
             'descriptor_stats': {},
-            'profile_count': 0,
+            'preset_count': 0,
             'total_captures': 0,
-            'per_profile': [],
+            'per_preset': [],
         }
 
     desc_keys = ['richness', 'warmth', 'even_odd', 'rolloff_shape']
 
-    # Average descriptors across profiles (equal weight per profile)
+    # Average descriptors across presets (equal weight per preset)
     avg_desc = {}
     stats = {}
     for key in desc_keys:
-        values = [fp['descriptors'].get(key, 0.0) for _, fp in per_profile]
+        values = [fp['descriptors'].get(key, 0.0) for _, fp in per_preset]
         n = len(values)
         mean = sum(values) / n
         variance = sum((v - mean) ** 2 for v in values) / n
@@ -1267,10 +1267,10 @@ def compute_group_fingerprint(profiles, sax_type=None):
         }
 
     # Average harmonic curves
-    max_len = max((len(fp['harmonics_db']) for _, fp in per_profile), default=0)
+    max_len = max((len(fp['harmonics_db']) for _, fp in per_preset), default=0)
     avg_hdb = [0.0] * max_len
     counts = [0] * max_len
-    for _, fp in per_profile:
+    for _, fp in per_preset:
         for i, db in enumerate(fp.get('harmonics_db', [])):
             avg_hdb[i] += db
             counts[i] += 1
@@ -1278,18 +1278,18 @@ def compute_group_fingerprint(profiles, sax_type=None):
         if counts[i] > 0:
             avg_hdb[i] /= counts[i]
 
-    total_caps = sum(fp['capture_count'] for _, fp in per_profile)
+    total_caps = sum(fp['capture_count'] for _, fp in per_preset)
 
-    # Average per-note data across profiles (for ghost overlay)
+    # Average per-note data across presets (for ghost overlay)
     all_notes = set()
-    for _, fp in per_profile:
+    for _, fp in per_preset:
         all_notes.update(fp.get('per_note', {}).keys())
 
     per_note = {}
     for note in all_notes:
         note_hdb_lists = []
         note_freqs = []
-        for _, fp in per_profile:
+        for _, fp in per_preset:
             pn = fp.get('per_note', {}).get(note)
             if pn and pn.get('harmonics_db'):
                 note_hdb_lists.append(pn['harmonics_db'])
@@ -1297,7 +1297,7 @@ def compute_group_fingerprint(profiles, sax_type=None):
                     note_freqs.append(pn['fundamental_freq'])
         if not note_hdb_lists:
             continue
-        # Average harmonics_db across profiles for this note
+        # Average harmonics_db across presets for this note
         n_max = max(len(h) for h in note_hdb_lists)
         avg_note_hdb = [0.0] * n_max
         note_counts = [0] * n_max
@@ -1318,9 +1318,9 @@ def compute_group_fingerprint(profiles, sax_type=None):
         'descriptors': avg_desc,
         'harmonics_db': avg_hdb,
         'descriptor_stats': stats,
-        'profile_count': len(per_profile),
+        'preset_count': len(per_preset),
         'total_captures': total_caps,
-        'per_profile': per_profile,
+        'per_preset': per_preset,
         'per_note': per_note,
         'note_count': len(per_note),
     }
@@ -1477,13 +1477,13 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     return captures
 
 
-DEFAULT_LIBRARY = "My Profiles"
+DEFAULT_LIBRARY = "My Presets"
 
 
-def load_tone_profiles(filepath):
-    """Load tone profiles from JSON file.
+def load_tone_presets(filepath):
+    """Load tone presets from JSON file.
 
-    Returns nested dict: {library_name: {profile_name: profile_data}}.
+    Returns nested dict: {library_name: {preset_name: preset_data}}.
     Migrates flat format (no libraries) if found.
     """
     if os.path.exists(filepath):
@@ -1493,13 +1493,13 @@ def load_tone_profiles(filepath):
             if not isinstance(data, dict):
                 return {DEFAULT_LIBRARY: {}}
 
-            # Check if this is the old flat format (profile names at top level
+            # Check if this is the old flat format (preset names at top level
             # with 'sessions' key inside — libraries wouldn't have that)
             if data and any(isinstance(v, dict) and 'sessions' in v
                            for v in data.values()):
                 # Migrate flat → nested
                 migrated = {DEFAULT_LIBRARY: data}
-                save_tone_profiles(migrated, filepath)
+                save_tone_presets(migrated, filepath)
                 return migrated
 
             return data
@@ -1508,28 +1508,28 @@ def load_tone_profiles(filepath):
     return {DEFAULT_LIBRARY: {}}
 
 
-def save_tone_profiles(profiles, filepath):
-    """Save tone profiles to JSON file."""
+def save_tone_presets(presets, filepath):
+    """Save tone presets to JSON file."""
     try:
         with open(filepath, 'w') as f:
-            json.dump(profiles, f, indent=2)
+            json.dump(presets, f, indent=2)
         return True
     except Exception:
         return False
 
 
-def flatten_profiles(profiles):
-    """Return a flat dict {profile_name: profile_data} from nested library structure.
+def flatten_presets(presets):
+    """Return a flat dict {preset_name: preset_data} from nested library structure.
 
     If duplicate names exist across libraries, they're prefixed with library name.
     """
     flat = {}
-    for lib_name, lib_profiles in profiles.items():
-        if not isinstance(lib_profiles, dict):
+    for lib_name, lib_presets in presets.items():
+        if not isinstance(lib_presets, dict):
             continue
-        for prof_name, prof_data in lib_profiles.items():
-            key = prof_name
+        for preset_name, preset_data in lib_presets.items():
+            key = preset_name
             if key in flat:
-                key = f"[{lib_name}] {prof_name}"
-            flat[key] = prof_data
+                key = f"[{lib_name}] {preset_name}"
+            flat[key] = preset_data
     return flat

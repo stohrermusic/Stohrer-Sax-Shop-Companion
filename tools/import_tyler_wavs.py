@@ -16,9 +16,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
     TonerEngine, analyze_audio_file,
-    load_tone_profiles, save_tone_profiles,
+    load_tone_presets, save_tone_presets,
 )
-from config import TONE_PROFILES_FILE
+from config import TONE_PRESETS_FILE
 
 LIBRARY = "Tyler Anderson"
 PLAYER = "Tyler Anderson"
@@ -144,8 +144,8 @@ def import_file(filepath, horn_type, make, model, serial, mpc, profiles):
 
 
 def main():
-    profile_path = TONE_PROFILES_FILE
-    profiles = load_tone_profiles(profile_path)
+    profile_path = TONE_PRESETS_FILE
+    profiles = load_tone_presets(profile_path)
 
     total_captures = 0
     total_profiles = 0
@@ -187,7 +187,7 @@ def main():
 
     # Save
     if total_captures > 0:
-        save_tone_profiles(profiles, profile_path)
+        save_tone_presets(profiles, profile_path)
         print(f"\n{'='*50}")
         print(f"DONE: {total_profiles} profiles, {total_captures} total captures")
         print(f"Saved to: {profile_path}")

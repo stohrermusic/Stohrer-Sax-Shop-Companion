@@ -310,7 +310,7 @@ PAD_PRESET_FILE = os.path.join(_CONFIG_DIR, "pad_presets.json")
 KEY_PRESET_FILE = os.path.join(_CONFIG_DIR, "key_height_library.json")
 SETTINGS_FILE = os.path.join(_CONFIG_DIR, "app_settings.json")
 SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
-TONE_PROFILES_FILE = os.path.join(_CONFIG_DIR, "tone_profiles.json")
+TONE_PRESETS_FILE = os.path.join(_CONFIG_DIR, "tone_profiles.json")
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"

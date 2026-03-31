@@ -26,9 +26,9 @@ import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
-    load_tone_profiles, compute_fingerprint, MIN_PROFILE_NOTES,
+    load_tone_presets, compute_fingerprint, MIN_PRESET_NOTES,
 )
-from config import TONE_PROFILES_FILE
+from config import TONE_PRESETS_FILE
 
 # ============================================================
 # Keyword patterns → descriptor mapping
@@ -101,7 +101,7 @@ def main():
     print("TONER CALIBRATION REPORT")
     print("=" * 60)
 
-    profiles = load_tone_profiles(TONE_PROFILES_FILE)
+    profiles = load_tone_presets(TONE_PRESETS_FILE)
     if not profiles:
         print("\nNo profiles found.")
         return

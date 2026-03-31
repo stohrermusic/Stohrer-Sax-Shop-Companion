@@ -6,7 +6,7 @@ Harmonic tone analyzer for saxophone. Shows a live spectrum analyzer
 descriptor gauges on the right. Auto-detects fundamental pitch and
 analyzes harmonic content for real-time tone quality feedback.
 
-Includes a tone profile system: guided capture sessions build up
+Includes a tone preset system: guided capture sessions build up
 harmonic fingerprints of individual horns over time, with comparison
 overlay for before/after analysis and horn-to-horn comparison.
 
@@ -25,7 +25,7 @@ IS_MACOS = sys.platform == 'darwin'
 try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
-        MIN_PROFILE_NOTES, SAX_TYPES, MIN_FUNDAMENTAL_HZ,
+        MIN_PRESET_NOTES, SAX_TYPES, MIN_FUNDAMENTAL_HZ,
         SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
         ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
@@ -33,7 +33,7 @@ try:
         compute_group_fingerprint, compute_rolloff_rate,
 
         ROLLOFF_WARN_THRESHOLD, ROLLOFF_MIN_CAPTURES,
-        load_tone_profiles, save_tone_profiles,
+        load_tone_presets, save_tone_presets,
         analyze_audio_file, check_mic_quality,
         transpose_note, reverse_transpose_note, note_to_freq,
     )
@@ -44,9 +44,9 @@ except ImportError:
     PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 try:
-    from config import TONE_PROFILES_FILE, save_settings
+    from config import TONE_PRESETS_FILE, save_settings
 except ImportError:
-    TONE_PROFILES_FILE = "tone_profiles.json"
+    TONE_PRESETS_FILE = "tone_profiles.json"
 
 
 # ============================================
@@ -88,7 +88,7 @@ FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 
 CAL_COUNTDOWN_S = 10.0                # seconds of countdown before calibration starts
 CAL_ATTACK_SETTLE_S = 0.1             # seconds of attack transient to skip in calibration
 DEFAULT_STABLE_THRESHOLD = 25         # frames — initial stable-note threshold
-PROFILE_NAME_MAX_DISPLAY = 20         # characters before truncating profile name
+PRESET_NAME_MAX_DISPLAY = 20         # characters before truncating preset name
 
 
 def _note_sort_key(note_name):
@@ -112,8 +112,8 @@ def _note_sort_key(note_name):
         return 0
 
 
-def _format_profile_info(p):
-    """Format a profile dict into a readable info string."""
+def _format_preset_info(p):
+    """Format a preset dict into a readable info string."""
     info = f"{p.get('horn_make', '')} {p.get('horn_model', '')}".strip()
     if p.get('serial'):
         info += f"  (s/n {p['serial']})"
@@ -139,9 +139,9 @@ def _format_profile_info(p):
             m = c.get('method', 'structured')
             method_counts[m] = method_counts.get(m, 0) + 1
     info += f"\n{len(sessions)} sessions, {total_caps} captures, {len(notes)} unique notes"
-    if 0 < len(notes) < MIN_PROFILE_NOTES:
-        info += f" (need {MIN_PROFILE_NOTES - len(notes)} more)"
-    elif len(notes) >= MIN_PROFILE_NOTES:
+    if 0 < len(notes) < MIN_PRESET_NOTES:
+        info += f" (need {MIN_PRESET_NOTES - len(notes)} more)"
+    elif len(notes) >= MIN_PRESET_NOTES:
         info += " \u2713"
     if method_counts:
         method_parts = []
@@ -187,10 +187,10 @@ class TonerTabMixin:
         # Low harmonic data tracking — grey out gauges when sustained
         self._toner_low_data_frames = 0
         self._toner_low_data_shown = False
-        # Profile system state — nested: {library: {profile_name: data}}
-        self._toner_profiles = {}
+        # Profile system state — nested: {library: {preset_name: data}}
+        self._toner_presets = {}
         self._toner_active_library = None   # Library name
-        self._toner_active_profile = None   # Profile name within library
+        self._toner_active_preset = None   # Profile name within library
         self._toner_active_session = None   # Current capture session dict
         # Capture state machine: None, 'listening', 'delay', 'recording'
         self._toner_capture_state = None
@@ -235,7 +235,7 @@ class TonerTabMixin:
         self._toner_concert_pitch = tk.BooleanVar(
             value=toner_settings.get("concert_pitch", False))
 
-        self._toner_profiles = load_tone_profiles(TONE_PROFILES_FILE)
+        self._toner_presets = load_tone_presets(TONE_PRESETS_FILE)
 
         bg = BG_COLOR
 
@@ -472,7 +472,7 @@ class TonerTabMixin:
                 self._toner_on_sax_type_changed()
         sax_idx_var.trace_add("write", _on_sax_changed)
 
-        # Lock sax selector when profile is loaded
+        # Lock sax selector when preset is loaded
         self._toner_sax_scale_widget = self._toner_sax_scale
 
         if self._toner_engine:
@@ -501,10 +501,10 @@ class TonerTabMixin:
                  font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 10))
 
         # Profile indicator + Load/Unload toggle
-        self._toner_profile_label = tk.Label(
+        self._toner_preset_label = tk.Label(
             right_col, text="no preset", bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 8))
-        self._toner_profile_label.pack(side="left", padx=(0, 4))
+        self._toner_preset_label.pack(side="left", padx=(0, 4))
 
         self._toner_load_unload_btn = tk.Button(
             right_col, text="Load...",
@@ -912,7 +912,7 @@ class TonerTabMixin:
                                          outline="", width=0, state="hidden")
             self._toner_harmonic_markers.append(marker)
 
-        # Ghost overlay markers (for comparison profile)
+        # Ghost overlay markers (for comparison preset)
         for i in range(MAX_HARMONICS):
             ghost = cv.create_line(0, 0, 0, 0, fill=GHOST_COLOR,
                                    width=2, state="hidden")
@@ -1124,7 +1124,7 @@ class TonerTabMixin:
         self._toner_update_pitch_mode_label()
 
     def _toner_lock_sax_selector(self, locked):
-        """Lock or unlock the sax selector (locked when profile is loaded)."""
+        """Lock or unlock the sax selector (locked when preset is loaded)."""
         if hasattr(self, '_toner_sax_scale_widget'):
             state = "disabled" if locked else "normal"
             self._toner_sax_scale_widget.configure(state=state)
@@ -1180,16 +1180,16 @@ class TonerTabMixin:
             return concert_note
         return transpose_note(concert_note, self._toner_sax_var.get())
 
-    def _toner_display_note_for_profile(self, concert_note, profile=None):
-        """Transpose a concert note for display using a profile's horn type.
+    def _toner_display_note_for_preset(self, concert_note, preset=None):
+        """Transpose a concert note for display using a preset's horn type.
 
         Used in reports and comparisons where the active sax selector might
-        not match the profile being viewed.
+        not match the preset being viewed.
         """
         if not concert_note or self._toner_concert_pitch.get():
             return concert_note
-        if profile:
-            sax_type = profile.get('horn_type', self._toner_sax_var.get())
+        if preset:
+            sax_type = preset.get('horn_type', self._toner_sax_var.get())
         else:
             sax_type = self._toner_sax_var.get()
         return transpose_note(concert_note, sax_type)
@@ -1244,8 +1244,8 @@ class TonerTabMixin:
     # PROFILE MANAGEMENT
     # ------------------------------------------------------------------
 
-    def _toner_open_profile_dialog(self):
-        """Open the profile management dialog — central hub for all profile operations."""
+    def _toner_open_preset_dialog(self):
+        """Open the preset management dialog — central hub for all preset operations."""
         dlg = tk.Toplevel(self.root)
         dlg.title("Tone Presets")
         dlg.geometry("550x500")
@@ -1264,29 +1264,29 @@ class TonerTabMixin:
         list_frame = tk.Frame(frame, bg=bg)
         list_frame.pack(fill="both", expand=True, pady=(0, 5))
 
-        self._prof_listbox = tk.Listbox(list_frame, width=55, height=12,
+        self._preset_listbox = tk.Listbox(list_frame, width=55, height=12,
                                          font=("Helvetica", 10))
-        self._prof_listbox.pack(side="left", fill="both", expand=True)
+        self._preset_listbox.pack(side="left", fill="both", expand=True)
 
-        scrollbar = tk.Scrollbar(list_frame, command=self._prof_listbox.yview)
+        scrollbar = tk.Scrollbar(list_frame, command=self._preset_listbox.yview)
         scrollbar.pack(side="right", fill="y")
-        self._prof_listbox.config(yscrollcommand=scrollbar.set)
+        self._preset_listbox.config(yscrollcommand=scrollbar.set)
 
-        self._toner_refresh_profile_list()
+        self._toner_refresh_preset_list()
 
         # Info display
-        self._prof_info_label = tk.Label(frame, text="Select a preset to see details.",
+        self._preset_info_label = tk.Label(frame, text="Select a preset to see details.",
                                           bg=bg, fg=fg,
                                           font=("Helvetica", 9),
                                           justify="left", anchor="w",
                                           wraplength=500)
-        self._prof_info_label.pack(fill="x", pady=(0, 10))
+        self._preset_info_label.pack(fill="x", pady=(0, 10))
 
-        self._prof_listbox.bind("<<ListboxSelect>>",
-                                lambda e: self._toner_on_profile_selected())
+        self._preset_listbox.bind("<<ListboxSelect>>",
+                                lambda e: self._toner_on_preset_selected())
 
         # --- Action buttons: two rows ---
-        # Row 1: profile operations
+        # Row 1: preset operations
         row1 = tk.Frame(frame, bg=bg)
         row1.pack(fill="x", pady=(0, 5))
 
@@ -1298,7 +1298,7 @@ class TonerTabMixin:
                                    self._toner_open_analyze_dialog()]).pack(
                       side="left", padx=(0, 5))
         tk.Button(row1, text="Edit Notes...",
-                  command=self._toner_edit_profile_notes).pack(
+                  command=self._toner_edit_preset_notes).pack(
                       side="left", padx=(0, 5))
 
         # Row 2: create, import, delete, close
@@ -1306,31 +1306,31 @@ class TonerTabMixin:
         row2.pack(fill="x")
 
         tk.Button(row2, text="New Preset...",
-                  command=lambda: self._toner_new_profile(dlg)).pack(
+                  command=lambda: self._toner_new_preset(dlg)).pack(
                       side="left", padx=(0, 5))
         tk.Button(row2, text="Import Audio File...",
                   command=lambda: [dlg.destroy(),
                                    self._toner_import_audio_file()]).pack(
                       side="left", padx=(0, 5))
         tk.Button(row2, text="Delete",
-                  command=self._toner_delete_profile).pack(
+                  command=self._toner_delete_preset).pack(
                       side="left", padx=(0, 5))
         tk.Button(row2, text="Close",
                   command=dlg.destroy).pack(side="right")
 
-    def _toner_refresh_profile_list(self):
-        """Refresh the profile listbox (nested library structure)."""
-        if not hasattr(self, '_prof_listbox'):
+    def _toner_refresh_preset_list(self):
+        """Refresh the preset listbox (nested library structure)."""
+        if not hasattr(self, '_preset_listbox'):
             return
-        self._prof_listbox.delete(0, tk.END)
-        self._prof_list_keys = []  # Track (lib, name) for selection lookup
-        for lib_name, lib_profiles in self._toner_profiles.items():
-            if not isinstance(lib_profiles, dict) or not lib_profiles:
+        self._preset_listbox.delete(0, tk.END)
+        self._preset_list_keys = []  # Track (lib, name) for selection lookup
+        for lib_name, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict) or not lib_presets:
                 continue
-            self._prof_listbox.insert(tk.END, f"\u2500\u2500 {lib_name} \u2500\u2500")
-            self._prof_list_keys.append(None)  # Header, not selectable
-            for prof_name, profile in lib_profiles.items():
-                sessions = profile.get('sessions', [])
+            self._preset_listbox.insert(tk.END, f"\u2500\u2500 {lib_name} \u2500\u2500")
+            self._preset_list_keys.append(None)  # Header, not selectable
+            for preset_name, preset in lib_presets.items():
+                sessions = preset.get('sessions', [])
                 total_caps = sum(len(s.get('captures', []))
                                for s in sessions)
                 notes = set()
@@ -1338,41 +1338,41 @@ class TonerTabMixin:
                     for c in s.get('captures', []):
                         notes.add(c.get('note', ''))
                 status = f"{len(notes)} notes" if total_caps > 0 else "empty"
-                if len(notes) >= MIN_PROFILE_NOTES:
+                if len(notes) >= MIN_PRESET_NOTES:
                     status += " \u2713"
-                self._prof_listbox.insert(tk.END,
-                    f"  {prof_name}  ({profile.get('horn_type', '?')}, {status})")
-                self._prof_list_keys.append((lib_name, prof_name))
+                self._preset_listbox.insert(tk.END,
+                    f"  {preset_name}  ({preset.get('horn_type', '?')}, {status})")
+                self._preset_list_keys.append((lib_name, preset_name))
 
-    def _toner_on_profile_selected(self):
-        """Update info label when a profile is selected."""
-        sel = self._prof_listbox.curselection()
+    def _toner_on_preset_selected(self):
+        """Update info label when a preset is selected."""
+        sel = self._preset_listbox.curselection()
         if not sel:
             return
-        key = self._prof_list_keys[sel[0]]
+        key = self._preset_list_keys[sel[0]]
         if key is None:
-            self._prof_info_label.configure(text="")
+            self._preset_info_label.configure(text="")
             return  # Library header
-        lib_name, prof_name = key
-        profile = self._toner_profiles[lib_name][prof_name]
-        self._prof_info_label.configure(text=_format_profile_info(profile))
+        lib_name, preset_name = key
+        preset = self._toner_presets[lib_name][preset_name]
+        self._preset_info_label.configure(text=_format_preset_info(preset))
 
-    def _toner_edit_profile_notes(self):
-        """Edit the notes field of the selected profile."""
-        sel = self._prof_listbox.curselection()
+    def _toner_edit_preset_notes(self):
+        """Edit the notes field of the selected preset."""
+        sel = self._preset_listbox.curselection()
         if not sel:
             return
-        key = self._prof_list_keys[sel[0]]
+        key = self._preset_list_keys[sel[0]]
         if key is None:
             return
-        lib_name, prof_name = key
-        profile = self._toner_profiles[lib_name][prof_name]
-        self._toner_notes_dialog(prof_name, profile)
+        lib_name, preset_name = key
+        preset = self._toner_presets[lib_name][preset_name]
+        self._toner_notes_dialog(preset_name, preset)
 
-    def _toner_notes_dialog(self, prof_name, profile, prompt_text=None):
-        """Open a multi-line notes editor for a profile."""
+    def _toner_notes_dialog(self, preset_name, preset, prompt_text=None):
+        """Open a multi-line notes editor for a preset."""
         dlg = tk.Toplevel(self.root)
-        dlg.title(f"Notes \u2014 {prof_name}")
+        dlg.title(f"Notes \u2014 {preset_name}")
         dlg.resizable(True, True)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1386,7 +1386,7 @@ class TonerTabMixin:
                      font=("Helvetica", 10), wraplength=400,
                      justify="left").pack(pady=(0, 8))
 
-        tk.Label(frame, text=f"Notes for \"{prof_name}\":", bg=bg,
+        tk.Label(frame, text=f"Notes for \"{preset_name}\":", bg=bg,
                  font=("Helvetica", 10)).pack(anchor="w", pady=(0, 4))
 
         text_frame = tk.Frame(frame)
@@ -1401,18 +1401,18 @@ class TonerTabMixin:
         notes_text.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=notes_text.yview)
 
-        current = profile.get('notes', '')
+        current = preset.get('notes', '')
         notes_text.insert("1.0", current)
         notes_text.focus_set()
 
         def save():
             new_notes = notes_text.get("1.0", tk.END).strip()
-            profile['notes'] = new_notes
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
-            # Refresh info display if profile dialog is open
-            if hasattr(self, '_prof_info_label'):
+            preset['notes'] = new_notes
+            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
+            # Refresh info display if preset dialog is open
+            if hasattr(self, '_preset_info_label'):
                 try:
-                    self._toner_on_profile_selected()
+                    self._toner_on_preset_selected()
                 except Exception:
                     pass
             dlg.destroy()
@@ -1427,8 +1427,8 @@ class TonerTabMixin:
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
         dlg.minsize(400, 250)
 
-    def _toner_build_profile_fields(self, frame, bg, fg):
-        """Build profile form fields. Returns (fields_dict, lib_var, notes_text).
+    def _toner_build_preset_fields(self, frame, bg, fg):
+        """Build preset form fields. Returns (fields_dict, lib_var, notes_text).
 
         Required fields are always shown. Optional fields respect
         the visible_preset_fields setting.
@@ -1465,8 +1465,8 @@ class TonerTabMixin:
         tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
                  anchor="e", font=("Helvetica", 10)).pack(
             side="left", padx=(0, 8))
-        existing_libs = [k for k in self._toner_profiles.keys()
-                        if isinstance(self._toner_profiles[k], dict)]
+        existing_libs = [k for k in self._toner_presets.keys()
+                        if isinstance(self._toner_presets[k], dict)]
         if not existing_libs:
             existing_libs = [DEFAULT_LIBRARY]
         lib_var = tk.StringVar(value=existing_libs[0])
@@ -1522,8 +1522,8 @@ class TonerTabMixin:
                 return False
         return True
 
-    def _toner_collect_profile_data(self, fields, notes_text):
-        """Collect profile data dict from form fields."""
+    def _toner_collect_preset_data(self, fields, notes_text):
+        """Collect preset data dict from form fields."""
         data = {
             'horn_type': fields.get("horn_type", tk.StringVar()).get(),
             'horn_make': fields.get("horn_make", tk.StringVar()).get().strip(),
@@ -1541,8 +1541,8 @@ class TonerTabMixin:
         }
         return data
 
-    def _toner_new_profile(self, parent_dlg):
-        """Create a new horn profile via guided dialog."""
+    def _toner_new_preset(self, parent_dlg):
+        """Create a new horn preset via guided dialog."""
         dlg = tk.Toplevel(parent_dlg)
         dlg.title("New Tone Preset")
         dlg.resizable(False, False)
@@ -1557,7 +1557,7 @@ class TonerTabMixin:
         tk.Label(frame, text="Create Tone Preset", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
 
-        fields, lib_var, notes_text = self._toner_build_profile_fields(
+        fields, lib_var, notes_text = self._toner_build_preset_fields(
             frame, bg, fg)
 
         def save():
@@ -1565,21 +1565,21 @@ class TonerTabMixin:
                 return
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
-            if lib not in self._toner_profiles:
-                self._toner_profiles[lib] = {}
-            if name in self._toner_profiles[lib]:
+            if lib not in self._toner_presets:
+                self._toner_presets[lib] = {}
+            if name in self._toner_presets[lib]:
                 messagebox.showwarning("Duplicate Name",
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_profiles[lib][name] = self._toner_collect_profile_data(
+            self._toner_presets[lib][name] = self._toner_collect_preset_data(
                 fields, notes_text)
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
             self._toner_active_library = lib
-            self._toner_active_profile = name
+            self._toner_active_preset = name
             self._toner_active_session = None
-            self._toner_update_profile_label()
-            self._toner_refresh_profile_list()
+            self._toner_update_preset_label()
+            self._toner_refresh_preset_list()
             dlg.destroy()
 
         btn_row = tk.Frame(frame, bg=bg)
@@ -1587,29 +1587,29 @@ class TonerTabMixin:
         tk.Button(btn_row, text="Create", command=save).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
 
-    def _toner_delete_profile(self):
-        """Delete the selected profile."""
-        sel = self._prof_listbox.curselection()
+    def _toner_delete_preset(self):
+        """Delete the selected preset."""
+        sel = self._preset_listbox.curselection()
         if not sel:
             return
-        key = self._prof_list_keys[sel[0]]
+        key = self._preset_list_keys[sel[0]]
         if key is None:
             return  # Library header
-        lib_name, prof_name = key
+        lib_name, preset_name = key
         if messagebox.askyesno("Delete Preset",
-                f"Delete preset '{prof_name}' from '{lib_name}'?"):
-            del self._toner_profiles[lib_name][prof_name]
+                f"Delete preset '{preset_name}' from '{lib_name}'?"):
+            del self._toner_presets[lib_name][preset_name]
             # Remove empty libraries
-            if not self._toner_profiles[lib_name]:
-                del self._toner_profiles[lib_name]
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+            if not self._toner_presets[lib_name]:
+                del self._toner_presets[lib_name]
+            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
             if (self._toner_active_library == lib_name and
-                    self._toner_active_profile == prof_name):
+                    self._toner_active_preset == preset_name):
                 self._toner_active_library = None
-                self._toner_active_profile = None
+                self._toner_active_preset = None
                 self._toner_active_session = None
-            self._toner_refresh_profile_list()
-            self._prof_info_label.configure(text="")
+            self._toner_refresh_preset_list()
+            self._preset_info_label.configure(text="")
 
     # ------------------------------------------------------------------
     # CAPTURE SYSTEM (auto-detect stable tones)
@@ -1622,13 +1622,13 @@ class TonerTabMixin:
             self._toner_stop_capture()
             return
 
-        # Need a profile loaded
-        if not self._toner_active_profile:
+        # Need a preset loaded
+        if not self._toner_active_preset:
             messagebox.showinfo("No Preset Loaded",
                 "Load a preset first to capture data.\n\n"
                 "Use Load... on the control strip, or\n"
                 "File > Presets to create and manage presets.")
-            self._toner_open_profile_dialog()
+            self._toner_open_preset_dialog()
             return
 
         # Start a new session if needed
@@ -1698,8 +1698,8 @@ class TonerTabMixin:
         self._toner_capture_progress.configure(text="")
 
 
-    def _toner_new_profile_flow(self):
-        """Create a new profile (complete setup identity), then start capturing."""
+    def _toner_new_preset_flow(self):
+        """Create a new preset (complete setup identity), then start capturing."""
         dlg = tk.Toplevel(self.root)
         dlg.title("New Tone Preset")
         dlg.resizable(False, False)
@@ -1718,7 +1718,7 @@ class TonerTabMixin:
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
-        fields, lib_var, notes_text = self._toner_build_profile_fields(
+        fields, lib_var, notes_text = self._toner_build_preset_fields(
             frame, bg, fg)
 
         def save_and_start():
@@ -1726,18 +1726,18 @@ class TonerTabMixin:
                 return
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
-            if lib not in self._toner_profiles:
-                self._toner_profiles[lib] = {}
-            if name in self._toner_profiles[lib]:
+            if lib not in self._toner_presets:
+                self._toner_presets[lib] = {}
+            if name in self._toner_presets[lib]:
                 messagebox.showwarning("Duplicate Name",
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_profiles[lib][name] = self._toner_collect_profile_data(
+            self._toner_presets[lib][name] = self._toner_collect_preset_data(
                 fields, notes_text)
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
             self._toner_active_library = lib
-            self._toner_active_profile = name
+            self._toner_active_preset = name
             dlg.destroy()
             self._toner_start_new_session_and_listen()
 
@@ -1749,23 +1749,23 @@ class TonerTabMixin:
                   command=dlg.destroy).pack(side="left")
 
     def _toner_load_from_dialog(self, dlg):
-        """Load the selected profile from the profile dialog."""
-        sel = self._prof_listbox.curselection()
+        """Load the selected preset from the preset dialog."""
+        sel = self._preset_listbox.curselection()
         if not sel:
             messagebox.showinfo("Select Preset", "Select a preset first.")
             return
-        key = self._prof_list_keys[sel[0]]
+        key = self._preset_list_keys[sel[0]]
         if key is None:
             return
-        lib_name, prof_name = key
+        lib_name, preset_name = key
         self._toner_active_library = lib_name
-        self._toner_active_profile = prof_name
+        self._toner_active_preset = preset_name
         self._toner_active_session = None
-        self._toner_update_profile_label()
+        self._toner_update_preset_label()
 
         # Sync sax type and lock selector
-        prof = self._toner_profiles[lib_name][prof_name]
-        sax_type = prof.get('horn_type', '')
+        preset = self._toner_presets[lib_name][preset_name]
+        sax_type = preset.get('horn_type', '')
         if sax_type:
             self._toner_sax_var.set(sax_type)
             if sax_type in self._toner_visible_sax:
@@ -1777,30 +1777,30 @@ class TonerTabMixin:
         dlg.destroy()
 
     def _toner_load_unload_toggle(self):
-        """Toggle between Load and Unload based on current profile state."""
-        if self._toner_active_profile:
-            self._toner_unload_profile()
+        """Toggle between Load and Unload based on current preset state."""
+        if self._toner_active_preset:
+            self._toner_unload_preset()
         else:
-            self._toner_load_profile_quick()
+            self._toner_load_preset_quick()
 
     def _toner_update_load_unload_btn(self):
-        """Update the Load/Unload button text based on profile state."""
+        """Update the Load/Unload button text based on preset state."""
         if hasattr(self, '_toner_load_unload_btn'):
-            if self._toner_active_profile:
+            if self._toner_active_preset:
                 self._toner_load_unload_btn.configure(text="Unload")
             else:
                 self._toner_load_unload_btn.configure(text="Load...")
 
-    def _toner_load_profile_quick(self):
-        """Quick profile loader — shows list, loads selected."""
-        all_profiles = []
-        for lib_name, lib_profiles in self._toner_profiles.items():
-            if not isinstance(lib_profiles, dict):
+    def _toner_load_preset_quick(self):
+        """Quick preset loader — shows list, loads selected."""
+        all_presets = []
+        for lib_name, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict):
                 continue
-            for prof_name, prof_data in lib_profiles.items():
-                all_profiles.append((lib_name, prof_name, prof_data))
+            for preset_name, preset_data in lib_presets.items():
+                all_presets.append((lib_name, preset_name, preset_data))
 
-        if not all_profiles:
+        if not all_presets:
             messagebox.showinfo("No Presets",
                 "No presets yet. Create one in File > Presets.")
             return
@@ -1815,26 +1815,26 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
         frame.pack(fill="both", expand=True)
 
-        listbox = tk.Listbox(frame, width=40, height=min(10, len(all_profiles)),
+        listbox = tk.Listbox(frame, width=40, height=min(10, len(all_presets)),
                               font=("Helvetica", 10))
         listbox.pack(fill="both", expand=True, pady=(0, 8))
 
-        for lib_name, prof_name, _ in all_profiles:
-            listbox.insert(tk.END, f"[{lib_name}] {prof_name}")
+        for lib_name, preset_name, _ in all_presets:
+            listbox.insert(tk.END, f"[{lib_name}] {preset_name}")
 
         def load():
             sel = listbox.curselection()
             if not sel:
                 return
-            lib_name, prof_name, _ = all_profiles[sel[0]]
+            lib_name, preset_name, _ = all_presets[sel[0]]
             self._toner_active_library = lib_name
-            self._toner_active_profile = prof_name
+            self._toner_active_preset = preset_name
             self._toner_active_session = None
-            self._toner_update_profile_label()
+            self._toner_update_preset_label()
 
             # Sync sax type and lock selector
-            prof = self._toner_profiles[lib_name][prof_name]
-            sax_type = prof.get('horn_type', '')
+            preset = self._toner_presets[lib_name][preset_name]
+            sax_type = preset.get('horn_type', '')
             if sax_type:
                 self._toner_sax_var.set(sax_type)
                 if sax_type in self._toner_visible_sax:
@@ -1850,12 +1850,12 @@ class TonerTabMixin:
         tk.Button(btn_frame, text="Load", command=load).pack(side="left", padx=(0, 5))
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(side="left")
 
-    def _toner_unload_profile(self):
-        """Unload the active profile."""
+    def _toner_unload_preset(self):
+        """Unload the active preset."""
         self._toner_active_library = None
-        self._toner_active_profile = None
+        self._toner_active_preset = None
         self._toner_active_session = None
-        self._toner_update_profile_label()
+        self._toner_update_preset_label()
         self._toner_lock_sax_selector(False)
 
     def _toner_signal_above_threshold(self, result):
@@ -1879,19 +1879,19 @@ class TonerTabMixin:
                 cv.itemconfigure(self._toner_cal_prompt, state="hidden")
                 cv.itemconfigure(self._toner_cal_status, state="hidden")
 
-    def _toner_update_profile_label(self):
-        """Update the active profile indicator and Load/Unload button."""
-        if hasattr(self, '_toner_profile_label'):
-            name = self._toner_active_profile or ""
+    def _toner_update_preset_label(self):
+        """Update the active preset indicator and Load/Unload button."""
+        if hasattr(self, '_toner_preset_label'):
+            name = self._toner_active_preset or ""
             if name:
-                display = name[:PROFILE_NAME_MAX_DISPLAY] + "..." if len(name) > PROFILE_NAME_MAX_DISPLAY else name
-                self._toner_profile_label.configure(text=display, fg="#AAAAAA")
+                display = name[:PRESET_NAME_MAX_DISPLAY] + "..." if len(name) > PRESET_NAME_MAX_DISPLAY else name
+                self._toner_preset_label.configure(text=display, fg="#AAAAAA")
             else:
-                self._toner_profile_label.configure(text="no preset", fg="#666666")
+                self._toner_preset_label.configure(text="no preset", fg="#666666")
         self._toner_update_load_unload_btn()
 
     def _toner_start_new_session_and_listen(self):
-        """Create a new session for the active profile and begin listening."""
+        """Create a new session for the active preset and begin listening."""
         # Prompt for mic type if not set
         if not self.settings.get('mic_type'):
             messagebox.showinfo("Mic Type Required",
@@ -1903,12 +1903,12 @@ class TonerTabMixin:
                 parent=self.root)
             return
 
-        self._toner_update_profile_label()
-        # Sync sax type from profile to selector and engine
-        if self._toner_active_library and self._toner_active_profile:
-            lib = self._toner_profiles.get(self._toner_active_library, {})
-            prof = lib.get(self._toner_active_profile, {})
-            sax_type = prof.get('horn_type', '')
+        self._toner_update_preset_label()
+        # Sync sax type from preset to selector and engine
+        if self._toner_active_library and self._toner_active_preset:
+            lib = self._toner_presets.get(self._toner_active_library, {})
+            preset = lib.get(self._toner_active_preset, {})
+            sax_type = preset.get('horn_type', '')
             if sax_type:
                 if hasattr(self, '_toner_sax_var'):
                     self._toner_sax_var.set(sax_type)
@@ -1917,9 +1917,9 @@ class TonerTabMixin:
 
         # Copy preset metadata into session so each session owns its data
         preset = {}
-        if self._toner_active_library and self._toner_active_profile:
-            lib = self._toner_profiles.get(self._toner_active_library, {})
-            preset = lib.get(self._toner_active_profile, {})
+        if self._toner_active_library and self._toner_active_preset:
+            lib = self._toner_presets.get(self._toner_active_library, {})
+            preset = lib.get(self._toner_active_preset, {})
 
         self._toner_active_session = {
             'date': time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -2001,13 +2001,13 @@ class TonerTabMixin:
         """Save recorded audio chunks to a WAV file correlated with the session."""
         try:
             rec_dir = self._toner_get_recording_dir()
-            # Build filename from profile name and session date
-            profile_name = ''
-            if self._toner_active_profile:
-                profile_name = self._toner_active_profile
+            # Build filename from preset name and session date
+            preset_name = ''
+            if self._toner_active_preset:
+                preset_name = self._toner_active_preset
             # Sanitize for filesystem
             safe_name = "".join(c if c.isalnum() or c in ' -_' else '_'
-                                for c in profile_name).strip() or 'session'
+                                for c in preset_name).strip() or 'session'
             session_date = self._toner_active_session.get('date', '')
             safe_date = session_date.replace(':', '-').replace(' ', '_')
             filename = f"{safe_name}_{safe_date}.wav"
@@ -2033,11 +2033,11 @@ class TonerTabMixin:
         if not captures:
             return
 
-        # Get active profile for note transposition
-        _cov_profile = None
-        if self._toner_active_library and self._toner_active_profile:
-            lib = self._toner_profiles.get(self._toner_active_library, {})
-            _cov_profile = lib.get(self._toner_active_profile)
+        # Get active preset for note transposition
+        _cov_preset = None
+        if self._toner_active_library and self._toner_active_preset:
+            lib = self._toner_presets.get(self._toner_active_library, {})
+            _cov_preset = lib.get(self._toner_active_preset)
 
         dlg = tk.Toplevel(self.root)
         dlg.title("Capture Summary")
@@ -2049,8 +2049,8 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        prof_name = self._toner_active_profile or "?"
-        tk.Label(frame, text=f"Session: {prof_name}", bg=bg, fg=fg,
+        preset_name = self._toner_active_preset or "?"
+        tk.Label(frame, text=f"Session: {preset_name}", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
 
         # Count captures per note
@@ -2114,8 +2114,8 @@ class TonerTabMixin:
 
                 # Note label (rotated text not supported, so abbreviated)
                 if len(all_notes) <= 24 or i % 2 == 0:
-                    disp_note = self._toner_display_note_for_profile(
-                        note, _cov_profile)
+                    disp_note = self._toner_display_note_for_preset(
+                        note, _cov_preset)
                     chart_cv.create_text(
                         x + bar_w / 2, margin_t + ch + 10,
                         text=disp_note, fill="#444444",
@@ -2144,8 +2144,8 @@ class TonerTabMixin:
             assessment.append("No mid register notes captured")
         if high_count == 0:
             assessment.append("No high register notes captured")
-        if unique < MIN_PROFILE_NOTES:
-            assessment.append(f"Need {MIN_PROFILE_NOTES - unique} more unique "
+        if unique < MIN_PRESET_NOTES:
+            assessment.append(f"Need {MIN_PRESET_NOTES - unique} more unique "
                             f"notes for fingerprint")
 
         if assessment:
@@ -2167,17 +2167,17 @@ class TonerTabMixin:
 
         def done_with_notes():
             dlg.destroy()
-            # Clear session — it's saved, don't carry it to the next profile
+            # Clear session — it's saved, don't carry it to the next preset
             session_lib = self._toner_active_library
-            session_prof = self._toner_active_profile
+            session_prof = self._toner_active_preset
             self._toner_active_session = None
             # Prompt for notes after session
             lib = session_lib
-            prof_name = session_prof
-            if lib and prof_name and lib in self._toner_profiles:
-                profile = self._toner_profiles[lib].get(prof_name)
-                if profile:
-                    self._toner_notes_dialog(prof_name, profile,
+            preset_name = session_prof
+            if lib and preset_name and lib in self._toner_presets:
+                preset = self._toner_presets[lib].get(preset_name)
+                if preset:
+                    self._toner_notes_dialog(preset_name, preset,
                         prompt_text="How did this horn sound to you? "
                         "Add your impressions \u2014 bright, dark, rich, "
                         "stuffy, free-blowing, anything you noticed.")
@@ -2186,17 +2186,17 @@ class TonerTabMixin:
             if messagebox.askyesno("Discard Session",
                     "Discard all captures from this session?\n\n"
                     "This cannot be undone.", parent=dlg):
-                # Remove this session's captures from the profile
+                # Remove this session's captures from the preset
                 lib = self._toner_active_library
-                prof_name = self._toner_active_profile
-                if lib and prof_name and lib in self._toner_profiles:
-                    profile = self._toner_profiles[lib].get(prof_name)
-                    if profile and self._toner_active_session:
+                preset_name = self._toner_active_preset
+                if lib and preset_name and lib in self._toner_presets:
+                    preset = self._toner_presets[lib].get(preset_name)
+                    if preset and self._toner_active_session:
                         session_date = self._toner_active_session.get('date', '')
-                        sessions = profile.get('sessions', [])
-                        profile['sessions'] = [s for s in sessions
+                        sessions = preset.get('sessions', [])
+                        preset['sessions'] = [s for s in sessions
                                                if s.get('date') != session_date]
-                        save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+                        save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
                 self._toner_active_session = None
                 dlg.destroy()
 
@@ -2504,25 +2504,25 @@ class TonerTabMixin:
                 parent=self.root)
 
     def _toner_save_active_session(self):
-        """Save the active session to the active profile.
+        """Save the active session to the active preset.
 
         Saves a deep copy of the session data so that subsequent
-        captures on a different profile don't mutate this profile's
+        captures on a different preset don't mutate this preset's
         stored data through shared references.
         """
         import copy
         lib = self._toner_active_library
-        prof_name = self._toner_active_profile
-        if not lib or not prof_name:
+        preset_name = self._toner_active_preset
+        if not lib or not preset_name:
             return
-        if lib not in self._toner_profiles:
+        if lib not in self._toner_presets:
             return
-        lib_profiles = self._toner_profiles[lib]
-        if prof_name not in lib_profiles:
+        lib_presets = self._toner_presets[lib]
+        if preset_name not in lib_presets:
             return
 
-        profile = lib_profiles[prof_name]
-        sessions = profile.setdefault('sessions', [])
+        preset = lib_presets[preset_name]
+        sessions = preset.setdefault('sessions', [])
         session_date = self._toner_active_session.get('date', '')
 
         # Deep copy to prevent shared references between profiles
@@ -2537,7 +2537,7 @@ class TonerTabMixin:
         if not found:
             sessions.append(session_copy)
 
-        save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+        save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
 
     # ------------------------------------------------------------------
     # COMPARISON
@@ -2545,17 +2545,17 @@ class TonerTabMixin:
 
     def _toner_open_analyze_dialog(self):
         """Open dialog to select profiles/sessions for analysis."""
-        all_profiles = []
-        for lib_name, lib_profiles in self._toner_profiles.items():
-            if not isinstance(lib_profiles, dict):
+        all_presets = []
+        for lib_name, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict):
                 continue
-            for prof_name, prof_data in lib_profiles.items():
-                sessions = prof_data.get('sessions', [])
+            for preset_name, preset_data in lib_presets.items():
+                sessions = preset_data.get('sessions', [])
                 total_caps = sum(len(s.get('captures', [])) for s in sessions)
                 if total_caps > 0:
-                    all_profiles.append((lib_name, prof_name, prof_data))
+                    all_presets.append((lib_name, preset_name, preset_data))
 
-        if not all_profiles:
+        if not all_presets:
             messagebox.showinfo("No Presets",
                 "No presets with captures to analyze.")
             return
@@ -2583,7 +2583,7 @@ class TonerTabMixin:
 
         # Collect unique values for filters
         def _unique(field):
-            return sorted(set(p.get(field, '') for _, _, p in all_profiles
+            return sorted(set(p.get(field, '') for _, _, p in all_presets
                               if p.get(field)))
         all_types = _unique('horn_type')
         all_makes = _unique('horn_make')
@@ -2593,7 +2593,7 @@ class TonerTabMixin:
 
         # Mic types from sessions
         all_mic_types = set()
-        for _, _, p in all_profiles:
+        for _, _, p in all_presets:
             for s in p.get('sessions', []):
                 mt = s.get('mic_type', '')
                 if mt:
@@ -2675,9 +2675,9 @@ class TonerTabMixin:
             dlg.bind('<MouseWheel>', _on_mousewheel)
 
         # Each item in check_items is a dict describing what the checkbox
-        # represents: either an entire profile or a single session.
-        # {'type': 'profile', 'lib': str, 'name': str, 'profile': dict}
-        # {'type': 'session', 'lib': str, 'name': str, 'profile': dict,
+        # represents: either an entire preset or a single session.
+        # {'type': 'preset', 'lib': str, 'name': str, 'preset': dict}
+        # {'type': 'session', 'lib': str, 'name': str, 'preset': dict,
         #  'session': dict, 'date': str}
         check_items = []
         check_vars = []
@@ -2695,45 +2695,45 @@ class TonerTabMixin:
             fm = filter_mpc.get()
             fmt = filter_mic_type.get()
             search = search_var.get().strip().lower()
-            for lib_name, prof_name, prof in all_profiles:
-                if ft != "All" and prof.get('horn_type', '') != ft:
+            for lib_name, preset_name, preset in all_presets:
+                if ft != "All" and preset.get('horn_type', '') != ft:
                     continue
-                if fmk != "All" and prof.get('horn_make', '') != fmk:
+                if fmk != "All" and preset.get('horn_make', '') != fmk:
                     continue
-                if fmd != "All" and prof.get('horn_model', '') != fmd:
+                if fmd != "All" and preset.get('horn_model', '') != fmd:
                     continue
-                if fp != "All" and prof.get('player', '') != fp:
+                if fp != "All" and preset.get('player', '') != fp:
                     continue
-                if fm != "All" and prof.get('mouthpiece', '') != fm:
+                if fm != "All" and preset.get('mouthpiece', '') != fm:
                     continue
                 if fmt != "All":
                     prof_mic_types = set(
                         s.get('mic_type', '').capitalize()
-                        for s in prof.get('sessions', [])
+                        for s in preset.get('sessions', [])
                         if s.get('mic_type'))
                     if fmt not in prof_mic_types:
                         continue
                 if search:
                     haystack = " ".join([
-                        prof_name,
-                        prof.get('horn_make', ''),
-                        prof.get('horn_model', ''),
-                        prof.get('serial', ''),
-                        prof.get('player', ''),
-                        prof.get('mouthpiece', ''),
-                        prof.get('reed', ''),
-                        prof.get('ligature', ''),
-                        prof.get('room', ''),
-                        prof.get('preamp', ''),
-                        prof.get('notes', ''),
+                        preset_name,
+                        preset.get('horn_make', ''),
+                        preset.get('horn_model', ''),
+                        preset.get('serial', ''),
+                        preset.get('player', ''),
+                        preset.get('mouthpiece', ''),
+                        preset.get('reed', ''),
+                        preset.get('ligature', ''),
+                        preset.get('room', ''),
+                        preset.get('preamp', ''),
+                        preset.get('notes', ''),
                     ]).lower()
                     # Also search session-level mic info
-                    for s in prof.get('sessions', []):
+                    for s in preset.get('sessions', []):
                         haystack += " " + s.get('mic_type', '')
                         haystack += " " + s.get('mic_model', '')
                     if search not in haystack:
                         continue
-                sessions = [s for s in prof.get('sessions', [])
+                sessions = [s for s in preset.get('sessions', [])
                             if s.get('captures')]
                 notes = set()
                 for s in sessions:
@@ -2742,17 +2742,17 @@ class TonerTabMixin:
                 if not notes:
                     continue
                 status = f"{len(notes)} notes"
-                if len(notes) >= MIN_PROFILE_NOTES:
+                if len(notes) >= MIN_PRESET_NOTES:
                     status += " \u2713"
 
                 # Profile-level checkbox (all sessions)
                 var = tk.BooleanVar(value=False)
                 check_vars.append(var)
-                check_items.append({'type': 'profile', 'lib': lib_name,
-                                    'name': prof_name, 'profile': prof})
+                check_items.append({'type': 'preset', 'lib': lib_name,
+                                    'name': preset_name, 'preset': preset})
                 session_vars = []  # track child session vars
 
-                def _make_profile_toggle(pvar, svars):
+                def _make_preset_toggle(pvar, svars):
                     def _toggle():
                         val = pvar.get()
                         for sv in svars:
@@ -2761,11 +2761,11 @@ class TonerTabMixin:
 
                 tk.Checkbutton(
                     list_inner,
-                    text=f"[{lib_name}] {prof_name}  ({status})",
+                    text=f"[{lib_name}] {preset_name}  ({status})",
                     variable=var, bg=bg, fg=fg,
                     selectcolor=bg, activebackground=bg,
                     anchor="w", font=("Helvetica", 10),
-                    command=_make_profile_toggle(var, session_vars),
+                    command=_make_preset_toggle(var, session_vars),
                 ).pack(fill="x", anchor="w")
 
                 # Session-level checkboxes (indented, only if 2+ sessions)
@@ -2780,7 +2780,7 @@ class TonerTabMixin:
                         session_vars.append(svar)
                         check_items.append({
                             'type': 'session', 'lib': lib_name,
-                            'name': prof_name, 'profile': prof,
+                            'name': preset_name, 'preset': preset,
                             'session': sess, 'date': date})
                         tk.Checkbutton(
                             list_inner,
@@ -2815,12 +2815,12 @@ class TonerTabMixin:
             for i, var in enumerate(check_vars):
                 if var.get():
                     item = check_items[i]
-                    sax = item['profile'].get('horn_type', 'Tenor')
-                    if item['type'] == 'profile':
+                    sax = item['preset'].get('horn_type', 'Tenor')
+                    if item['type'] == 'preset':
                         fp_val = compute_fingerprint(
-                            item['profile'].get('sessions', []), sax)
+                            item['preset'].get('sessions', []), sax)
                         fp_val['_name'] = item['name']
-                        fp_val['_profile'] = item['profile']
+                        fp_val['_preset'] = item['preset']
                     else:
                         fp_val = compute_session_fingerprint(
                             item['session'], sax)
@@ -2828,7 +2828,7 @@ class TonerTabMixin:
                             continue
                         fp_val['_name'] = (f"{item['name']} \u2014 "
                                            f"{item['date']}")
-                        fp_val['_profile'] = item['profile']
+                        fp_val['_preset'] = item['preset']
                     results.append(fp_val)
             return results
 
@@ -2847,20 +2847,20 @@ class TonerTabMixin:
             dlg.destroy()
 
         def average_selected():
-            """Compute group average of selected profiles (profile-level only)."""
-            profile_list = []
+            """Compute group average of selected profiles (preset-level only)."""
+            preset_list = []
             for i, var in enumerate(check_vars):
-                if var.get() and check_items[i]['type'] == 'profile':
+                if var.get() and check_items[i]['type'] == 'preset':
                     item = check_items[i]
-                    profile_list.append((item['name'], item['profile']))
-            if len(profile_list) < 2:
+                    preset_list.append((item['name'], item['preset']))
+            if len(preset_list) < 2:
                 messagebox.showinfo("Select More",
                     "Select at least 2 presets to average.\n"
                     "(Individual sessions are not included in group averages.)",
                     parent=dlg)
                 return
             dlg.destroy()
-            self._toner_show_group_report(profile_list)
+            self._toner_show_group_report(preset_list)
 
         tk.Button(btn_frame, text="Analyze Selected",
                   command=analyze_selected).pack(side="left", padx=(0, 5))
@@ -2874,7 +2874,7 @@ class TonerTabMixin:
     def _toner_show_analysis(self, fingerprints):
         """Show analysis window for one or more profiles/sessions.
 
-        Single selection: profile view with chart, descriptors, per-note.
+        Single selection: preset view with chart, descriptors, per-note.
         Multiple selections: comparison with delta analysis.
         """
         is_single = len(fingerprints) == 1
@@ -2910,7 +2910,7 @@ class TonerTabMixin:
                         font=("Helvetica", 10),
                         command=lambda: refresh_all()).pack(side="left", padx=(0, 10))
 
-        # Difference view toggle (only for 2-profile comparisons)
+        # Difference view toggle (only for 2-preset comparisons)
         chart_mode = tk.StringVar(value="overlay")
         diff_frame = tk.Frame(toggle_frame, bg=bg)
         if len(fingerprints) == 2:
@@ -3126,7 +3126,7 @@ class TonerTabMixin:
             ("Rolloff Shape", "rolloff_shape"),
         ]
 
-        # Rolloff rates and mic types for each profile (for table and mismatch check)
+        # Rolloff rates and mic types for each preset (for table and mismatch check)
         _rolloff_rates = [fp.get('rolloff_rate') for fp in fingerprints]
         _mic_types = [fp.get('mic_type', '') for fp in fingerprints]
 
@@ -3212,9 +3212,9 @@ class TonerTabMixin:
             if mode == "per_note":
                 prefix = f"For {note_var.get()}: "
 
-            # Helper: session/capture context for a profile
-            def _prof_ctx(fp):
-                p = fp.get('_profile', {})
+            # Helper: session/capture context for a preset
+            def _preset_ctx(fp):
+                p = fp.get('_preset', {})
                 n_sess = len([s for s in p.get('sessions', [])
                               if s.get('captures')]) if p else 0
                 return f"{fp['capture_count']} caps, {n_sess} sess"
@@ -3222,10 +3222,10 @@ class TonerTabMixin:
             lines = []
 
             if is_single:
-                # Single profile/session view
+                # Single preset/session view
                 fp = fingerprints[0]
                 d = data[0].get('descriptors', {})
-                lines.append(f"{fp['_name']} ({_prof_ctx(fp)})")
+                lines.append(f"{fp['_name']} ({_preset_ctx(fp)})")
                 lines.append("")
                 desc_parts = []
                 for label, key in desc_labels:
@@ -3245,8 +3245,8 @@ class TonerTabMixin:
                     lines.append(" | ".join(parts))
 
             else:
-                # Context header for multi-profile
-                ctx_parts = [f"{fp['_name']} ({_prof_ctx(fp)})"
+                # Context header for multi-preset
+                ctx_parts = [f"{fp['_name']} ({_preset_ctx(fp)})"
                              for fp in fingerprints]
                 lines.append(f"Comparing: {', '.join(ctx_parts)}")
                 lines.append("")
@@ -3322,8 +3322,8 @@ class TonerTabMixin:
                                 "but we are still learning what drives these differences.")
 
                     # Player context
-                    p1 = fingerprints[0].get('_profile', {}).get('player', '')
-                    p2 = fingerprints[1].get('_profile', {}).get('player', '')
+                    p1 = fingerprints[0].get('_preset', {}).get('player', '')
+                    p2 = fingerprints[1].get('_preset', {}).get('player', '')
                     if p1 and p2:
                         if p1.lower() == p2.lower():
                             lines.append(
@@ -3408,14 +3408,14 @@ class TonerTabMixin:
     # GROUP REPORT
     # ------------------------------------------------------------------
 
-    def _toner_show_group_report(self, profile_list):
+    def _toner_show_group_report(self, preset_list):
         """Show an aggregated report across multiple profiles.
 
         Args:
-            profile_list: list of (name, profile_data) tuples
+            preset_list: list of (name, profile_data) tuples
         """
-        grp = compute_group_fingerprint(profile_list)
-        if grp['profile_count'] == 0:
+        grp = compute_group_fingerprint(preset_list)
+        if grp['preset_count'] == 0:
             messagebox.showinfo("No Data",
                 "Selected presets have no captures.")
             return
@@ -3432,10 +3432,10 @@ class TonerTabMixin:
         main.pack(fill="both", expand=True, padx=10, pady=10)
 
         # --- Header ---
-        tk.Label(main, text=f"Group Average: {grp['profile_count']} presets",
+        tk.Label(main, text=f"Group Average: {grp['preset_count']} presets",
                  bg=bg, fg=fg,
                  font=("Helvetica", 13, "bold")).pack(anchor="w")
-        names = [n for n, _ in profile_list]
+        names = [n for n, _ in preset_list]
         tk.Label(main, text=", ".join(names), bg=bg, fg=fg,
                  font=("Helvetica", 9), wraplength=680,
                  justify="left").pack(anchor="w")
@@ -3501,7 +3501,7 @@ class TonerTabMixin:
                                       anchor="e")
 
             max_h = max((len(fp.get('harmonics_db', []))
-                         for _, fp in grp['per_profile']),
+                         for _, fp in grp['per_preset']),
                         default=0)
             max_h = max(max_h, len(grp.get('harmonics_db', [])))
             if max_h < 2:
@@ -3513,7 +3513,7 @@ class TonerTabMixin:
                                       fill="#888888", font=("Helvetica", 7))
 
             # Individual profiles (thin lines)
-            for idx, (name, fp) in enumerate(grp['per_profile']):
+            for idx, (name, fp) in enumerate(grp['per_preset']):
                 color = chart_colors[idx % len(chart_colors)]
                 hdb = fp.get('harmonics_db', [])
                 points = []
@@ -3548,7 +3548,7 @@ class TonerTabMixin:
                                   text="Average", fill="#000000",
                                   font=("Helvetica", 7), anchor="w")
             legend_y += 16
-            for idx, (name, _) in enumerate(grp['per_profile']):
+            for idx, (name, _) in enumerate(grp['per_preset']):
                 color = chart_colors[idx % len(chart_colors)]
                 chart_cv.create_rectangle(legend_x - 2, legend_y - 2,
                                            legend_x + 10, legend_y + 10,
@@ -3561,7 +3561,7 @@ class TonerTabMixin:
 
         chart_cv.bind("<Configure>", draw_group_chart)
 
-        # --- Per-profile breakdown table ---
+        # --- Per-preset breakdown table ---
         tbl_frame = tk.LabelFrame(main, text="Per-Preset Breakdown",
                                    bg=bg, fg=fg,
                                    font=("Helvetica", 10, "bold"))
@@ -3585,12 +3585,12 @@ class TonerTabMixin:
             tk.Label(thdr, text=text, width=w, bg=bg, fg=fg,
                      font=("Helvetica", 8, "bold")).pack(side="left")
 
-        for name, fp in grp['per_profile']:
+        for name, fp in grp['per_preset']:
             trow = tk.Frame(tbl_inner, bg=bg)
             trow.pack(fill="x")
-            # Find session count from profile_list
+            # Find session count from preset_list
             n_sess = 0
-            for pn, pd in profile_list:
+            for pn, pd in preset_list:
                 if pn == name:
                     n_sess = len([s for s in pd.get('sessions', [])
                                   if s.get('captures')])
@@ -3611,7 +3611,7 @@ class TonerTabMixin:
                          font=("Helvetica", 8)).pack(side="left")
 
         # Context text
-        ctx = (f"Group average across {grp['profile_count']} presets "
+        ctx = (f"Group average across {grp['preset_count']} presets "
                f"({grp['total_captures']} total captures). "
                f"\u00b1 values reflect variation across presets, "
                f"not measurement noise within a preset.")
@@ -3626,14 +3626,14 @@ class TonerTabMixin:
             menu = tk.Menu(dlg, tearoff=0)
             # Group average option
             menu.add_command(
-                label=f"Group Average ({grp['profile_count']} presets)",
+                label=f"Group Average ({grp['preset_count']} presets)",
                 command=lambda: [
                     self._toner_set_overlay(
-                        grp, f"Group avg ({grp['profile_count']} presets)"),
+                        grp, f"Group avg ({grp['preset_count']} presets)"),
                     dlg.destroy()])
             menu.add_separator()
             # Individual profiles
-            for pname, fp in grp['per_profile']:
+            for pname, fp in grp['per_preset']:
                 menu.add_command(
                     label=pname,
                     command=lambda f=fp, n=pname: [
@@ -3813,7 +3813,7 @@ class TonerTabMixin:
     # ------------------------------------------------------------------
 
     def _toner_import_audio_file(self):
-        """Import an audio file (WAV) — full guided flow with profile setup."""
+        """Import an audio file (WAV) — full guided flow with preset setup."""
         from tkinter import filedialog
 
         if not self._toner_engine:
@@ -3850,32 +3850,32 @@ class TonerTabMixin:
                  justify="left").pack(pady=(0, 10))
 
         # Profile selector
-        all_profiles = []
-        for lib_name, lib_profiles in self._toner_profiles.items():
-            if not isinstance(lib_profiles, dict):
+        all_presets = []
+        for lib_name, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict):
                 continue
-            for prof_name in lib_profiles:
-                all_profiles.append((lib_name, prof_name))
+            for preset_name in lib_presets:
+                all_presets.append((lib_name, preset_name))
 
-        profile_frame = tk.Frame(frame, bg=bg)
-        profile_frame.pack(fill="x", pady=(0, 5))
+        preset_frame = tk.Frame(frame, bg=bg)
+        preset_frame.pack(fill="x", pady=(0, 5))
 
-        use_existing = tk.BooleanVar(value=bool(all_profiles))
+        use_existing = tk.BooleanVar(value=bool(all_presets))
 
-        if all_profiles:
-            tk.Radiobutton(profile_frame, text="Existing preset:",
+        if all_presets:
+            tk.Radiobutton(preset_frame, text="Existing preset:",
                            variable=use_existing, value=True,
                            bg=bg, fg=fg, font=("Helvetica", 10)).pack(
                                anchor="w")
-            profile_var = tk.StringVar(
-                value=f"[{all_profiles[0][0]}] {all_profiles[0][1]}" if all_profiles else "")
-            profile_list = [f"[{lib}] {name}" for lib, name in all_profiles]
-            prof_combo = ttk.Combobox(profile_frame, textvariable=profile_var,
-                                      values=profile_list, state="readonly",
+            preset_var = tk.StringVar(
+                value=f"[{all_presets[0][0]}] {all_presets[0][1]}" if all_presets else "")
+            preset_list = [f"[{lib}] {name}" for lib, name in all_presets]
+            preset_combo = ttk.Combobox(preset_frame, textvariable=preset_var,
+                                      values=preset_list, state="readonly",
                                       width=40)
-            prof_combo.pack(anchor="w", padx=(20, 0), pady=(0, 5))
+            preset_combo.pack(anchor="w", padx=(20, 0), pady=(0, 5))
 
-        tk.Radiobutton(profile_frame, text="Create new preset...",
+        tk.Radiobutton(preset_frame, text="Create new preset...",
                        variable=use_existing, value=False,
                        bg=bg, fg=fg, font=("Helvetica", 10)).pack(anchor="w")
 
@@ -3891,11 +3891,11 @@ class TonerTabMixin:
         def do_import():
             source_notes = source_notes_var.get().strip()
 
-            if use_existing.get() and all_profiles:
-                # Use selected profile
-                sel_text = profile_var.get()
+            if use_existing.get() and all_presets:
+                # Use selected preset
+                sel_text = preset_var.get()
                 selected = None
-                for lib, name in all_profiles:
+                for lib, name in all_presets:
                     if f"[{lib}] {name}" == sel_text:
                         selected = (lib, name)
                         break
@@ -3905,11 +3905,11 @@ class TonerTabMixin:
                     return
 
                 self._toner_active_library = selected[0]
-                self._toner_active_profile = selected[1]
+                self._toner_active_preset = selected[1]
 
                 # Sync sax type
-                prof = self._toner_profiles[selected[0]][selected[1]]
-                sax_type = prof.get('horn_type', '')
+                preset = self._toner_presets[selected[0]][selected[1]]
+                sax_type = preset.get('horn_type', '')
                 if sax_type and self._toner_engine:
                     self._toner_engine.set_sax_type(sax_type)
                     if hasattr(self, '_toner_sax_var'):
@@ -3928,11 +3928,11 @@ class TonerTabMixin:
                 dlg.destroy()
                 self._toner_do_file_import(filepath, source_notes)
             else:
-                # Need to create new profile first
+                # Need to create new preset first
                 dlg.destroy()
-                # Store filepath for after profile creation
+                # Store filepath for after preset creation
                 self._toner_pending_file_import = (filepath, source_notes)
-                self._toner_new_profile_flow_then_import()
+                self._toner_new_preset_flow_then_import()
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(5, 0))
@@ -3941,9 +3941,9 @@ class TonerTabMixin:
         tk.Button(btn_row, text="Cancel",
                   command=dlg.destroy).pack(side="left")
 
-    def _toner_new_profile_flow_then_import(self):
-        """Create a new profile, then import the pending file."""
-        # Reuse the existing new profile flow but override the callback
+    def _toner_new_preset_flow_then_import(self):
+        """Create a new preset, then import the pending file."""
+        # Reuse the existing new preset flow but override the callback
         dlg = tk.Toplevel(self.root)
         dlg.title("New Tone Preset")
         dlg.resizable(False, False)
@@ -3984,8 +3984,8 @@ class TonerTabMixin:
         lib_row.pack(fill="x", pady=2)
         tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
                  anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        existing_libs = [k for k in self._toner_profiles.keys()
-                        if isinstance(self._toner_profiles[k], dict)]
+        existing_libs = [k for k in self._toner_presets.keys()
+                        if isinstance(self._toner_presets[k], dict)]
         if not existing_libs:
             existing_libs = [DEFAULT_LIBRARY]
         lib_var = tk.StringVar(value=existing_libs[0])
@@ -4018,14 +4018,14 @@ class TonerTabMixin:
                     "Please enter a preset name.", parent=dlg)
                 return
 
-            if lib not in self._toner_profiles:
-                self._toner_profiles[lib] = {}
-            if name in self._toner_profiles[lib]:
+            if lib not in self._toner_presets:
+                self._toner_presets[lib] = {}
+            if name in self._toner_presets[lib]:
                 messagebox.showwarning("Duplicate",
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_profiles[lib][name] = {
+            self._toner_presets[lib][name] = {
                 'horn_type': fields["horn_type"].get(),
                 'horn_make': fields["horn_make"].get().strip(),
                 'horn_model': fields["horn_model"].get().strip(),
@@ -4037,11 +4037,11 @@ class TonerTabMixin:
                 'created': time.strftime("%Y-%m-%d"),
                 'sessions': [],
             }
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
             self._toner_active_library = lib
-            self._toner_active_profile = name
+            self._toner_active_preset = name
             self._toner_active_session = None  # Clear old session
-            self._toner_update_profile_label()
+            self._toner_update_preset_label()
 
             # Set sax type
             sax_type = fields["horn_type"].get()
@@ -4135,19 +4135,19 @@ class TonerTabMixin:
             f"Notes found: {', '.join(display_notes)}\n\n"
             f"Preset now has {len(total_notes)} unique notes total.")
 
-    def _toner_export_profiles(self):
+    def _toner_export_presets(self):
         """Export selected tone profiles to a JSON file."""
         from tkinter import filedialog
 
         # Build list of all profiles
-        all_profiles = []
-        for lib_name, lib_profiles in self._toner_profiles.items():
-            if not isinstance(lib_profiles, dict):
+        all_presets = []
+        for lib_name, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict):
                 continue
-            for prof_name, prof_data in lib_profiles.items():
-                all_profiles.append((lib_name, prof_name, prof_data))
+            for preset_name, preset_data in lib_presets.items():
+                all_presets.append((lib_name, preset_name, preset_data))
 
-        if not all_profiles:
+        if not all_presets:
             messagebox.showinfo("Nothing to Export", "No tone presets to export.")
             return
 
@@ -4171,12 +4171,12 @@ class TonerTabMixin:
         list_frame.pack(fill="both", expand=True, pady=(0, 10))
 
         check_vars = []
-        for lib_name, prof_name, prof_data in all_profiles:
-            sessions = prof_data.get('sessions', [])
+        for lib_name, preset_name, preset_data in all_presets:
+            sessions = preset_data.get('sessions', [])
             caps = sum(len(s.get('captures', [])) for s in sessions)
             var = tk.BooleanVar(value=True)
             tk.Checkbutton(list_frame,
-                text=f"[{lib_name}] {prof_name} ({caps} captures)",
+                text=f"[{lib_name}] {preset_name} ({caps} captures)",
                 variable=var, bg=bg, font=("Helvetica", 9),
                 anchor="w").pack(fill="x")
             check_vars.append(var)
@@ -4195,7 +4195,7 @@ class TonerTabMixin:
             # Build export data from selected profiles
             export = {}
             count = 0
-            for (lib, name, data), var in zip(all_profiles, check_vars):
+            for (lib, name, data), var in zip(all_presets, check_vars):
                 if var.get():
                     if lib not in export:
                         export[lib] = {}
@@ -4234,7 +4234,7 @@ class TonerTabMixin:
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
             side="left")
 
-    def _toner_import_profiles(self):
+    def _toner_import_presets(self):
         """Import tone profiles from a JSON file, merging into existing libraries."""
         from tkinter import filedialog
         import json
@@ -4267,25 +4267,25 @@ class TonerTabMixin:
 
         # Merge
         count = 0
-        for lib_name, lib_profiles in imported.items():
-            if not isinstance(lib_profiles, dict):
+        for lib_name, lib_presets in imported.items():
+            if not isinstance(lib_presets, dict):
                 continue
-            if lib_name not in self._toner_profiles:
-                self._toner_profiles[lib_name] = {}
-            for prof_name, prof_data in lib_profiles.items():
-                if prof_name not in self._toner_profiles[lib_name]:
-                    self._toner_profiles[lib_name][prof_name] = prof_data
+            if lib_name not in self._toner_presets:
+                self._toner_presets[lib_name] = {}
+            for preset_name, preset_data in lib_presets.items():
+                if preset_name not in self._toner_presets[lib_name]:
+                    self._toner_presets[lib_name][preset_name] = preset_data
                     count += 1
                 else:
-                    # Merge sessions into existing profile
-                    existing = self._toner_profiles[lib_name][prof_name]
+                    # Merge sessions into existing preset
+                    existing = self._toner_presets[lib_name][preset_name]
                     existing_dates = {s.get('date') for s in existing.get('sessions', [])}
-                    for session in prof_data.get('sessions', []):
+                    for session in preset_data.get('sessions', []):
                         if session.get('date') not in existing_dates:
                             existing.setdefault('sessions', []).append(session)
                             count += 1
 
-        save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+        save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)
         messagebox.showinfo("Import Complete",
             f"Imported {count} new presets/sessions.")
 
@@ -4301,5 +4301,5 @@ class TonerTabMixin:
             "concert_pitch": self._toner_concert_pitch.get() if hasattr(self, '_toner_concert_pitch') else False,
         }
         # Also save any pending session
-        if self._toner_active_session and self._toner_active_profile:
-            save_tone_profiles(self._toner_profiles, TONE_PROFILES_FILE)
+        if self._toner_active_session and self._toner_active_preset:
+            save_tone_presets(self._toner_presets, TONE_PRESETS_FILE)

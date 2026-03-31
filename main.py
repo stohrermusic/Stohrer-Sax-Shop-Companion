@@ -279,18 +279,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
-        toner_file_menu.add_command(label="Presets...", command=self._toner_open_profile_dialog)
+        toner_file_menu.add_command(label="Presets...", command=self._toner_open_preset_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
         toner_file_menu.add_cascade(label="Transfer Data", menu=toner_transfer_menu)
-        toner_transfer_menu.add_command(label="Export Preset Library...", command=self._toner_export_profiles)
-        toner_transfer_menu.add_command(label="Import Preset Library...", command=self._toner_import_profiles)
+        toner_transfer_menu.add_command(label="Export Preset Library...", command=self._toner_export_presets)
+        toner_transfer_menu.add_command(label="Import Preset Library...", command=self._toner_import_presets)
 
         toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
         toner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
         toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
-        toner_options_menu.add_command(label="Preset Fields...", command=self._open_profile_fields_dialog)
+        toner_options_menu.add_command(label="Preset Fields...", command=self._open_preset_fields_dialog)
         self._toner_record_wav_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
         toner_options_menu.add_checkbutton(label="Record WAV During Capture",
                                             variable=self._toner_record_wav_var,
@@ -2062,8 +2062,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
             side="left")
 
-    def _open_profile_fields_dialog(self):
-        """Let the user choose which optional profile fields to show."""
+    def _open_preset_fields_dialog(self):
+        """Let the user choose which optional preset fields to show."""
         dlg = tk.Toplevel(self.root)
         dlg.title("Preset Fields")
         dlg.resizable(False, False)

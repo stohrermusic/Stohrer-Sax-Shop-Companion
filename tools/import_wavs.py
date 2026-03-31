@@ -18,9 +18,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
     TonerEngine, analyze_audio_file,
-    load_tone_profiles, save_tone_profiles,
+    load_tone_presets, save_tone_presets,
 )
-from config import TONE_PROFILES_FILE
+from config import TONE_PRESETS_FILE
 
 RECORDINGS_BASE = os.path.expanduser("~/Downloads/recordings")
 
@@ -291,8 +291,8 @@ def import_edinger(profiles):
 def main():
     which = sys.argv[1].lower() if len(sys.argv) > 1 else "all"
 
-    profile_path = TONE_PROFILES_FILE
-    profiles = load_tone_profiles(profile_path)
+    profile_path = TONE_PRESETS_FILE
+    profiles = load_tone_presets(profile_path)
 
     grand_profiles = 0
     grand_captures = 0
@@ -314,7 +314,7 @@ def main():
         grand_captures += c
 
     if grand_captures > 0:
-        save_tone_profiles(profiles, profile_path)
+        save_tone_presets(profiles, profile_path)
         print(f"\n{'='*50}")
         print(f"DONE: {grand_profiles} profiles, {grand_captures} total captures")
         print(f"Saved to: {profile_path}")

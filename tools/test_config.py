@@ -45,8 +45,8 @@ from config import (
 # Tone profile functions live in toner_engine
 try:
     from toner_engine import (
-        load_tone_profiles,
-        save_tone_profiles,
+        load_tone_presets,
+        save_tone_presets,
         DEFAULT_LIBRARY,
     )
     HAS_TONER = True
@@ -378,9 +378,9 @@ def test_tone_profiles_roundtrip():
                 }
             }
         }
-        ok = save_tone_profiles(profiles, path)
-        assert_true(ok, "save_tone_profiles should return True")
-        loaded = load_tone_profiles(path)
+        ok = save_tone_presets(profiles, path)
+        assert_true(ok, "save_tone_presets should return True")
+        loaded = load_tone_presets(path)
         assert_in("My Library", loaded)
         assert_in("Another Library", loaded)
         assert_in("Test Horn", loaded["My Library"])
@@ -396,7 +396,7 @@ def test_tone_profiles_missing_file():
     tmpdir = tempfile.mkdtemp()
     try:
         path = os.path.join(tmpdir, "nonexistent.json")
-        result = load_tone_profiles(path)
+        result = load_tone_presets(path)
         assert_in(DEFAULT_LIBRARY, result)
         assert_equal(result[DEFAULT_LIBRARY], {})
     finally:
@@ -412,7 +412,7 @@ def test_tone_profiles_corrupt_json():
         path = os.path.join(tmpdir, "corrupt.json")
         with open(path, 'w') as f:
             f.write("not json {{{")
-        result = load_tone_profiles(path)
+        result = load_tone_presets(path)
         assert_in(DEFAULT_LIBRARY, result)
     finally:
         shutil.rmtree(tmpdir)
@@ -437,7 +437,7 @@ def test_tone_profiles_flat_migration():
             }
         }
         _save_json(path, flat)
-        loaded = load_tone_profiles(path)
+        loaded = load_tone_presets(path)
         # Should be wrapped in DEFAULT_LIBRARY
         assert_in(DEFAULT_LIBRARY, loaded)
         assert_in("My Selmer", loaded[DEFAULT_LIBRARY])

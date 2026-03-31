@@ -22,12 +22,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from toner_engine import (
     TonerEngine, TonerResult, HarmonicInfo,
-    SAMPLE_RATE, FFT_SIZE, MAX_HARMONICS, MIN_PROFILE_NOTES,
+    SAMPLE_RATE, FFT_SIZE, MAX_HARMONICS, MIN_PRESET_NOTES,
     CAPTURE_DELAY_S, DEFAULT_LIBRARY,
     average_captures, compute_fingerprint,
     compute_session_fingerprint, compute_session_variation,
     compute_group_fingerprint,
-    load_tone_profiles, save_tone_profiles, flatten_profiles,
+    load_tone_presets, save_tone_presets, flatten_presets,
 )
 
 passed = 0
@@ -336,11 +336,11 @@ profiles = {
     }
 }
 
-ok = save_tone_profiles(profiles, tmpfile)
+ok = save_tone_presets(profiles, tmpfile)
 test("Save succeeds", ok)
 test("File exists", os.path.exists(tmpfile))
 
-loaded = load_tone_profiles(tmpfile)
+loaded = load_tone_presets(tmpfile)
 test("Load returns dict", isinstance(loaded, dict))
 test("Library preserved", "Test Library" in loaded)
 test("Profile preserved", "Test Horn" in loaded["Test Library"])
@@ -360,7 +360,7 @@ flat_data = {
 with open(flat_file, 'w') as f:
     json.dump(flat_data, f)
 
-loaded = load_tone_profiles(flat_file)
+loaded = load_tone_presets(flat_file)
 test("Migrated to nested", DEFAULT_LIBRARY in loaded)
 test("Old profile under default lib", "Old Profile" in loaded[DEFAULT_LIBRARY])
 
@@ -371,23 +371,23 @@ test("File rewritten as nested", DEFAULT_LIBRARY in raw)
 
 # ============================================================
 section("Profile storage - missing/corrupt file")
-loaded = load_tone_profiles(os.path.join(tmpdir, "nonexistent.json"))
+loaded = load_tone_presets(os.path.join(tmpdir, "nonexistent.json"))
 test("Missing file: returns default", DEFAULT_LIBRARY in loaded)
 test("Missing file: empty library", loaded[DEFAULT_LIBRARY] == {})
 
 corrupt_file = os.path.join(tmpdir, "corrupt.json")
 with open(corrupt_file, 'w') as f:
     f.write("{{{bad json")
-loaded = load_tone_profiles(corrupt_file)
+loaded = load_tone_presets(corrupt_file)
 test("Corrupt file: returns default", DEFAULT_LIBRARY in loaded)
 
 # ============================================================
-section("flatten_profiles()")
+section("flatten_presets()")
 nested = {
     "Lib A": {"Horn 1": {"data": 1}, "Horn 2": {"data": 2}},
     "Lib B": {"Horn 3": {"data": 3}},
 }
-flat = flatten_profiles(nested)
+flat = flatten_presets(nested)
 test("Flat has 3 entries", len(flat) == 3)
 test("Horn 1 in flat", "Horn 1" in flat)
 test("Horn 3 in flat", "Horn 3" in flat)
@@ -397,7 +397,7 @@ nested_dup = {
     "Lib A": {"Same Name": {"data": "a"}},
     "Lib B": {"Same Name": {"data": "b"}},
 }
-flat = flatten_profiles(nested_dup)
+flat = flatten_presets(nested_dup)
 test("Duplicates resolved", len(flat) == 2)
 test("Prefixed duplicate exists", any("[Lib B]" in k for k in flat.keys()))
 
@@ -611,15 +611,15 @@ prof_a = {'horn_type': 'Tenor', 'sessions': [sess1, sess2]}
 prof_b = {'horn_type': 'Tenor', 'sessions': [sess3]}
 grp = compute_group_fingerprint([("Horn A", prof_a), ("Horn B", prof_b)])
 test("group_fp: returns dict", isinstance(grp, dict))
-test("group_fp: profile_count == 2", grp['profile_count'] == 2)
+test("group_fp: preset_count == 2", grp['preset_count'] == 2)
 test("group_fp: has descriptors", 'descriptors' in grp)
 test("group_fp: has descriptor_stats", 'descriptor_stats' in grp)
 test("group_fp: has harmonics_db", len(grp['harmonics_db']) > 0)
-test("group_fp: has per_profile", len(grp['per_profile']) == 2)
+test("group_fp: has per_preset", len(grp['per_preset']) == 2)
 test("group_fp: total_captures correct", grp['total_captures'] == 9)  # 6 + 3
 # Empty profiles
 grp_empty = compute_group_fingerprint([("Empty", {'sessions': [empty_sess]})])
-test("group_fp: no-data profile gives count 0", grp_empty['profile_count'] == 0)
+test("group_fp: no-data profile gives count 0", grp_empty['preset_count'] == 0)
 
 # ============================================================
 # Final summary

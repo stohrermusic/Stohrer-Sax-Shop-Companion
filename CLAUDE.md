@@ -99,8 +99,8 @@ library_features.py     → LibraryFeaturesMixin (Key Heights, Serial Lookup, Sc
 tooling_tab.py          → ToolingTabMixin (Die Inserts & Die Holders tab)
 tuner_tab.py            → TunerTabMixin (Chromatic strobe tuner tab, StrobeWheel class)
 tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no tkinter)
-toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, profile system, comparison)
-toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, profile storage, no tkinter)
+toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, preset system, comparison)
+toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, preset storage, no tkinter)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
 tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings, optional fallback to canvas)
     ↓ uses
@@ -179,17 +179,17 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - **GPU/Canvas constant alignment**: `DIM_MULTIPLIER` exists in three places that must stay in sync: `tuner_tab.py` (Python canvas path), `tuner_renderer/src/shader.wgsl` (GPU shader), and `tuner_renderer/src/renderer.rs` (GPU host). `BRIGHTNESS_GAMMA` exists in two places: `tuner_tab.py` and `renderer.rs` (applied in host code, not the shader). If you change either constant, update all locations.
 
 **Tone Analyzer (Toner)**: Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
-- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Profile storage uses `load_tone_profiles()`/`save_tone_profiles()` with nested library format `{library: {profile: data}}`.
-- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Profile management, comparison tool with multi-select and filtering, import/export.
+- `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must have 2+ of its own harmonics to be accepted), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Preset storage uses `load_tone_presets()`/`save_tone_presets()` with nested library format `{library: {preset: data}}`.
+- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Preset management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Two live gauges: Complexity (spectral flatness — Pure ↔ Complex) and Warmth (H2 octave harmonic strength — Thin ↔ Warm). Brightness/darkness/resonance/fullness were removed after data analysis showed the labels didn't match player vocabulary and some descriptors didn't differentiate between horns.
-- Three comparison descriptors (shown in analysis tool, not live gauges): Core Tone (Tristimulus T2, H2-H4 energy weight — most player-independent metric), Even/Odd Ratio (even vs odd harmonic balance), Rolloff Shape (nonlinearity of harmonic rolloff — spectral peaks/bumps).
+- Two comparison descriptors (shown in analysis tool, not live gauges): Even/Odd Ratio (even vs odd harmonic balance), Rolloff Shape (nonlinearity of harmonic rolloff — spectral peaks/bumps). Core Tone was removed — no spread across 38 horns.
 - Comparison analysis includes harmonic-range interpretation: H1-H4 shifts = bore, H7-H13 shifts = neck/mpc, broadband = mpc/player. Same-player comparisons noted as more reliable.
 - Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
-- Delta gauges: when an overlay profile is loaded, existing gauges toggle to delta mode (live vs baseline per-note). Two comparison-only gauges appear: Spectral Tilt (H7-H12 delta) and Mid-Harmonic Balance (H3-H6 delta). These only work as deltas — absolute values are too mic-dependent.
+- Spectrum overlay: a preset can be loaded as a ghost overlay on the live spectrum (via Analyze > single preset or group average > Overlay on Spectrum). Blue ghost bars update per-note as you play. Live delta gauges were removed — the analyze tool (both sides averaged) is where comparison actually works.
 - Recording quality: `compute_rolloff_rate()` measures harmonic rolloff (dB/harmonic). Live warning if rolloff > 2.5 dB/H. Stored per session and in fingerprints. Comparison tool warns on mismatch.
 - Mic type/model: required `mic_type` (condenser/ribbon/dynamic) set in Options > Input Device, stamped on every session. Comparison tool filters by mic type.
-- Analyze tool (renamed from Compare): handles single profile view, two-profile delta analysis with difference chart, and multi-profile spread analysis. Replaces the old separate Report tool.
+- Analyze tool (renamed from Compare): handles single preset view, two-preset delta analysis with difference chart, and multi-preset spread analysis. Replaces the old separate Report tool.
 - Three capture modes: "free" (0.5s stability, continuous micro-captures while playing naturally), "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
 - Auto-transposition: SAX selector sets both the break frequency and the displayed note names. Written pitch is shown by default (alto shows A4 when concert C4 is played). "Concert" checkbox overrides to concert pitch.
 - Coverage summary dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
@@ -218,13 +218,13 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `pad_presets.json` - Saved pad size lists
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
-- `tone_profiles.json` - Tone analyzer profiles (nested library format, same as presets)
+- `tone_profiles.json` - Tone analyzer presets and sessions (nested library format)
 
-### Tone Profile Data Model
+### Tone Preset Data Model
 
-Profiles use nested library format: `{library_name: {profile_name: profile_data}}`. Each profile is a fixed setup (horn + player + mouthpiece + reed). Changing any variable means creating a new profile.
+Presets use nested library format: `{library_name: {preset_name: preset_data}}`. A preset saves setup details (horn + player + mouthpiece + reed) and pre-fills session metadata for quick capture start. Sessions store their own copy of the metadata at creation time.
 
-A profile contains sessions (date + captures). **Captures store only raw measurement data** — no pre-computed descriptors:
+A preset contains sessions (date + captures). **Captures store only raw measurement data** — no pre-computed descriptors:
 - `harmonics_db`: list of dB values relative to fundamental (up to 20 harmonics, index 0 = fundamental)
 - `harmonic_cents`: list of cents deviations from ideal harmonic positions
 - `fundamental_freq`: detected fundamental frequency in Hz
@@ -238,13 +238,13 @@ Descriptors (complexity, warmth) are always computed on the fly by `descriptors_
 
 `compute_fingerprint(sessions, sax_type)` in `toner_engine.py` aggregates all sessions: averages harmonics per-note, computes descriptors from the averaged harmonics, then averages descriptors across notes with equal weight. The `per_note` dict maps note names to averaged harmonic data, enabling note-by-note comparison across horns.
 
-Flat legacy format (profiles at top level without library wrapper) is auto-migrated on load.
+Flat legacy format (presets at top level without library wrapper) is auto-migrated on load.
 
 ### Toner Calibration
 
-Profile notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated profiles, extracts keywords, compares them against computed descriptors, and reports alignment. The `tools/analyze_horn_spread.py` script computes statistical spread of descriptors across all profiles — min/max/mean/stddev per descriptor, per-note variation, gauge scaling suggestions, and grouping analysis by horn type and manufacturer. Both tools help identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
+Preset notes can contain subjective tone descriptions ("rich horn", "very bright", "dark and warm"). The `tools/calibrate_toner.py` script scans all annotated presets, extracts keywords, compares them against computed descriptors, and reports alignment. The `tools/analyze_horn_spread.py` script computes statistical spread of descriptors across all presets — min/max/mean/stddev per descriptor, per-note variation, gauge scaling suggestions, and grouping analysis by horn type and manufacturer. Both tools help identify where the descriptor scaling constants need adjustment. Bias sliders in the UI provide per-user visual calibration without affecting captured data.
 
-**Descriptor calibration status**: Two descriptors survived data-driven validation: complexity (spectral flatness) and warmth (H2 strength). Brightness/darkness were removed because the labels conflicted with player vocabulary (data showed Yamahas read "dark" but players call them "bright"). Resonance was removed because it read 100% on all 39 profiles — no differentiation. Fullness was removed because it depended on brightness/darkness. Key constants live in toner_engine.py: `RICHNESS_RAW_MIN`, `RICHNESS_RAW_RANGE`, `WARMTH_DB_FLOOR`, `WARMTH_DB_RANGE`. Development history in `.claude/projects/*/memory/descriptors.md`. `tools/profile_report.py` generates a detailed single-profile report.
+**Descriptor calibration status**: Two descriptors survived data-driven validation: complexity (spectral flatness) and warmth (H2 strength). Brightness/darkness were removed because the labels conflicted with player vocabulary (data showed Yamahas read "dark" but players call them "bright"). Resonance was removed because it read 100% on all 39 presets — no differentiation. Fullness was removed because it depended on brightness/darkness. Key constants live in toner_engine.py: `RICHNESS_RAW_MIN`, `RICHNESS_RAW_RANGE`, `WARMTH_DB_FLOOR`, `WARMTH_DB_RANGE`. Development history in `.claude/projects/*/memory/descriptors.md`. `tools/profile_report.py` generates a detailed single-preset report.
 
 **Error Logging**: `setup_logging()` in config.py creates a rotating log file (`app.log`) in the config directory. `main.py` hooks both `sys.excepthook` and tkinter's `report_callback_exception` so any unhandled exception gets a full traceback written to the log and a dialog shown to the user pointing them to Help > Open Log File. The log rotates at 500KB with 1 backup.
 
