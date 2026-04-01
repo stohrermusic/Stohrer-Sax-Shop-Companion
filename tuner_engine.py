@@ -398,7 +398,16 @@ class TunerEngine:
 
             result.phase_offsets[pc] = self._phase_offsets[pc]
             for r in range(NUM_RINGS):
-                result.ring_phase_offsets[pc][r] = self._ring_phase_offsets[pc][r]
+                if result.ring_magnitudes[pc][r] > 0:
+                    # This ring has signal — use its independently tracked phase
+                    result.ring_phase_offsets[pc][r] = self._ring_phase_offsets[pc][r]
+                else:
+                    # No signal at this octave — inherit overall wheel phase
+                    # so the dim background spins coherently like a real disc.
+                    # Also sync the accumulator so phase is smooth when signal
+                    # first appears on this ring.
+                    self._ring_phase_offsets[pc][r] = self._phase_offsets[pc]
+                    result.ring_phase_offsets[pc][r] = self._phase_offsets[pc]
 
         # Normalize magnitudes to 0-1, but only if the strongest signal
         # is meaningfully above the noise floor (not just noise peaks)
