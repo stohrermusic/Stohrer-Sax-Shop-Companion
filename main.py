@@ -2175,45 +2175,52 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 "The Toner is a real-time harmonic analyzer that captures the "
                 "frequency content of your sound — the fundamental and its "
-                "overtones — and translates that into descriptors like "
-                "complexity and warmth.\n\n"
-
-                "HOW IT WORKS\n\n"
-
-                "A microphone picks up your sound, an FFT extracts the harmonic "
-                "series, and the gauges show you what's happening in real time. "
-                "You can capture sessions, save presets for different setups "
-                "(horn + mouthpiece + player + reed), and compare them side by "
-                "side.\n\n"
-
-                "WHAT THE GAUGES MEAN\n\n"
-
-                "Two live gauges — Complexity (how evenly energy spreads across "
-                "harmonics) and Warmth (strength of the octave harmonic) — track "
-                "real differences between horns and setups. The comparison tool "
-                "adds Core Tone, Even/Odd balance, and Rolloff Shape for deeper "
-                "analysis.\n\n"
+                "overtones. A microphone picks up your sound, an FFT extracts "
+                "the harmonic series, and the display shows you what's happening "
+                "in real time. You can capture sessions, save presets for "
+                "different setups (horn + mouthpiece + player + reed + mic), "
+                "and compare them side by side.\n\n"
 
                 "The formulas and scaling may still shift as we gather more data. "
                 "The raw harmonic measurements are always saved, so improvements "
                 "apply retroactively to all your historical captures.\n\n"
 
-                "WHERE THE REAL VALUE IS\n\n"
+                "THREE WAYS TO USE IT\n\n"
 
-                "The power of this tool is twofold:\n\n"
+                "1. Instant feedback — see how you affect the sound with "
+                "your embouchure, support, and voicing.\n\n"
 
-                "1. Instant feedback — you can see in real time how changes in "
-                "your embouchure, air support, mouthpiece, or reed affect the "
-                "harmonic content of your sound. This is useful right now, today, "
-                "regardless of how the descriptors are calibrated.\n\n"
+                "2. Controlled comparison — change a variable and compare "
+                "readings to see what changes in your sound. More readings, "
+                "better data.\n\n"
 
-                "2. Controlled comparison — change one variable, keep everything "
-                "else the same, and the difference in readings tells you exactly "
-                "what that variable did. Over time, the things that stay the same "
-                "start to emerge from the things that drift.\n\n"
+                "3. Tracking your sound over time — same horn, same setup, "
+                "just you and your practice. Sessions are dated, so you "
+                "can see how your tone evolves week to week or month "
+                "to month.\n\n"
 
-                "We need more data to make the descriptors better. Every session "
-                "you capture helps."
+                "BEFORE YOUR FIRST CAPTURE\n\n"
+
+                "Check Options > Settings:\n\n"
+
+                "1. Input Device — select your audio input. If you have a "
+                "USB mic plugged in, choose it here.\n\n"
+
+                "2. Recording Folder — if you want to save WAV audio files "
+                "alongside your captures, enable \"Record WAV\" and choose a "
+                "folder. This is optional but handy for backup or sharing.\n\n"
+
+                "3. Preset Fields — choose which variable fields to show when "
+                "creating presets.\n\n"
+
+                "Then create a preset in File > Presets. Six fields are always "
+                "required: Make, Model, Player, Mouthpiece, Mic Type, and "
+                "Mic Model. A high quality condenser mic will give the most "
+                "accurate readings, but you can also use the toner to compare "
+                "mic effects.\n\n"
+
+                "Donate your data! Email Matt to share your captures and "
+                "help improve the toner."
             )
             txt.insert("1.0", content)
             txt.configure(state="disabled")

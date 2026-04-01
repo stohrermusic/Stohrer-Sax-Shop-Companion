@@ -1317,7 +1317,7 @@ class TonerTabMixin:
                                 variable=_ns_var, bg=bg, fg=fg,
                                 font=("Helvetica", 9))
         _ns_cb.pack(anchor="w")
-        _ns_msgs = ["No.", "Nope.", "Uh uh.", "I refuse.",
+        _ns_msgs = ["No.", "Nope.", "Uh uh.", "Jabroni: I refuse.",
                      "Forget it.", "Stop.", "Dude."]
         _ns_idx = [0]
 
@@ -2358,7 +2358,26 @@ class TonerTabMixin:
 
         # Start WAV recording if enabled
         if self.settings.get('toner_record_wav') and self._toner_engine:
-            self._toner_engine.start_recording()
+            # First time: require user to pick a folder
+            if not self.settings.get('toner_recording_dir'):
+                from tkinter import filedialog
+                messagebox.showinfo("Choose Recording Folder",
+                    "WAV recording is enabled but no folder has been chosen.\n\n"
+                    "Please select a folder where recordings will be saved.",
+                    parent=self.root)
+                folder = filedialog.askdirectory(
+                    title="Choose Recording Folder",
+                    initialdir=os.path.expanduser("~"),
+                    parent=self.root)
+                if folder:
+                    self.settings['toner_recording_dir'] = folder
+                    save_settings(self.settings)
+                else:
+                    # User cancelled — disable WAV recording for this session
+                    self.settings['toner_record_wav'] = False
+                    save_settings(self.settings)
+            if self.settings.get('toner_record_wav'):
+                self._toner_engine.start_recording()
 
         self._toner_begin_listening()
 
@@ -2436,9 +2455,18 @@ class TonerTabMixin:
             from toner_engine import TonerEngine
             TonerEngine.save_recording(chunks, filepath)
 
+            # Verify file was created
+            if not os.path.isfile(filepath) or os.path.getsize(filepath) == 0:
+                messagebox.showwarning("Recording",
+                    "WAV recording failed — file was not created.")
+                return
+
             # Store reference in session
             self._toner_active_session['recording_file'] = filename
             self._toner_save_active_session()
+
+            messagebox.showinfo("Recording Saved",
+                f"WAV saved to:\n{filepath}")
         except Exception as e:
             messagebox.showwarning("Recording",
                 f"Could not save WAV recording:\n{e}")
@@ -3778,7 +3806,7 @@ class TonerTabMixin:
                             lines.append(
                                 f"\nDifferent players ({p1} vs {p2}) \u2014 "
                                 "player and mouthpiece effects can be as large as "
-                                "horn differences. Core Tone (H2\u2013H4) tends to "
+                                "horn differences. Low harmonics (H1\u2013H4) tend to "
                                 "be more stable across players, but treat all "
                                 "cross-player comparisons as suggestive, not definitive.")
             elif len(fingerprints) > 2:

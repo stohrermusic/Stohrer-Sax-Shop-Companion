@@ -2816,8 +2816,9 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._body("Microphone")
-        self._bullet("Set your mic type and model in Options \u2192 Input "
-                      "Device. Mic type is required before capturing.")
+        self._bullet("Mic type and model are set per preset \u2014 you'll "
+                      "enter them when creating a preset in File \u2192 "
+                      "Presets. Both are required before capturing.")
         self._bullet("A condenser mic (e.g. Audio-Technica AT2020 USB) "
                       "gives you the fullest picture \u2014 flat response "
                       "captures upper harmonics accurately, which is "
@@ -2846,13 +2847,15 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._body("Preset")
-        self._bullet("A preset saves your setup details: horn + player + mouthpiece. "
-                      "It pre-fills session metadata for quick capture start.")
+        self._bullet("A preset saves your setup details: horn + player + "
+                      "mouthpiece + mic. It pre-fills session metadata for "
+                      "quick capture start.")
         self._bullet("Click Capture, then create or load a preset. "
-                      "Fill in at least the required fields (make, "
-                      "model, player, mouthpiece). Optional fields "
-                      "like reed, room, and preamp can be enabled in "
-                      "Options \u2192 Preset Fields.")
+                      "Six fields are required: Make, Model, Player, "
+                      "Mouthpiece, Mic Type, and Mic Model. Optional "
+                      "fields like reed, serial, ligature, room, and "
+                      "preamp can be enabled in Options \u2192 Settings "
+                      "\u2192 Analysis tab.")
         self._bullet("The SAX selector sets the transposition and is "
                       "stored with the preset. When you load a preset, "
                       "it updates automatically.")
@@ -2950,9 +2953,11 @@ class UserGuideWindow(tk.Toplevel):
 
         # === COMPARISON DESCRIPTORS ===
         self._h2("Comparison Descriptors")
-        self._body("In addition to the two live gauges, the comparison "
-                    "tool computes three additional descriptors that are "
-                    "most useful when comparing presets side by side.")
+        self._body("In addition to the two live gauges, the Analyze "
+                    "tool computes two additional descriptors that are "
+                    "most useful when comparing presets side by side. "
+                    "These default to off and can be enabled in "
+                    "Options \u2192 Settings \u2192 Analysis tab.")
         self._blank()
 
         self._body("Even/Odd Ratio")
@@ -3058,11 +3063,17 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("WAV Recording")
-        self._body("Options \u2192 Record WAV During Capture saves a "
+        self._body("Options \u2192 Settings \u2192 General tab has a "
+                    "Recording section where you can enable \"Record WAV "
+                    "during capture\" and choose a folder. This saves a "
                     "WAV audio file alongside each capture session. "
-                    "This is entirely optional \u2014 the toner does "
+                    "It is entirely optional \u2014 the toner does "
                     "not need the WAV file. All harmonic data is "
                     "captured and stored in the session automatically.")
+        self._blank()
+        self._body("The first time you start a capture with WAV "
+                    "recording enabled, you'll be asked to choose a "
+                    "folder if you haven't already.")
         self._blank()
         self._body("Reasons you might want it:")
         self._bullet("As a backup of the original audio, in case you "
@@ -3075,10 +3086,8 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("To keep a record of how a horn sounds on a "
                       "given day")
         self._blank()
-        self._body("Use Options \u2192 Recording Folder to choose "
-                    "where files are saved. Each file is named with "
-                    "the preset name and session date so you can "
-                    "find it later.")
+        self._body("Each file is named with the preset name and session "
+                    "date so you can find it later.")
         self._blank()
         self._body("The toner activates automatically when you switch "
                     "to the Toner tab and stops when you leave it.")
