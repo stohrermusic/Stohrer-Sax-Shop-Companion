@@ -2440,16 +2440,15 @@ class TonerTabMixin:
         """Save recorded audio chunks to a WAV file correlated with the session."""
         try:
             rec_dir = self._toner_get_recording_dir()
-            # Build filename from preset name and session date
+            # Build filename from preset name and current time (unique per save)
             preset_name = ''
             if self._toner_active_preset:
                 preset_name = self._toner_active_preset
             # Sanitize for filesystem
             safe_name = "".join(c if c.isalnum() or c in ' -_' else '_'
                                 for c in preset_name).strip() or 'session'
-            session_date = self._toner_active_session.get('date', '')
-            safe_date = session_date.replace(':', '-').replace(' ', '_')
-            filename = f"{safe_name}_{safe_date}.wav"
+            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"{safe_name}_{timestamp}.wav"
             filepath = os.path.join(rec_dir, filename)
 
             from toner_engine import TonerEngine
