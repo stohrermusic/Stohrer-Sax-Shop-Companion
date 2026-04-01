@@ -28,8 +28,9 @@ python tools/test_toner_full.py
 python tools/test_tuner_engine.py
 python tools/test_bugfixes.py
 python tools/test_config.py
-# etc.
 ```
+
+All test suites (26 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_descriptor_validity`, `test_descriptor_wavs`, `test_detection_fix`, `test_edge_bias`, `test_goodson_import`, `test_gpu_tuner`, `test_import_normalize`, `test_pad_notes`, `test_release_1_9`, `test_sizing_ranges`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_recording`, `test_web_pad_import`.
 
 Before committing, run the suites affected by your changes. For releases, run all. If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
 
@@ -68,9 +69,11 @@ python build.py --dmg
 
 ## CI/CD (GitHub Actions)
 
-The `.github/workflows/build.yml` workflow automatically builds for all three platforms:
+The `.github/workflows/build.yml` workflow automatically builds for all platforms:
 - Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually
-- Builds Windows .exe, macOS .app (universal2: Intel + Apple Silicon, zipped), and Linux binary in parallel
+- Builds four binaries in parallel: Windows .exe, macOS Apple Silicon .app (zipped), macOS Intel .app (zipped, no audio features), and Linux binary
+- macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
+- `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer
 - Uploads artifacts to the workflow run
 - Auto-attaches binaries to GitHub Releases
 
@@ -185,7 +188,7 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), VU-style gauge panel (right), and control strip (bottom). Preset management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Two live gauges: Complexity (spectral flatness — Pure ↔ Complex) and Warmth (H2 octave harmonic strength — Thin ↔ Warm). Brightness/darkness/resonance/fullness were removed after data analysis showed the labels didn't match player vocabulary and some descriptors didn't differentiate between horns.
-- Two comparison descriptors (shown in analysis tool, not live gauges): Even/Odd Ratio (even vs odd harmonic balance), Rolloff Shape (nonlinearity of harmonic rolloff — spectral peaks/bumps). Core Tone was removed — no spread across 38 horns.
+- Two comparison descriptors (shown in Analyze tool, not live gauges): Even/Odd Ratio (even vs odd harmonic balance), Rolloff Shape (nonlinearity of harmonic rolloff — spectral peaks/bumps). Both default to off, enabled in Options > Settings > Analysis tab.
 - Comparison analysis includes harmonic-range interpretation: H1-H4 shifts = bore, H7-H13 shifts = neck/mpc, broadband = mpc/player. Same-player comparisons noted as more reliable.
 - Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
 - Spectrum overlay: a preset can be loaded as a ghost overlay on the live spectrum (via Analyze > single preset or group average > Overlay on Spectrum). Blue ghost bars update per-note as you play. Live delta gauges were removed — the analyze tool (both sides averaged) is where comparison actually works.
@@ -194,10 +197,11 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 - Analyze tool (renamed from Compare): handles single preset view, two-preset delta analysis with difference chart, and multi-preset spread analysis. Replaces the old separate Report tool. Analysis descriptors (complexity, warmth, even/odd, rolloff shape) are user-configurable in Options > Settings > Analysis tab. Even/odd and rolloff shape default to off and are marked [beta].
 - Mutate preset: duplicates a preset with all fields pre-filled (name cleared), letting users change one variable (mouthpiece, mic, reed) and save as a new preset. Streamlines A/B testing workflows.
 - Settings dialog: Options > Settings opens a tabbed dialog (General: input device, recording, pitch; Analysis: preset fields, descriptor visibility). Capture Threshold stays as a standalone menu item due to its live level meter.
-- Three capture modes: "free" (0.5s stability, continuous micro-captures while playing naturally), "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis), and "file" (import WAV, extract stable note segments offline). Each capture is tagged with its method.
+- Two selectable capture modes: "free" (0.5s stability, continuous micro-captures while playing naturally) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
 - Auto-transposition: SAX selector sets both the break frequency and the displayed note names. Written pitch is shown by default (alto shows A4 when concert C4 is played). "Concert" checkbox overrides to concert pitch.
 - Coverage summary dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
 - `compute_fingerprint(sessions, sax_type)` recomputes descriptors from raw harmonics (never uses stored descriptors), averages per-note first (equal weight per note), then across notes. This prevents register skew.
+- WAV recording: optional, enabled in Options > Settings > General. On first capture with WAV enabled, the app prompts the user to choose a recording folder (no silent default). After each save, a confirmation dialog shows the full file path. The `recording_file` field in the session dict links the WAV to its session. Filenames use preset name + timestamp at save time for uniqueness.
 
 **Audio Stream Health**: Both `tuner_engine.py` and `toner_engine.py` import `AudioRingBuffer` from `audio_utils.py` for stream health monitoring. The ring buffer tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
 
@@ -258,7 +262,7 @@ Preset notes can contain subjective tone descriptions ("rich horn", "very bright
 
 **macOS build**: `build.py` patches Info.plist after PyInstaller to add `NSMicrophoneUsageDescription`. Without this, macOS silently denies mic access to the tuner and toner.
 
-**Feature Set**: File > Feature Set lets users show/hide tabs. Tuner and Toner default to hidden. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, how it works, calibration caveats). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
+**Feature Set**: File > Feature Set lets users show/hide tabs. Tuner and Toner default to hidden. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, three ways to use it, and setup steps: input device, recording folder, preset fields, required preset fields). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
 
 ## Web Data Sync ("Import Matt's")
 
