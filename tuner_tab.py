@@ -1,7 +1,7 @@
 """
 Tuner tab mixin for Stohrer Sax Shop Companion.
 
-12-wheel chromatic strobe tuner modeled after the Peterson Stroboconn 6T-5.
+12-wheel chromatic strobe tuner modeled after the Conn Stroboconn 6T-5.
 Concentric rings, wedge cutouts, phase tracking, with an analog VU meter
 showing the detected fundamental pitch.
 

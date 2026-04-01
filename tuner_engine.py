@@ -4,7 +4,7 @@ Strobe tuner audio engine for Stohrer Sax Shop Companion.
 Handles audio capture, FFT pitch analysis, phase tracking, and reference tone
 generation. Pure math/audio — no tkinter dependency.
 
-Modeled after the Peterson Stroboconn 6T-5: 12 chromatic pitch classes, each
+Modeled after the Conn Stroboconn 6T-5: 12 chromatic pitch classes, each
 with concentric rings showing different octaves. Phase tracking drives the
 stroboscopic rotation effect.
 
