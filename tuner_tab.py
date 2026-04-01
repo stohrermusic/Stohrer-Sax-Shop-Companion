@@ -1152,7 +1152,7 @@ class TunerTabMixin:
         # --- Stripe/Backlight color ---
         color_row = tk.Frame(frame, bg=bg)
         color_row.pack(fill="x", pady=(0, 10))
-        tk.Label(color_row, text="Stripe Color:", bg=bg, fg=fg,
+        tk.Label(color_row, text="Backlight Color:", bg=bg, fg=fg,
                  font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
         color_swatch = tk.Button(
             color_row, text="  ", bg=self._tuner_color, width=4,
@@ -1163,7 +1163,7 @@ class TunerTabMixin:
         def pick_stripe_color():
             c = colorchooser.askcolor(
                 initialcolor=self._tuner_color,
-                title="Choose Stripe Color", parent=dlg
+                title="Choose Backlight Color", parent=dlg
             )
             if c[1]:
                 self._tuner_color = c[1]
