@@ -131,10 +131,10 @@ shader_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 if os.path.exists(shader_path):
     with open(shader_path) as f:
         shader_src = f.read()
-    test("Shader uses 'angle - wheel.phase' (correct direction)",
-         'angle - wheel.phase' in shader_src)
-    test("Shader does NOT use 'angle + wheel.phase' (wrong direction)",
-         'angle + wheel.phase' not in shader_src)
+    test("Shader uses per-ring phase 'angle - wheel.ring_phases[ring_idx]'",
+         'angle - wheel.ring_phases[ring_idx]' in shader_src)
+    test("Shader does NOT use 'angle + wheel.ring_phases' (wrong direction)",
+         'angle + wheel.ring_phases' not in shader_src)
 else:
     test("Shader file exists", False)
 
@@ -162,7 +162,7 @@ test("RING_SEGMENTS = [4,8,16,32,64,128,256]",
      tuner_tab.RING_SEGMENTS == [4, 8, 16, 32, 64, 128, 256])
 test("CENTER_GAP_FRACTION = 0.12", tuner_tab.CENTER_GAP_FRACTION == 0.12)
 test("BRIGHTNESS_GAMMA = 0.45", tuner_tab.BRIGHTNESS_GAMMA == 0.45)
-test("MAGNITUDE_THRESHOLD = 0.05", tuner_tab.MAGNITUDE_THRESHOLD == 0.05)
+test("MAGNITUDE_THRESHOLD = 0.02", tuner_tab.MAGNITUDE_THRESHOLD == 0.02)
 test("DIM_MULTIPLIER = 0.08", tuner_tab.DIM_MULTIPLIER == 0.08)
 
 if os.path.exists(shader_path):
@@ -214,8 +214,8 @@ renderer_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 if os.path.exists(renderer_path):
     with open(renderer_path) as f:
         rs_src = f.read()
-    test("GpuWheelData compile-time size assert (96 bytes)",
-         'size_of::<GpuWheelData>() == 96' in rs_src)
+    test("GpuWheelData compile-time size assert (128 bytes)",
+         'size_of::<GpuWheelData>() == 128' in rs_src)
     test("Globals compile-time size assert (16 bytes)",
          'size_of::<Globals>() == 16' in rs_src)
     test("sRGB to linear conversion present",
@@ -379,23 +379,23 @@ if _has_gpu:
         renderer.resize(800, 600)
         test("resize works", True)
 
-        # Render a frame with valid data
-        phases = [float(i * 30) for i in range(12)]
+        # Render a frame with valid data (per-ring phases: 12 lists of 7)
+        ring_phases = [[float(i * 30 + r * 2) for r in range(7)] for i in range(12)]
         mags = [0.5] * 12
         rmags = [[0.3, 0.5, 0.7, 0.5, 0.3, 0.2, 0.1]] * 12
-        renderer.render(phases, mags, rmags, 80.0, 100.0)
+        renderer.render(ring_phases, mags, rmags, 80.0, 100.0)
         test("render() with valid data succeeds", True)
 
         # Render with edge cases
-        renderer.render([0.0]*12, [0.0]*12, [[0.0]*7]*12, 0.0, 0.0)
+        renderer.render([[0.0]*7]*12, [0.0]*12, [[0.0]*7]*12, 0.0, 0.0)
         test("render() with all zeros succeeds", True)
 
-        renderer.render([360.0]*12, [1.0]*12, [[1.0]*7]*12, 100.0, 150.0)
+        renderer.render([[360.0]*7]*12, [1.0]*12, [[1.0]*7]*12, 100.0, 150.0)
         test("render() with max values succeeds", True)
 
         # Multiple rapid frames (stress test)
         for i in range(60):
-            p = [float(i * 6)] * 12
+            p = [[float(i * 6 + r) for r in range(7)]] * 12
             renderer.render(p, mags, rmags, 80.0, 100.0)
         test("60 rapid frames without error", True)
 

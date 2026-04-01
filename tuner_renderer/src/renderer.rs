@@ -10,29 +10,30 @@ use crate::platform;
 
 const MAX_WHEELS: usize = 12;
 const BRIGHTNESS_GAMMA: f32 = 0.45;
-const MAGNITUDE_THRESHOLD: f32 = 0.05;
+const MAGNITUDE_THRESHOLD: f32 = 0.02;
 
 // ── GPU data structures (must match shader.wgsl layout exactly) ─────
 
 /// Per-wheel parameters uploaded to the storage buffer each frame.
-/// Layout: 96 bytes, aligned to 16 (matching WGSL struct).
+/// Layout: 128 bytes, aligned to 16 (matching WGSL struct).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 struct GpuWheelData {
     center: [f32; 2],           // offset  0: pixel coords
     radius: f32,                // offset  8: pixel radius
-    phase: f32,                 // offset 12: rotation (radians)
-    ring_mags: [f32; 8],        // offset 16: per-ring brightness (7+1 pad)
-    stripe_color: [f32; 4],     // offset 48: rgb + pad
-    faceplate_color: [f32; 4],  // offset 64: rgb + pad
-    brightness: f32,            // offset 80: overall brightness (gamma-applied)
-    wedge_center: f32,          // offset 84: wedge center angle (radians)
-    ring_brightness_blend: f32, // offset 88: 0=uniform, 1=per-ring
-    overall_brightness: f32,    // offset 92: master scale
+    _pad0: f32,                 // offset 12: alignment padding
+    ring_phases: [f32; 8],      // offset 16: per-ring rotation (radians, 7+1 pad)
+    ring_mags: [f32; 8],        // offset 48: per-ring brightness (7+1 pad)
+    stripe_color: [f32; 4],     // offset 80: rgb + pad
+    faceplate_color: [f32; 4],  // offset 96: rgb + pad
+    brightness: f32,            // offset 112: overall brightness (gamma-applied)
+    wedge_center: f32,          // offset 116: wedge center angle (radians)
+    ring_brightness_blend: f32, // offset 120: 0=uniform, 1=per-ring
+    overall_brightness: f32,    // offset 124: master scale
 }
 
 // Compile-time layout verification
-const _: () = assert!(std::mem::size_of::<GpuWheelData>() == 96);
+const _: () = assert!(std::mem::size_of::<GpuWheelData>() == 128);
 
 /// Global uniforms (screen size for pixel→NDC conversion in vertex shader).
 #[repr(C)]
@@ -331,7 +332,7 @@ impl Renderer {
 
     pub fn render(
         &mut self,
-        phases: &[f32],
+        ring_phases_deg: &[Vec<f32>],
         magnitudes: &[f32],
         ring_magnitudes: &[Vec<f32>],
         ring_brightness_pct: f32,
@@ -346,9 +347,9 @@ impl Renderer {
         let mut gpu_data = [GpuWheelData::zeroed(); MAX_WHEELS];
 
         for (i, &(cx, cy, radius, is_up)) in self.layouts.iter().enumerate().take(num_wheels) {
-            let phase_deg = phases.get(i).copied().unwrap_or(0.0);
             let mag = magnitudes.get(i).copied().unwrap_or(0.0);
             let rm = ring_magnitudes.get(i);
+            let rp = ring_phases_deg.get(i);
 
             // Gamma-corrected brightness
             let brightness = if mag > MAGNITUDE_THRESHOLD {
@@ -356,6 +357,15 @@ impl Renderer {
             } else {
                 0.0
             };
+
+            // Per-ring phases (degrees → radians)
+            let mut ring_phases = [0.0f32; 8];
+            for j in 0..7 {
+                ring_phases[j] = rp
+                    .and_then(|r| r.get(j).copied())
+                    .unwrap_or(0.0)
+                    .to_radians();
+            }
 
             // Per-ring magnitudes with gamma
             let mut ring_mags = [0.0f32; 8];
@@ -379,7 +389,8 @@ impl Renderer {
             gpu_data[i] = GpuWheelData {
                 center: [cx, cy],
                 radius,
-                phase: phase_deg.to_radians(),
+                _pad0: 0.0,
+                ring_phases,
                 ring_mags,
                 stripe_color: [
                     self.stripe_color[0],

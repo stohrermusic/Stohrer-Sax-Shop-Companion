@@ -63,6 +63,10 @@ CENTS_CLAMP = 100.0
 ACTIVE_THRESHOLD = 0.05
 # Consecutive stale audio reads before triggering stream restart (~1s at 60fps)
 STALE_RESTART_THRESHOLD = 60
+# Per-ring temporal smoothing — exponential decay factor per frame.
+# Lower = slower fade (more inertia). At 60fps, 0.3 gives ~100ms decay.
+RING_SMOOTH_ATTACK = 0.5    # How fast a ring brightens (rise)
+RING_SMOOTH_DECAY = 0.15    # How fast a ring fades (fall) — slower = more fuzzy lingering
 
 
 # ============================================
@@ -74,7 +78,7 @@ NUM_RINGS = MAX_OCTAVE - MIN_OCTAVE + 1  # 7 rings = 7 octaves
 class TunerResult:
     """Result of one analysis frame."""
     __slots__ = ['magnitudes', 'phase_offsets', 'cents_errors', 'active',
-                 'ring_magnitudes']
+                 'ring_magnitudes', 'ring_phase_offsets']
 
     def __init__(self):
         self.magnitudes = [0.0] * 12       # Energy per pitch class (0-1 normalized)
@@ -87,6 +91,10 @@ class TunerResult:
         # effect where the played octave's ring appears sharp/bright while
         # other rings are dim/fuzzy.
         self.ring_magnitudes = [[0.0] * NUM_RINGS for _ in range(12)]
+        # Per-ring phase offsets — each ring tracks its own octave's frequency
+        # independently, showing inharmonicity across octaves like the real
+        # Stroboconn where each ring responds to its own frequency component.
+        self.ring_phase_offsets = [[0.0] * NUM_RINGS for _ in range(12)]
 
 
 # ============================================
@@ -110,6 +118,11 @@ class TunerEngine:
         self._last_device = None   # For auto-restart
         self._stale_count = 0      # Consecutive stale reads
         self.last_error = None     # Set when stream restart fails
+        # Per-ring smoothed magnitudes — temporal decay like physical disc inertia
+        self._smoothed_ring_mags = [[0.0] * NUM_RINGS for _ in range(12)]
+        # Per-ring independent phase accumulators — each ring tracks its own
+        # octave's frequency, showing real inharmonicity
+        self._ring_phase_offsets = [[0.0] * NUM_RINGS for _ in range(12)]
         self._build_freq_table()
 
     def _build_freq_table(self):
@@ -308,7 +321,6 @@ class TunerEngine:
             total_mag = 0.0
             best_mag = 0.0
             best_octave = -1
-            best_bin = -1
 
             for oct_idx, freq in enumerate(self._freq_table[pc]):
                 if freq < MIN_FREQUENCY_HZ or freq > SAMPLE_RATE / 2:
@@ -319,10 +331,9 @@ class TunerEngine:
                     continue
 
                 # Peak magnitude at this bin and immediate neighbors
-                # Find which of the 3 bins has the actual peak for correct
-                # parabolic interpolation later
                 local_mags = [mags[bin_idx - 1], mags[bin_idx], mags[bin_idx + 1]]
                 peak_offset = int(np.argmax(local_mags)) - 1  # -1, 0, or +1
+                peak_bin = bin_idx + peak_offset
                 mag = local_mags[peak_offset + 1]
 
                 if mag > threshold:
@@ -331,41 +342,63 @@ class TunerEngine:
                     if mag > best_mag:
                         best_mag = mag
                         best_octave = oct_idx
-                        best_bin = bin_idx + peak_offset
+
+                    # Per-ring phase tracking — each ring independently
+                    # measures its own octave's frequency via parabolic
+                    # interpolation, just like the real Stroboconn where
+                    # each ring responds to its own frequency component.
+                    if peak_bin > 0 and peak_bin < len(mags) - 1:
+                        alpha = float(mags[peak_bin - 1])
+                        beta = float(mags[peak_bin])
+                        gamma = float(mags[peak_bin + 1])
+                        denom = alpha - 2 * beta + gamma
+                        if abs(denom) > 1e-10 and beta > 0:
+                            p = 0.5 * (alpha - gamma) / denom
+                            ring_freq = (peak_bin + p) * bin_freq
+                        else:
+                            ring_freq = peak_bin * bin_freq
+
+                        if ring_freq > 0 and freq > 0:
+                            ring_cents = 1200.0 * math.log2(ring_freq / freq)
+                            ring_cents = max(-CENTS_CLAMP, min(CENTS_CLAMP, ring_cents))
+                            self._ring_phase_offsets[pc][oct_idx] += (
+                                ring_cents * self._drift_rates[pc] * dt
+                            )
+                            self._ring_phase_offsets[pc][oct_idx] %= 360.0
 
             result.magnitudes[pc] = total_mag
             if total_mag > max_mag:
                 max_mag = total_mag
 
-            # Phase tracking — only for pitch classes with sufficient energy
-            if best_bin > 0 and best_bin < len(mags) - 1 and best_mag > threshold:
-                # Parabolic interpolation for sub-bin frequency accuracy
-                alpha = float(mags[best_bin - 1])
-                beta = float(mags[best_bin])
-                gamma = float(mags[best_bin + 1])
-
-                denom = alpha - 2 * beta + gamma
-                if abs(denom) > 1e-10 and beta > 0:
-                    p = 0.5 * (alpha - gamma) / denom
-                    actual_freq = (best_bin + p) * bin_freq
-                else:
-                    actual_freq = best_bin * bin_freq
-
-                ref_freq = self._freq_table[pc][best_octave]
-
-                if actual_freq > 0 and ref_freq > 0:
-                    cents = 1200.0 * math.log2(actual_freq / ref_freq)
-                    cents = max(-CENTS_CLAMP, min(CENTS_CLAMP, cents))
-                    result.cents_errors[pc] = cents
-
-                    # Accumulate phase offset (the strobe rotation)
-                    # Uses per-pitch-class drift rate matching Stroboconn disc physics
-                    # Positive cents (sharp) → increasing phase → CW rotation in shader
-                    # Negative cents (flat) → decreasing phase → CCW rotation
-                    self._phase_offsets[pc] += cents * self._drift_rates[pc] * dt
-                    self._phase_offsets[pc] %= 360.0
+            # Overall cents error and phase from strongest octave (for VU meter)
+            if best_octave >= 0:
+                result.cents_errors[pc] = 0.0
+                best_freq = self._freq_table[pc][best_octave]
+                best_bin_idx = int(round(best_freq / bin_freq))
+                if 0 < best_bin_idx < len(mags) - 1:
+                    local_mags = [mags[best_bin_idx - 1], mags[best_bin_idx], mags[best_bin_idx + 1]]
+                    po = int(np.argmax(local_mags)) - 1
+                    pb = best_bin_idx + po
+                    if 0 < pb < len(mags) - 1:
+                        a2 = float(mags[pb - 1])
+                        b2 = float(mags[pb])
+                        g2 = float(mags[pb + 1])
+                        d2 = a2 - 2 * b2 + g2
+                        if abs(d2) > 1e-10 and b2 > 0:
+                            p2 = 0.5 * (a2 - g2) / d2
+                            af = (pb + p2) * bin_freq
+                        else:
+                            af = pb * bin_freq
+                        if af > 0 and best_freq > 0:
+                            cents = 1200.0 * math.log2(af / best_freq)
+                            cents = max(-CENTS_CLAMP, min(CENTS_CLAMP, cents))
+                            result.cents_errors[pc] = cents
+                            self._phase_offsets[pc] += cents * self._drift_rates[pc] * dt
+                            self._phase_offsets[pc] %= 360.0
 
             result.phase_offsets[pc] = self._phase_offsets[pc]
+            for r in range(NUM_RINGS):
+                result.ring_phase_offsets[pc][r] = self._ring_phase_offsets[pc][r]
 
         # Normalize magnitudes to 0-1, but only if the strongest signal
         # is meaningfully above the noise floor (not just noise peaks)
@@ -381,6 +414,23 @@ class TunerEngine:
                 for r in range(NUM_RINGS):
                     result.ring_magnitudes[pc][r] = 0.0
 
+        # Temporal smoothing on per-ring magnitudes — simulates physical disc
+        # inertia.  Real Stroboconn rings fade in/out gradually because the
+        # strobe illumination has persistence and the human eye integrates.
+        # Fast attack (ring lights up quickly), slow decay (fades out gradually,
+        # giving the "fuzzy" look on secondary octave rings).
+        for pc in range(12):
+            for r in range(NUM_RINGS):
+                target = result.ring_magnitudes[pc][r]
+                prev = self._smoothed_ring_mags[pc][r]
+                if target > prev:
+                    alpha = RING_SMOOTH_ATTACK
+                else:
+                    alpha = RING_SMOOTH_DECAY
+                smoothed = prev + alpha * (target - prev)
+                self._smoothed_ring_mags[pc][r] = smoothed
+                result.ring_magnitudes[pc][r] = smoothed
+
         # Determine active wheels
         for pc in range(12):
             result.active[pc] = result.magnitudes[pc] > ACTIVE_THRESHOLD
@@ -390,6 +440,7 @@ class TunerEngine:
     def reset_phases(self):
         """Reset all phase offsets to zero."""
         self._phase_offsets = [0.0] * 12
+        self._ring_phase_offsets = [[0.0] * NUM_RINGS for _ in range(12)]
 
 
 # ============================================

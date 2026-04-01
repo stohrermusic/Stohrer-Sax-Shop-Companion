@@ -9,7 +9,8 @@
 struct WheelData {
     center: vec2<f32>,              // pixel coordinates
     radius: f32,                    // pixel radius
-    phase: f32,                     // rotation offset (radians)
+    _pad0: f32,                     // alignment padding
+    ring_phases: array<f32, 8>,     // per-ring rotation offsets (radians, 7 used + 1 pad)
     ring_mags: array<f32, 8>,       // per-ring brightness (7 used + 1 pad)
     stripe_color: vec4<f32>,        // rgb + unused
     faceplate_color: vec4<f32>,     // rgb + unused
@@ -145,9 +146,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Stripe alternation: sin() of rotated angle gives smooth alternation,
     // step() converts to binary stripe. segments/2 full sine cycles = segments zones.
-    // Phase is subtracted so that: sharp → CW, flat → CCW (matching real Stroboconn).
+    // Each ring uses its own phase — independent frequency tracking per octave,
+    // showing real inharmonicity like the physical Stroboconn.
     let segs = ring_segments(ring_idx);
-    let rotated = angle - wheel.phase;
+    let rotated = angle - wheel.ring_phases[ring_idx];
     let stripe = step(0.0, sin(rotated * segs * 0.5));
 
     // Per-ring vs uniform brightness blending

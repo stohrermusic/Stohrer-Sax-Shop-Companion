@@ -58,7 +58,7 @@ CENTER_GAP_FRACTION = 0.12       # Fraction of radius reserved as center gap
 RING_GAP_FRACTION = 0.05         # Fraction of ring width used as gap between rings
 MASK_EXTEND_PX = 8               # Pixels the mask extends beyond disc edge
 BRIGHTNESS_GAMMA = 0.45          # Gamma curve for magnitude → brightness mapping
-MAGNITUDE_THRESHOLD = 0.05       # Below this magnitude, brightness snaps to zero
+MAGNITUDE_THRESHOLD = 0.02       # Below this magnitude, brightness snaps to zero
 PHASE_CHANGE_THRESHOLD = 0.005   # Degrees — skip redraw below this (sub-pixel)
 LABEL_BRIGHTNESS_MIN = 0.35      # Minimum label brightness when signal detected
 LABEL_BRIGHTNESS_RANGE = 0.65    # Additional brightness scaled by magnitude
@@ -285,6 +285,7 @@ class StrobeWheel:
                 self.canvas.itemconfigure(poly_id, fill=fill)
 
     def update(self, phase_offset, magnitude, ring_magnitudes=None,
+               ring_phase_offsets=None,
                ring_brightness_pct=100, overall_brightness_pct=80):
         """Update wheel for one animation frame.
 
@@ -292,6 +293,9 @@ class StrobeWheel:
             phase_offset: Rotation angle in degrees (from engine phase tracking)
             magnitude: Overall signal strength 0.0-1.0 (drives label brightness)
             ring_magnitudes: Optional list of per-ring magnitudes (0.0-1.0).
+            ring_phase_offsets: Optional list of per-ring phase offsets in degrees.
+                Each ring tracks its own octave's frequency independently.
+                If None, all rings use phase_offset.
             ring_brightness_pct: 0-100, how much per-ring effect to apply
                 (0=uniform brightness, 100=full per-ring independent brightness)
             overall_brightness_pct: 0-100, scales the overall brightness ceiling
@@ -330,39 +334,45 @@ class StrobeWheel:
 
         self._brightness = brightness
 
-        # Update segment positions (rotate by phase_offset)
-        # Skip coordinate recalculation when phase hasn't moved enough to see.
-        # 0.005 degrees ≈ 0.09px at 50px radius — sub-pixel, invisible.
-        if abs(phase_offset - self._phase_offset) < PHASE_CHANGE_THRESHOLD:
-            return  # No visible change, skip coordinate update
+        # Update segment positions — each ring uses its own phase offset
+        # (independent frequency tracking per octave, like the real Stroboconn).
+        # Build per-ring phases: use independent ring phases if available,
+        # otherwise fall back to the single overall phase.
+        ring_phases = []
+        for r in range(NUM_RINGS):
+            rp = ring_phase_offsets[r] if ring_phase_offsets else phase_offset
+            ring_phases.append(rp)
 
-        self._phase_offset = phase_offset
+        # Skip coordinate recalculation when no phase has moved enough to see.
+        if hasattr(self, '_last_ring_phases'):
+            if all(abs(ring_phases[r] - self._last_ring_phases[r]) < PHASE_CHANGE_THRESHOLD
+                   for r in range(NUM_RINGS)):
+                return
+        self._last_ring_phases = list(ring_phases)
+        self._phase_offset = phase_offset  # Keep for compatibility
 
         # Only update segments that are visible through the wedge cutout.
         # The wedge shows WEDGE_ANGLE degrees centered on 90° (top).
         # Segments outside this arc are hidden behind the mask — skip them.
         wedge_half = WEDGE_ANGLE / 2.0
-        # Visible range in "math angle" space (90° = top of screen)
         vis_lo = 90.0 - wedge_half
         vis_hi = 90.0 + wedge_half
 
         for ring_idx in range(NUM_RINGS):
+            ring_phase = ring_phases[ring_idx]
             r_inner, r_outer = self._ring_radii[ring_idx]
             for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
-                start = (base_start + phase_offset) % 360.0
+                start = (base_start + ring_phase) % 360.0
                 end = start + seg_span
-                # Check if segment overlaps the visible wedge
-                # (handle wrap-around: segment at 350°-10° overlaps wedge at 50°-130°)
                 if not (end > vis_lo and start < vis_hi):
-                    # Also check wrap-around
                     if not (end + 360.0 > vis_lo and start < vis_hi) and \
                        not (end > vis_lo and start - 360.0 < vis_hi):
-                        continue  # Hidden behind mask — skip
+                        continue
 
                 points = _annular_sector_points(
                     self.cx, self.cy, r_inner, r_outer,
-                    base_start + phase_offset,
-                    base_start + phase_offset + seg_span, steps
+                    base_start + ring_phase,
+                    base_start + ring_phase + seg_span, steps
                 )
                 self.canvas.coords(poly_id, *points)
 
@@ -1310,15 +1320,15 @@ class TunerTabMixin:
                 # ── GPU path: single call to Rust renderer ──
                 magnitudes = [min(1.0, (result.magnitudes[i] * gain) ** note_exp)
                               for i in range(12)]
-                phases = []
                 spin_mags = []
+                ring_phases = []
                 for i in range(12):
                     if magnitudes[i] > MAGNITUDE_THRESHOLD:
-                        phases.append(result.phase_offsets[i])
                         spin_mags.append(magnitudes[i])
+                        ring_phases.append(list(result.ring_phase_offsets[i]))
                     else:
-                        phases.append(0.0)
                         spin_mags.append(0.0)
+                        ring_phases.append([0.0] * NUM_RINGS)
 
                 ring_mags = []
                 for i in range(12):
@@ -1328,7 +1338,7 @@ class TunerTabMixin:
                         ring_mags.append([0.0] * len(result.ring_magnitudes[i]))
                 try:
                     self._gpu_renderer.render(
-                        phases, spin_mags, ring_mags,
+                        ring_phases, spin_mags, ring_mags,
                         oct_pct,
                         float(self._tuner_overall_brightness),
                     )
@@ -1353,14 +1363,17 @@ class TunerTabMixin:
                                  for rm in result.ring_magnitudes[i]]
                     if mag > MAGNITUDE_THRESHOLD:
                         phase = result.phase_offsets[i]
+                        rp = list(result.ring_phase_offsets[i])
                     else:
                         phase = 0.0
                         mag = 0.0
                         ring_mags = [0.0] * len(ring_mags)
+                        rp = None
                     wheel.update(
                         phase,
                         mag,
                         ring_magnitudes=ring_mags,
+                        ring_phase_offsets=rp,
                         ring_brightness_pct=oct_pct,
                         overall_brightness_pct=self._tuner_overall_brightness,
                     )

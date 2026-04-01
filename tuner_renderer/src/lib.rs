@@ -45,14 +45,14 @@ impl TunerRenderer {
     /// Render one frame with current wheel states.
     ///
     /// Args:
-    ///     phases: 12 phase offsets in degrees (from engine)
+    ///     ring_phases: 12 lists of 7 per-ring phase offsets in degrees
     ///     magnitudes: 12 magnitude values, 0.0–1.0 (gain already applied)
     ///     ring_magnitudes: 12 lists of 7 per-ring magnitudes (gain applied)
     ///     ring_brightness_pct: 0–100, per-ring brightness blend
     ///     overall_brightness_pct: 10–150, master brightness
     fn render(
         &mut self,
-        phases: Vec<f32>,
+        ring_phases: Vec<Vec<f32>>,
         magnitudes: Vec<f32>,
         ring_magnitudes: Vec<Vec<f32>>,
         ring_brightness_pct: f32,
@@ -60,7 +60,7 @@ impl TunerRenderer {
     ) -> PyResult<()> {
         self.inner
             .render(
-                &phases,
+                &ring_phases,
                 &magnitudes,
                 &ring_magnitudes,
                 ring_brightness_pct,
