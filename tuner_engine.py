@@ -4,9 +4,8 @@ Strobe tuner audio engine for Stohrer Sax Shop Companion.
 Handles audio capture, FFT pitch analysis, phase tracking, and reference tone
 generation. Pure math/audio — no tkinter dependency.
 
-Modeled after the Conn Stroboconn 6T-5: 12 chromatic pitch classes, each
-with concentric rings showing different octaves. Phase tracking drives the
-stroboscopic rotation effect.
+12 chromatic pitch classes, each with concentric rings showing different
+octaves. Phase tracking drives the stroboscopic rotation effect.
 
 Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 """
@@ -38,9 +37,9 @@ FFT_SIZE = 4096  # ~93ms at 44100Hz, ~10.77Hz bin resolution
 
 PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-# Stroboconn disc physics: drift rate is computed from disc RPM.
-# Each pitch class disc spins at a different speed (gear-driven from
-# a 55Hz tuning fork synchronous motor). The A disc spins at 27.5 rev/sec.
+# Strobe disc physics: drift rate is computed from disc RPM.
+# Each pitch class disc spins at a different speed. The A disc spins at
+# 27.5 rev/sec (440 Hz / 16 segments).
 # Drift = ln(2)/1200 * disc_rps * 360 degrees/sec/cent
 # disc_rps = reference_freq_for_pitch_class / DISC_BASE_SEGMENTS
 # Using the 16-segment ring (octave 4) as reference:
@@ -87,13 +86,12 @@ class TunerResult:
         self.active = [False] * 12          # Whether wheel is "lit"
         # Per-ring (per-octave) magnitudes for each pitch class.
         # ring_magnitudes[pc][ring_idx] = energy at that specific octave.
-        # Drives per-ring brightness like the real Stroboconn's stroboscopic
-        # effect where the played octave's ring appears sharp/bright while
-        # other rings are dim/fuzzy.
+        # Drives per-ring brightness — the played octave's ring appears
+        # sharp/bright while other rings are dim/fuzzy.
         self.ring_magnitudes = [[0.0] * NUM_RINGS for _ in range(12)]
         # Per-ring phase offsets — each ring tracks its own octave's frequency
-        # independently, showing inharmonicity across octaves like the real
-        # Stroboconn where each ring responds to its own frequency component.
+        # independently, showing inharmonicity across octaves — each ring
+        # responds to its own frequency component.
         self.ring_phase_offsets = [[0.0] * NUM_RINGS for _ in range(12)]
 
 
@@ -131,7 +129,7 @@ class TunerEngine:
         freq_table[pc][oct_idx] gives the frequency for pitch class pc
         at octave (MIN_OCTAVE + oct_idx). pc 0 = C, pc 9 = A.
 
-        Also computes per-pitch-class drift rates matching Stroboconn physics.
+        Also computes per-pitch-class drift rates matching strobe disc physics.
         Each disc spins at disc_rps = freq_octave4 / DISC_BASE_SEGMENTS.
         Drift = ln(2)/1200 * disc_rps * 360 degrees/sec/cent.
         """
@@ -145,7 +143,7 @@ class TunerEngine:
                 octave_freqs.append(freq)
             self._freq_table.append(octave_freqs)
 
-            # Drift rate for this pitch class: matches physical Stroboconn disc speed
+            # Drift rate for this pitch class: matches physical strobe disc speed
             # freq_oct4 = reference_pitch * 2^((pc-9)/12)
             freq_oct4 = self._reference_pitch * (2.0 ** ((pc - 9) / 12.0))
             disc_rps = freq_oct4 / DISC_BASE_SEGMENTS
@@ -345,8 +343,8 @@ class TunerEngine:
 
                     # Per-ring phase tracking — each ring independently
                     # measures its own octave's frequency via parabolic
-                    # interpolation, just like the real Stroboconn where
-                    # each ring responds to its own frequency component.
+                    # interpolation — each ring responds to its own
+                    # frequency component independently.
                     if peak_bin > 0 and peak_bin < len(mags) - 1:
                         alpha = float(mags[peak_bin - 1])
                         beta = float(mags[peak_bin])
@@ -424,8 +422,8 @@ class TunerEngine:
                     result.ring_magnitudes[pc][r] = 0.0
 
         # Temporal smoothing on per-ring magnitudes — simulates physical disc
-        # inertia.  Real Stroboconn rings fade in/out gradually because the
-        # strobe illumination has persistence and the human eye integrates.
+        # inertia.  Strobe rings fade in/out gradually because the
+        # illumination has persistence and the human eye integrates.
         # Fast attack (ring lights up quickly), slow decay (fades out gradually,
         # giving the "fuzzy" look on secondary octave rings).
         for pc in range(12):

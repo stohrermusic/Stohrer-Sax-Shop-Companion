@@ -1,4 +1,4 @@
-//! wgpu renderer for 12 Stroboconn-style strobe tuner wheels.
+//! wgpu renderer for 12 stroboscopic tuner wheels.
 //!
 //! All wheel geometry is computed analytically in the fragment shader —
 //! the CPU only uploads 12 wheel parameter structs per frame.

@@ -1,9 +1,8 @@
 """
 Tuner tab mixin for Stohrer Sax Shop Companion.
 
-12-wheel chromatic strobe tuner modeled after the Conn Stroboconn 6T-5.
-Concentric rings, wedge cutouts, phase tracking, with an analog VU meter
-showing the detected fundamental pitch.
+12-wheel chromatic stroboscopic tuner with concentric rings, wedge cutouts,
+phase tracking, and an analog VU meter showing the detected fundamental pitch.
 
 Requires: numpy, sounddevice (graceful fallback if unavailable)
 """
@@ -235,7 +234,7 @@ class StrobeWheel:
             self._segments.append(ring_segs)
 
     def _create_mask(self):
-        """Create wedge-shaped mask matching the Stroboconn cutout."""
+        """Create wedge-shaped mask cutout for the strobe wheel."""
         cx, cy = self.cx, self.cy
         r = self.radius
         mr = r + MASK_EXTEND_PX  # Mask extends slightly beyond disc edge
@@ -335,7 +334,7 @@ class StrobeWheel:
         self._brightness = brightness
 
         # Update segment positions — each ring uses its own phase offset
-        # (independent frequency tracking per octave, like the real Stroboconn).
+        # (independent frequency tracking per octave).
         # Build per-ring phases: use independent ring phases if available,
         # otherwise fall back to the single overall phase.
         ring_phases = []

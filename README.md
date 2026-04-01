@@ -61,7 +61,7 @@ A cross-platform desktop app for saxophone repair shops and saxophonists. Genera
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner
-- 12-wheel stroboscopic tuner modeled after the Conn Stroboconn
+- 12-wheel stroboscopic chromatic tuner
 - GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
   - Automatic fallback to CPU canvas rendering if GPU unavailable
 - Per-ring octave brightness from real spectral data

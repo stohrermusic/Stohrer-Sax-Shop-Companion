@@ -87,9 +87,9 @@ freqs_oct4 = [engine._freq_table[pc][4 - MIN_OCTAVE] for pc in range(12)]
 test("Chromatic scale ascending", all(freqs_oct4[i] < freqs_oct4[i+1] for i in range(11)))
 
 # ============================================
-# DRIFT RATES (Stroboconn physics)
+# DRIFT RATES (strobe disc physics)
 # ============================================
-print("\n--- Drift Rates (Stroboconn Physics) ---")
+print("\n--- Drift Rates (Strobe Disc Physics) ---")
 # A disc: 440 Hz / 16 segments = 27.5 rev/sec
 # Drift = ln(2)/1200 * 27.5 * 360 = 5.72 deg/sec/cent
 expected_a_drift = math.log(2) / 1200.0 * (440.0 / DISC_BASE_SEGMENTS) * 360.0

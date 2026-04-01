@@ -1,6 +1,6 @@
 // Strobe wheel GPU shader — analytical per-pixel computation.
 //
-// Renders 12 Stroboconn-style strobe tuner wheels as instanced quads.
+// Renders 12 stroboscopic tuner wheels as instanced quads.
 // The fragment shader computes ring patterns, rotation, wedge masking,
 // and per-ring brightness entirely per-pixel — no geometry needed.
 
@@ -147,7 +147,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Stripe alternation: sin() of rotated angle gives smooth alternation,
     // step() converts to binary stripe. segments/2 full sine cycles = segments zones.
     // Each ring uses its own phase — independent frequency tracking per octave,
-    // showing real inharmonicity like the physical Stroboconn.
+    // showing real inharmonicity across octaves.
     let segs = ring_segments(ring_idx);
     let rotated = angle - wheel.ring_phases[ring_idx];
     let stripe = step(0.0, sin(rotated * segs * 0.5));
