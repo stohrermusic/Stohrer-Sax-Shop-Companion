@@ -2825,9 +2825,9 @@ class UserGuideWindow(tk.Toplevel):
                       "where most of the interesting differences live.")
         self._bullet("Ribbon and dynamic mics can still be used. Warmth "
                       "(H2) reads accurately on any mic. But upper "
-                      "harmonics will be attenuated, so complexity and "
-                      "the full harmonic data will be less reliable. "
-                      "The mic type is stored with your data so you "
+                      "harmonics will be attenuated, so harmonic complexity "
+                      "cannot be measured (the gauge is disabled for ribbon "
+                      "mics). The mic type is stored with your data so you "
                       "always know what produced it.")
         self._bullet("Laptop/built-in mics are not suitable \u2014 they "
                       "roll off both low and high frequencies and add noise")
@@ -3141,7 +3141,7 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._body("Descriptors")
-        self._bullet("Complexity uses spectral flatness (the ratio of "
+        self._bullet("Harmonic Complexity uses spectral flatness (the ratio of "
                       "geometric mean to arithmetic mean of harmonic "
                       "amplitudes). A pure tone has low flatness; a "
                       "complex tone with many strong harmonics has high "

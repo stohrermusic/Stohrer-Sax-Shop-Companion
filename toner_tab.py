@@ -194,6 +194,7 @@ class TonerTabMixin:
         # Low harmonic data tracking — grey out gauges when sustained
         self._toner_low_data_frames = 0
         self._toner_low_data_shown = False
+        self._toner_ribbon_mic = False  # Ribbon mic disables complexity gauge
         # Profile system state — nested: {library: {preset_name: data}}
         self._toner_presets = {}
         self._toner_active_library = None   # Library name
@@ -345,7 +346,7 @@ class TonerTabMixin:
         # --- Descriptor gauges ---
         self._toner_gauges = {}
         gauge_defs = [
-            ("richness", "Pure", "Complex"),    # Harmonic Spread
+            ("richness", "Pure", "Complex"),    # Harmonic Complexity
             ("warmth", "Thin", "Warm"),          # H2 Strength
         ]
 
@@ -499,6 +500,25 @@ class TonerTabMixin:
                 self._toner_sax_var.set(visible_sax[idx])
                 self._toner_on_sax_type_changed()
         sax_idx_var.trace_add("write", _on_sax_changed)
+
+        # Sandbox checkbox (below sax selector, visible only when enabled)
+        self._toner_sandbox_var = tk.BooleanVar(value=False)
+
+        def _on_sandbox_toggled(*args):
+            if self._toner_sandbox_var.get():
+                self._toner_concert_pitch.set(True)
+                self._toner_update_pitch_mode_label()
+
+        self._toner_sandbox_cb = tk.Checkbutton(
+            sax_inner, text="sandbox (concert pitch)",
+            variable=self._toner_sandbox_var,
+            command=_on_sandbox_toggled,
+            bg=ctrl_bg, fg="#CC8800", activebackground=ctrl_bg,
+            activeforeground="#CC8800", selectcolor=ctrl_bg,
+            font=("Helvetica", 7, "bold"))
+        self._toner_sandbox_cb._skip_theme = True
+        if self.settings.get("toner_sandbox_enabled"):
+            self._toner_sandbox_cb.pack(pady=(2, 0))
 
         # Lock sax selector when preset is loaded
         self._toner_sax_scale_widget = self._toner_sax_scale
@@ -698,11 +718,18 @@ class TonerTabMixin:
             fill="#AA4400", font=("Helvetica", 8, "bold"),
             state="hidden")
 
+        # "Ribbon mic" overlay — hidden by default, shown when ribbon mic loaded
+        ribbon_id = cv.create_text(
+            cx, cy - 30, text="N/A \u2014 ribbon mic",
+            fill="#888888", font=("Helvetica", 8, "bold"),
+            state="hidden")
+
         return {
             'canvas': cv, 'cx': cx, 'cy': cy,
             'needle_len': needle_len, 'needle_id': needle_id,
             'shadow_id': shadow_id, 'arc_start': arc_start, 'arc_end': arc_end,
-            'low_data_id': low_data_id, 'centered': centered,
+            'low_data_id': low_data_id, 'ribbon_id': ribbon_id,
+            'centered': centered,
         }
 
     def _toner_build_intonation_gauge(self, cv):
@@ -886,11 +913,35 @@ class TonerTabMixin:
         needle_color = "#554400" if show else "#1A1200"
         shadow_color = "#665522" if show else "#8A6500"
         for key, gauge in self._toner_gauges.items():
+            if self._toner_ribbon_mic and key == 'richness':
+                continue  # ribbon overlay takes priority
             cv = gauge['canvas']
             if 'low_data_id' in gauge:
                 cv.itemconfigure(gauge['low_data_id'], state=state)
             cv.itemconfigure(gauge['needle_id'], fill=needle_color)
             cv.itemconfigure(gauge['shadow_id'], fill=shadow_color)
+
+    def _toner_set_ribbon_overlay(self, show):
+        """Show or hide ribbon mic overlay on the richness gauge only."""
+        self._toner_ribbon_mic = show
+        gauge = self._toner_gauges.get('richness')
+        if not gauge:
+            return
+        cv = gauge['canvas']
+        if show:
+            cv.itemconfigure(gauge['ribbon_id'], state="normal")
+            # Hide low-data overlay if visible (ribbon takes priority)
+            if 'low_data_id' in gauge:
+                cv.itemconfigure(gauge['low_data_id'], state="hidden")
+            # Gray out needle
+            cv.itemconfigure(gauge['needle_id'], fill="#554400")
+            cv.itemconfigure(gauge['shadow_id'], fill="#665522")
+        else:
+            cv.itemconfigure(gauge['ribbon_id'], state="hidden")
+            # Restore needle colors (unless low-data overlay is active)
+            if not self._toner_low_data_shown:
+                cv.itemconfigure(gauge['needle_id'], fill="#1A1200")
+                cv.itemconfigure(gauge['shadow_id'], fill="#8A6500")
 
     def _toner_set_overlay(self, fingerprint, name):
         """Set a fingerprint as the live spectrum ghost overlay."""
@@ -1241,6 +1292,16 @@ class TonerTabMixin:
                        variable=record_var, bg=bg, fg=fg,
                        font=("Helvetica", 9)).pack(anchor="w")
 
+        reanalyze_var = tk.BooleanVar(value=self.settings.get("toner_wav_reanalyze", False))
+        tk.Checkbutton(rec_frame, text="Perform WAV analysis  (max accuracy)",
+                       variable=reanalyze_var, bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w", padx=(16, 0))
+
+        auto_delete_var = tk.BooleanVar(value=self.settings.get("toner_wav_auto_delete", False))
+        tk.Checkbutton(rec_frame, text="Delete WAV after analysis",
+                       variable=auto_delete_var, bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w", padx=(16, 0))
+
         folder_frame = tk.Frame(rec_frame, bg=bg)
         folder_frame.pack(fill="x", pady=(2, 0))
         current_dir = self.settings.get("toner_recording_dir", "") or self._toner_get_recording_dir()
@@ -1372,13 +1433,15 @@ class TonerTabMixin:
         analysis_desc = toner_settings.get("analysis_descriptors", {})
 
         descriptor_info = [
-            ("richness", "Complexity", None,
+            ("richness", "Harmonic Complexity", None,
              "Spectral flatness \u2014 how evenly energy is spread "
              "across the harmonic series.\n\n"
              "Higher values = many harmonics at similar strength "
              "(complex, rich tone).\n"
              "Lower values = energy concentrated in fewer harmonics "
-             "(purer, simpler tone)."),
+             "(purer, simpler tone).\n\n"
+             "Note: Ribbon mics roll off upper harmonics and cannot "
+             "accurately measure this descriptor."),
             ("warmth", "Warmth", None,
              "Strength of the second harmonic (H2, one octave above "
              "the fundamental) relative to the fundamental.\n\n"
@@ -1421,6 +1484,23 @@ class TonerTabMixin:
             tk.Button(row, text="?", width=2, font=("Helvetica", 8),
                       command=make_info_cmd()).pack(side="left", padx=(6, 0))
 
+        # --- Sandbox Mode ---
+        sandbox_frame = tk.LabelFrame(ana_frame, text="Sandbox Mode", bg=bg,
+                                       fg=fg, padx=10, pady=8)
+        sandbox_frame.pack(fill="x", pady=(0, 8))
+
+        sandbox_var = tk.BooleanVar(value=self.settings.get("toner_sandbox_enabled", False))
+        tk.Checkbutton(sandbox_frame, text="Allow sandbox mode",
+                       variable=sandbox_var, bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w")
+        tk.Label(sandbox_frame,
+                 text="Sandbox presets can capture any pitched sound\n"
+                      "without requiring mic type or instrument fields.\n"
+                      "Good for experiments, non-sax instruments, or\n"
+                      "unconventional setups like contact mics.",
+                 bg=bg, fg="#888888", font=("Helvetica", 8),
+                 justify="left").pack(anchor="w", pady=(2, 0))
+
         # ==================================================================
         # OK / CANCEL
         # ==================================================================
@@ -1436,6 +1516,8 @@ class TonerTabMixin:
 
             # Recording
             self.settings["toner_record_wav"] = record_var.get()
+            self.settings["toner_wav_reanalyze"] = reanalyze_var.get()
+            self.settings["toner_wav_auto_delete"] = auto_delete_var.get()
             folder = folder_label.cget("text")
             if folder and folder != current_dir:
                 self.settings["toner_recording_dir"] = folder
@@ -1459,6 +1541,9 @@ class TonerTabMixin:
             # Analysis descriptors
             ts = self.settings.setdefault("toner_settings", {})
             ts["analysis_descriptors"] = {k: v.get() for k, v in desc_vars.items()}
+
+            # Sandbox
+            self.settings["toner_sandbox_enabled"] = sandbox_var.get()
 
             save_settings(self.settings)
 
@@ -1657,8 +1742,10 @@ class TonerTabMixin:
                 status = f"{len(notes)} notes" if total_caps > 0 else "empty"
                 if len(notes) >= MIN_PRESET_NOTES:
                     status += " \u2713"
+                sb_tag = "[sandbox] " if preset.get('sandbox') else ""
+                horn = preset.get('horn_type', '?') or '?'
                 self._preset_listbox.insert(tk.END,
-                    f"  {preset_name}  ({preset.get('horn_type', '?')}, {status})")
+                    f"  {sb_tag}{preset_name}  ({horn}, {status})")
                 self._preset_list_keys.append((lib_name, preset_name))
 
     def _toner_on_preset_selected(self):
@@ -1768,7 +1855,7 @@ class TonerTabMixin:
         vis = self.settings.get("visible_preset_fields", {})
         d = defaults or {}
 
-        MIC_TYPES = ["Condenser", "Ribbon", "Dynamic"]
+        MIC_TYPES = ["Condenser", "Ribbon", "Dynamic", "Other"]
 
         def add_field(label, key, default="", widget_type="entry",
                       optional_key=None, data_key=None):
@@ -1826,6 +1913,23 @@ class TonerTabMixin:
         add_field("Mic Type:", "mic_type", "", widget_type="mic_combo")
         add_field("Mic Model:", "mic_model", "")
 
+        # Sandbox checkbox (only when enabled in settings)
+        sandbox_var = None
+        if self.settings.get("toner_sandbox_enabled"):
+            sb_row = tk.Frame(frame, bg=bg)
+            sb_row.pack(fill="x", pady=(6, 2))
+            sandbox_var = tk.BooleanVar(value=d.get('sandbox', False))
+            sb_cb = tk.Checkbutton(sb_row, text="Sandbox",
+                                   variable=sandbox_var, bg=bg, fg=fg,
+                                   font=("Helvetica", 10, "bold"))
+            sb_cb.pack(side="left", padx=(0, 8))
+            tk.Label(sb_row, text="(any sound, no required fields)",
+                     bg=bg, fg="#888888", font=("Helvetica", 8)).pack(
+                side="left")
+            # Disable checkbox if editing an existing preset (sandbox is immutable)
+            if d.get('sandbox') is not None and d.get('sessions'):
+                sb_cb.configure(state="disabled")
+
         # Notes — multi-line (optional)
         notes_text = None
         if vis.get("notes", True):
@@ -1840,19 +1944,25 @@ class TonerTabMixin:
             if d.get('notes'):
                 notes_text.insert("1.0", d['notes'])
 
-        return fields, lib_var, notes_text
+        return fields, lib_var, notes_text, sandbox_var
 
-    def _toner_validate_required_fields(self, fields, dlg):
-        """Check required fields are filled. Returns True if valid."""
-        required = [
-            ("name", "Preset Name"),
-            ("horn_make", "Make"),
-            ("horn_model", "Model"),
-            ("player", "Player"),
-            ("mouthpiece", "Mouthpiece"),
-            ("mic_type", "Mic Type"),
-            ("mic_model", "Mic Model"),
-        ]
+    def _toner_validate_required_fields(self, fields, dlg, sandbox=False):
+        """Check required fields are filled. Returns True if valid.
+
+        In sandbox mode, only the preset name is required.
+        """
+        if sandbox:
+            required = [("name", "Preset Name")]
+        else:
+            required = [
+                ("name", "Preset Name"),
+                ("horn_make", "Make"),
+                ("horn_model", "Model"),
+                ("player", "Player"),
+                ("mouthpiece", "Mouthpiece"),
+                ("mic_type", "Mic Type"),
+                ("mic_model", "Mic Model"),
+            ]
         for key, label in required:
             if key in fields and not fields[key].get().strip():
                 messagebox.showwarning("Required Field",
@@ -1897,11 +2007,13 @@ class TonerTabMixin:
         tk.Label(frame, text="Create Tone Preset", bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
 
-        fields, lib_var, notes_text = self._toner_build_preset_fields(
+        fields, lib_var, notes_text, sandbox_var = self._toner_build_preset_fields(
             frame, bg, fg)
 
         def save():
-            if not self._toner_validate_required_fields(fields, dlg):
+            is_sandbox = sandbox_var and sandbox_var.get()
+            if not self._toner_validate_required_fields(fields, dlg,
+                                                         sandbox=is_sandbox):
                 return
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
@@ -1912,8 +2024,10 @@ class TonerTabMixin:
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_presets[lib][name] = self._toner_collect_preset_data(
-                fields, notes_text)
+            data = self._toner_collect_preset_data(fields, notes_text)
+            if is_sandbox:
+                data['sandbox'] = True
+            self._toner_presets[lib][name] = data
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
@@ -1959,11 +2073,13 @@ class TonerTabMixin:
         defaults = dict(source)
         defaults['name'] = ""
 
-        fields, lib_var, notes_text = self._toner_build_preset_fields(
+        fields, lib_var, notes_text, sandbox_var = self._toner_build_preset_fields(
             frame, bg, fg, defaults=defaults, default_lib=lib_name)
 
         def save():
-            if not self._toner_validate_required_fields(fields, dlg):
+            is_sandbox = sandbox_var and sandbox_var.get()
+            if not self._toner_validate_required_fields(fields, dlg,
+                                                         sandbox=is_sandbox):
                 return
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
@@ -1974,8 +2090,10 @@ class TonerTabMixin:
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_presets[lib][name] = self._toner_collect_preset_data(
-                fields, notes_text)
+            data = self._toner_collect_preset_data(fields, notes_text)
+            if is_sandbox:
+                data['sandbox'] = True
+            self._toner_presets[lib][name] = data
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
@@ -2090,7 +2208,8 @@ class TonerTabMixin:
             self._toner_stable_threshold = FREE_STABLE_FRAMES
             self._toner_capture_state = 'free_listening'
             self._toner_free_accumulator = []
-            label_text = "Play anything..."
+            is_sb = (self._toner_active_session or {}).get('sandbox')
+            label_text = "[sandbox] Play anything..." if is_sb else "Play anything..."
 
         self._toner_stable_note = ""
         self._toner_stable_count = 0
@@ -2122,11 +2241,13 @@ class TonerTabMixin:
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
-        fields, lib_var, notes_text = self._toner_build_preset_fields(
+        fields, lib_var, notes_text, sandbox_var = self._toner_build_preset_fields(
             frame, bg, fg)
 
         def save_and_start():
-            if not self._toner_validate_required_fields(fields, dlg):
+            is_sandbox = sandbox_var and sandbox_var.get()
+            if not self._toner_validate_required_fields(fields, dlg,
+                                                         sandbox=is_sandbox):
                 return
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
@@ -2137,8 +2258,10 @@ class TonerTabMixin:
                     f"'{name}' already exists in '{lib}'.", parent=dlg)
                 return
 
-            self._toner_presets[lib][name] = self._toner_collect_preset_data(
-                fields, notes_text)
+            data = self._toner_collect_preset_data(fields, notes_text)
+            if is_sandbox:
+                data['sandbox'] = True
+            self._toner_presets[lib][name] = data
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
@@ -2302,20 +2425,33 @@ class TonerTabMixin:
             if mt:
                 mic_text = mm if mm else mt.capitalize()
                 self._toner_mic_label.configure(text=mic_text, fg="#AAAAAA")
+            elif preset.get('sandbox'):
+                self._toner_mic_label.configure(text="sandbox", fg="#CC8800")
             elif self._toner_active_preset:
                 self._toner_mic_label.configure(text="mic not set", fg="#FF8800")
             else:
                 self._toner_mic_label.configure(text="no preset", fg="#666666")
+            # Gray out complexity gauge for ribbon mics
+            is_ribbon = mt.lower() == 'ribbon' if mt else False
+            if is_ribbon != self._toner_ribbon_mic:
+                self._toner_set_ribbon_overlay(is_ribbon)
+        # Sync sandbox checkbox with loaded preset
+        if hasattr(self, '_toner_sandbox_var'):
+            is_sb = bool(preset.get('sandbox')) if preset else False
+            self._toner_sandbox_var.set(is_sb)
+            if is_sb:
+                self._toner_concert_pitch.set(True)
+                self._toner_update_pitch_mode_label()
         self._toner_update_load_unload_btn()
 
     def _toner_start_new_session_and_listen(self):
         """Create a new session for the active preset and begin listening."""
-        # Prompt for mic type if not set on preset
+        # Prompt for mic type if not set on preset (skip for sandbox)
         preset_check = {}
         if self._toner_active_library and self._toner_active_preset:
             lib = self._toner_presets.get(self._toner_active_library, {})
             preset_check = lib.get(self._toner_active_preset, {})
-        if not preset_check.get('mic_type'):
+        if not preset_check.get('sandbox') and not preset_check.get('mic_type'):
             messagebox.showinfo("Mic Type Required",
                 "This preset has no mic type set.\n\n"
                 "Use Mutate in File \u2192 Presets to add mic info,\n"
@@ -2341,6 +2477,7 @@ class TonerTabMixin:
             lib = self._toner_presets.get(self._toner_active_library, {})
             preset = lib.get(self._toner_active_preset, {})
 
+        is_sandbox = preset.get('sandbox', False)
         self._toner_active_session = {
             'date': time.strftime("%Y-%m-%d %H:%M:%S"),
             'captures': [],
@@ -2354,6 +2491,8 @@ class TonerTabMixin:
             'mouthpiece': preset.get('mouthpiece', ''),
             'reed': preset.get('reed', ''),
         }
+        if is_sandbox:
+            self._toner_active_session['sandbox'] = True
         self._toner_rolloff_warned = False
 
         # Start WAV recording if enabled
@@ -2388,10 +2527,16 @@ class TonerTabMixin:
             self._toner_free_save_micro_capture()
 
         # Save WAV recording if active
+        wav_filepath = None
         if self._toner_engine:
             chunks = self._toner_engine.stop_recording()
             if chunks and self._toner_active_session:
-                self._toner_save_wav_recording(chunks)
+                wav_filepath = self._toner_save_wav_recording(chunks)
+
+        # Reanalyze from WAV for max accuracy (replaces live captures)
+        if (wav_filepath and self._toner_active_session
+                and self.settings.get('toner_wav_reanalyze')):
+            self._toner_reanalyze_from_wav(wav_filepath)
 
         # Compute and store recording quality metric for the session
         if self._toner_active_session and self._toner_active_session.get('captures'):
@@ -2437,7 +2582,7 @@ class TonerTabMixin:
         return rec_dir
 
     def _toner_save_wav_recording(self, chunks):
-        """Save recorded audio chunks to a WAV file correlated with the session."""
+        """Save recorded audio chunks to a WAV file. Returns filepath or None."""
         try:
             rec_dir = self._toner_get_recording_dir()
             # Build filename from preset name and current time (unique per save)
@@ -2458,17 +2603,75 @@ class TonerTabMixin:
             if not os.path.isfile(filepath) or os.path.getsize(filepath) == 0:
                 messagebox.showwarning("Recording",
                     "WAV recording failed — file was not created.")
-                return
+                return None
 
             # Store reference in session
             self._toner_active_session['recording_file'] = filename
             self._toner_save_active_session()
 
-            messagebox.showinfo("Recording Saved",
-                f"WAV saved to:\n{filepath}")
+            if not self.settings.get('toner_wav_reanalyze'):
+                messagebox.showinfo("Recording Saved",
+                    f"WAV saved to:\n{filepath}")
+            return filepath
         except Exception as e:
             messagebox.showwarning("Recording",
                 f"Could not save WAV recording:\n{e}")
+            return None
+
+    def _toner_reanalyze_from_wav(self, wav_filepath):
+        """Replace live captures with offline WAV analysis for better accuracy."""
+        if not self._toner_active_session or not self._toner_engine:
+            return
+        live_count = len(self._toner_active_session.get('captures', []))
+
+        # Show progress in the capture frame
+        self._toner_capture_label.configure(text="Performing WAV analysis...")
+        self._toner_capture_progress.configure(text="")
+        self.root.update_idletasks()
+
+        def on_progress(current, total):
+            pct = current * 100 // total
+            self._toner_capture_progress.configure(text=f"{pct}%")
+            self.root.update_idletasks()
+
+        try:
+            captures = analyze_audio_file(wav_filepath, self._toner_engine,
+                                          progress_cb=on_progress)
+        except Exception as e:
+            messagebox.showwarning("WAV Analysis",
+                f"WAV analysis failed, keeping live captures:\n{e}")
+            return
+
+        if not captures:
+            messagebox.showinfo("WAV Analysis",
+                "WAV analysis found no stable segments.\n"
+                "Keeping live captures.")
+            return
+
+        # Stamp captures with metadata
+        for cap in captures:
+            cap['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
+            cap['method'] = 'file'
+
+        self._toner_active_session['captures'] = captures
+        self._toner_save_active_session()
+
+        wav_notes = len(set(c['note'] for c in captures))
+        msg = (f"WAV analysis: {len(captures)} captures "
+               f"across {wav_notes} notes\n"
+               f"(replaced {live_count} live captures)")
+
+        # Auto-delete WAV if enabled
+        if self.settings.get('toner_wav_auto_delete'):
+            try:
+                os.remove(wav_filepath)
+                self._toner_active_session.pop('recording_file', None)
+                self._toner_save_active_session()
+                msg += "\nWAV file deleted."
+            except OSError:
+                msg += "\nCould not delete WAV file."
+
+        messagebox.showinfo("WAV Analysis Complete", msg)
 
     def _toner_show_coverage_summary(self):
         """Show a coverage summary with note distribution and resume option."""
@@ -3343,6 +3546,17 @@ class TonerTabMixin:
         main = tk.Frame(dlg, bg=bg)
         main.pack(fill="both", expand=True, padx=10, pady=10)
 
+        # Sandbox banner if any preset is sandbox
+        any_sandbox = any(fp.get('_preset', {}).get('sandbox')
+                          for fp in fingerprints)
+        if any_sandbox:
+            sb_banner = tk.Label(main,
+                text="\u26a0 Sandbox preset \u2014 non-standard setup, "
+                     "compare with caution",
+                bg="#443300", fg="#FFCC00", font=("Helvetica", 9, "bold"),
+                padx=8, pady=4)
+            sb_banner.pack(fill="x", pady=(0, 5))
+
         # --- View toggle: Horn Average vs Per-Note ---
         toggle_frame = tk.Frame(main, bg=bg)
         toggle_frame.pack(fill="x", pady=(0, 5))
@@ -3567,7 +3781,7 @@ class TonerTabMixin:
         table_inner.pack(fill="x", padx=5, pady=5)
 
         all_desc_labels = [
-            ("Complexity", "richness"),
+            ("H. Complexity", "richness"),
             ("Warmth", "warmth"),
             ("Even H. Bal.", "even_odd"),
             ("Rolloff Shape", "rolloff_shape"),
@@ -3821,8 +4035,18 @@ class TonerTabMixin:
                             f"({values[0][0]} highest, "
                             f"{values[-1][0]} lowest)")
 
-            # Check for mic type and rolloff mismatches
+            # Check for sandbox, mic type, and rolloff mismatches
             if mode == "average":
+                # Sandbox warning
+                sandbox_names = [fp['_name'] for fp in fingerprints
+                                 if fp.get('_preset', {}).get('sandbox')]
+                if sandbox_names and len(sandbox_names) < len(fingerprints):
+                    sb_list = ", ".join(sandbox_names)
+                    lines.append("")
+                    lines.append(
+                        f"\u26a0 Sandbox preset(s): {sb_list}. "
+                        "Sandbox data may use non-standard mic or "
+                        "instrument setups \u2014 compare with caution.")
                 # Mic type mismatch
                 known_types = [mt for mt in _mic_types if mt]
                 if len(set(known_types)) > 1:
@@ -3844,7 +4068,7 @@ class TonerTabMixin:
                         lines.append(
                             "\u26a0 Recording quality differs significantly "
                             f"(rolloff spread: {rate_spread:.1f} dB/H). "
-                            "Complexity comparison may reflect mic/room "
+                            "Harmonic complexity comparison may reflect mic/room "
                             "differences rather than horn differences.")
 
             analysis_text.insert("1.0", "\n".join(lines) if lines else
@@ -3871,6 +4095,11 @@ class TonerTabMixin:
             tk.Button(btn_row, text="Overlay on Spectrum",
                       command=overlay_from_analysis).pack(
                           side="left", padx=(0, 5))
+        def back_to_selection():
+            dlg.destroy()
+            self._toner_open_analyze_dialog()
+        tk.Button(btn_row, text="\u2190 Back",
+                  command=back_to_selection).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text="Close",
                   command=dlg.destroy).pack(side="left")
 
@@ -3923,7 +4152,7 @@ class TonerTabMixin:
 
         gd = grp['descriptors']
         gs = grp['descriptor_stats']
-        for label, key in [("Complexity", "richness"),
+        for label, key in [("H. Complexity", "richness"),
                            ("Warmth", "warmth")]:
             val = gd.get(key, 0)
             col = tk.Frame(desc_row, bg=bg)
@@ -4113,6 +4342,11 @@ class TonerTabMixin:
 
         tk.Button(btn_row, text="Overlay on Spectrum...",
                   command=overlay_pick).pack(side="left", padx=(0, 5))
+        def back_to_selection():
+            dlg.destroy()
+            self._toner_open_analyze_dialog()
+        tk.Button(btn_row, text="\u2190 Back",
+                  command=back_to_selection).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text="Close",
                   command=dlg.destroy).pack(side="left")
 
@@ -4239,7 +4473,8 @@ class TonerTabMixin:
                 self._toner_set_low_data_overlay(False)
 
             # Update descriptor gauges (always absolute values)
-            self._toner_update_gauge('richness', d.get('richness', 0.0))
+            if not self._toner_ribbon_mic:
+                self._toner_update_gauge('richness', d.get('richness', 0.0))
             self._toner_update_gauge('warmth', d.get('warmth', 0.0))
 
             # Process capture if active

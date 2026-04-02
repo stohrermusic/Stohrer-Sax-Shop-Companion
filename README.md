@@ -75,8 +75,8 @@ A cross-platform desktop app for saxophone repair shops and saxophonists. Genera
 - Real-time harmonic spectrum analyzer for saxophone
 - Detects fundamental pitch, extracts up to 20 harmonics with parabolic amplitude correction
 - Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
-- Live gauges: intonation, complexity (spectral flatness), warmth (H2 strength)
-- Five comparison descriptors: complexity, warmth, core tone (H2-H4 body character), even/odd harmonic ratio, rolloff shape
+- Live gauges: intonation, harmonic complexity (spectral flatness), warmth (H2 strength)
+- Five comparison descriptors: harmonic complexity, warmth, core tone (H2-H4 body character), even/odd harmonic ratio, rolloff shape
 - Supports all standard saxophone types including baritone
 - Tone profiles: capture harmonic fingerprints of individual horns
   - Free capture and guided calibration modes, plus WAV file import (16/24/32-bit)

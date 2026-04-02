@@ -1,13 +1,15 @@
 """
 Batch import WAV recordings into toner profiles.
 
-Re-imports Tyler Anderson's library (replacing old H12 data with H20)
-and imports Thomas Edinger's Head2Head tenor comparison.
+Re-imports Tyler Anderson's library (replacing old H12 data with H20),
+imports Thomas Edinger's Head2Head tenor comparison,
+and imports Mario Larios-García's alto and soprano recordings.
 
 Usage:
-    python tools/import_wavs.py              # import both
+    python tools/import_wavs.py              # import all
     python tools/import_wavs.py tyler        # Tyler only
     python tools/import_wavs.py edinger      # Edinger only
+    python tools/import_wavs.py mario        # Mario only
 """
 
 import sys
@@ -138,6 +140,41 @@ EDINGER_FILES = {
         "Yamaha", "YTS-62 Purple Logo", "017542",
         "High F#, engraving"),
 }
+
+
+# ============================================================
+# MARIO LARIOS-GARCÍA
+# ============================================================
+
+MARIO_LIBRARY = "Mario Larios-García"
+MARIO_PLAYER = "Mario Larios-García"
+MARIO_MIC_TYPE = "condenser"
+MARIO_MIC_MODEL = "Audio Technica AT2035"
+
+MARIO_DIR = os.path.join("C:\\sax shop companion\\recordings", "Mario Larios-García")
+
+MARIO_FILES = [
+    {
+        "file": "Alto Sax Demo.wav",
+        "horn_type": "Alto",
+        "make": "Buescher",
+        "model": "True-Tone",
+        "serial": "1926",
+        "mpc": "Marvell Carpenter/PureVibe Power",
+        "reed": "Boston Sax Shop silver box 2.5",
+        "notes": "1926 vintage. Ligature: Marvell Carpenter/PureVibe.",
+    },
+    {
+        "file": "Soprano Sax Demo.wav",
+        "horn_type": "Soprano",
+        "make": "Yamaha",
+        "model": "YSS-475",
+        "serial": "",
+        "mpc": "AM Mouthpieces Aras 7",
+        "reed": "Boston Sax Shop black box 2.5",
+        "notes": "",
+    },
+]
 
 
 # ============================================================
@@ -288,6 +325,34 @@ def import_edinger(profiles):
     return total_profiles, total_captures
 
 
+def import_mario(profiles):
+    """Import Mario Larios-García's recordings."""
+    # Clear existing to allow clean re-import
+    if MARIO_LIBRARY in profiles:
+        old_count = len(profiles[MARIO_LIBRARY])
+        del profiles[MARIO_LIBRARY]
+        print(f"  Cleared {old_count} old profiles (re-importing)")
+
+    total_captures = 0
+    total_profiles = 0
+
+    for entry in MARIO_FILES:
+        filepath = os.path.join(MARIO_DIR, entry["file"])
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+        n = import_file(filepath, entry["horn_type"], entry["make"],
+                        entry["model"], entry["serial"], entry["mpc"],
+                        entry["reed"], MARIO_MIC_TYPE, MARIO_MIC_MODEL,
+                        MARIO_PLAYER, MARIO_LIBRARY, entry["notes"],
+                        profiles)
+        if n > 0:
+            total_captures += n
+            total_profiles += 1
+
+    return total_profiles, total_captures
+
+
 def main():
     which = sys.argv[1].lower() if len(sys.argv) > 1 else "all"
 
@@ -310,6 +375,14 @@ def main():
         print("THOMAS EDINGER — Saxophones Head2Head")
         print(f"{'='*50}")
         p, c = import_edinger(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "mario"):
+        print(f"\n{'='*50}")
+        print("MARIO LARIOS-GARCÍA")
+        print(f"{'='*50}")
+        p, c = import_mario(profiles)
         grand_profiles += p
         grand_captures += c
 
