@@ -280,6 +280,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
         toner_file_menu.add_command(label="Presets...", command=self._toner_open_preset_dialog)
+        toner_file_menu.add_command(label="Analyze...", command=self._toner_open_analyze_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
         toner_file_menu.add_cascade(label="Transfer Data", menu=toner_transfer_menu)

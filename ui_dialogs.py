@@ -2842,8 +2842,22 @@ class UserGuideWindow(tk.Toplevel):
                       "proximity effect exaggerates low harmonics")
         self._bullet("A quieter room is better \u2014 background noise "
                       "masks upper harmonics")
-        self._bullet("Keep placement consistent between sessions. Moving "
-                      "the mic is another variable that shows up in the data.")
+        self._bullet("Mic position matters more than almost anything "
+                      "else. In testing, moving a few inches between "
+                      "takes \u2014 same horn, same player, same room, "
+                      "minutes apart \u2014 changed the rolloff rate by "
+                      "over 1 dB/harmonic. That's enough to shift "
+                      "complexity readings by 10\u201320%.")
+        self._bullet("For controlled comparisons, use a mic stand at "
+                      "a fixed position. If you hold the mic or move "
+                      "between sessions, the position change will show "
+                      "up in your data and may be larger than the "
+                      "difference you're trying to measure. But you "
+                      "can also deliberately change your position to "
+                      "see how much it influences what gets captured.")
+        self._bullet("Keep placement consistent between sessions. If "
+                      "you're comparing two horns, don't move the mic "
+                      "or yourself between recordings.")
         self._blank()
 
         self._body("Preset")
