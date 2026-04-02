@@ -36,6 +36,8 @@ try:
         load_tone_presets, save_tone_presets,
         analyze_audio_file, check_mic_quality,
         transpose_note, reverse_transpose_note, note_to_freq,
+        compute_population_stats, percentile_rank,
+        find_out_of_range_notes, note_name_to_midi,
     )
     _TONER_IMPORTS_OK = True
 except ImportError:
@@ -200,6 +202,8 @@ class TonerTabMixin:
         self._toner_active_library = None   # Library name
         self._toner_active_preset = None   # Profile name within library
         self._toner_active_session = None   # Current capture session dict
+        self._toner_captured_notes = set()  # Cached note set (avoids per-frame iteration)
+        self._toner_save_pending = False    # Deferred save flag
         # Capture state machine: None, 'listening', 'delay', 'recording'
         self._toner_capture_state = None
         self._toner_capture_start = 0.0
@@ -1287,15 +1291,25 @@ class TonerTabMixin:
                                    fg=fg, padx=10, pady=8)
         rec_frame.pack(fill="x", pady=(0, 8))
 
-        record_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", False))
+        record_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", True))
+        wav_warning = tk.Label(rec_frame,
+            text="\u26a0 Without WAV recording, post-capture analysis "
+                 "will be roughly half as accurate.",
+            bg=bg, fg="#CC6600", font=("Helvetica", 8),
+            wraplength=380, justify="left")
+
+        def _on_record_toggled():
+            if record_var.get():
+                wav_warning.pack_forget()
+            else:
+                wav_warning.pack(anchor="w", padx=(16, 0), pady=(0, 2))
+
         tk.Checkbutton(rec_frame, text="Record WAV during capture",
                        variable=record_var, bg=bg, fg=fg,
+                       command=_on_record_toggled,
                        font=("Helvetica", 9)).pack(anchor="w")
-
-        reanalyze_var = tk.BooleanVar(value=self.settings.get("toner_wav_reanalyze", False))
-        tk.Checkbutton(rec_frame, text="Perform WAV analysis  (max accuracy)",
-                       variable=reanalyze_var, bg=bg, fg=fg,
-                       font=("Helvetica", 9)).pack(anchor="w", padx=(16, 0))
+        if not record_var.get():
+            wav_warning.pack(anchor="w", padx=(16, 0), pady=(0, 2))
 
         auto_delete_var = tk.BooleanVar(value=self.settings.get("toner_wav_auto_delete", False))
         tk.Checkbutton(rec_frame, text="Delete WAV after analysis",
@@ -1469,7 +1483,7 @@ class TonerTabMixin:
             row = tk.Frame(desc_frame, bg=bg)
             row.pack(fill="x", pady=2)
 
-            var = tk.BooleanVar(value=analysis_desc.get(key, key in ("richness", "warmth")))
+            var = tk.BooleanVar(value=analysis_desc.get(key, key in ("richness", "warmth", "even_odd")))
             desc_vars[key] = var
             tk.Checkbutton(row, variable=var, bg=bg).pack(side="left")
 
@@ -1515,8 +1529,9 @@ class TonerTabMixin:
                     self.settings["audio_input_device"] = dev_indices[sel[0]]
 
             # Recording
-            self.settings["toner_record_wav"] = record_var.get()
-            self.settings["toner_wav_reanalyze"] = reanalyze_var.get()
+            rec = record_var.get()
+            self.settings["toner_record_wav"] = rec
+            self.settings["toner_wav_reanalyze"] = rec  # always reanalyze when recording
             self.settings["toner_wav_auto_delete"] = auto_delete_var.get()
             folder = folder_label.cget("text")
             if folder and folder != current_dir:
@@ -2494,6 +2509,8 @@ class TonerTabMixin:
         if is_sandbox:
             self._toner_active_session['sandbox'] = True
         self._toner_rolloff_warned = False
+        self._toner_captured_notes = set()
+        self._toner_save_pending = False
 
         # Start WAV recording if enabled
         if self.settings.get('toner_record_wav') and self._toner_engine:
@@ -2522,6 +2539,8 @@ class TonerTabMixin:
 
     def _toner_stop_capture(self):
         """Stop capture mode. Saves pending data, shows coverage summary."""
+        # Flush any deferred save
+        self._toner_flush_save()
         # Save any accumulated free-mode frames before stopping
         if self._toner_capture_mode == 'free' and self._toner_free_accumulator:
             self._toner_free_save_micro_capture()
@@ -2916,11 +2935,8 @@ class TonerTabMixin:
                 self._toner_stable_count = 0
                 self._toner_free_accumulator = []
 
-            # Count unique notes captured so far
-            notes_so_far = set()
-            if self._toner_active_session:
-                for cap in self._toner_active_session.get('captures', []):
-                    notes_so_far.add(cap.get('note', ''))
+            # Count unique notes captured so far (cached set)
+            notes_so_far = self._toner_captured_notes
 
             if self._toner_stable_note:
                 disp = self._toner_transpose_note(self._toner_stable_note)
@@ -3047,6 +3063,7 @@ class TonerTabMixin:
 
                     if self._toner_active_session is not None:
                         self._toner_active_session['captures'].append(capture_entry)
+                        self._toner_captured_notes.add(concert_note)
                         self._toner_save_active_session()
                         self._toner_check_rolloff_warning()
 
@@ -3116,7 +3133,8 @@ class TonerTabMixin:
 
         if self._toner_active_session is not None:
             self._toner_active_session['captures'].append(capture_entry)
-            self._toner_save_active_session()
+            self._toner_captured_notes.add(dominant_note)
+            self._toner_schedule_save()
             self._toner_check_rolloff_warning()
 
     def _toner_check_rolloff_warning(self):
@@ -3126,6 +3144,12 @@ class TonerTabMixin:
         session = self._toner_active_session
         if not session:
             return
+        # Check if preset has suppressed this warning
+        if self._toner_active_library and self._toner_active_preset:
+            lib = self._toner_presets.get(self._toner_active_library, {})
+            preset = lib.get(self._toner_active_preset, {})
+            if preset.get('suppress_rolloff_warning'):
+                return
         captures = session.get('captures', [])
         if len(captures) < ROLLOFF_MIN_CAPTURES:
             return
@@ -3141,17 +3165,69 @@ class TonerTabMixin:
         avg_rate = sum(rates) / len(rates)
         if avg_rate > ROLLOFF_WARN_THRESHOLD:
             self._toner_rolloff_warned = True
-            messagebox.showwarning(
-                "Recording Quality",
-                f"Upper harmonics are dropping off steeply "
-                f"({avg_rate:.1f} dB/harmonic).\n\n"
-                f"This usually means the microphone is too far from "
-                f"the bell, or a built-in laptop mic is being used.\n\n"
-                f"For best results:\n"
-                f"  \u2022  Use an external condenser mic (e.g. AT2020)\n"
-                f"  \u2022  Place it 2\u20133 feet from the bell\n"
-                f"  \u2022  See Help \u2192 User Guide for details",
-                parent=self.root)
+            self._toner_show_rolloff_warning(avg_rate)
+
+    def _toner_show_rolloff_warning(self, avg_rate):
+        """Show rolloff warning with option to suppress for this preset."""
+        warn_dlg = tk.Toplevel(self.root)
+        warn_dlg.title("Recording Quality")
+        warn_dlg.transient(self.root)
+        warn_dlg.grab_set()
+        warn_dlg.resizable(False, False)
+
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(warn_dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="\u26a0 Recording Quality", bg=bg, fg=fg,
+                 font=("Helvetica", 11, "bold")).pack(anchor="w", pady=(0, 8))
+
+        tk.Label(frame,
+                 text=f"Upper harmonics are dropping off steeply "
+                      f"({avg_rate:.1f} dB/harmonic).\n\n"
+                      f"This can be caused by:\n"
+                      f"  \u2022  Microphone too far from the bell\n"
+                      f"  \u2022  Built-in laptop mic\n"
+                      f"  \u2022  Playing technique (subtone, soft dynamics)\n\n"
+                      f"For best results, use an external condenser mic\n"
+                      f"2\u20133 feet from the bell.",
+                 bg=bg, fg=fg, font=("Helvetica", 9),
+                 justify="left").pack(anchor="w", pady=(0, 10))
+
+        suppress_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(frame,
+                       text="Don't show this again for this preset",
+                       variable=suppress_var, bg=bg, fg=fg,
+                       font=("Helvetica", 9)).pack(anchor="w", pady=(0, 10))
+
+        def _dismiss():
+            if suppress_var.get():
+                if self._toner_active_library and self._toner_active_preset:
+                    lib = self._toner_presets.get(
+                        self._toner_active_library, {})
+                    preset = lib.get(self._toner_active_preset, {})
+                    preset['suppress_rolloff_warning'] = True
+                    save_tone_presets(self._toner_presets, TONER_DATA_FILE)
+            warn_dlg.destroy()
+
+        tk.Button(frame, text="OK", command=_dismiss,
+                  width=10).pack(anchor="e")
+
+    def _toner_schedule_save(self):
+        """Schedule a deferred save (batches rapid captures)."""
+        if not self._toner_save_pending:
+            self._toner_save_pending = True
+            try:
+                self.root.after(10000, self._toner_flush_save)
+            except tk.TclError:
+                pass
+
+    def _toner_flush_save(self):
+        """Execute a deferred save if one is pending."""
+        if self._toner_save_pending:
+            self._toner_save_pending = False
+            self._toner_save_active_session()
 
     def _toner_save_active_session(self):
         """Save the active session to the active preset.
@@ -3489,8 +3565,12 @@ class TonerTabMixin:
                 messagebox.showinfo("Select",
                     "Select at least one preset or session.", parent=dlg)
                 return
+            # Determine primary sax type for population stats
+            sax_type = selected[0].get('_preset', {}).get(
+                'horn_type', 'Tenor')
+            pop_stats = compute_population_stats(all_presets, sax_type)
             dlg.destroy()
-            self._toner_show_analysis(selected)
+            self._toner_show_analysis(selected, population_stats=pop_stats)
 
         def clear_comparison():
             self._toner_clear_overlay()
@@ -3521,7 +3601,7 @@ class TonerTabMixin:
         tk.Button(btn_frame, text="Cancel",
                   command=dlg.destroy).pack(side="right")
 
-    def _toner_show_analysis(self, fingerprints):
+    def _toner_show_analysis(self, fingerprints, population_stats=None):
         """Show analysis window for one or more profiles/sessions.
 
         Single selection: preset view with chart, descriptors, per-note.
@@ -3622,12 +3702,51 @@ class TonerTabMixin:
 
         legend_frame = tk.Frame(chart_frame, bg=bg)
         legend_frame.pack(fill="x", padx=5, pady=(0, 3))
+
+        # Detail label shown when a legend entry is clicked
+        detail_var = tk.StringVar(value="")
+        detail_label = tk.Label(chart_frame, textvariable=detail_var,
+                                bg=bg, fg="#666666", font=("Helvetica", 8),
+                                anchor="w", justify="left")
+
+        def _show_preset_detail(fp):
+            p = fp.get('_preset', {})
+            parts = []
+            horn = " ".join(filter(None, [p.get('horn_make', ''),
+                                          p.get('horn_model', '')]))
+            if horn:
+                parts.append(horn)
+            serial = p.get('serial', '')
+            if serial:
+                parts.append(f"#{serial}")
+            ht = p.get('horn_type', '')
+            if ht:
+                parts.append(f"({ht})")
+            player = p.get('player', '')
+            if player:
+                parts.append(f"\u2014 {player}")
+            mpc = p.get('mouthpiece', '')
+            if mpc:
+                parts.append(f"| mpc: {mpc}")
+            reed = p.get('reed', '')
+            if reed:
+                parts.append(f"| reed: {reed}")
+            mic_t = p.get('mic_type', '')
+            mic_m = p.get('mic_model', '')
+            mic = mic_m or mic_t
+            if mic:
+                parts.append(f"| mic: {mic}")
+            detail_var.set(" ".join(parts) if parts else fp.get('_name', ''))
+            detail_label.pack(fill="x", padx=5, pady=(0, 3))
+
         for i, fp in enumerate(fingerprints):
             color = chart_colors[i % len(chart_colors)]
             tk.Label(legend_frame, text="\u25a0", fg=color, bg=bg,
                      font=("Helvetica", 12)).pack(side="left")
-            tk.Label(legend_frame, text=fp['_name'], bg=bg, fg=fg,
-                     font=("Helvetica", 9)).pack(side="left", padx=(0, 12))
+            lbl = tk.Label(legend_frame, text=fp['_name'], bg=bg, fg=fg,
+                           font=("Helvetica", 9), cursor="hand2")
+            lbl.pack(side="left", padx=(0, 12))
+            lbl.bind("<Button-1>", lambda e, f=fp: _show_preset_detail(f))
 
         def get_data_for_view():
             """Return list of (harmonics_db, descriptors) per fingerprint for current view."""
@@ -3754,6 +3873,7 @@ class TonerTabMixin:
                     db_list = d.get('harmonics_db', [])
                     if len(db_list) < 2:
                         continue
+                    tag = f"fp_{i}"
 
                     points = []
                     for hi, db in enumerate(db_list):
@@ -3763,14 +3883,27 @@ class TonerTabMixin:
                         points.extend([x, y])
 
                     if len(points) >= 4:
-                        chart_cv.create_line(*points, fill=color, width=2, smooth=True)
+                        chart_cv.create_line(*points, fill=color, width=2,
+                                              smooth=True, tags=(tag,))
                         for j in range(0, len(points), 2):
                             chart_cv.create_oval(
                                 points[j] - 3, points[j + 1] - 3,
                                 points[j] + 3, points[j + 1] + 3,
-                                fill=color, outline="")
+                                fill=color, outline="", tags=(tag,))
+
+        def _on_chart_click(event):
+            items = chart_cv.find_overlapping(
+                event.x - 6, event.y - 6, event.x + 6, event.y + 6)
+            for item_id in items:
+                for tag in chart_cv.gettags(item_id):
+                    if tag.startswith("fp_"):
+                        idx = int(tag[3:])
+                        if idx < len(fingerprints):
+                            _show_preset_detail(fingerprints[idx])
+                            return
 
         chart_cv.bind("<Configure>", draw_chart)
+        chart_cv.bind("<Button-1>", _on_chart_click)
 
         # --- Descriptor table (rebuilt on view change) ---
         table_label = "Descriptors" if is_single else "Descriptor Comparison"
@@ -3785,17 +3918,20 @@ class TonerTabMixin:
             ("Warmth", "warmth"),
             ("Even H. Bal.", "even_odd"),
             ("Rolloff Shape", "rolloff_shape"),
+            ("Evenness", "evenness"),
         ]
         analysis_desc = self.settings.get("toner_settings", {}).get(
             "analysis_descriptors", {"richness": True, "warmth": True})
         desc_labels = [(label, key) for label, key in all_desc_labels
-                       if analysis_desc.get(key, key in ("richness", "warmth"))]
+                       if analysis_desc.get(key, key in (
+                           "richness", "warmth", "even_odd"))]
         # Pole labels for descriptor direction (low% → high%)
         desc_poles = {
             "richness": ("pure", "complex"),
             "warmth": ("thin", "warm"),
             "even_odd": ("odd", "even"),
             "rolloff_shape": ("smooth", "peaked"),
+            "evenness": ("variable", "even"),
         }
 
         # Rolloff rates and mic types for each preset (for table and mismatch check)
@@ -3827,7 +3963,7 @@ class TonerTabMixin:
             tk.Label(header, text="", width=20, bg=bg, fg=fg,
                      font=("Helvetica", 9, "bold"), anchor="w").pack(side="left")
             for fp in fingerprints:
-                tk.Label(header, text=fp['_name'][:15], width=12, bg=bg, fg=fg,
+                tk.Label(header, text=fp['_name'][:15], width=14, bg=bg, fg=fg,
                          font=("Helvetica", 9, "bold"), anchor="center").pack(side="left")
 
             for label, key in desc_labels:
@@ -3853,8 +3989,30 @@ class TonerTabMixin:
                     else:
                         val_fg = fg
                     text = f"{val:.0%}" if val > 0 else "\u2014"
-                    tk.Label(row, text=text, width=12, bg=bg, fg=val_fg,
+                    # Add percentile when population data available
+                    if (population_stats and population_stats['count'] >= 3
+                            and val > 0
+                            and view_mode.get() == "average"):
+                        sorted_vals = population_stats[
+                            'descriptor_values'].get(key, [])
+                        pct = percentile_rank(val, sorted_vals)
+                        if pct is not None:
+                            text += f"  P{pct}"
+                    tk.Label(row, text=text, width=14, bg=bg, fg=val_fg,
                              font=("Helvetica", 9), anchor="center").pack(side="left")
+
+            # Population context note
+            if (population_stats and population_stats['count'] >= 3
+                    and view_mode.get() == "average"):
+                pop_note = tk.Frame(table_inner, bg=bg)
+                pop_note.pack(fill="x")
+                tk.Label(pop_note,
+                         text=f"P = percentile among "
+                              f"{population_stats['count']} "
+                              f"{population_stats['sax_type'].lower()} "
+                              f"presets",
+                         bg=bg, fg="#999999",
+                         font=("Helvetica", 7)).pack(anchor="e")
 
             # Rolloff rate and mic type rows (only in horn average view)
             if view_mode.get() == "average":
@@ -3869,7 +4027,12 @@ class TonerTabMixin:
                     else:
                         text = f"{rate:.1f} dB/H"
                         val_fg = "#880000" if rate > ROLLOFF_WARN_THRESHOLD else fg
-                    tk.Label(row, text=text, width=12, bg=bg, fg=val_fg,
+                        if population_stats and population_stats['count'] >= 3:
+                            pct = percentile_rank(
+                                rate, population_stats['rolloff_values'])
+                            if pct is not None:
+                                text += f"  P{pct}"
+                    tk.Label(row, text=text, width=14, bg=bg, fg=val_fg,
                              font=("Helvetica", 9), anchor="center").pack(side="left")
 
                 row2 = tk.Frame(table_inner, bg=bg)
@@ -3878,7 +4041,7 @@ class TonerTabMixin:
                          font=("Helvetica", 9), anchor="w").pack(side="left")
                 for mt in _mic_types:
                     text = mt.capitalize() if mt else "\u2014"
-                    tk.Label(row2, text=text, width=12, bg=bg, fg=fg,
+                    tk.Label(row2, text=text, width=14, bg=bg, fg=fg,
                              font=("Helvetica", 9), anchor="center").pack(side="left")
 
         def rebuild_analysis():
@@ -3905,6 +4068,42 @@ class TonerTabMixin:
                 fp = fingerprints[0]
                 d = data[0].get('descriptors', {})
                 lines.append(f"{fp['_name']} ({_preset_ctx(fp)})")
+
+                # Data quality summary
+                note_count = fp.get('note_count', 0)
+                per_note = fp.get('per_note', {})
+                if per_note:
+                    midi_vals = [(n, note_name_to_midi(n))
+                                 for n in per_note.keys()]
+                    midi_vals = [(n, m) for n, m in midi_vals
+                                 if m is not None]
+                    if midi_vals:
+                        midi_vals.sort(key=lambda x: x[1])
+                        lo, hi = midi_vals[0][0], midi_vals[-1][0]
+                        lines.append(
+                            f"{note_count} notes ({lo}\u2013{hi}), "
+                            f"{fp.get('capture_count', 0)} captures")
+                    else:
+                        lines.append(
+                            f"{note_count} notes, "
+                            f"{fp.get('capture_count', 0)} captures")
+                if note_count < MIN_PRESET_NOTES:
+                    lines.append(
+                        f"\u26a0 Sparse coverage ({note_count} notes, "
+                        f"{MIN_PRESET_NOTES}+ recommended)")
+
+                # Out-of-range note detection
+                sax_type = fp.get('_preset', {}).get('horn_type', '')
+                oor = find_out_of_range_notes(
+                    per_note.keys(), sax_type) if per_note else []
+                if oor:
+                    oor_sorted = sorted(oor, key=lambda n:
+                        note_name_to_midi(n) or 0)
+                    lines.append(
+                        f"\u26a0 Out-of-range notes: "
+                        f"{', '.join(oor_sorted)} "
+                        f"(possible artifacts)")
+
                 lines.append("")
                 desc_parts = []
                 for label, key in desc_labels:
@@ -3927,6 +4126,37 @@ class TonerTabMixin:
                     if rr is not None:
                         parts.append(f"Rolloff: {rr:.1f} dB/H")
                     lines.append(" | ".join(parts))
+
+                # Population context
+                if (population_stats and population_stats['count'] >= 3
+                        and mode == "average"):
+                    pop_parts = []
+                    for label, key in desc_labels:
+                        val = d.get(key, 0)
+                        if val <= 0:
+                            continue
+                        sorted_vals = population_stats[
+                            'descriptor_values'].get(key, [])
+                        pct = percentile_rank(val, sorted_vals)
+                        if pct is None:
+                            continue
+                        if pct <= 15:
+                            tag = "low"
+                        elif pct <= 35:
+                            tag = "below avg"
+                        elif pct <= 65:
+                            tag = "mid-range"
+                        elif pct <= 85:
+                            tag = "above avg"
+                        else:
+                            tag = "high"
+                        pop_parts.append(f"{label.lower()} P{pct} ({tag})")
+                    if pop_parts:
+                        st = population_stats['sax_type'].lower()
+                        lines.append("")
+                        lines.append(
+                            f"Among {population_stats['count']} "
+                            f"{st} presets: " + ", ".join(pop_parts))
 
             else:
                 # Context header for multi-preset

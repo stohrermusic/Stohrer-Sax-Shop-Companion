@@ -947,6 +947,46 @@ def note_to_freq(note_name, reference_pitch=440.0):
     return reference_pitch * 2 ** ((midi - 69) / 12)
 
 
+def note_name_to_midi(note_name):
+    """Convert a note name like 'C#4' to its MIDI number, or None."""
+    if not note_name:
+        return None
+    pc_name = note_name[:-1]
+    try:
+        octave = int(note_name[-1])
+        pc_idx = PITCH_CLASSES.index(pc_name)
+    except (ValueError, IndexError):
+        return None
+    return (octave + 1) * 12 + pc_idx
+
+
+# Expected concert pitch MIDI ranges per sax type (with margin for altissimo).
+# Notes outside these ranges are flagged as potential detection artifacts.
+SAX_NOTE_RANGES = {
+    "Sopranino": (68, 96),   # Ab4 – C7
+    "Soprano":   (56, 91),   # Ab3 – G6
+    "Alto":      (49, 84),   # Db3 – C6
+    "F Mezzo":   (44, 80),   # Ab2 – Ab5
+    "C Melody":  (49, 80),   # Db3 – Ab5
+    "Tenor":     (44, 79),   # Ab2 – G5
+    "Baritone":  (37, 72),   # Db2 – C5
+    "Bass":      (32, 67),   # Ab1 – G4
+}
+
+
+def find_out_of_range_notes(per_note_keys, sax_type):
+    """Return note names that fall outside expected range for sax_type."""
+    if sax_type not in SAX_NOTE_RANGES:
+        return []
+    low, high = SAX_NOTE_RANGES[sax_type]
+    out = []
+    for note in per_note_keys:
+        midi = note_name_to_midi(note)
+        if midi is not None and (midi < low or midi > high):
+            out.append(note)
+    return out
+
+
 def _shift_note(note_name, semitones):
     """Shift a note name by the given number of semitones.
 
@@ -1323,6 +1363,58 @@ def compute_group_fingerprint(presets, sax_type=None):
         'per_preset': per_preset,
         'per_note': per_note,
         'note_count': len(per_note),
+    }
+
+
+def percentile_rank(value, sorted_values):
+    """Return percentile (0-100) of value within sorted_values."""
+    if not sorted_values:
+        return None
+    import bisect
+    n = len(sorted_values)
+    pos = bisect.bisect_left(sorted_values, value)
+    return round(100.0 * pos / n)
+
+
+def compute_population_stats(all_presets, sax_type):
+    """Compute descriptor distributions for all presets of a sax type.
+
+    Args:
+        all_presets: list of (lib_name, preset_name, preset_data) tuples
+        sax_type: e.g. "Alto", "Tenor"
+
+    Returns dict with descriptor_values, rolloff_values, count, sax_type.
+    """
+    desc_lists = {}
+    rolloff_list = []
+    count = 0
+
+    for lib_name, preset_name, preset_data in all_presets:
+        if preset_data.get('horn_type', '') != sax_type:
+            continue
+        sessions = preset_data.get('sessions', [])
+        if not any(s.get('captures') for s in sessions):
+            continue
+        fp = compute_fingerprint(sessions, sax_type)
+        if not fp or not fp.get('descriptors'):
+            continue
+        count += 1
+        for key, val in fp['descriptors'].items():
+            desc_lists.setdefault(key, []).append(val)
+        rr = fp.get('rolloff_rate')
+        if rr is not None:
+            rolloff_list.append(rr)
+
+    # Sort all lists for percentile lookup
+    for key in desc_lists:
+        desc_lists[key].sort()
+    rolloff_list.sort()
+
+    return {
+        'descriptor_values': desc_lists,
+        'rolloff_values': rolloff_list,
+        'count': count,
+        'sax_type': sax_type,
     }
 
 
