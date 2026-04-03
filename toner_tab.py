@@ -1374,6 +1374,7 @@ class TonerTabMixin:
             ("serial", "Serial #"),
             ("reed", "Reed"),
             ("ligature", "Ligature"),
+            ("mic_position", "Mic Position"),
             ("room", "Room / Environment"),
             ("preamp", "Preamp / Interface"),
             ("notes", "Notes"),
@@ -1928,6 +1929,14 @@ class TonerTabMixin:
         add_field("Mic Type:", "mic_type", "", widget_type="mic_combo")
         add_field("Mic Model:", "mic_model", "")
 
+        # Optional fields (shown based on visible_preset_fields settings)
+        add_field("Serial #:", "serial", optional_key="serial")
+        add_field("Reed:", "reed", optional_key="reed")
+        add_field("Ligature:", "ligature", optional_key="ligature")
+        add_field("Mic Position:", "mic_position", optional_key="mic_position")
+        add_field("Room:", "room", optional_key="room")
+        add_field("Preamp:", "preamp", optional_key="preamp")
+
         # Sandbox checkbox (only when enabled in settings)
         sandbox_var = None
         if self.settings.get("toner_sandbox_enabled"):
@@ -1996,6 +2005,7 @@ class TonerTabMixin:
             'mouthpiece': fields.get("mouthpiece", tk.StringVar()).get().strip(),
             'reed': fields.get("reed", tk.StringVar()).get().strip() if "reed" in fields else "",
             'ligature': fields.get("ligature", tk.StringVar()).get().strip() if "ligature" in fields else "",
+            'mic_position': fields.get("mic_position", tk.StringVar()).get().strip() if "mic_position" in fields else "",
             'room': fields.get("room", tk.StringVar()).get().strip() if "room" in fields else "",
             'preamp': fields.get("preamp", tk.StringVar()).get().strip() if "preamp" in fields else "",
             'mic_type': fields.get("mic_type", tk.StringVar()).get().lower(),
@@ -2505,6 +2515,7 @@ class TonerTabMixin:
             'player': preset.get('player', ''),
             'mouthpiece': preset.get('mouthpiece', ''),
             'reed': preset.get('reed', ''),
+            'mic_position': preset.get('mic_position', ''),
         }
         if is_sandbox:
             self._toner_active_session['sandbox'] = True
@@ -3449,6 +3460,7 @@ class TonerTabMixin:
                         preset.get('mouthpiece', ''),
                         preset.get('reed', ''),
                         preset.get('ligature', ''),
+                        preset.get('mic_position', ''),
                         preset.get('room', ''),
                         preset.get('preamp', ''),
                         preset.get('notes', ''),
@@ -3736,6 +3748,9 @@ class TonerTabMixin:
             mic = mic_m or mic_t
             if mic:
                 parts.append(f"| mic: {mic}")
+            mic_pos = p.get('mic_position', '')
+            if mic_pos:
+                parts.append(f"@ {mic_pos}")
             detail_var.set(" ".join(parts) if parts else fp.get('_name', ''))
             detail_label.pack(fill="x", padx=5, pady=(0, 3))
 
