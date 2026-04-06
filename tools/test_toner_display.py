@@ -243,7 +243,9 @@ if failed == 0:
 else:
     print(f"{failed} TESTS FAILED")
 print()
-print("KEY FINDING: The bars display uses a dB scale (0 to -60 dB).")
-print("A harmonic at half the fundamental's amplitude (-6 dB) appears")
-print("as 90% of the bar height. This is mathematically correct but")
-print("visually misleading — consider offering a linear amplitude scale.")
+print("NOTE: The bars display defaults to a dB scale (0 to -60 dB).")
+print("A harmonic at -6 dB (50% amplitude) appears at 90% of the bar")
+print("height in dB mode — mathematically correct but visually")
+print("compressed at the loud end. The Analyze tool's Scale toggle")
+print("(dB / Linear) lets users switch to linear amplitude when they")
+print("want a closer match to perceived loudness.")

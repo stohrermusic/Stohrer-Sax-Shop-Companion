@@ -3384,6 +3384,31 @@ class TonerTabMixin:
                 messagebox.showinfo("Select",
                     "Select at least one preset or session.", parent=dlg)
                 return
+            # Cross-sax-type warning. Mixing alto + tenor + bari + soprano
+            # in the same comparison is allowed but the readings get
+            # confounded by physics: lower-pitched horns intrinsically read
+            # warmer and brighter on the H4-H5 measure regardless of
+            # mouthpiece, so cross-type comparisons mostly reflect
+            # fundamental frequency rather than tonal character.
+            sax_types_in_selection = sorted(set(
+                fp.get('_preset', {}).get('horn_type', '') or '?'
+                for fp in selected))
+            if len(sax_types_in_selection) > 1:
+                proceed = messagebox.askyesno(
+                    "Mixed Sax Types",
+                    "You're comparing presets across different sax types "
+                    f"({', '.join(sax_types_in_selection)}).\n\n"
+                    "Lower-pitched horns intrinsically read warmer and "
+                    "brighter on most descriptors, regardless of "
+                    "mouthpiece or player. Cross-type comparisons mostly "
+                    "reflect that physics, not the tonal character of "
+                    "the instruments.\n\n"
+                    "The Character Map and descriptor table are most "
+                    "reliable when comparing within a single sax type.\n\n"
+                    "Continue anyway?",
+                    parent=dlg, icon='warning', default='no')
+                if not proceed:
+                    return
             # Determine primary sax type for population stats
             sax_type = selected[0].get('_preset', {}).get(
                 'horn_type', 'Tenor')
@@ -3408,6 +3433,26 @@ class TonerTabMixin:
                     "(Individual sessions are not included in group averages.)",
                     parent=dlg)
                 return
+            # Cross-sax-type warning — averaging across sax types is even
+            # less meaningful than comparing them, since the result has no
+            # natural physical interpretation.
+            sax_types_in_selection = sorted(set(
+                p.get('horn_type', '') or '?' for _, p in preset_list))
+            if len(sax_types_in_selection) > 1:
+                proceed = messagebox.askyesno(
+                    "Mixed Sax Types",
+                    "You're averaging presets across different sax types "
+                    f"({', '.join(sax_types_in_selection)}).\n\n"
+                    "Lower-pitched horns intrinsically read warmer and "
+                    "brighter than higher-pitched horns. Averaging across "
+                    "sax types mixes that physics into a single number "
+                    "with no clear physical interpretation.\n\n"
+                    "Group averages are most meaningful within a single "
+                    "sax type.\n\n"
+                    "Continue anyway?",
+                    parent=dlg, icon='warning', default='no')
+                if not proceed:
+                    return
             dlg.destroy()
             self._toner_show_group_report(preset_list)
 
@@ -3433,8 +3478,20 @@ class TonerTabMixin:
             dlg.title(f"Analyze \u2014 {fingerprints[0].get('_name', '?')}")
         else:
             dlg.title("Analyze \u2014 Comparison")
-        dlg.geometry("720x750")
-        dlg.transient(self.root)
+        # Single-preset stays compact; comparison view needs room for the
+        # extra Character Map chart between the harmonic chart and table.
+        dlg.geometry("720x950" if len(fingerprints) >= 2 else "720x750")
+        # Intentionally NOT transient — on Windows, transient toplevels lose
+        # the maximize button. The Analyze window is non-modal and content-
+        # heavy; users want to maximize it, alt-tab to it, and leave it open
+        # while doing other work. It should behave as an independent window.
+        # Allow the user to resize / maximize / fullscreen the window —
+        # there's a lot of information here and bigger is often better.
+        # The window content is taller than any viewport when there's a lot
+        # of comparison data, so the whole thing scrolls vertically.
+        # minsize stays modest because scrolling handles the overflow.
+        dlg.resizable(True, True)
+        dlg.minsize(640, 500)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
         fg = "black"
@@ -3442,8 +3499,56 @@ class TonerTabMixin:
         chart_colors = ["#2196F3", "#FF5722", "#4CAF50", "#FF9800",
                         "#9C27B0", "#00BCD4", "#E91E63", "#8BC34A"]
 
-        main = tk.Frame(dlg, bg=bg)
-        main.pack(fill="both", expand=True, padx=10, pady=10)
+        # --- Scrollable main content ---
+        # Outer holds the scrollbar + the scroll canvas. The "main" frame
+        # used by the rest of this method lives INSIDE the scroll canvas
+        # via create_window so the entire UI scrolls as one piece.
+        outer = tk.Frame(dlg, bg=bg)
+        outer.pack(fill="both", expand=True)
+
+        scroll_vbar = tk.Scrollbar(outer, orient="vertical")
+        scroll_vbar.pack(side="right", fill="y")
+
+        scroll_canvas = tk.Canvas(outer, bg=bg, highlightthickness=0,
+                                   yscrollcommand=scroll_vbar.set)
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+        scroll_vbar.config(command=scroll_canvas.yview)
+
+        main = tk.Frame(scroll_canvas, bg=bg)
+        scroll_window = scroll_canvas.create_window(
+            (0, 0), window=main, anchor="nw", tags="scroll_inner")
+
+        # Update the scrollregion whenever the inner frame's natural size
+        # changes (e.g. when widgets are added or text is rebuilt).
+        def _update_scrollregion(event=None):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+        main.bind("<Configure>", _update_scrollregion)
+
+        # Make the inner frame's width track the scroll canvas's width so
+        # children that pack(fill="x") fill the visible area instead of
+        # collapsing to their natural width.
+        def _resize_inner(event):
+            scroll_canvas.itemconfig("scroll_inner", width=event.width)
+        scroll_canvas.bind("<Configure>", _resize_inner)
+
+        # Mouse wheel scrolling bound at the dialog level so it works
+        # regardless of which child widget the cursor is over. Bound only
+        # to this dialog so it doesn't interfere with other windows.
+        def _on_mousewheel(event):
+            scroll_canvas.yview_scroll(
+                int(-1 * (event.delta / 120)), "units")
+        dlg.bind("<MouseWheel>", _on_mousewheel)
+        # Linux uses Button-4/5 instead of MouseWheel
+        dlg.bind("<Button-4>",
+                 lambda e: scroll_canvas.yview_scroll(-1, "units"))
+        dlg.bind("<Button-5>",
+                 lambda e: scroll_canvas.yview_scroll(1, "units"))
+
+        # Inner padding lives on a sub-frame so it doesn't fight with the
+        # scroll canvas geometry math.
+        main_pad = tk.Frame(main, bg=bg)
+        main_pad.pack(fill="both", expand=True, padx=10, pady=10)
+        main = main_pad  # rest of method uses `main` as before
 
         # Sandbox banner if any preset is sandbox
         any_sandbox = any(fp.get('_preset', {}).get('sandbox')
@@ -3470,10 +3575,17 @@ class TonerTabMixin:
                         font=("Helvetica", 10),
                         command=lambda: refresh_all()).pack(side="left", padx=(0, 10))
 
-        # Difference view toggle (only for 2-preset comparisons)
+        # Chart mode toggle (Overlay always; Bars when 2+; Difference only for 2)
         chart_mode = tk.StringVar(value="overlay")
+        # Y-axis scale toggle. dB is the underlying storage format and works
+        # well for showing wide dynamic range; linear amplitude
+        # (= 10^(dB/20)) is closer to perceived loudness and prevents the
+        # visual compression where -6 dB (50% amplitude) appears at 90% bar
+        # height. Difference mode always stays in dB because deltas in dB
+        # are easier to interpret than deltas in raw amplitude.
+        scale_mode = tk.StringVar(value="dB")
         diff_frame = tk.Frame(toggle_frame, bg=bg)
-        if len(fingerprints) == 2:
+        if len(fingerprints) >= 2:
             diff_frame.pack(side="right", padx=(10, 0))
             tk.Label(diff_frame, text="Chart:", bg=bg, fg=fg,
                      font=("Helvetica", 9)).pack(side="left", padx=(0, 4))
@@ -3481,10 +3593,30 @@ class TonerTabMixin:
                             value="overlay", bg=bg, fg=fg, selectcolor=bg,
                             font=("Helvetica", 9),
                             command=lambda: refresh_all()).pack(side="left")
-            tk.Radiobutton(diff_frame, text="Difference", variable=chart_mode,
-                            value="difference", bg=bg, fg=fg, selectcolor=bg,
+            tk.Radiobutton(diff_frame, text="Bars", variable=chart_mode,
+                            value="bars", bg=bg, fg=fg, selectcolor=bg,
                             font=("Helvetica", 9),
                             command=lambda: refresh_all()).pack(side="left")
+            if len(fingerprints) == 2:
+                tk.Radiobutton(diff_frame, text="Difference",
+                                variable=chart_mode, value="difference",
+                                bg=bg, fg=fg, selectcolor=bg,
+                                font=("Helvetica", 9),
+                                command=lambda: refresh_all()).pack(side="left")
+
+        # Scale toggle — visible for single AND multi-preset views.
+        scale_frame = tk.Frame(toggle_frame, bg=bg)
+        scale_frame.pack(side="right", padx=(10, 0))
+        tk.Label(scale_frame, text="Scale:", bg=bg, fg=fg,
+                 font=("Helvetica", 9)).pack(side="left", padx=(0, 4))
+        tk.Radiobutton(scale_frame, text="dB", variable=scale_mode,
+                        value="dB", bg=bg, fg=fg, selectcolor=bg,
+                        font=("Helvetica", 9),
+                        command=lambda: refresh_all()).pack(side="left")
+        tk.Radiobutton(scale_frame, text="Linear", variable=scale_mode,
+                        value="linear", bg=bg, fg=fg, selectcolor=bg,
+                        font=("Helvetica", 9),
+                        command=lambda: refresh_all()).pack(side="left")
 
         # Note selector (shown only in per-note mode)
         note_frame = tk.Frame(toggle_frame, bg=bg)
@@ -3528,6 +3660,15 @@ class TonerTabMixin:
                                 bg=bg, fg="#666666", font=("Helvetica", 8),
                                 anchor="w", justify="left")
 
+        # Cross-widget "selected preset" state. Clicking a chart line, a quad
+        # dot, or a legend entry selects that preset; clicking the same item
+        # again toggles the selection off. The real set_selected is installed
+        # later, once draw_chart and _quad_redraw exist.
+        selected_idx = [None]
+        legend_labels = []
+        legend_default_bg = bg
+        set_selected = lambda idx: None  # placeholder
+
         def _show_preset_detail(fp):
             p = fp.get('_preset', {})
             parts = []
@@ -3560,15 +3701,37 @@ class TonerTabMixin:
                 parts.append(f"@ {mic_pos}")
             detail_var.set(" ".join(parts) if parts else fp.get('_name', ''))
             detail_label.pack(fill="x", padx=5, pady=(0, 3))
+            # Highlight this preset across the legend, chart, and quad map.
+            # set_selected is installed later but Python looks it up at call
+            # time, so this works as long as the user can't click before the
+            # real implementation is bound (which they can't).
+            try:
+                idx = fingerprints.index(fp)
+            except ValueError:
+                idx = None
+            set_selected(idx)
 
+        # Legend wraps to multiple rows when there are many presets so long
+        # names don't get clipped on the right edge of the chart frame.
+        legend_per_row = 3 if len(fingerprints) > 3 else len(fingerprints)
+        legend_per_row = max(1, legend_per_row)
+        legend_row = None
         for i, fp in enumerate(fingerprints):
+            if i % legend_per_row == 0:
+                legend_row = tk.Frame(legend_frame, bg=bg)
+                legend_row.pack(fill="x")
             color = chart_colors[i % len(chart_colors)]
-            tk.Label(legend_frame, text="\u25a0", fg=color, bg=bg,
+            tk.Label(legend_row, text="\u25a0", fg=color, bg=bg,
                      font=("Helvetica", 12)).pack(side="left")
-            lbl = tk.Label(legend_frame, text=fp['_name'], bg=bg, fg=fg,
-                           font=("Helvetica", 9), cursor="hand2")
+            name = fp['_name']
+            if len(name) > 30:
+                name = name[:29] + "\u2026"
+            lbl = tk.Label(legend_row, text=name, bg=legend_default_bg, fg=fg,
+                           font=("Helvetica", 9), cursor="hand2",
+                           padx=4)
             lbl.pack(side="left", padx=(0, 12))
             lbl.bind("<Button-1>", lambda e, f=fp: _show_preset_detail(f))
+            legend_labels.append(lbl)
 
         def get_data_for_view():
             """Return list of (harmonics_db, descriptors) per fingerprint for current view."""
@@ -3597,8 +3760,14 @@ class TonerTabMixin:
                 return
 
             data = get_data_for_view()
-            is_diff = (chart_mode.get() == "difference"
-                       and len(fingerprints) == 2)
+            mode = chart_mode.get()
+            is_diff = (mode == "difference" and len(fingerprints) == 2)
+            is_bars = (mode == "bars" and len(fingerprints) >= 2)
+            # Difference mode always renders in dB regardless of scale toggle
+            # because deltas in dB are easier to interpret than deltas in
+            # raw amplitude (where the same dB shift looks very different
+            # at the loud end vs the quiet end).
+            is_linear = (scale_mode.get() == "linear" and not is_diff)
 
             margin_l, margin_r, margin_t, margin_b = 40, 10, 10, 25
             cw = w - margin_l - margin_r
@@ -3607,6 +3776,32 @@ class TonerTabMixin:
             all_db = [d.get('harmonics_db', []) for d in data]
             max_h = max((len(db) for db in all_db), default=2)
             max_h = max(max_h, 2)
+
+            # X position of harmonic index hi. Bars mode uses centered groups
+            # so the first group has space on its left; line/diff modes anchor
+            # H1 at the left edge so curves use the full width.
+            group_width = cw / max_h if max_h > 0 else cw
+            def harmonic_x(hi):
+                if is_bars:
+                    return margin_l + group_width * (hi + 0.5)
+                if max_h > 1:
+                    return margin_l + cw * hi / (max_h - 1)
+                return margin_l + cw / 2
+
+            # Y position helper. In dB mode the chart spans -60..0 dB
+            # linearly. In linear amplitude mode the chart spans 0..1
+            # amplitude (= 10^(dB/20)), which gives a closer match to
+            # perceived loudness — a -6 dB harmonic (50% amplitude) sits
+            # at 50% bar height instead of 90%. Default args capture the
+            # range so the later db_min/db_max reassignment for difference
+            # mode (below) can't leak into this closure.
+            db_min, db_max = -60.0, 0.0
+            def db_to_y(db_val, _mn=db_min, _mx=db_max, _lin=is_linear):
+                clamped = max(_mn, min(_mx, db_val))
+                if _lin:
+                    amp = 10.0 ** (clamped / 20.0)
+                    return margin_t + ch * (1.0 - amp)
+                return margin_t + ch * (1.0 - (clamped - _mn) / (_mx - _mn))
 
             if is_diff:
                 # Difference mode: show delta between two profiles
@@ -3627,8 +3822,22 @@ class TonerTabMixin:
                 chart_cv.create_text(8, h // 2, text="\u0394 dB",
                                       fill="#888888", font=("Helvetica", 7),
                                       angle=90)
+            elif is_linear:
+                # Linear amplitude grid at 0%, 25%, 50%, 75%, 100%
+                for amp_pct in (0, 25, 50, 75, 100):
+                    amp = amp_pct / 100.0
+                    y = margin_t + ch * (1.0 - amp)
+                    chart_cv.create_line(margin_l, y, w - margin_r, y,
+                                          fill="#DDDDDD", width=1)
+                    chart_cv.create_text(margin_l - 4, y,
+                                          text=f"{amp_pct}%",
+                                          fill="#888888",
+                                          font=("Helvetica", 7), anchor="e")
+                # Axis label so users know what's plotted
+                chart_cv.create_text(8, h // 2, text="amp",
+                                      fill="#888888",
+                                      font=("Helvetica", 7), angle=90)
             else:
-                db_min, db_max = -60.0, 0.0
                 for db in range(-60, 1, 10):
                     y = margin_t + ch * (1.0 - (db - db_min) / (db_max - db_min))
                     chart_cv.create_line(margin_l, y, w - margin_r, y,
@@ -3638,7 +3847,7 @@ class TonerTabMixin:
                                           anchor="e")
 
             for hi in range(max_h):
-                x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
+                x = harmonic_x(hi)
                 chart_cv.create_text(x, h - 5, text=f"{hi + 1}",
                                       fill="#888888", font=("Helvetica", 7))
 
@@ -3665,7 +3874,7 @@ class TonerTabMixin:
                     points = []
                     for hi in range(n):
                         delta = db_a[hi] - db_b[hi]
-                        x = margin_l + cw * hi / (max_h - 1)
+                        x = harmonic_x(hi)
                         clamped = max(db_min, min(db_max, delta))
                         y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
                         points.extend([x, y])
@@ -3689,28 +3898,62 @@ class TonerTabMixin:
                         margin_l + 5, margin_t + 8,
                         text=f"\u2191 {n1} stronger   \u2193 {n2} stronger",
                         fill="#666666", font=("Helvetica", 7), anchor="w")
+            elif is_bars:
+                # Grouped bars at each harmonic position, one bar per preset.
+                # Useful for 3+ preset comparisons where overlay lines tangle.
+                n_presets = len(data)
+                if n_presets > 0:
+                    # 85% of group goes to bars, 15% gap between groups
+                    bar_w = max(1.0, (group_width * 0.85) / n_presets)
+                    chart_bottom_y = margin_t + ch
+                    for hi in range(max_h):
+                        center_x = harmonic_x(hi)
+                        total_w = bar_w * n_presets
+                        start_x = center_x - total_w / 2
+                        for i, d in enumerate(data):
+                            color = chart_colors[i % len(chart_colors)]
+                            db_list = d.get('harmonics_db', [])
+                            if hi >= len(db_list):
+                                continue
+                            bar_top_y = db_to_y(db_list[hi])
+                            x_left = start_x + i * bar_w
+                            x_right = x_left + bar_w * 0.92  # tiny gap inside group
+                            tag = f"fp_{i}"
+                            is_selected = (selected_idx[0] == i)
+                            outline_color = "#000000" if is_selected else ""
+                            outline_w = 2 if is_selected else 0
+                            chart_cv.create_rectangle(
+                                x_left, bar_top_y, x_right, chart_bottom_y,
+                                fill=color, outline=outline_color,
+                                width=outline_w, tags=(tag,))
             else:
-                for i, d in enumerate(data):
+                # Draw the selected line LAST so it sits on top of the others.
+                draw_order = sorted(
+                    range(len(data)),
+                    key=lambda i: 1 if i == selected_idx[0] else 0)
+                for i in draw_order:
+                    d = data[i]
                     color = chart_colors[i % len(chart_colors)]
                     db_list = d.get('harmonics_db', [])
                     if len(db_list) < 2:
                         continue
                     tag = f"fp_{i}"
+                    is_selected = (selected_idx[0] == i)
+                    line_width = 4 if is_selected else 2
+                    dot_r = 5 if is_selected else 3
 
                     points = []
                     for hi, db in enumerate(db_list):
-                        x = margin_l + cw * hi / (max_h - 1) if max_h > 1 else margin_l
-                        clamped = max(db_min, min(db_max, db))
-                        y = margin_t + ch * (1.0 - (clamped - db_min) / (db_max - db_min))
-                        points.extend([x, y])
+                        points.extend([harmonic_x(hi), db_to_y(db)])
 
                     if len(points) >= 4:
-                        chart_cv.create_line(*points, fill=color, width=2,
+                        chart_cv.create_line(*points, fill=color,
+                                              width=line_width,
                                               smooth=True, tags=(tag,))
                         for j in range(0, len(points), 2):
                             chart_cv.create_oval(
-                                points[j] - 3, points[j + 1] - 3,
-                                points[j] + 3, points[j + 1] + 3,
+                                points[j] - dot_r, points[j + 1] - dot_r,
+                                points[j] + dot_r, points[j + 1] + dot_r,
                                 fill=color, outline="", tags=(tag,))
 
         def _on_chart_click(event):
@@ -3726,6 +3969,244 @@ class TonerTabMixin:
 
         chart_cv.bind("<Configure>", draw_chart)
         chart_cv.bind("<Button-1>", _on_chart_click)
+
+        # --- Character Map (Warmth × Brightness 2D scatter) ---
+        # Only meaningful with 2+ presets; a single dot tells you nothing.
+        # Reassigned inside the conditional below so refresh_all() can call
+        # _quad_redraw() unconditionally.
+        _quad_redraw = lambda *_: None
+
+        if len(fingerprints) >= 2:
+            quad_frame = tk.LabelFrame(
+                main, text="Character Map (Warmth \u00d7 Brightness)",
+                bg=bg, fg=fg, font=("Helvetica", 10, "bold"))
+            # expand=True so the chart grows when the user enlarges the
+            # dialog. The canvas itself also expands.
+            quad_frame.pack(fill="both", expand=True, pady=(0, 6))
+
+            quad_top = tk.Frame(quad_frame, bg=bg)
+            quad_top.pack(fill="x", padx=5, pady=(2, 0))
+            tk.Label(quad_top, text="Y axis (brightness):",
+                      bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
+
+            # Default to Complexity. H4-H5 mean is much more correlated
+            # with Warmth (r ~ 0.83 within tenors) because both metrics
+            # share a denominator (both measured in dB relative to the
+            # fundamental). Complexity (spectral flatness) is the most
+            # independent of Warmth (r ~ 0.16 within altos), so it makes
+            # the chart actually function as a 2D character space rather
+            # than a diagonal trend.
+            quad_brightness_var = tk.StringVar(value="Complexity")
+            quad_brightness_combo = ttk.Combobox(
+                quad_top, textvariable=quad_brightness_var,
+                values=["Complexity", "H4-H5 mean", "Rolloff (inverted)"],
+                state="readonly", width=18, font=("Helvetica", 8))
+            quad_brightness_combo.pack(side="left", padx=(4, 0))
+            quad_brightness_combo.bind(
+                "<<ComboboxSelected>>", lambda e: draw_quadrant())
+
+            # height is the initial preferred size; expand=True lets it grow
+            # to fill any extra vertical space when the dialog is enlarged.
+            quad_cv = tk.Canvas(quad_frame, bg="white",
+                                 highlightthickness=0, height=190)
+            quad_cv.pack(fill="both", expand=True, padx=5, pady=5)
+
+            def get_brightness(fp):
+                """Y-axis value for a fingerprint based on selected measure."""
+                measure = quad_brightness_var.get()
+                if measure == "Complexity":
+                    return fp.get('descriptors', {}).get('richness', 0.0)
+                if measure == "Rolloff (inverted)":
+                    r = fp.get('rolloff_rate')
+                    if r is None:
+                        return None
+                    # Map ~1.0 dB/H (very bright) → 1.0,
+                    # ~4.0 dB/H (very dark) → 0.0
+                    return max(0.0, min(1.0, (4.0 - r) / 3.0))
+                # Default: average of H4 and H5 in dB (raw signal)
+                hd = fp.get('harmonics_db', [])
+                if len(hd) >= 5:
+                    return (hd[3] + hd[4]) / 2.0
+                return None
+
+            def draw_quadrant(event=None):
+                quad_cv.delete("all")
+                w = quad_cv.winfo_width()
+                h = quad_cv.winfo_height()
+                if w < 80 or h < 80:
+                    return
+
+                margin_l, margin_r, margin_t, margin_b = 56, 14, 14, 36
+                cw = w - margin_l - margin_r
+                ch = h - margin_t - margin_b
+                chart_left = margin_l
+                chart_right = margin_l + cw
+                chart_top = margin_t
+                chart_bottom = margin_t + ch
+
+                # Compute Y values for all presets up front
+                y_values = [get_brightness(fp) for fp in fingerprints]
+                valid_ys = [v for v in y_values if v is not None]
+                if not valid_ys:
+                    quad_cv.create_text(
+                        w // 2, h // 2,
+                        text="No brightness data for selected measure",
+                        fill="#888888", font=("Helvetica", 9))
+                    return
+
+                # Y-axis range
+                measure = quad_brightness_var.get()
+                if measure in ("Complexity", "Rolloff (inverted)"):
+                    y_min, y_max = 0.0, 1.0
+                else:
+                    # H4-H5 mean: auto-scale with padding
+                    y_min_data = min(valid_ys)
+                    y_max_data = max(valid_ys)
+                    pad = max(1.5, (y_max_data - y_min_data) * 0.25)
+                    y_min = y_min_data - pad
+                    y_max = y_max_data + pad
+                    if y_max - y_min < 4.0:
+                        center = (y_max + y_min) / 2
+                        y_min = center - 2.0
+                        y_max = center + 2.0
+
+                # Outer border
+                quad_cv.create_rectangle(
+                    chart_left, chart_top, chart_right, chart_bottom,
+                    outline="#CCCCCC", width=1)
+
+                # Quadrant midlines (warmth=0.5, brightness midpoint)
+                x_mid_pixel = chart_left + cw * 0.5
+                y_mid_pixel = chart_top + ch * 0.5
+                quad_cv.create_line(
+                    x_mid_pixel, chart_top, x_mid_pixel, chart_bottom,
+                    fill="#BBBBBB", width=1, dash=(3, 3))
+                quad_cv.create_line(
+                    chart_left, y_mid_pixel, chart_right, y_mid_pixel,
+                    fill="#BBBBBB", width=1, dash=(3, 3))
+
+                # Quadrant corner labels (faded)
+                quad_cv.create_text(
+                    chart_right - 4, chart_top + 4,
+                    text="warm + bright", fill="#BBBBBB",
+                    font=("Helvetica", 7, "italic"), anchor="ne")
+                quad_cv.create_text(
+                    chart_left + 4, chart_top + 4,
+                    text="thin + bright", fill="#BBBBBB",
+                    font=("Helvetica", 7, "italic"), anchor="nw")
+                quad_cv.create_text(
+                    chart_right - 4, chart_bottom - 4,
+                    text="warm + dark", fill="#BBBBBB",
+                    font=("Helvetica", 7, "italic"), anchor="se")
+                quad_cv.create_text(
+                    chart_left + 4, chart_bottom - 4,
+                    text="thin + dark", fill="#BBBBBB",
+                    font=("Helvetica", 7, "italic"), anchor="sw")
+
+                # X-axis ticks and label
+                for px, lbl in [(0.0, "0%"), (0.5, "50%"), (1.0, "100%")]:
+                    x = chart_left + cw * px
+                    quad_cv.create_text(
+                        x, chart_bottom + 10, text=lbl,
+                        fill="#888888", font=("Helvetica", 7))
+                quad_cv.create_text(
+                    chart_left + cw / 2, chart_bottom + 24,
+                    text="\u2190 thin    Warmth    warm \u2192",
+                    fill="#666666", font=("Helvetica", 8))
+
+                # Y-axis ticks and label
+                for frac in (0.0, 0.5, 1.0):
+                    val = y_min + (y_max - y_min) * frac
+                    y = chart_top + ch * (1.0 - frac)
+                    if measure == "H4-H5 mean":
+                        tick_text = f"{val:+.1f}"
+                    else:
+                        tick_text = f"{val:.2f}"
+                    quad_cv.create_text(
+                        chart_left - 4, y, text=tick_text,
+                        fill="#888888", font=("Helvetica", 7), anchor="e")
+                if measure == "H4-H5 mean":
+                    y_title = "\u2190 dark   H4\u2013H5 dB   bright \u2192"
+                elif measure == "Complexity":
+                    y_title = "\u2190 pure   Complexity   complex \u2192"
+                else:
+                    y_title = "\u2190 dark   Rolloff (inv)   bright \u2192"
+                quad_cv.create_text(
+                    14, chart_top + ch / 2, text=y_title,
+                    fill="#666666", font=("Helvetica", 8), angle=90)
+
+                # Plot dots — colors match the harmonic chart legend just
+                # above this frame, so no inline labels are needed. Click any
+                # dot to see preset detail in the detail label and highlight
+                # the matching preset across the legend, harmonic chart, and
+                # this Character Map. Selected dot draws last so it sits on
+                # top of any overlapping unselected dots.
+                draw_order = sorted(
+                    range(len(fingerprints)),
+                    key=lambda i: 1 if i == selected_idx[0] else 0)
+                for i in draw_order:
+                    fp = fingerprints[i]
+                    yv = y_values[i]
+                    if yv is None:
+                        continue
+                    warmth = fp.get('descriptors', {}).get('warmth', 0.0)
+                    color = chart_colors[i % len(chart_colors)]
+                    is_selected = (selected_idx[0] == i)
+                    r = 9 if is_selected else 6
+                    outline_color = "#000000" if is_selected else "white"
+                    outline_w = 2 if is_selected else 2
+                    x = chart_left + cw * max(0.0, min(1.0, warmth))
+                    y = chart_top + ch * (
+                        1.0 - max(0.0, min(1.0, (yv - y_min) / (y_max - y_min))))
+                    # Keep dots fully inside the chart frame
+                    x = max(chart_left + r, min(chart_right - r, x))
+                    y = max(chart_top + r, min(chart_bottom - r, y))
+                    tag = f"qm_{i}"  # quadrant marker tag
+                    quad_cv.create_oval(
+                        x - r, y - r, x + r, y + r,
+                        fill=color, outline=outline_color,
+                        width=outline_w, tags=(tag,))
+
+            def _on_quad_click(event):
+                items = quad_cv.find_overlapping(
+                    event.x - 6, event.y - 6, event.x + 6, event.y + 6)
+                for item_id in items:
+                    for tag in quad_cv.gettags(item_id):
+                        if tag.startswith("qm_"):
+                            idx = int(tag[3:])
+                            if idx < len(fingerprints):
+                                _show_preset_detail(fingerprints[idx])
+                                return
+
+            quad_cv.bind("<Configure>", draw_quadrant)
+            quad_cv.bind("<Button-1>", _on_quad_click)
+            _quad_redraw = draw_quadrant
+
+        # Install the real cross-widget selection handler now that
+        # draw_chart and _quad_redraw exist. Toggles selection on/off when
+        # the same item is clicked twice. Restyles legend labels and
+        # redraws both charts to apply visual highlight.
+        def _set_selected_impl(idx):
+            if idx is not None and idx == selected_idx[0]:
+                selected_idx[0] = None  # toggle off
+            else:
+                selected_idx[0] = idx
+            for i, lbl in enumerate(legend_labels):
+                if i == selected_idx[0]:
+                    try:
+                        lbl.config(font=("Helvetica", 9, "bold"),
+                                    bg="#FFEB3B")
+                    except tk.TclError:
+                        pass
+                else:
+                    try:
+                        lbl.config(font=("Helvetica", 9),
+                                    bg=legend_default_bg)
+                    except tk.TclError:
+                        pass
+            draw_chart()
+            _quad_redraw()
+        set_selected = _set_selected_impl
 
         # --- Descriptor table (rebuilt on view change) ---
         table_label = "Descriptors" if is_single else "Descriptor Comparison"
@@ -3780,28 +4261,51 @@ class TonerTabMixin:
 
             data = get_data_for_view()
 
+            # Compact mode for many-preset comparisons: smaller cells/font
+            # so 6+ columns still fit inside the dialog width.
+            compact = len(fingerprints) > 3
+            data_width = 11 if compact else 14
+            data_font = ("Helvetica", 8) if compact else ("Helvetica", 9)
+            head_width = 11 if compact else 14
+            head_font = ("Helvetica", 8, "bold") if compact else ("Helvetica", 9, "bold")
+            head_trunc = 11 if compact else 15
+            label_width = 18 if compact else 20
+            label_font = ("Helvetica", 8) if compact else ("Helvetica", 9)
+            pct_sep = " " if compact else "  "
+
+            def _is_real(v):
+                """Reject None and NaN; keep real numbers."""
+                if v is None:
+                    return False
+                if isinstance(v, float) and (v != v):  # NaN
+                    return False
+                return True
+
             header = tk.Frame(table_inner, bg=bg)
             header.pack(fill="x")
-            tk.Label(header, text="", width=20, bg=bg, fg=fg,
-                     font=("Helvetica", 9, "bold"), anchor="w").pack(side="left")
+            tk.Label(header, text="", width=label_width, bg=bg, fg=fg,
+                     font=head_font, anchor="w").pack(side="left")
             for fp in fingerprints:
-                tk.Label(header, text=fp['_name'][:15], width=14, bg=bg, fg=fg,
-                         font=("Helvetica", 9, "bold"), anchor="center").pack(side="left")
+                tk.Label(header, text=fp['_name'][:head_trunc],
+                         width=head_width, bg=bg, fg=fg,
+                         font=head_font, anchor="center").pack(side="left")
 
             for label, key in desc_labels:
                 row = tk.Frame(table_inner, bg=bg)
                 row.pack(fill="x")
                 poles = desc_poles.get(key)
                 row_label = f"{label} ({poles[0]}\u2194{poles[1]})" if poles else label
-                tk.Label(row, text=row_label, width=20, bg=bg, fg=fg,
-                         font=("Helvetica", 9), anchor="w").pack(side="left")
+                tk.Label(row, text=row_label, width=label_width, bg=bg, fg=fg,
+                         font=label_font, anchor="w").pack(side="left")
 
                 values = [d.get('descriptors', {}).get(key, 0) for d in data]
-                max_val = max(values) if values else 0
-                min_val = min(values) if values else 0
+                real_vals = [v for v in values if _is_real(v) and v > 0]
+                max_val = max(real_vals) if real_vals else 0
+                min_val = min(real_vals) if real_vals else 0
 
                 for val in values:
-                    if len(values) > 1 and max_val != min_val:
+                    if (_is_real(val) and val > 0 and len(real_vals) > 1
+                            and max_val != min_val):
                         if val == max_val:
                             val_fg = "#006600"
                         elif val == min_val:
@@ -3810,18 +4314,21 @@ class TonerTabMixin:
                             val_fg = fg
                     else:
                         val_fg = fg
-                    text = f"{val:.0%}" if val > 0 else "\u2014"
+                    if not _is_real(val) or val <= 0:
+                        text = "\u2014"
+                    else:
+                        text = f"{val:.0%}"
                     # Add percentile when population data available
                     if (population_stats and population_stats['count'] >= 3
-                            and val > 0
+                            and _is_real(val) and val > 0
                             and view_mode.get() == "average"):
                         sorted_vals = population_stats[
                             'descriptor_values'].get(key, [])
                         pct = percentile_rank(val, sorted_vals)
                         if pct is not None:
-                            text += f"  P{pct}"
-                    tk.Label(row, text=text, width=14, bg=bg, fg=val_fg,
-                             font=("Helvetica", 9), anchor="center").pack(side="left")
+                            text += f"{pct_sep}P{pct}"
+                    tk.Label(row, text=text, width=data_width, bg=bg, fg=val_fg,
+                             font=data_font, anchor="center").pack(side="left")
 
             # Population context note
             if (population_stats and population_stats['count'] >= 3
@@ -3840,31 +4347,33 @@ class TonerTabMixin:
             if view_mode.get() == "average":
                 row = tk.Frame(table_inner, bg=bg)
                 row.pack(fill="x")
-                tk.Label(row, text="Rec. Quality", width=20, bg=bg, fg=fg,
-                         font=("Helvetica", 9), anchor="w").pack(side="left")
+                tk.Label(row, text="Rec. Quality", width=label_width, bg=bg,
+                         fg=fg, font=label_font, anchor="w").pack(side="left")
                 for rate in _rolloff_rates:
-                    if rate is None:
+                    if not _is_real(rate):
                         text = "\u2014"
                         val_fg = fg
                     else:
-                        text = f"{rate:.1f} dB/H"
+                        # Compact mode drops the "/H" to save horizontal space
+                        unit = "dB" if compact else "dB/H"
+                        text = f"{rate:.1f} {unit}"
                         val_fg = "#880000" if rate > ROLLOFF_WARN_THRESHOLD else fg
                         if population_stats and population_stats['count'] >= 3:
                             pct = percentile_rank(
                                 rate, population_stats['rolloff_values'])
                             if pct is not None:
-                                text += f"  P{pct}"
-                    tk.Label(row, text=text, width=14, bg=bg, fg=val_fg,
-                             font=("Helvetica", 9), anchor="center").pack(side="left")
+                                text += f"{pct_sep}P{pct}"
+                    tk.Label(row, text=text, width=data_width, bg=bg, fg=val_fg,
+                             font=data_font, anchor="center").pack(side="left")
 
                 row2 = tk.Frame(table_inner, bg=bg)
                 row2.pack(fill="x")
-                tk.Label(row2, text="Mic Type", width=20, bg=bg, fg=fg,
-                         font=("Helvetica", 9), anchor="w").pack(side="left")
+                tk.Label(row2, text="Mic Type", width=label_width, bg=bg,
+                         fg=fg, font=label_font, anchor="w").pack(side="left")
                 for mt in _mic_types:
                     text = mt.capitalize() if mt else "\u2014"
-                    tk.Label(row2, text=text, width=14, bg=bg, fg=fg,
-                             font=("Helvetica", 9), anchor="center").pack(side="left")
+                    tk.Label(row2, text=text, width=data_width, bg=bg, fg=fg,
+                             font=data_font, anchor="center").pack(side="left")
 
         def rebuild_analysis():
             data = get_data_for_view()
@@ -3986,6 +4495,13 @@ class TonerTabMixin:
                              for fp in fingerprints]
                 lines.append(f"Comparing: {', '.join(ctx_parts)}")
                 lines.append("")
+                if len(fingerprints) >= 3:
+                    lines.append(
+                        "Tip: switch the chart to Bars to see harmonic "
+                        "amplitudes side by side, and use the Character Map "
+                        "below to see where each preset sits on the warmth "
+                        "\u00d7 brightness axes.")
+                    lines.append("")
 
             if len(fingerprints) == 2:
                 n1 = fingerprints[0]['_name']
@@ -4049,13 +4565,22 @@ class TonerTabMixin:
                                     f"{prefix}Broadband shifts across H2\u2013H12. "
                                     "This pattern is often associated with mouthpiece "
                                     "or player differences, but the causes of harmonic "
-                                    "variation are not fully understood.")
+                                    "variation are not fully understood. In our test "
+                                    "data, mouthpiece changes routinely shift "
+                                    "descriptors by 10\u201325% on the same horn.")
                         elif low_shift > 2.0 and low_shift > mid_shift:
                             lines.append(
                                 f"{prefix}Shifts concentrated in low harmonics "
                                 "(H2\u2013H4). Research suggests this range is "
                                 "influenced more by the bore than by the mouthpiece, "
                                 "but we are still learning what drives these differences.")
+                        # Pointer to the Character Map for spatial intuition
+                        if abs(biggest[1]) > 2.0:
+                            lines.append(
+                                f"{prefix}See the Character Map for where these "
+                                "two presets sit on the warmth \u00d7 brightness "
+                                "axes \u2014 they're independent, so the same shift "
+                                "can come from very different timbral changes.")
 
                     # Player context
                     p1 = fingerprints[0].get('_preset', {}).get('player', '')
@@ -4075,6 +4600,7 @@ class TonerTabMixin:
                                 "be more stable across players, but treat all "
                                 "cross-player comparisons as suggestive, not definitive.")
             elif len(fingerprints) > 2:
+                any_spread = False
                 for label, key in desc_labels:
                     values = [(fingerprints[i]['_name'],
                               d.get('descriptors', {}).get(key, 0))
@@ -4086,6 +4612,15 @@ class TonerTabMixin:
                             f"{prefix}{label} spread: {spread:.0%} "
                             f"({values[0][0]} highest, "
                             f"{values[-1][0]} lowest)")
+                        any_spread = True
+                if any_spread:
+                    lines.append("")
+                    lines.append(
+                        f"{prefix}Remember: warmth and brightness are "
+                        "independent axes. Two presets with the same warmth "
+                        "can have very different brightness, and vice versa. "
+                        "The Character Map shows the 2D spread; the Bars chart "
+                        "shows the raw harmonic amplitudes that drive it.")
 
             # Check for sandbox, mic type, and rolloff mismatches
             if mode == "average":
@@ -4108,8 +4643,10 @@ class TonerTabMixin:
                     lines.append("")
                     lines.append(
                         f"\u26a0 Mic types differ ({type_list}). "
-                        "Differences in complexity may partly reflect "
-                        "the mic's frequency response rather than the horn.")
+                        "Differences in complexity, warmth, and rolloff rate may "
+                        "partly reflect the mic's frequency response rather than "
+                        "the horn. Even/Odd Ratio is the most stable descriptor "
+                        "across mic differences in our test data.")
 
                 # Rolloff mismatch (still useful even with same mic type)
                 valid_rates = [r for r in _rolloff_rates if r is not None]
@@ -4129,6 +4666,7 @@ class TonerTabMixin:
 
         def refresh_all():
             draw_chart()
+            _quad_redraw()
             rebuild_table()
             rebuild_analysis()
 
@@ -4152,6 +4690,29 @@ class TonerTabMixin:
             self._toner_open_analyze_dialog()
         tk.Button(btn_row, text="\u2190 Back",
                   command=back_to_selection).pack(side="left", padx=(0, 5))
+
+        # Maximize toggle — backup for users on Windows where the title bar's
+        # maximize button can sometimes be missing or unreliable. Toggles
+        # between 'zoomed' and 'normal' window states.
+        def toggle_maximize():
+            try:
+                current = dlg.state()
+            except tk.TclError:
+                current = "normal"
+            if current == "zoomed":
+                dlg.state("normal")
+            else:
+                try:
+                    dlg.state("zoomed")
+                except tk.TclError:
+                    # macOS Aqua doesn't support 'zoomed'; fall back to a
+                    # large geometry that fills most of the screen.
+                    sw = dlg.winfo_screenwidth()
+                    sh = dlg.winfo_screenheight()
+                    dlg.geometry(f"{sw - 40}x{sh - 80}+20+20")
+        tk.Button(btn_row, text="Maximize",
+                  command=toggle_maximize).pack(side="left", padx=(0, 5))
+
         tk.Button(btn_row, text="Close",
                   command=dlg.destroy).pack(side="left")
 
@@ -4174,13 +4735,51 @@ class TonerTabMixin:
         dlg = tk.Toplevel(self.root)
         dlg.title("Group Average")
         dlg.geometry("720x650")
-        dlg.transient(self.root)
+        # Same reasoning as the Analyze dialog: skip transient so the user
+        # gets the maximize button and an independent taskbar entry, and
+        # allow free resize / fullscreen. Content scrolls vertically.
+        dlg.resizable(True, True)
+        dlg.minsize(640, 500)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
         fg = "black"
 
-        main = tk.Frame(dlg, bg=bg)
-        main.pack(fill="both", expand=True, padx=10, pady=10)
+        # --- Scrollable main content (same pattern as Analyze) ---
+        outer = tk.Frame(dlg, bg=bg)
+        outer.pack(fill="both", expand=True)
+
+        scroll_vbar = tk.Scrollbar(outer, orient="vertical")
+        scroll_vbar.pack(side="right", fill="y")
+
+        scroll_canvas = tk.Canvas(outer, bg=bg, highlightthickness=0,
+                                   yscrollcommand=scroll_vbar.set)
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+        scroll_vbar.config(command=scroll_canvas.yview)
+
+        main = tk.Frame(scroll_canvas, bg=bg)
+        scroll_canvas.create_window(
+            (0, 0), window=main, anchor="nw", tags="scroll_inner")
+
+        def _update_scrollregion(event=None):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+        main.bind("<Configure>", _update_scrollregion)
+
+        def _resize_inner(event):
+            scroll_canvas.itemconfig("scroll_inner", width=event.width)
+        scroll_canvas.bind("<Configure>", _resize_inner)
+
+        def _on_mousewheel(event):
+            scroll_canvas.yview_scroll(
+                int(-1 * (event.delta / 120)), "units")
+        dlg.bind("<MouseWheel>", _on_mousewheel)
+        dlg.bind("<Button-4>",
+                 lambda e: scroll_canvas.yview_scroll(-1, "units"))
+        dlg.bind("<Button-5>",
+                 lambda e: scroll_canvas.yview_scroll(1, "units"))
+
+        main_pad = tk.Frame(main, bg=bg)
+        main_pad.pack(fill="both", expand=True, padx=10, pady=10)
+        main = main_pad
 
         # --- Header ---
         tk.Label(main, text=f"Group Average: {grp['preset_count']} presets",
@@ -4399,6 +4998,29 @@ class TonerTabMixin:
             self._toner_open_analyze_dialog()
         tk.Button(btn_row, text="\u2190 Back",
                   command=back_to_selection).pack(side="left", padx=(0, 5))
+
+        # Maximize toggle — backup for users on Windows where the title bar's
+        # maximize button can sometimes be missing or unreliable. Toggles
+        # between 'zoomed' and 'normal' window states.
+        def toggle_maximize():
+            try:
+                current = dlg.state()
+            except tk.TclError:
+                current = "normal"
+            if current == "zoomed":
+                dlg.state("normal")
+            else:
+                try:
+                    dlg.state("zoomed")
+                except tk.TclError:
+                    # macOS Aqua doesn't support 'zoomed'; fall back to a
+                    # large geometry that fills most of the screen.
+                    sw = dlg.winfo_screenwidth()
+                    sh = dlg.winfo_screenheight()
+                    dlg.geometry(f"{sw - 40}x{sh - 80}+20+20")
+        tk.Button(btn_row, text="Maximize",
+                  command=toggle_maximize).pack(side="left", padx=(0, 5))
+
         tk.Button(btn_row, text="Close",
                   command=dlg.destroy).pack(side="left")
 
