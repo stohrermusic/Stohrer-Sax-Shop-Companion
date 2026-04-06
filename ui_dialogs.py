@@ -3045,6 +3045,19 @@ class UserGuideWindow(tk.Toplevel):
                     "variable did.")
         self._blank()
 
+        self._body("Important: this is a tool for relative measurements, "
+                    "not for discovering absolute truths about gear. In "
+                    "our test data, mouthpiece + player + mic effects "
+                    "routinely dwarf horn-to-horn differences \u2014 the "
+                    "same Conn 6M played by two different players with two "
+                    "different mouthpieces produced 12 dB of spread on "
+                    "upper-harmonic energy, which is bigger than the spread "
+                    "across many different horns combined. Use the Toner "
+                    "to compare YOUR setups to YOUR other setups, and "
+                    "expect that any reading you take is mostly about your "
+                    "current signal chain rather than the horn alone.")
+        self._blank()
+
         # === TWO WAYS TO USE IT ===
         self._h2("Two Ways to Use It")
 
@@ -3256,8 +3269,8 @@ class UserGuideWindow(tk.Toplevel):
                       "the biggest sources of variation in captures.")
         self._blank()
 
-        # === COMPARISON DESCRIPTORS ===
-        self._h2("Comparison Descriptors")
+        # === TONE DESCRIPTORS ===
+        self._h2("Tone Descriptors")
         self._body("The Analyze tool computes a handful of descriptors from the "
                     "harmonic data. They are most useful for side-by-side comparison, "
                     "where deltas between two presets cancel out mic-position and "
@@ -3265,33 +3278,108 @@ class UserGuideWindow(tk.Toplevel):
                     "Options \u2192 Settings \u2192 Analysis tab \u2014 Even/Odd is "
                     "on by default; Rolloff Shape is off by default.")
         self._blank()
-        self._body("Harmonic Complexity & Warmth")
-        self._bullet("Complexity = spectral flatness (Pure \u2194 Complex). "
-                      "Warmth = strength of the 2nd harmonic / octave (Thin \u2194 Warm). "
-                      "Both are reasonable comparison signals when other variables "
-                      "are held constant.")
+
+        self._body("Warmth and brightness are independent")
+        self._body("The two main descriptors \u2014 Warmth and Harmonic "
+                    "Complexity \u2014 measure independent properties of "
+                    "saxophone tone, and they don't have to agree. A horn or "
+                    "mouthpiece can be warm and bright, warm and dark, not warm "
+                    "and bright, or not warm and dark. All four are real, "
+                    "recognizable characters that players name and care about.")
         self._blank()
 
-        self._body("Even/Odd Ratio")
-        self._bullet("The balance between even harmonics (H2, H4, "
-                      "H6...) and odd harmonics (H3, H5, H7...). Even "
-                      "harmonics produce a round, warm quality; odd "
-                      "harmonics produce an edgier, hollower quality. "
-                      "Conical bore instruments like saxophone produce "
-                      "both, but the ratio varies between horns. This "
-                      "captures something that Warmth alone doesn't "
-                      "\u2014 the full even-to-odd balance across the "
-                      "entire harmonic series, not just H2.")
+        self._body("The four quadrants:")
+        self._bullet("Warm + bright: fat, supported, projecting. Vintage Conns "
+                      "played hard, some metal mouthpieces, the classic \"big\" "
+                      "tenor sound.")
+        self._bullet("Warm + dark: round, mellow, rich. Classical large-chamber "
+                      "mouthpieces, dark Otto Links.")
+        self._bullet("Not warm + bright: edgy, cutting, no body. Berg Larsen "
+                      "115/0, screaming fusion mouthpieces.")
+        self._bullet("Not warm + dark: hollow, woody, clarinet-like. The \"pure "
+                      "fundamental, suppressed everything else\" character. Some "
+                      "vintage large-chamber hard rubber mouthpieces sit here.")
         self._blank()
 
-        self._body("Rolloff Shape")
-        self._bullet("How smoothly the harmonics roll off from strong "
-                      "to weak. A low value means a clean, linear "
-                      "rolloff \u2014 each harmonic fades a consistent "
-                      "amount. A high value means there are bumps or "
-                      "peaks in the rolloff \u2014 certain harmonics "
-                      "stick out. This may correspond to what players "
-                      "describe as \"presence\" or \"projection.\"")
+        self._body("Why they're independent: Warmth measures how strongly the "
+                    "2nd harmonic (the octave above the fundamental) sits in "
+                    "the tone \u2014 that comes from how the chamber and reed "
+                    "couple to the fundamental. Brightness measures how much "
+                    "energy is in the upper harmonics \u2014 that comes from "
+                    "the buzz of the reed against the tip rail. Those are "
+                    "physically decoupled mechanisms. You can engineer either "
+                    "axis without affecting the other.")
+        self._blank()
+
+        self._body("The Analyze tool's Character Map plots Warmth against a "
+                    "brightness measure so you can see where any selected "
+                    "preset sits in the two-dimensional character space. The "
+                    "default brightness axis is Harmonic Complexity, because "
+                    "it is the most independent of Warmth in our test data. "
+                    "The dropdown also offers H4\u2013H5 mean (the raw average "
+                    "strength of the 4th and 5th harmonics) and Rolloff "
+                    "(inverted), but those measures share a denominator with "
+                    "Warmth (both are dB relative to the fundamental) and "
+                    "tend to track Warmth rather than provide an independent "
+                    "axis.")
+        self._blank()
+
+        self._body("The Character Map is most reliable when comparing "
+                    "presets within a single sax type. Lower-pitched horns "
+                    "intrinsically read warmer and brighter than higher-"
+                    "pitched horns regardless of mouthpiece, so mixing "
+                    "types in the same comparison mostly shows you that "
+                    "physics rather than tonal character. The Analyze tool "
+                    "warns you before opening a cross-type comparison.")
+        self._blank()
+
+        self._body("The descriptors in detail")
+        self._bullet("Warmth (Thin \u2194 Warm) \u2014 strength of the 2nd "
+                      "harmonic relative to the fundamental. A strong H2 "
+                      "produces a round body sitting just above the fundamental, "
+                      "which is the \"fat\" or \"thick\" quality players "
+                      "describe as warmth. Note: warmth is NOT the same as "
+                      "darkness. A mouthpiece can be dark in its upper "
+                      "harmonics while still having a weak H2 (reads \"not "
+                      "warm\") or a strong H2 (reads \"warm\").")
+        self._blank()
+
+        self._bullet("Harmonic Complexity (Pure \u2194 Complex) \u2014 spectral "
+                      "flatness, a measure of how evenly distributed the "
+                      "harmonic energy is. A pure tone with one dominant "
+                      "harmonic reads low; a tone with many strong harmonics "
+                      "of comparable amplitude reads high. Tracks the simple-"
+                      "vs-rich axis of timbre.")
+        self._blank()
+
+        self._bullet("Even/Odd Ratio (Odd \u2194 Even) \u2014 the balance "
+                      "between even harmonics (H2, H4, H6...) and odd harmonics "
+                      "(H3, H5, H7...). Even harmonics produce a round, warm "
+                      "quality; odd harmonics produce an edgier, hollower "
+                      "quality. Conical bore instruments like saxophone "
+                      "produce both, but the ratio varies between horns and "
+                      "especially between mouthpieces. Captures something "
+                      "Warmth alone doesn't \u2014 the full balance across "
+                      "the entire harmonic series, not just H2. In our test "
+                      "data, this is the most consistent descriptor across "
+                      "varying recording conditions.")
+        self._blank()
+
+        self._bullet("Rolloff Shape (Smooth \u2194 Peaked) \u2014 how cleanly "
+                      "the harmonics roll off from strong to weak. A low "
+                      "value means a clean, linear rolloff; a high value "
+                      "means bumps or peaks where certain harmonics stick out. "
+                      "May correspond to what players describe as \"presence\" "
+                      "or \"projection.\" Off by default; turn on in "
+                      "Options \u2192 Settings \u2192 Analysis.")
+        self._blank()
+
+        self._bullet("Evenness (Variable \u2194 Even) \u2014 how uniformly "
+                      "the tone character sits across the register. Low "
+                      "evenness means the horn sounds different in different "
+                      "ranges (e.g. warm in the low end and bright on top). "
+                      "High evenness means consistent character throughout. "
+                      "Computed only when at least 5 notes are captured.")
         self._blank()
 
         # === WHERE DIFFERENCES COME FROM ===
@@ -3454,23 +3542,53 @@ class UserGuideWindow(tk.Toplevel):
                       "fundamental are discarded as noise.")
         self._blank()
 
-        self._body("Descriptors")
-        self._bullet("Harmonic Complexity uses spectral flatness (the ratio of "
-                      "geometric mean to arithmetic mean of harmonic "
-                      "amplitudes). A pure tone has low flatness; a "
-                      "complex tone with many strong harmonics has high "
-                      "flatness. The coverage of significant harmonics "
-                      "(those above \u221235 dB) is factored in.")
+        self._body("Descriptors \u2014 Formulas")
+        self._bullet("Harmonic Complexity uses spectral flatness (the ratio "
+                      "of geometric mean to arithmetic mean of harmonic "
+                      "amplitudes), scaled by the coverage of significant "
+                      "harmonics (those above \u221235 dB relative to the "
+                      "fundamental). A pure tone has low flatness; a complex "
+                      "tone with many strong harmonics has high flatness.")
         self._bullet("Warmth measures the strength of the 2nd harmonic "
-                      "(the octave). A strong H2 produces a round, warm "
-                      "quality. This is consistent with acoustic "
-                      "research on even/odd harmonic ratios in wind "
-                      "instruments.")
-        self._bullet("Descriptors are never stored \u2014 they are always "
-                      "recomputed from raw harmonic data using the "
-                      "current formulas. This means improvements to the "
-                      "formulas apply retroactively to all historical "
-                      "captures.")
+                      "(the octave) in dB relative to the fundamental, mapped "
+                      "to a 0\u20131 range. A stronger H2 reads warmer. "
+                      "Consistent with acoustic research on even/odd harmonic "
+                      "ratios in wind instruments.")
+        self._bullet("Even/Odd Ratio is computed in the linear (not dB) "
+                      "amplitude domain as the sum of even harmonic amplitudes "
+                      "divided by the sum of all harmonic amplitudes. Higher "
+                      "values indicate even-harmonic dominance.")
+        self._bullet("Rolloff Shape is the standard deviation of residuals "
+                      "from a linear fit to the harmonic series in dB. Low "
+                      "values mean a clean exponential rolloff; high values "
+                      "mean peaks or notches in the harmonic structure.")
+        self._bullet("Evenness is computed as 1 minus (standard deviation of "
+                      "complexity across notes / 0.40), clamped to the 0\u20131 "
+                      "range. Requires at least 5 notes captured.")
+        self._bullet("Rolloff Rate is the slope (dB per harmonic) of the "
+                      "linear fit to H1\u2013H12 in dB. Used as both a "
+                      "recording-quality indicator and a darkness proxy. "
+                      "Sax-type-dependent: typical baritone 1.5\u20132.0, "
+                      "tenor 1.1\u20132.0, alto 1.9\u20132.3, soprano 2.8\u20134.0.")
+        self._blank()
+
+        self._body("Why Warmth and Brightness are Independent")
+        self._bullet("Warmth (H2 strength) and brightness (upper-harmonic "
+                      "energy) come from physically decoupled mechanisms. "
+                      "H2 strength is set by how the chamber and reed couple "
+                      "to the fundamental \u2014 bigger chamber and rounder "
+                      "design produce more H2. Upper-harmonic energy is set "
+                      "by the buzz of the reed against the tip rail \u2014 "
+                      "brighter facing and harder reed produce more H4\u2013H10. "
+                      "You can engineer either axis independently of the other, "
+                      "which is why the Analyze tool's character map treats "
+                      "Warmth and brightness as orthogonal axes.")
+        self._blank()
+
+        self._body("Descriptors are never stored \u2014 they are always "
+                    "recomputed from raw harmonic data using the current "
+                    "formulas. This means improvements to the formulas apply "
+                    "retroactively to all historical captures.")
         self._blank()
 
         self._body("What Gets Saved")
