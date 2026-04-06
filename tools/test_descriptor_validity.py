@@ -7,7 +7,11 @@ Uses three test groups:
 2. Tyler Tenors: Same player/setup, different horns.
 3. Tyler Altos: Same player/setup, different horns.
 
-Also tests: do the delta/comparison descriptors work when the live ones don't?
+A descriptor is a viable live-gauge candidate if its within-player spread
+is large enough to see on a gauge AND not dwarfed by between-player gap.
+Live descriptor gauges were removed 2026-04-06 because absolute single-
+preset readouts proved too noisy; this script is what we'd run to vet any
+candidate before re-adding one.
 
 Run:  python tools/test_descriptor_validity.py
 """
@@ -115,8 +119,8 @@ def analyze_group(name, file_dict, sax_type):
         return None
 
     # ── Print descriptor table ──
-    desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
-    header_map = {'richness': 'Rich', 'warmth': 'Warm', 'core_tone': 'Core',
+    desc_keys = ['richness', 'warmth', 'even_odd', 'rolloff_shape']
+    header_map = {'richness': 'Rich', 'warmth': 'Warm',
                   'even_odd': 'E/O', 'rolloff_shape': 'Roll'}
 
     print(f"\n  {'Horn':<25}", end="")
@@ -223,13 +227,9 @@ def analyze_group(name, file_dict, sax_type):
             else:
                 print(f"  -> Small differences (borderline audible)")
 
-    # ── Test delta descriptors between all pairs ──
-    print(f"\n  -- Delta Descriptor Matrix (avg across note-by-note deltas) --")
-    print(f"  Comparing each pair: spectral_tilt and mid_harmonic")
-
-    # (Delta descriptors removed — spectral tilt and mid-harmonic gauges were
-    # removed from the app after data analysis showed live comparison is unreliable)
-        print(f"    -> {'Differentiates' if avg_mid > 0.05 else 'Does not differentiate'}")
+    # Delta descriptors (spectral_tilt, mid_harmonic) were removed from the
+    # app after data analysis showed live comparison is unreliable; the
+    # per-pair matrix that used to live here is gone with them.
 
     return fingerprints
 
@@ -266,8 +266,8 @@ def main():
         print("  CROSS-PLAYER: Is between-player variation > within-player variation?")
         print(f"{'=' * 75}")
 
-        desc_keys = ['richness', 'warmth', 'core_tone', 'even_odd', 'rolloff_shape']
-        header_map = {'richness': 'Rich', 'warmth': 'Warm', 'core_tone': 'Core',
+        desc_keys = ['richness', 'warmth', 'even_odd', 'rolloff_shape']
+        header_map = {'richness': 'Rich', 'warmth': 'Warm',
                       'even_odd': 'E/O', 'rolloff_shape': 'Roll'}
 
         for k in desc_keys:
@@ -301,21 +301,22 @@ def main():
     print("  SUMMARY")
     print(f"{'=' * 75}")
     print("""
-  LIVE GAUGES (what the user sees while playing):
-    Richness: ?  (check within-player spread vs gauge range)
-    Warmth:   ?  (check within-player spread vs gauge range)
+  Current descriptors (computed from raw harmonics on the fly):
+    Richness       (Pure <-> Complex)  -- spectral flatness
+    Warmth         (Thin <-> Warm)     -- H2 strength
+    Even/Odd                           -- even vs odd harmonic balance
+    Rolloff Shape                      -- nonlinearity of harmonic rolloff
 
-  COMPARISON DESCRIPTORS (shown in Analyze tool):
-    Core Tone:     ?
-    Even/Odd:      ?
-    Rolloff Shape: ?
+  How to read this:
+    * A descriptor is a viable LIVE-gauge candidate if its within-player
+      spread is large enough to see on a gauge AND not dwarfed by the
+      between-player gap. Read the [verdict] column above.
+    * A descriptor is useful in the Analyze tool (where deltas cancel
+      mic/setup confounders) even if it fails the live-gauge test.
 
-  DELTA GAUGES (shown during live comparison):
-    Spectral Tilt:   ?  (direct dB comparison, bypasses descriptor formulas)
-    Mid-Harmonic:    ?  (direct dB comparison, bypasses descriptor formulas)
-
-  A descriptor WORKS if within-player spread is large enough to see on a
-  gauge AND is not dwarfed by between-player differences.
+  No live descriptor gauges currently exist -- they were removed
+  2026-04-06 because mic position alone shifted complexity 10-20%
+  between same-horn takes. Re-vet here before re-adding any.
 """)
 
 

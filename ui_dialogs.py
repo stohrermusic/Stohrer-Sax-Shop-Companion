@@ -3085,12 +3085,11 @@ class UserGuideWindow(tk.Toplevel):
                       "gives you the fullest picture \u2014 flat response "
                       "captures upper harmonics accurately, which is "
                       "where most of the interesting differences live.")
-        self._bullet("Ribbon and dynamic mics can still be used. Warmth "
-                      "(H2) reads accurately on any mic. But upper "
-                      "harmonics will be attenuated, so harmonic complexity "
-                      "cannot be measured (the gauge is disabled for ribbon "
-                      "mics). The mic type is stored with your data so you "
-                      "always know what produced it.")
+        self._bullet("Ribbon and dynamic mics can still be used, but they "
+                      "attenuate upper harmonics, which skews complexity-based "
+                      "comparisons. The mic type is stored with your data so "
+                      "you always know what produced it, and the Analyze tool "
+                      "warns when comparing across mic types.")
         self._bullet("Laptop/built-in mics are not suitable \u2014 they "
                       "roll off both low and high frequencies and add noise")
         self._bullet("Bluetooth headset mics do not work \u2014 sample "
@@ -3167,23 +3166,20 @@ class UserGuideWindow(tk.Toplevel):
                       "dB shows the logarithmic audio scale.")
         self._blank()
 
-        self._h2("Gauges")
-        self._body("Two always-visible gauges summarize aspects of the "
-                    "harmonic content in real time. Watch how they move "
-                    "as you play \u2014 the movement is more informative "
-                    "than any single reading.")
-        self._bullet("Intonation: flat/sharp meter with cents readout. "
-                      "The IN TUNE lamp lights within \u00b14 cents.")
-        self._bullet("Harmonic Spread (Pure \u2194 Complex): how evenly "
-                      "energy is spread across the harmonics. Concentrated "
-                      "in the fundamental = pure. Spread evenly = complex.")
-        self._bullet("H2 Strength (Thin \u2194 Warm): strength of the octave "
-                      "harmonic relative to the fundamental. Strong H2 = "
-                      "warm, round quality. Weak H2 = thinner, more focused.")
+        self._h2("Live Display")
+        self._body("The live display shows two things in real time: the "
+                    "intonation gauge (flat/sharp with cents readout, IN TUNE "
+                    "lamp within \u00b14 cents) and the spectrum bars "
+                    "(complete harmonic shape from H1 through H20).")
         self._blank()
-        self._body("The spectrum bars show everything the gauges don't "
-                    "capture \u2014 the complete harmonic shape from "
-                    "H1 through H20.")
+        self._body("Live descriptor gauges (Pure\u2194Complex, Thin\u2194Warm) "
+                    "were removed because absolute single-preset readouts "
+                    "proved too noisy to trust \u2014 mic position alone "
+                    "shifts complexity by 10\u201320% between takes, and "
+                    "the mouthpiece dominates the signal much more than the "
+                    "horn does. The descriptors still live in the Analyze "
+                    "tool, where comparing two presets cancels those "
+                    "confounders out.")
 
         self._h2("Spectrum Overlay")
         self._body("You can load a preset as a ghost overlay on the "

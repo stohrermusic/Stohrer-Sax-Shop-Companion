@@ -73,9 +73,7 @@ GAUGE_ARC_END = 25.0
 GAUGE_WIDTH = 240
 GAUGE_HEIGHT = 100
 GAUGE_ARC_RADIUS = 65
-GAUGE_DESCRIPTOR_NEEDLE_OFFSET = 12   # needle_len = radius - offset
 GAUGE_INTONATION_NEEDLE_OFFSET = 16
-GAUGE_DESCRIPTOR_DAMPING = 0.15       # lerp factor per frame for descriptor needles
 GAUGE_INTONATION_DAMPING = 0.18       # lerp factor per frame for intonation needle
 
 # Animation / display thresholds
@@ -83,7 +81,6 @@ IN_TUNE_CENTS_THRESHOLD = 4.0         # cents — below this, "in tune" lamp lig
 INTONATION_RANGE_CENTS = 50.0         # cents — full deflection of intonation gauge
 SPECTRUM_MAX_FREQ = 8000.0            # Hz — right edge of spectrum display
 SPECTRAL_CHECK_FRAME_COUNT = 25       # frames before mic quality check fires
-LOW_DATA_FRAME_THRESHOLD = 15         # frames (~0.5s) before "low data" overlay shows
 FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 fps
 
 # Capture state machine
@@ -189,14 +186,6 @@ class TonerTabMixin:
         self._toner_harmonic_markers = []
         self._toner_ghost_markers = []     # Ghost overlay bars for comparison
         self._toner_bars_built = False
-        # Smoothed descriptor values for damped needle movement
-        self._toner_smooth = {
-            'richness': 0.0, 'warmth': 0.0,
-        }
-        # Low harmonic data tracking — grey out gauges when sustained
-        self._toner_low_data_frames = 0
-        self._toner_low_data_shown = False
-        self._toner_ribbon_mic = False  # Ribbon mic disables complexity gauge
         # Profile system state — nested: {library: {preset_name: data}}
         self._toner_presets = {}
         self._toner_active_library = None   # Library name
@@ -347,22 +336,11 @@ class TonerTabMixin:
 
         gauge_row += 1
 
-        # --- Descriptor gauges ---
-        self._toner_gauges = {}
-        gauge_defs = [
-            ("richness", "Pure", "Complex"),    # Harmonic Complexity
-            ("warmth", "Thin", "Warm"),          # H2 Strength
-        ]
-
-        for key, left_label, right_label in gauge_defs:
-            cv = tk.Canvas(gauge_frame, bg=bg, highlightthickness=0,
-                           width=260, height=110)
-            cv._dark_canvas = True
-            cv.grid(row=gauge_row, column=0, pady=(2, 0))
-            gauge_data = self._toner_build_gauge(cv, left_label, right_label)
-            self._toner_gauges[key] = gauge_data
-
-            gauge_row += 1
+        # Live descriptor gauges (Pure↔Complex, Thin↔Warm) were removed
+        # 2026-04-06 — current data is too noisy to make absolute single-
+        # preset readouts meaningful (mic position alone shifts complexity
+        # 10-20%; mouthpiece dominates the signal). Comparison descriptors
+        # still live in the Analyze tool where deltas cancel the confounders.
 
         # --- Capture status bar (hidden until active) ---
         self._toner_capture_frame = tk.Frame(self._toner_main_frame, bg="#333300")
@@ -628,114 +606,6 @@ class TonerTabMixin:
     # GAUGE BUILDER (VU-meter style)
     # ------------------------------------------------------------------
 
-    def _toner_build_gauge(self, cv, left_label, right_label, centered=False):
-        """Draw a VU-style arc gauge and return dict with IDs for animation.
-
-        If centered=True, the gauge is a delta gauge: 0.5 = center/zero,
-        with a prominent center tick mark and "0" label.
-        """
-        cv_w, cv_h = GAUGE_WIDTH, GAUGE_HEIGHT
-        cv.configure(width=cv_w, height=cv_h)
-        cx = cv_w // 2
-        cy = cv_h - 8
-        r = GAUGE_ARC_RADIUS
-        arc_start = GAUGE_ARC_START
-        arc_end = GAUGE_ARC_END
-
-        bg = BG_COLOR
-        tick_color = TICK_COLOR
-
-        cv.create_rectangle(2, 2, cv_w - 2, cv_h - 2,
-                            fill="#222222", outline="#3A3A3A", width=1)
-        cv.create_rectangle(5, 5, cv_w - 5, cv_h - 5,
-                            fill=AMBER, outline="#B87D08", width=1)
-
-        for i in range(11):
-            frac = i / 10.0
-            angle_deg = arc_start + (arc_end - arc_start) * frac
-            angle_rad = math.radians(angle_deg)
-
-            if i == 5:
-                tick_len, tick_w = 10, 2
-            elif i % 2 == 0:
-                tick_len, tick_w = 7, 1
-            else:
-                tick_len, tick_w = 4, 1
-
-            x_o = cx + r * math.cos(angle_rad)
-            y_o = cy - r * math.sin(angle_rad)
-            x_i = cx + (r - tick_len) * math.cos(angle_rad)
-            y_i = cy - (r - tick_len) * math.sin(angle_rad)
-            cv.create_line(x_i, y_i, x_o, y_o, fill=tick_color, width=tick_w)
-
-        arc_points = []
-        for i in range(41):
-            frac = i / 40.0
-            angle_deg = arc_start + (arc_end - arc_start) * frac
-            angle_rad = math.radians(angle_deg)
-            arc_points.extend([
-                cx + r * math.cos(angle_rad),
-                cy - r * math.sin(angle_rad),
-            ])
-        cv.create_line(*arc_points, fill=tick_color, width=1, smooth=True)
-
-        # Center zero marker for delta gauges
-        if centered:
-            center_deg = (arc_start + arc_end) / 2
-            center_rad = math.radians(center_deg)
-            x_o = cx + (r + 3) * math.cos(center_rad)
-            y_o = cy - (r + 3) * math.sin(center_rad)
-            cv.create_text(x_o, y_o - 6, text="0",
-                           fill=tick_color, font=("Helvetica", 7, "bold"))
-
-        label_font = ("Helvetica", 7)
-        if left_label:
-            left_angle = math.radians(arc_start + 5)
-            cv.create_text(cx + (r + 12) * math.cos(left_angle),
-                           cy - (r + 12) * math.sin(left_angle),
-                           text=left_label, fill=tick_color, font=label_font,
-                           anchor="e")
-        if right_label:
-            right_angle = math.radians(arc_end - 5)
-            cv.create_text(cx + (r + 12) * math.cos(right_angle),
-                           cy - (r + 12) * math.sin(right_angle),
-                           text=right_label, fill=tick_color, font=label_font,
-                           anchor="w")
-
-        needle_len = r - GAUGE_DESCRIPTOR_NEEDLE_OFFSET
-        center_angle = math.radians((arc_start + arc_end) / 2)
-        nx = cx + needle_len * math.cos(center_angle)
-        ny = cy - needle_len * math.sin(center_angle)
-
-        shadow_id = cv.create_line(
-            cx + 1, cy + 1, nx + 1, ny + 1,
-            fill="#8A6500", width=2, capstyle="round")
-        needle_id = cv.create_line(
-            cx, cy, nx, ny, fill="#1A1200", width=2, capstyle="round")
-
-        cv.create_oval(cx - 4, cy - 4, cx + 4, cy + 4,
-                       fill="#2A1A00", outline="#1A1200", width=1)
-
-        # "Low data" overlay — hidden by default, shown when harmonics insufficient
-        low_data_id = cv.create_text(
-            cx, cy - 30, text="Low harmonic data",
-            fill="#AA4400", font=("Helvetica", 8, "bold"),
-            state="hidden")
-
-        # "Ribbon mic" overlay — hidden by default, shown when ribbon mic loaded
-        ribbon_id = cv.create_text(
-            cx, cy - 30, text="N/A \u2014 ribbon mic",
-            fill="#888888", font=("Helvetica", 8, "bold"),
-            state="hidden")
-
-        return {
-            'canvas': cv, 'cx': cx, 'cy': cy,
-            'needle_len': needle_len, 'needle_id': needle_id,
-            'shadow_id': shadow_id, 'arc_start': arc_start, 'arc_end': arc_end,
-            'low_data_id': low_data_id, 'ribbon_id': ribbon_id,
-            'centered': centered,
-        }
-
     def _toner_build_intonation_gauge(self, cv):
         """Build the intonation VU gauge (±50 cents, same style as tuner VU)."""
         cv_w, cv_h = GAUGE_WIDTH, GAUGE_HEIGHT
@@ -887,65 +757,6 @@ class TonerTabMixin:
             cv.itemconfigure(self._toner_cents_text_id,
                              text=f"{self._toner_smooth_cents:.0f}\u00a2",
                              fill=TICK_COLOR)
-
-    def _toner_update_gauge(self, key, value):
-        """Update a descriptor gauge needle to the given 0.0-1.0 value with damping."""
-        gauge = self._toner_gauges.get(key)
-        if not gauge:
-            return
-
-        damping = GAUGE_DESCRIPTOR_DAMPING
-        self._toner_smooth[key] += (value - self._toner_smooth[key]) * damping
-        frac = max(0.0, min(1.0, self._toner_smooth[key]))
-
-        angle_deg = gauge['arc_start'] + (gauge['arc_end'] - gauge['arc_start']) * frac
-        angle_rad = math.radians(angle_deg)
-        nx = gauge['cx'] + gauge['needle_len'] * math.cos(angle_rad)
-        ny = gauge['cy'] - gauge['needle_len'] * math.sin(angle_rad)
-
-        cv = gauge['canvas']
-        cv.coords(gauge['shadow_id'],
-                  gauge['cx'] + 1, gauge['cy'] + 1, nx + 1, ny + 1)
-        cv.coords(gauge['needle_id'],
-                  gauge['cx'], gauge['cy'], nx, ny)
-
-    def _toner_set_low_data_overlay(self, show):
-        """Show or hide 'Low harmonic data' overlay on descriptor gauges."""
-        self._toner_low_data_shown = show
-        state = "normal" if show else "hidden"
-        # Dim needles when showing, restore when hiding
-        needle_color = "#554400" if show else "#1A1200"
-        shadow_color = "#665522" if show else "#8A6500"
-        for key, gauge in self._toner_gauges.items():
-            if self._toner_ribbon_mic and key == 'richness':
-                continue  # ribbon overlay takes priority
-            cv = gauge['canvas']
-            if 'low_data_id' in gauge:
-                cv.itemconfigure(gauge['low_data_id'], state=state)
-            cv.itemconfigure(gauge['needle_id'], fill=needle_color)
-            cv.itemconfigure(gauge['shadow_id'], fill=shadow_color)
-
-    def _toner_set_ribbon_overlay(self, show):
-        """Show or hide ribbon mic overlay on the richness gauge only."""
-        self._toner_ribbon_mic = show
-        gauge = self._toner_gauges.get('richness')
-        if not gauge:
-            return
-        cv = gauge['canvas']
-        if show:
-            cv.itemconfigure(gauge['ribbon_id'], state="normal")
-            # Hide low-data overlay if visible (ribbon takes priority)
-            if 'low_data_id' in gauge:
-                cv.itemconfigure(gauge['low_data_id'], state="hidden")
-            # Gray out needle
-            cv.itemconfigure(gauge['needle_id'], fill="#554400")
-            cv.itemconfigure(gauge['shadow_id'], fill="#665522")
-        else:
-            cv.itemconfigure(gauge['ribbon_id'], state="hidden")
-            # Restore needle colors (unless low-data overlay is active)
-            if not self._toner_low_data_shown:
-                cv.itemconfigure(gauge['needle_id'], fill="#1A1200")
-                cv.itemconfigure(gauge['shadow_id'], fill="#8A6500")
 
     def _toner_set_overlay(self, fingerprint, name):
         """Set a fingerprint as the live spectrum ghost overlay."""
@@ -2456,10 +2267,6 @@ class TonerTabMixin:
                 self._toner_mic_label.configure(text="mic not set", fg="#FF8800")
             else:
                 self._toner_mic_label.configure(text="no preset", fg="#666666")
-            # Gray out complexity gauge for ribbon mics
-            is_ribbon = mt.lower() == 'ribbon' if mt else False
-            if is_ribbon != self._toner_ribbon_mic:
-                self._toner_set_ribbon_overlay(is_ribbon)
         # Sync sandbox checkbox with loaded preset
         if hasattr(self, '_toner_sandbox_var'):
             is_sb = bool(preset.get('sandbox')) if preset else False
@@ -4700,29 +4507,8 @@ class TonerTabMixin:
                 self._toner_freq_label.configure(text="")
                 self._toner_update_intonation(0.0)
 
-            # Update descriptor gauges
-            d = result.descriptors
-
-            # Track low harmonic data condition
-            if d.get('low_harmonic_data', False) and result.fundamental_freq > 0:
-                self._toner_low_data_frames += 1
-            else:
-                self._toner_low_data_frames = 0
-
-            # Show/hide low-data overlay on descriptor gauges
-            if (self._toner_low_data_frames >= LOW_DATA_FRAME_THRESHOLD
-                    and not self._toner_low_data_shown):
-                self._toner_set_low_data_overlay(True)
-            elif (self._toner_low_data_frames == 0
-                    and self._toner_low_data_shown):
-                self._toner_set_low_data_overlay(False)
-
-            # Update descriptor gauges (always absolute values)
-            if not self._toner_ribbon_mic:
-                self._toner_update_gauge('richness', d.get('richness', 0.0))
-            self._toner_update_gauge('warmth', d.get('warmth', 0.0))
-
-            # Process capture if active
+            # Process capture if active. Captures still record raw harmonics
+            # so the Analyze tool can compute deltas after the fact.
             self._toner_process_capture_frame(result)
 
         interval = FRAME_RATES.get(self._toner_fps_var.get(), 33)
