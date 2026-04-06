@@ -2132,9 +2132,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             "Serial Lookup",
             "Screw Specs",
             "Tooling",
+            "Tuner",
         ]
         experimental_tabs = [
-            "Tuner",
             "Toner",
         ]
 

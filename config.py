@@ -604,7 +604,7 @@ DEFAULT_SETTINGS = {
         "Serial Lookup": True,
         "Screw Specs": True,
         "Tooling": True,
-        "Tuner": False,
+        "Tuner": True,
         "Toner": False,
     },
 
