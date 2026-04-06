@@ -58,7 +58,7 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 
 ### Tooling — Die Inserts & Die Holders
 - Generate SVG/G-code for laser-cut acrylic pad die inserts (small: 50mm OD, large: 70mm OD)
-- Die holders: 85mm OD, 4-layer stack with magnet and alignment holes
+- Die holders: 85mm OD, 6-layer stack (solid base, magnet disc, three pin discs, retaining ring)
 - Enter individual sizes, ranges, or generate full sets
 - Kerf test pattern for calibrating your laser
 - Scrap mode for spreading dies across multiple sheets

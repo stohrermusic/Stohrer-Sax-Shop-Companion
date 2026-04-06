@@ -2561,7 +2561,7 @@ class UserGuideWindow(tk.Toplevel):
 
     # Map section names to display titles
     SECTION_TITLES = {
-        "pad_generator": "Pad SVG / G-code Generator",
+        "pad_generator": "Pad Maker",
         "key_heights": "Key Height Library",
         "serial_lookup": "Serial Lookup",
         "screw_specs": "Screw Specs",
@@ -2800,8 +2800,8 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("Layer Colors")
-        self._body("Options > Layer Colors maps each operation to a LightBurn color layer (C00-C29). "
-                    "This only affects SVG output for use in LightBurn.")
+        self._body("Options > Layer Colors maps each operation to a LightBurn color layer "
+                    "(numbered 00 through 29). This only affects SVG output for use in LightBurn.")
         self._blank()
 
         self._h2("Custom Shapes")
@@ -2919,14 +2919,14 @@ class UserGuideWindow(tk.Toplevel):
 
         self._h2("Tooling \u2014 Die Holders")
         self._body("Generate laser-cutting files for the acrylic die holder assembly. "
-                    "Each holder is a stack of four 85mm discs:")
+                    "Each holder is a stack of six 85mm discs:")
         self._bullet("Solid bottom disc")
-        self._bullet("Magnet disc (3.5mm center hole for a magnet)")
-        self._bullet("Pin disc (alignment holes)")
+        self._bullet("Magnet disc (6.5mm center hole for a magnet)")
+        self._bullet("Three pin discs (3.5mm holes for alignment pins)")
         self._bullet("Retaining ring (inner diameter matches the die size class)")
-        self._body("Choose Large (70mm inner), Small (50mm inner), or Both. "
-                    "When generating both, shared layers are included once plus two "
-                    "retaining rings.")
+        self._body("Choose Large (70mm inner) or Small (50mm inner). To make a "
+                    "complete set of both sizes, generate each variant separately. "
+                    "Required sheet: 275 \u00d7 185 mm (10.8 \u00d7 7.3 in) per holder.")
         self._blank()
 
         self._h2("Tooling \u2014 Scrap Mode")
@@ -2969,31 +2969,40 @@ class UserGuideWindow(tk.Toplevel):
     def _section_tuner(self):
         self._h2("Tuner")
         self._body("A 12-wheel chromatic stroboscopic tuner. "
-                    "Each wheel shows concentric rings of alternating colored and dark segments "
-                    "visible through a wedge-shaped cutout. "
+                    "Each wheel shows concentric rings (one per octave) of alternating "
+                    "colored and dark segments visible through a wedge-shaped cutout. "
                     "An analog VU meter at the bottom shows the detected fundamental pitch and cents error.")
         self._bullet("When the input pitch matches the reference, the pattern freezes (appears stationary)")
         self._bullet("Sharp: pattern drifts right. Flat: pattern drifts left")
         self._bullet("Faster drift = farther from in-tune. Frozen = perfectly in tune")
         self._bullet("Multiple wheels respond simultaneously from harmonics in the sound \u2014 "
                       "this is real FFT analysis of the audio, not simulated")
+        self._bullet("Per-pitch-class phase tracking with temporal smoothing keeps each "
+                      "wheel's rotation independent and stable")
         self._blank()
 
-        self._body("Controls:")
-        self._bullet("Instrument in Key of: relabels notes for transposing instruments "
-                      "(Concert C, Bb, Eb, F)")
-        self._bullet("A = ___Hz: set the reference pitch (default 440)")
-        self._bullet("Sensitivity: how loud a signal needs to be to register")
-        self._bullet("Reference tone: play a pure sine or richer tone at any note "
-                      "from C3 to B6 through your speakers")
+        self._body("Rendering:")
+        self._bullet("GPU-accelerated via Rust/wgpu when available \u2014 60 to 120 fps")
+        self._bullet("Automatic CPU canvas fallback if the GPU path is unavailable "
+                      "(older systems, virtual machines, etc.)")
+        self._blank()
+
+        self._body("On-screen controls (the slider panel below the wheels):")
+        self._bullet("DISP > SENS: how loud a signal needs to be to register")
+        self._bullet("DISP > BRIGHT: master brightness for the strobe disc segments")
+        self._bullet("DISP > FPS: target frame rate (60 / 90 / 120)")
+        self._bullet("PITCH > A=: reference pitch in Hz (default 440)")
+        self._bullet("PITCH > KEY: instrument transposition (C / Bb / Eb / F)")
+        self._bullet("BIAS > NOTE: per-wheel ring brightness contrast "
+                      "(0 = all rings same brightness, 100 = played octave ring brightest)")
+        self._bullet("BIAS > OCT.: dominant octave boost (emphasizes the strongest ring)")
         self._blank()
 
         self._body("Settings (Options > Settings):")
-        self._bullet("Stripe Color: color of the strobe disc segments")
+        self._bullet("Input Device: pick the microphone the tuner listens to")
+        self._bullet("Backlight Color: color of the strobe disc segments")
         self._bullet("Faceplate Color: background color of the tuner display")
-        self._bullet("Per-Ring Brightness: controls the octave-specific brightness effect "
-                      "(0 = all rings same brightness, 100 = played octave ring brightest)")
-        self._bullet("Overall Brightness: master brightness for the strobe disc segments")
+        self._bullet("Show frame rate on screen: overlays a small live FPS counter for diagnostics")
         self._blank()
 
         self._h2("Microphone")
@@ -3194,42 +3203,73 @@ class UserGuideWindow(tk.Toplevel):
                     "tool where both sides are averaged data.")
         self._blank()
 
-        # === COMPARING ===
-        self._h2("Comparing Sessions")
-        self._body("This is where the tool earns its keep. The comparison "
-                    "tool shows you what's different between two or more "
-                    "presets \u2014 not which one is \"better,\" but what "
-                    "changed and where.")
+        # === ANALYZING ===
+        self._h2("The Analyze Tool")
+        self._body("This is where the tool earns its keep. The Analyze tool "
+                    "(File \u2192 Analyze\u2026) shows you what's different "
+                    "between two or more presets \u2014 not which one is "
+                    "\"better,\" but what changed and where.")
         self._blank()
-        self._bullet("Analyze... opens a picker with filters for horn "
+        self._bullet("File \u2192 Analyze opens a picker with filters for horn "
                       "type, player, mouthpiece, and mic type")
-        self._bullet("Select one or more presets: single selection "
-                      "shows that preset's data; two or more shows "
-                      "side-by-side delta analysis")
-        self._bullet("For two presets, the Difference chart shows "
-                      "a single curve of the harmonic-by-harmonic delta "
-                      "\u2014 instantly shows where the sound diverges")
-        self._bullet("Toggle between Horn Average and Per-Note to see "
-                      "whether differences are across the board or "
-                      "concentrated in certain registers")
-        self._bullet("\"Overlay on Spectrum\" loads a preset as a "
-                      "blue ghost behind the live display for real-time "
-                      "A/B comparison while playing")
+        self._bullet("Select one preset: detail view with descriptors and "
+                      "harmonic curve")
+        self._bullet("Select two presets: side-by-side delta analysis with a "
+                      "Difference chart \u2014 a single curve of the "
+                      "harmonic-by-harmonic delta that instantly shows where "
+                      "the sound diverges")
+        self._bullet("Select three or more: spread analysis across the group")
+        self._bullet("Toggle between Horn Average and Per-Note to see whether "
+                      "differences are across the board or concentrated in "
+                      "certain registers")
+        self._bullet("Population percentiles: each preset's descriptors are "
+                      "ranked against all other presets of the same sax type, "
+                      "with low/below avg/mid-range/above avg/high labels")
+        self._bullet("\"Overlay on Spectrum\" loads a preset as a blue ghost "
+                      "behind the live display for real-time A/B comparison "
+                      "while playing")
+        self._bullet("Clickable legend labels and chart lines show preset "
+                      "details (player, mouthpiece, mic, etc.)")
+        self._bullet("Back button on analysis windows returns you to the picker "
+                      "to try a different selection")
         self._blank()
-        self._body("The comparison table shows mic type and recording "
-                    "quality (rolloff rate) for each preset. If mic "
-                    "types differ, the analysis notes that harmonic "
-                    "differences may partly reflect the mic rather "
-                    "than the horn.")
+        self._body("The table shows mic type and recording quality (rolloff "
+                    "rate) for each preset. If mic types differ, the analysis "
+                    "notes that harmonic differences may partly reflect the mic "
+                    "rather than the horn.")
+        self._blank()
+
+        # === PRESET MANAGEMENT EXTRAS ===
+        self._h2("Preset Management Extras")
+        self._bullet("Mutate Preset: duplicates a preset with all fields "
+                      "pre-filled (name cleared) so you can change one variable "
+                      "(mouthpiece, mic, reed) and save it as a new preset. "
+                      "Streamlines A/B testing workflows.")
+        self._bullet("Sandbox mode: enable in Options \u2192 Settings \u2192 "
+                      "Analysis to relax field requirements for non-sax "
+                      "instruments, contact mics, effects chains, or "
+                      "experimental setups. Sandbox presets are flagged with an "
+                      "amber label so you don't confuse them with horn data.")
+        self._bullet("Mic position field: an optional preset field for "
+                      "documenting where the mic was placed (distance, angle, "
+                      "axis). Highly recommended \u2014 mic position is one of "
+                      "the biggest sources of variation in captures.")
         self._blank()
 
         # === COMPARISON DESCRIPTORS ===
         self._h2("Comparison Descriptors")
-        self._body("In addition to the two live gauges, the Analyze "
-                    "tool computes two additional descriptors that are "
-                    "most useful when comparing presets side by side. "
-                    "These default to off and can be enabled in "
-                    "Options \u2192 Settings \u2192 Analysis tab.")
+        self._body("The Analyze tool computes a handful of descriptors from the "
+                    "harmonic data. They are most useful for side-by-side comparison, "
+                    "where deltas between two presets cancel out mic-position and "
+                    "room confounders. Which ones are shown is configurable in "
+                    "Options \u2192 Settings \u2192 Analysis tab \u2014 Even/Odd is "
+                    "on by default; Rolloff Shape is off by default.")
+        self._blank()
+        self._body("Harmonic Complexity & Warmth")
+        self._bullet("Complexity = spectral flatness (Pure \u2194 Complex). "
+                      "Warmth = strength of the 2nd harmonic / octave (Thin \u2194 Warm). "
+                      "Both are reasonable comparison signals when other variables "
+                      "are held constant.")
         self._blank()
 
         self._body("Even/Odd Ratio")
@@ -3335,28 +3375,30 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("WAV Recording")
-        self._body("Options \u2192 Settings \u2192 General tab has a "
-                    "Recording section where you can enable \"Record WAV "
-                    "during capture\" and choose a folder. This saves a "
-                    "WAV audio file alongside each capture session. "
-                    "It is entirely optional \u2014 the toner does "
-                    "not need the WAV file. All harmonic data is "
-                    "captured and stored in the session automatically.")
+        self._body("WAV recording is on by default. Each capture session writes "
+                    "a WAV file alongside the harmonic data. The first time you "
+                    "start a capture, you'll be asked to choose a folder.")
         self._blank()
-        self._body("The first time you start a capture with WAV "
-                    "recording enabled, you'll be asked to choose a "
-                    "folder if you haven't already.")
+        self._body("Why it matters: when WAV recording is enabled, the toner "
+                    "automatically re-analyzes the recording offline at the end "
+                    "of the session, with stricter segment detection than the live "
+                    "pipeline can manage. Offline analysis typically extracts "
+                    "around 2\u00d7 the harmonic resolution of live capture, so "
+                    "your stored fingerprints come from the better measurement. "
+                    "This takes about 5 seconds for a 4-minute recording.")
         self._blank()
-        self._body("Reasons you might want it:")
-        self._bullet("As a backup of the original audio, in case you "
-                      "ever want to re-analyze it with different "
-                      "settings or a future version of the tool")
-        self._bullet("To share recordings with others for their own "
-                      "analysis or import")
-        self._bullet("To listen back and correlate what you hear with "
-                      "what the data shows")
-        self._bullet("To keep a record of how a horn sounds on a "
-                      "given day")
+        self._body("You can disable WAV recording in Options \u2192 Settings \u2192 "
+                    "General if you really need to (a warning explains the accuracy "
+                    "tradeoff). You can also tell the toner to delete each WAV "
+                    "after it's been analyzed if you only want the harmonic data.")
+        self._blank()
+        self._body("Other reasons to keep the WAVs:")
+        self._bullet("Backup of the original audio in case a future version of the "
+                      "tool has improved analysis")
+        self._bullet("Share recordings for others' analysis or import (see the "
+                      "first-run dialog for the contribution folder)")
+        self._bullet("Listen back and correlate what you hear with what the data shows")
+        self._bullet("Keep a record of how a horn sounds on a given day")
         self._blank()
         self._body("Each file is named with the preset name and session "
                     "date so you can find it later.")

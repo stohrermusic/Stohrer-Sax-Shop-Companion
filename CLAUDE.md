@@ -208,7 +208,7 @@ Key difference: dart ranges return None on no match (opt-in), while the other th
 
 **Audio Stream Health**: Both `tuner_engine.py` and `toner_engine.py` import `AudioRingBuffer` from `audio_utils.py` for stream health monitoring. The ring buffer tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
 
-**Tooling Tab**: Accordion-style UI with die insert and die holder SVG/G-code generation. Small dies ≤39.5mm (50mm OD), large ≥40mm (70mm OD). Die holders 85mm OD, 4-layer stack. Canvas widgets need explicit handling in the resonance theme walker.
+**Tooling Tab**: Accordion-style UI with die insert and die holder SVG/G-code generation. Small dies ≤39.5mm (50mm OD), large ≥40mm (70mm OD). Die holders 85mm OD, 6-layer stack (solid base, magnet disc with 6.5mm hole, 3× pin discs with 3.5mm holes, retaining ring). Canvas widgets need explicit handling in the resonance theme walker.
 
 ### Settings Backward Compatibility
 
