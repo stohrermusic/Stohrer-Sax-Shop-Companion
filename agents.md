@@ -26,7 +26,7 @@
 
 ## Key Features & Logic
 
-### 1. Pad SVG Generator (The "Factory")
+### 1. Pad Maker (The "Factory")
 * **Location:** Logic in `svg_engine.py`; UI in `main.py`.
 * **Star/Dart Pattern:** Generates "geared" shapes for leather pads.
     * **Math:** `calculate_star_path` uses a cosine wave modified by a `shape_factor` (0.0=Sine to 1.0=Square).

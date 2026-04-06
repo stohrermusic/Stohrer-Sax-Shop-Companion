@@ -9,7 +9,7 @@ import time
 # --- Local Imports ---
 from config import (
     load_settings, save_settings, load_presets, save_presets,
-    PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE,
+    PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
@@ -73,6 +73,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
+        self.sizing_presets = load_presets(SIZING_PRESET_FILE, preset_type_name="Sizing Preset")
         self.custom_polygon = None  # For custom shape nesting
 
         # --- Scrap Mode Session State ---
@@ -331,9 +332,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def create_widgets(self):
         self.notebook = ttk.Notebook(self.root)
         
-        # --- Create Tab 1: Pad SVG Generator ---
+        # --- Create Tab 1: Pad Maker ---
         self.pad_tab = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.pad_tab, text='Pad SVG Generator')
+        self.notebook.add(self.pad_tab, text='Pad Maker')
         self.create_pad_generator_tab(self.pad_tab)
 
         # --- Create Tab 2: Key Height Library ---
@@ -1901,8 +1902,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     # --- Misc Windows ---
     def open_options_window(self):
-        OptionsWindow(self.root, self, self.settings, self.update_ui_from_settings, lambda: save_settings(self.settings))
-        
+        OptionsWindow(
+            self.root, self, self.settings,
+            self.update_ui_from_settings,
+            lambda: save_settings(self.settings),
+            sizing_presets=self.sizing_presets,
+            sizing_presets_save_callback=lambda: save_presets(self.sizing_presets, SIZING_PRESET_FILE),
+        )
+
+
     def open_key_layout_window(self):
         KeyLayoutWindow(self.root, self.settings, self.rebuild_key_tab, lambda: save_settings(self.settings))
 
@@ -2114,7 +2122,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Label(frame, text="Feature Set", bg=bg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 5))
         tk.Label(frame, text="Choose which tabs to show.\n"
-                 "The SVG Generator is always on.",
+                 "The Pad Maker is always on.",
                  bg=bg, font=("Helvetica", 9)).pack(pady=(0, 10))
 
         visible = self.settings.get("visible_tabs", {})

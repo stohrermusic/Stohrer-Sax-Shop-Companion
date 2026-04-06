@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
+import copy
 import random
 import json
 import sys
@@ -7,6 +8,7 @@ import sys
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, RESONANCE_MESSAGES,
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets,
+    SIZING_PRESET_KEYS,
     APP_VERSION, APP_BUILD_DATE
 )
 
@@ -103,15 +105,20 @@ class ConfirmationDialog(tk.Toplevel):
         self.destroy()
 
 class OptionsWindow:
-    def __init__(self, parent, app, settings, update_callback, save_callback):
+    def __init__(self, parent, app, settings, update_callback, save_callback,
+                 sizing_presets=None, sizing_presets_save_callback=None):
         self.app = app
         self.settings = settings
         self.update_callback = update_callback
         self.save_callback = save_callback
-        
+        # Sizing-rules preset library: {preset_name: {settings keys...}}.
+        # Mutated in place; persisted via sizing_presets_save_callback.
+        self.sizing_presets = sizing_presets if sizing_presets is not None else {}
+        self.sizing_presets_save_callback = sizing_presets_save_callback or (lambda: None)
+
         self.top = tk.Toplevel(parent)
         self.top.title("Sizing Rules")
-        self.top.geometry("500x750") 
+        self.top.geometry("500x750")
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
@@ -119,14 +126,14 @@ class OptionsWindow:
         # --- Main Layout Frames ---
         bottom_button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         bottom_button_frame.pack(side="bottom", fill="x", pady=10, padx=10)
-        
+
         tk.Button(bottom_button_frame, text="Save", command=self.save_options).pack(side="left", padx=5)
         tk.Button(bottom_button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
-        
+
         if not IS_MACOS:
             tk.Button(bottom_button_frame, text="Advanced", command=self.app.open_resonance_window).pack(side="right", padx=5)
         tk.Button(bottom_button_frame, text="Revert to Defaults", command=self.revert_to_defaults).pack(side="right", padx=5)
-        
+
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(side="top", fill="both", expand=True)
 
@@ -213,7 +220,8 @@ class OptionsWindow:
         self.eng_placement_range_loc_vars = {}
 
         self.create_option_widgets()
-    
+        self._refresh_sizing_preset_combo()
+
     def create_option_widgets(self):
         main_frame = self.scrollable_frame
         
@@ -494,6 +502,27 @@ class OptionsWindow:
         export_frame = tk.LabelFrame(main_frame, text="Export Settings", bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
         tk.Checkbutton(export_frame, text="Enable Inkscape/Compatibility Mode (unitless SVG)", variable=self.compatibility_mode_var, bg=DIALOG_BG).pack(anchor='w')
+
+        self._build_sizing_preset_section(main_frame)
+
+    def _build_sizing_preset_section(self, parent):
+        """Add the Sizing Rules Presets controls at the bottom of the form."""
+        preset_frame = tk.LabelFrame(parent, text="Sizing Rules Presets", bg=DIALOG_BG, padx=5, pady=5)
+        preset_frame.pack(fill="x", pady=5)
+
+        select_row = tk.Frame(preset_frame, bg=DIALOG_BG)
+        select_row.pack(fill="x", pady=(0, 4))
+        tk.Label(select_row, text="Preset:", bg=DIALOG_BG).pack(side="left")
+        self.preset_combo = ttk.Combobox(select_row, state="readonly", width=28)
+        self.preset_combo.pack(side="left", padx=5, fill="x", expand=True)
+        tk.Button(select_row, text="Load", command=self.on_load_sizing_preset).pack(side="left", padx=2)
+
+        button_row = tk.Frame(preset_frame, bg=DIALOG_BG)
+        button_row.pack(fill="x")
+        tk.Button(button_row, text="Save As...", command=self.on_save_as_sizing_preset).pack(side="left", padx=2)
+        tk.Button(button_row, text="Delete", command=self.on_delete_sizing_preset).pack(side="left", padx=2)
+        tk.Button(button_row, text="Import...", command=self.on_import_sizing_presets).pack(side="left", padx=2)
+        tk.Button(button_row, text="Export...", command=self.on_export_sizing_presets).pack(side="left", padx=2)
 
     # --- Dart Range Management ---
 
@@ -942,6 +971,232 @@ class OptionsWindow:
 
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
+
+    # ------------------------------------------------------------------
+    # Sizing-rules preset support
+    # ------------------------------------------------------------------
+    def _capture_form_to_dict(self):
+        """Snapshot the current form state into a sizing-preset dict."""
+        return {
+            # Sizing
+            "units": self.unit_var.get(),
+            "felt_offset": self.felt_offset_var.get(),
+            "card_to_felt_offset": self.card_offset_var.get(),
+            "leather_wrap_multiplier": self.leather_mult_var.get(),
+            "min_hole_size": self.min_hole_size_var.get(),
+            "felt_thickness": self.felt_thickness_var.get(),
+            "felt_thickness_unit": self.felt_thickness_unit_var.get(),
+            "sizing_range_mode": self.sizing_range_mode_var.get(),
+            "sizing_ranges": copy.deepcopy(self.sizing_ranges),
+            # Darts
+            "darts_enabled": self.darts_enabled_var.get(),
+            "dart_range_mode": self.dart_range_mode_var.get(),
+            "dart_threshold": self.dart_threshold_var.get(),
+            "dart_overwrap": self.dart_overwrap_var.get(),
+            "dart_wrap_bonus": self.dart_wrap_bonus_var.get(),
+            "dart_frequency_multiplier": self.dart_frequency_multiplier_var.get(),
+            "dart_shape_factor": self.dart_shape_factor_var.get(),
+            "dart_ranges": copy.deepcopy(self.dart_ranges),
+            "dart_engraving_on": self.dart_engraving_on_var.get(),
+            # Engraving
+            "engraving_on": self.engraving_on_var.get(),
+            "engraving_font_size": {m: v.get() for m, v in self.engraving_font_size_vars.items()},
+            "engraving_settings_range_mode": self.eng_settings_range_mode_var.get(),
+            "engraving_settings_ranges": copy.deepcopy(self.eng_settings_ranges),
+            "engraving_location": {
+                m: {"mode": v["mode"].get(), "value": v["value"].get()}
+                for m, v in self.engraving_loc_vars.items()
+            },
+            "engraving_placement_range_mode": self.eng_placement_range_mode_var.get(),
+            "engraving_placement_ranges": copy.deepcopy(self.eng_placement_ranges),
+            # Export
+            "compatibility_mode": self.compatibility_mode_var.get(),
+        }
+
+    def _apply_dict_to_form(self, source):
+        """Set every form var from a sizing-preset dict.
+
+        Missing keys fall back to DEFAULT_SETTINGS so older preset files
+        keep working when the schema gains new fields.
+        """
+        d = DEFAULT_SETTINGS
+
+        # Sizing
+        self.unit_var.set(source.get("units", d["units"]))
+        self.felt_offset_var.set(source.get("felt_offset", d["felt_offset"]))
+        self.card_offset_var.set(source.get("card_to_felt_offset", d["card_to_felt_offset"]))
+        self.leather_mult_var.set(source.get("leather_wrap_multiplier", d["leather_wrap_multiplier"]))
+        self.min_hole_size_var.set(source.get("min_hole_size", d["min_hole_size"]))
+        self.felt_thickness_var.set(source.get("felt_thickness", d["felt_thickness"]))
+        self.felt_thickness_unit_var.set(source.get("felt_thickness_unit", d["felt_thickness_unit"]))
+        self.sizing_range_mode_var.set(source.get("sizing_range_mode", "universal"))
+        self.sizing_ranges = copy.deepcopy(list(source.get("sizing_ranges", [])))
+        self._refresh_sizing_range_combo()
+        self._toggle_sizing_mode()
+
+        # Darts
+        self.darts_enabled_var.set(source.get("darts_enabled", d.get("darts_enabled", True)))
+        self.dart_range_mode_var.set(source.get("dart_range_mode", "universal"))
+        self.dart_threshold_var.set(source.get("dart_threshold", d.get("dart_threshold", 18.0)))
+        self.dart_overwrap_var.set(source.get("dart_overwrap", d.get("dart_overwrap", 0.5)))
+        self.dart_wrap_bonus_var.set(source.get("dart_wrap_bonus", d.get("dart_wrap_bonus", 0.75)))
+        self.dart_frequency_multiplier_var.set(source.get("dart_frequency_multiplier", d.get("dart_frequency_multiplier", 1.0)))
+        self.dart_shape_factor_var.set(source.get("dart_shape_factor", d.get("dart_shape_factor", 0.0)))
+        self.dart_ranges = copy.deepcopy(list(source.get("dart_ranges", [])))
+        self._refresh_range_combo()
+        self._toggle_dart_mode()
+        self.dart_engraving_on_var.set(source.get("dart_engraving_on", True))
+
+        # Engraving
+        self.engraving_on_var.set(source.get("engraving_on", d["engraving_on"]))
+        eng_fonts = source.get("engraving_font_size", d["engraving_font_size"])
+        for material, var in self.engraving_font_size_vars.items():
+            var.set(eng_fonts.get(material, d["engraving_font_size"].get(material, 3.0)))
+        self.eng_settings_range_mode_var.set(source.get("engraving_settings_range_mode", "universal"))
+        self.eng_settings_ranges = copy.deepcopy(list(source.get("engraving_settings_ranges", [])))
+        self._refresh_eng_settings_range_combo()
+        self._toggle_eng_settings_mode()
+
+        eng_locs = source.get("engraving_location", d["engraving_location"])
+        for material, vars in self.engraving_loc_vars.items():
+            loc = eng_locs.get(material, d["engraving_location"].get(material, {"mode": "from_outside", "value": 2.5}))
+            vars['mode'].set(loc.get('mode', 'from_outside'))
+            vars['value'].set(loc.get('value', 2.5))
+        self.eng_placement_range_mode_var.set(source.get("engraving_placement_range_mode", "universal"))
+        self.eng_placement_ranges = copy.deepcopy(list(source.get("engraving_placement_ranges", [])))
+        self._refresh_eng_placement_range_combo()
+        self._toggle_eng_placement_mode()
+
+        # Export
+        self.compatibility_mode_var.set(source.get("compatibility_mode", d.get("compatibility_mode", False)))
+
+    def _refresh_sizing_preset_combo(self, select=None):
+        names = sorted(self.sizing_presets.keys())
+        self.preset_combo['values'] = names
+        if select and select in names:
+            self.preset_combo.set(select)
+        elif not names:
+            self.preset_combo.set("")
+
+    def on_load_sizing_preset(self):
+        name = self.preset_combo.get().strip()
+        if not name:
+            messagebox.showinfo("Load Preset", "Pick a preset from the dropdown first.")
+            return
+        if name not in self.sizing_presets:
+            messagebox.showerror("Load Preset", f"Preset '{name}' not found.")
+            return
+        self._apply_dict_to_form(self.sizing_presets[name])
+        messagebox.showinfo(
+            "Preset Loaded",
+            f"Loaded '{name}' into the form.\n\n"
+            "Click Save to apply these values to the app, or Cancel to discard.",
+        )
+
+    def on_save_as_sizing_preset(self):
+        name = simpledialog.askstring(
+            "Save Sizing Preset",
+            "Preset name:",
+            parent=self.top,
+        )
+        if name is None:
+            return
+        name = name.strip()
+        if not name:
+            messagebox.showwarning("Save Preset", "Preset name cannot be empty.")
+            return
+        if name in self.sizing_presets:
+            if not messagebox.askyesno(
+                "Overwrite Preset",
+                f"A preset named '{name}' already exists.\nOverwrite it?",
+            ):
+                return
+        self.sizing_presets[name] = self._capture_form_to_dict()
+        self.sizing_presets_save_callback()
+        self._refresh_sizing_preset_combo(select=name)
+
+    def on_delete_sizing_preset(self):
+        name = self.preset_combo.get().strip()
+        if not name or name not in self.sizing_presets:
+            messagebox.showinfo("Delete Preset", "Pick a preset from the dropdown first.")
+            return
+        if not messagebox.askyesno("Delete Preset", f"Delete preset '{name}'?"):
+            return
+        del self.sizing_presets[name]
+        self.sizing_presets_save_callback()
+        self._refresh_sizing_preset_combo()
+
+    def on_export_sizing_presets(self):
+        if not self.sizing_presets:
+            messagebox.showinfo("Export Presets", "There are no sizing presets to export.")
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.top,
+            title="Export Sizing Presets",
+            defaultextension=".json",
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+            initialfile="sizing_presets_export.json",
+        )
+        if not path:
+            return
+        try:
+            with open(path, 'w') as f:
+                json.dump(self.sizing_presets, f, indent=2)
+            messagebox.showinfo(
+                "Export Successful",
+                f"Exported {len(self.sizing_presets)} preset(s).",
+            )
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Could not export presets:\n{e}")
+
+    def on_import_sizing_presets(self):
+        path = filedialog.askopenfilename(
+            parent=self.top,
+            title="Import Sizing Presets",
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+        )
+        if not path:
+            return
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Could not read file:\n{e}")
+            return
+        if not isinstance(data, dict) or not data:
+            messagebox.showerror("Import Error", "File does not contain any sizing presets.")
+            return
+
+        added = 0
+        renamed = 0
+        last_added = None
+        for raw_name, preset in data.items():
+            if not isinstance(preset, dict):
+                continue
+            # Drop any keys that aren't part of the schema so an unrelated
+            # JSON file can't smuggle stray settings into the dialog.
+            clean = {k: copy.deepcopy(v) for k, v in preset.items() if k in SIZING_PRESET_KEYS}
+            if not clean:
+                continue
+            name = raw_name
+            while name in self.sizing_presets:
+                name += "*"
+            if name != raw_name:
+                renamed += 1
+            self.sizing_presets[name] = clean
+            last_added = name
+            added += 1
+
+        if added == 0:
+            messagebox.showinfo("Import", "No valid sizing presets found in that file.")
+            return
+
+        self.sizing_presets_save_callback()
+        self._refresh_sizing_preset_combo(select=last_added)
+        msg = f"Imported {added} preset(s)."
+        if renamed:
+            msg += f"\nRenamed due to conflict: {renamed}."
+        messagebox.showinfo("Import Successful", msg)
 
 class LayerColorWindow:
     def __init__(self, parent, settings, save_callback):
@@ -2428,7 +2683,7 @@ class UserGuideWindow(tk.Toplevel):
             self._section_padmaking_guide()
 
     def _section_pad_generator(self):
-        self._h2("Pad SVG / G-code Generator")
+        self._h2("Pad Maker (SVG / G-code)")
         self._body("Enter pad sizes in the text area, one per line, in the format "
                     "\"size x quantity\" (e.g. \"42.0 x 3\"). Select one or more materials "
                     "and click Generate to create laser-cutting files.")
@@ -2519,6 +2774,13 @@ class UserGuideWindow(tk.Toplevel):
         self._body("Star/Dart Settings: for leather pads below a size threshold, "
                     "star or dart patterns are added so the leather can fold around the felt. "
                     "Overwrap, wrap bonus, frequency multiplier, and shape factor are all adjustable.")
+        self._blank()
+        self._body("Sizing-rules presets: at the bottom of the Sizing Rules dialog you can "
+                    "save the entire configuration as a named preset, load presets from the "
+                    "dropdown, and export/import preset files to share with other techs.")
+        self._bullet("Save As: snapshots every value in the dialog (sizing, darts, engraving, placement)")
+        self._bullet("Load: fills the dialog from the selected preset \u2014 click Save to apply")
+        self._bullet("Import/Export: JSON files containing one or more presets")
         self._blank()
 
         self._h2("G-code Settings")
@@ -2650,7 +2912,7 @@ class UserGuideWindow(tk.Toplevel):
                     "are useful as pad cup tools: stiffeners during key geometry operations, "
                     "rim rounders, leveling helpers, bending braces, and so on.")
         self._body("For precise pad cup tools where you need exact control over the diameter, "
-                    "use the \"Exact Size\" material option in the Pad SVG Generator tab instead. "
+                    "use the \"Exact Size\" material option in the Pad Maker tab instead. "
                     "If outputting G-code for acrylic, adjust the G-code settings for the "
                     "exact_size material to match acrylic speeds and powers.")
         self._blank()

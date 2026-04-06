@@ -313,6 +313,27 @@ KEY_PRESET_FILE = os.path.join(_CONFIG_DIR, "key_height_library.json")
 SETTINGS_FILE = os.path.join(_CONFIG_DIR, "app_settings.json")
 SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
 TONER_DATA_FILE = os.path.join(_CONFIG_DIR, "toner_data.json")
+SIZING_PRESET_FILE = os.path.join(_CONFIG_DIR, "sizing_presets.json")
+
+# Settings keys captured by a sizing-rules preset (everything in the
+# Options > Sizing Rules dialog).
+SIZING_PRESET_KEYS = (
+    # Sizing
+    "units", "felt_offset", "card_to_felt_offset", "leather_wrap_multiplier",
+    "min_hole_size", "felt_thickness", "felt_thickness_unit",
+    "sizing_range_mode", "sizing_ranges",
+    # Darts
+    "darts_enabled", "dart_range_mode", "dart_threshold", "dart_overwrap",
+    "dart_wrap_bonus", "dart_frequency_multiplier", "dart_shape_factor",
+    "dart_ranges", "dart_engraving_on",
+    # Engraving
+    "engraving_on", "engraving_font_size",
+    "engraving_settings_range_mode", "engraving_settings_ranges",
+    "engraving_location",
+    "engraving_placement_range_mode", "engraving_placement_ranges",
+    # Export compatibility (lives in this dialog)
+    "compatibility_mode",
+)
 
 # Auto-migrate old filename → new
 _old_toner_file = os.path.join(_CONFIG_DIR, "tone_profiles.json")
