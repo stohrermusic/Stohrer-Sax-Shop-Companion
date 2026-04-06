@@ -12,7 +12,7 @@ from config import (
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files,
-    get_ssl_context, get_input_devices,
+    get_ssl_context, get_input_devices, get_config_dir,
     setup_logging, get_log_file
 )
 from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
@@ -300,6 +300,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             help_menu.add_command(label="User Guide...", command=self.open_user_guide)
             help_menu.add_separator()
             help_menu.add_command(label="Open Log File", command=self._open_log_file)
+            help_menu.add_command(label="Open Config Folder", command=self._open_config_folder)
             help_menu.add_separator()
             help_menu.add_command(label="About", command=self.open_about)
 
@@ -2179,11 +2180,25 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             sb.pack(side="right", fill="y")
             txt.configure(yscrollcommand=sb.set)
 
-            content = (
+            # Tags for the fullscreen banner and the data-sharing link
+            txt.tag_configure("banner",
+                              font=("Helvetica", 11, "bold"),
+                              foreground="#B85000",
+                              spacing3=6)
+            txt.tag_configure("link",
+                              font=("Helvetica", 10, "underline"),
+                              foreground="#0066CC")
+
+            txt.insert("end",
+                "RUN THIS APP IN FULLSCREEN. The toner display needs room "
+                "to breathe \u2014 maximize the window before you start.\n\n",
+                "banner")
+
+            txt.insert("end",
                 "This feature is in beta.\n\n"
 
                 "The Toner is a real-time harmonic analyzer that captures the "
-                "frequency content of your sound — the fundamental and its "
+                "frequency content of your sound \u2014 the fundamental and its "
                 "overtones. A microphone picks up your sound, an FFT extracts "
                 "the harmonic series, and the display shows you what's happening "
                 "in real time. You can capture sessions, save presets for "
@@ -2196,14 +2211,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 "THREE WAYS TO USE IT\n\n"
 
-                "1. Instant feedback — see how you affect the sound with "
+                "1. Instant feedback \u2014 see how you affect the sound with "
                 "your embouchure, support, and voicing.\n\n"
 
-                "2. Controlled comparison — change a variable and compare "
+                "2. Controlled comparison \u2014 change a variable and compare "
                 "readings to see what changes in your sound. More readings, "
                 "better data.\n\n"
 
-                "3. Tracking your sound over time — same horn, same setup, "
+                "3. Tracking your sound over time \u2014 same horn, same setup, "
                 "just you and your practice. Sessions are dated, so you "
                 "can see how your tone evolves week to week or month "
                 "to month.\n\n"
@@ -2212,14 +2227,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 "Check Options > Settings:\n\n"
 
-                "1. Input Device — select your audio input. If you have a "
+                "1. Input Device \u2014 select your audio input. If you have a "
                 "USB mic plugged in, choose it here.\n\n"
 
-                "2. Recording Folder — if you want to save WAV audio files "
+                "2. Recording Folder \u2014 if you want to save WAV audio files "
                 "alongside your captures, enable \"Record WAV\" and choose a "
                 "folder. This is optional but handy for backup or sharing.\n\n"
 
-                "3. Preset Fields — choose which variable fields to show when "
+                "3. Preset Fields \u2014 choose which variable fields to show when "
                 "creating presets.\n\n"
 
                 "Then create a preset in File > Presets. Six fields are always "
@@ -2228,10 +2243,28 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "accurate readings, but you can also use the toner to compare "
                 "mic effects.\n\n"
 
-                "Donate your data! Email Matt to share your captures and "
-                "help improve the toner."
+                "HELP IMPROVE THE TONER\n\n"
+
+                "The toner is hungry for data. Every recording helps calibrate "
+                "the descriptors and uncover what they actually measure across "
+                "different horns, mouthpieces, mics, and players. If you'd like "
+                "to contribute, drop your WAV recordings and your "
+                "toner_data.json file in the shared folder below \u2014 it lives "
+                "in the platform config directory (Help > Open Config Folder):\n\n"
             )
-            txt.insert("1.0", content)
+
+            # Clickable Google Drive link
+            import webbrowser
+            drive_url = ("https://drive.google.com/drive/folders/"
+                         "1fZndlhDv57vdr6lApOQcvvVFP6pK0sj_?usp=drive_link")
+            txt.insert("end", drive_url + "\n", "link")
+            txt.tag_bind("link", "<Button-1>",
+                         lambda e: webbrowser.open(drive_url))
+            txt.tag_bind("link", "<Enter>",
+                         lambda e: txt.config(cursor="hand2"))
+            txt.tag_bind("link", "<Leave>",
+                         lambda e: txt.config(cursor=""))
+
             txt.configure(state="disabled")
 
             result = {"accepted": False}
@@ -2303,6 +2336,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 subprocess.Popen(['xdg-open', log_path])
         else:
             messagebox.showinfo("Log File", f"No log file found.\nExpected at: {log_path}")
+
+    def _open_config_folder(self):
+        """Open the platform config folder (where presets, settings, and
+        toner_data.json live) in the OS file browser."""
+        config_dir = get_config_dir()
+        if not os.path.isdir(config_dir):
+            messagebox.showinfo("Config Folder",
+                                f"Config folder not found.\nExpected at: {config_dir}")
+            return
+        if sys.platform == 'win32':
+            os.startfile(config_dir)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', config_dir])
+        else:
+            subprocess.Popen(['xdg-open', config_dir])
 
     def _save_checkbox(self, key, var):
         """Save a checkbox setting."""
