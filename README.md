@@ -1,14 +1,16 @@
 # Stohrer Sax Shop Companion
 
-A cross-platform desktop app for saxophone repair shops and saxophonists. Generates SVG and G-code files for laser-cutting pad materials, provides reference databases for key heights, serial numbers, and screw specifications, includes tooling generation for die inserts and holders, a chromatic strobe tuner, and a harmonic tone analyzer for studying your sound.
+A cross-platform desktop app for saxophone repair shops and saxophonists by [Matt Stohrer](https://www.StohrerMusic.com). Generates SVG and G-code files for laser-cutting pad materials, provides reference databases for key heights, serial numbers, and screw specifications, includes tooling generation for pad-making die inserts and holders, a 12 wheel chromatic strobe tuner, and a harmonic tone analyzer for studying your sound.
 
 ## Features
 
-### Pad Generator
+### Pad Maker
+
+Generate laser-cutting files for felt, card, leather, and exact-size pad materials. **G-code generation can be exported directly to your laser — LightBurn is no longer required**, though SVG output is still available if you prefer that workflow.
 
 #### Output Formats
-- SVG for laser cutters and plotters (LightBurn color layers)
 - G-code for Grbl-based lasers with per-material speed, power, and passes
+- SVG for LightBurn or other laser software (color layers map to operations)
 - Generate felt, card, leather, and exact size patterns
 
 #### Nesting & Layout
@@ -27,6 +29,7 @@ A cross-platform desktop app for saxophone repair shops and saxophonists. Genera
 - Pad size labels on each disc, with per-material font size and position
 - Line mode (single-stroke) or filled mode (scan-line raster fill with overscan)
 - Auto-fit — shifts text toward center on small pads, scales only as last resort
+- **Sizing Rules Presets** — save the entire Sizing Rules dialog as a named preset, load presets from a dropdown, import/export to share with other techs
 
 #### G-code Options
 - Air assist toggles (M8/M9) per layer
@@ -34,7 +37,7 @@ A cross-platform desktop app for saxophone repair shops and saxophonists. Genera
 - Kerf compensation (enter full kerf, app splits in half automatically)
 - Auto-eject SD card after export (Windows)
 
-#### Presets & Data
+#### Pad Presets & Data
 - Save and load pad size lists organized into libraries
 - Notes field for annotating presets
 - Import Matt's Pad Sets from [stohrermusic.com](https://www.stohrermusic.com/articles/pad-sets-library/)
@@ -66,32 +69,44 @@ A cross-platform desktop app for saxophone repair shops and saxophonists. Genera
   - Automatic fallback to CPU canvas rendering if GPU unavailable
 - Per-ring octave brightness from real spectral data
 - Grouped slider panel (display, pitch, bias) and vintage backlit VU meter
+- Per-pitch-class phase tracking with temporal smoothing
 - Transposition support (Concert, Bb, Eb, F)
-- Reference tone player with adjustable pitch
-- Configurable frame rate (60/90/120 fps) and faceplate color
+- Configurable frame rate (60/90/120 fps), backlight color, and faceplate color
 - A quality microphone is recommended (e.g. Audio-Technica AT2020 USB)
 
-### Harmonic Tone Analyzer
-- Real-time harmonic spectrum analyzer for saxophone
+### Harmonic Tone Analyzer (beta)
+
+A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental and overtones of your sound and lets you compare setups (horn, mouthpiece, reed, mic, mic placement, embouchure) over time. **A quality microphone is essential — laptop mics do not provide reliable results.**
+
+#### Live Display
 - Detects fundamental pitch, extracts up to 20 harmonics with parabolic amplitude correction
 - Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
-- Live gauges: intonation, harmonic complexity (spectral flatness), warmth (H2 strength)
-- Five comparison descriptors: harmonic complexity, warmth, core tone (H2-H4 body character), even/odd harmonic ratio, rolloff shape
-- Supports all standard saxophone types including baritone
-- Tone profiles: capture harmonic fingerprints of individual horns
-  - Free capture and guided calibration modes, plus WAV file import (16/24/32-bit)
-  - Profiles stored in concert pitch for cross-instrument comparison
-  - Organized into libraries with import/export
-- Comparison tool with filtering, per-note and horn-average views, difference charts
-  - Harmonic-range interpretation suggests which component (body, neck, mouthpiece) may be driving differences
-  - Same-player and cross-player context notes
-- Delta gauges for live A/B comparison against a loaded baseline profile
-- Optional WAV recording during capture sessions for backup or re-analysis
-- Recording quality tracking (harmonic rolloff rate) with live warnings
-- Mic type and model stored per session for reproducibility
-- Coverage summary after capture sessions — shows note distribution and gaps
-- Auto-transposition by saxophone type with concert pitch toggle
-- A quality microphone is essential — laptop mics do not provide reliable results
+- Intonation gauge with cents readout and ±4¢ "in tune" lamp
+- Auto-transposition by saxophone type (alto/tenor/soprano/baritone/etc.) with concert pitch toggle
+- Spectrum overlay: load any preset as a ghost overlay on the live spectrum
+
+#### Tone Presets
+- Capture harmonic fingerprints of individual horns and setups
+- Free capture (continuous micro-captures while playing naturally) and guided calibration modes
+- WAV file import for offline analysis (16/24/32-bit)
+- WAV recording **on by default** — captures are automatically re-analyzed offline for ~2× the harmonic resolution of live capture
+- Mic type, model, and position stored per preset for reproducibility
+- **Mutate Preset** — duplicate a preset with one variable changed (mouthpiece, mic, reed) for A/B testing
+- **Sandbox mode** — relaxes field requirements for non-sax instruments, contact mics, effects chains, or experimental setups
+- All captures stored in concert pitch for cross-instrument comparison
+- Organized into libraries, with import/export for sharing
+- Coverage summary after capture sessions — note distribution chart and gap detection
+
+#### Analyze Tool
+- Compare two presets, view a single preset in detail, or analyze multi-preset spreads
+- Difference charts and harmonic-range interpretation: H1-H4 shifts ≈ bore, H7-H13 ≈ neck/mouthpiece, broadband ≈ mouthpiece/player
+- Population percentiles — see where your captures rank within all presets of the same sax type
+- User-configurable comparison descriptors: harmonic complexity, warmth, even/odd harmonic ratio, rolloff shape, evenness
+- Filter by make, model, mic type, search; multi-select; same-player and cross-player context notes
+- Recording-quality tracking (harmonic rolloff rate) with live warnings and cross-mismatch detection
+
+#### Why beta?
+Descriptors are still being calibrated as we gather more data from different horns, mouthpieces, mics, and players. Live descriptor gauges have been removed for now because mic position alone shifts complexity 10–20% on the same horn — we want to ground the formulas in more recordings before promoting any back to live readouts. Raw harmonic measurements are always saved, so future formula improvements apply retroactively to your historical captures. The first-run dialog (File > Feature Set > Toner) explains how to contribute recordings and presets.
 
 ### General
 - Feature Set (File > Feature Set) — choose which tabs to show
