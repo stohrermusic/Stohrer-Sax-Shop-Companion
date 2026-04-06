@@ -6,6 +6,8 @@ A cross-platform desktop app for saxophone repair shops and saxophonists by [Mat
 
 ### Pad Maker
 
+![Pad Maker tab with Sizing Rules dialog](img/pad_maker.png)
+
 Generate laser-cutting files for felt, card, leather, and exact-size pad materials. **G-code generation can be exported directly to your laser — LightBurn is no longer required**, though SVG output is still available if you prefer that workflow.
 
 #### Output Formats
@@ -64,6 +66,9 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Scrap mode for spreading dies across multiple sheets
 
 ### Chromatic Strobe Tuner
+
+![Chromatic Strobe Tuner](img/tuner.png)
+
 - 12-wheel stroboscopic chromatic tuner
 - GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
   - Automatic fallback to CPU canvas rendering if GPU unavailable
