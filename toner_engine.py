@@ -1418,14 +1418,104 @@ def compute_population_stats(all_presets, sax_type):
     }
 
 
+def _read_wav_file(filepath):
+    """Read a RIFF/WAV file and return (samples_float32, framerate, n_channels).
+
+    Handles PCM (format 1) at 16/24/32-bit, IEEE float (format 3) at 32/64-bit,
+    and WAVE_FORMAT_EXTENSIBLE (0xFFFE) by inspecting the SubFormat GUID.
+    Falls back to None on unsupported formats.
+
+    Replaces the stdlib `wave` module, which raises on format 3 — common
+    in DAW exports. Walks chunks manually to find 'fmt ' and 'data'.
+    """
+    import struct
+
+    with open(filepath, 'rb') as f:
+        riff = f.read(12)
+        if len(riff) < 12 or riff[:4] != b'RIFF' or riff[8:12] != b'WAVE':
+            return None
+
+        fmt_tag = None
+        n_channels = None
+        framerate = None
+        bits_per_sample = None
+        raw = None
+
+        while True:
+            header = f.read(8)
+            if len(header) < 8:
+                break
+            chunk_id = header[:4]
+            chunk_size = struct.unpack('<I', header[4:8])[0]
+
+            if chunk_id == b'fmt ':
+                fmt_data = f.read(chunk_size)
+                if len(fmt_data) < 16:
+                    return None
+                fmt_tag = struct.unpack('<H', fmt_data[0:2])[0]
+                n_channels = struct.unpack('<H', fmt_data[2:4])[0]
+                framerate = struct.unpack('<I', fmt_data[4:8])[0]
+                bits_per_sample = struct.unpack('<H', fmt_data[14:16])[0]
+                # WAVE_FORMAT_EXTENSIBLE: read the SubFormat GUID's first 2 bytes
+                if fmt_tag == 0xFFFE and len(fmt_data) >= 26:
+                    sub_format = struct.unpack('<H', fmt_data[24:26])[0]
+                    fmt_tag = sub_format
+                # Pad byte if chunk size is odd
+                if chunk_size & 1:
+                    f.read(1)
+            elif chunk_id == b'data':
+                raw = f.read(chunk_size)
+                break
+            else:
+                # Skip unknown chunk (LIST, INFO, etc.)
+                f.read(chunk_size)
+                if chunk_size & 1:
+                    f.read(1)
+
+    if raw is None or fmt_tag is None or n_channels is None:
+        return None
+
+    sampwidth = bits_per_sample // 8
+    n_samples = len(raw) // sampwidth
+
+    # PCM int formats
+    if fmt_tag == 1:
+        if sampwidth == 2:
+            samples = np.frombuffer(raw, dtype='<i2').astype(np.float32) / 32768.0
+        elif sampwidth == 3:
+            # 24-bit: sign-extend each 3-byte sample to 4 bytes
+            padded = bytearray(4 * n_samples)
+            for i in range(n_samples):
+                padded[i * 4 + 1] = raw[i * 3]
+                padded[i * 4 + 2] = raw[i * 3 + 1]
+                padded[i * 4 + 3] = raw[i * 3 + 2]
+            samples = np.frombuffer(bytes(padded), dtype='<i4').astype(np.float32) / 2147483648.0
+        elif sampwidth == 4:
+            samples = np.frombuffer(raw, dtype='<i4').astype(np.float32) / 2147483648.0
+        else:
+            return None
+    # IEEE float formats
+    elif fmt_tag == 3:
+        if sampwidth == 4:
+            samples = np.frombuffer(raw, dtype='<f4').astype(np.float32)
+        elif sampwidth == 8:
+            samples = np.frombuffer(raw, dtype='<f8').astype(np.float32)
+        else:
+            return None
+    else:
+        return None
+
+    return samples, framerate, n_channels
+
+
 def analyze_audio_file(filepath, engine, progress_cb=None):
     """Analyze an audio file offline. Returns list of capture dicts.
 
     Loads the file, slides a window through it, detects stable note
     segments, and extracts averaged captures — same data as live capture.
 
-    Supports WAV files (via stdlib wave module). For other formats,
-    the file must first be converted to WAV.
+    Supports WAV files: PCM 16/24/32-bit and IEEE float 32/64-bit. For other
+    formats, the file must first be converted to WAV.
 
     Args:
         filepath: Path to a WAV audio file
@@ -1435,40 +1525,10 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     Returns:
         list of capture dicts (same format as session captures)
     """
-    import wave
-    import struct
-
-    # Load WAV file
-    with wave.open(filepath, 'rb') as wf:
-        n_channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
-        framerate = wf.getframerate()
-        n_frames = wf.getnframes()
-        raw = wf.readframes(n_frames)
-
-    # Convert to float32 mono (16-bit, 24-bit, 32-bit int, 32-bit float)
-    n_samples = n_frames * n_channels
-    if sampwidth == 2:
-        samples = np.array(struct.unpack(f'<{n_samples}h', raw),
-                          dtype=np.float32) / 32768.0
-    elif sampwidth == 3:
-        # 24-bit audio: pad each 3-byte sample to 4 bytes (sign-extend)
-        padded = bytearray(4 * n_samples)
-        for i in range(n_samples):
-            padded[i * 4 + 1] = raw[i * 3]
-            padded[i * 4 + 2] = raw[i * 3 + 1]
-            padded[i * 4 + 3] = raw[i * 3 + 2]
-        samples = np.array(struct.unpack(f'<{n_samples}i', bytes(padded)),
-                          dtype=np.float32) / 2147483648.0
-    elif sampwidth == 4:
-        # Try 32-bit float first (common DAW export), fall back to 32-bit int
-        samples = np.frombuffer(raw, dtype=np.float32).copy()
-        if np.any(np.abs(samples) > 2.0):
-            # Values > 2.0 means it's 32-bit int, not float
-            samples = np.array(struct.unpack(f'<{n_samples}i', raw),
-                              dtype=np.float32) / 2147483648.0
-    else:
+    loaded = _read_wav_file(filepath)
+    if loaded is None:
         return []
+    samples, framerate, n_channels = loaded
 
     # Mix to mono if stereo
     if n_channels > 1:

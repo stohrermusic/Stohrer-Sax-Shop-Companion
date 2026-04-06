@@ -30,7 +30,7 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (24 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_release_1_9`, `test_sizing_ranges`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (25 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_release_1_9`, `test_sizing_ranges`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
 Before committing, run the suites affected by your changes. For releases, run all. If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
 
