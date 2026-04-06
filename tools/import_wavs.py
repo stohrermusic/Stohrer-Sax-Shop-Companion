@@ -3,13 +3,15 @@ Batch import WAV recordings into toner profiles.
 
 Re-imports Tyler Anderson's library (replacing old H12 data with H20),
 imports Thomas Edinger's Head2Head tenor comparison,
-and imports Mario Larios-García's alto and soprano recordings.
+imports Mario Larios-García's alto and soprano recordings,
+and imports Ken Foster's bari mouthpiece comparison (one horn, six mpcs).
 
 Usage:
     python tools/import_wavs.py              # import all
     python tools/import_wavs.py tyler        # Tyler only
     python tools/import_wavs.py edinger      # Edinger only
     python tools/import_wavs.py mario        # Mario only
+    python tools/import_wavs.py foster       # Foster only
 """
 
 import sys
@@ -175,6 +177,71 @@ MARIO_FILES = [
         "notes": "",
     },
 ]
+
+
+# ============================================================
+# KEN FOSTER — Bari mouthpiece comparison (one horn, six mpcs)
+# ============================================================
+
+FOSTER_LIBRARY = "Ken Foster"
+FOSTER_PLAYER = "Ken Foster"
+FOSTER_MIC_TYPE = "dynamic"
+FOSTER_MIC_MODEL = "Electro-Voice RE20"
+
+FOSTER_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "Downloads",
+    "Ken Foster recordings-20260406T190638Z-3-001",
+    "Ken Foster recordings",
+    "Bari sax recordings",
+)
+
+# All six recordings are the same horn (Vito VSP-900 series bari, a
+# Yanagisawa-built stencil) played by Ken Foster with different mouthpieces.
+# Profile name encodes the mouthpiece since the horn doesn't change.
+FOSTER_FILES = [
+    {
+        "file": "#1 Bari .wav",
+        "profile_name": "Vito VSP 900 — Berg Larsen 115/0 HR",
+        "mpc": "Berg Larsen 115/0 hard rubber, medium facing length",
+    },
+    {
+        "file": "#2 Bari.wav",
+        "profile_name": "Vito VSP 900 — Vintage HR large chamber",
+        "mpc": "Vintage hard rubber, very large chamber",
+    },
+    {
+        "file": "#3 bari.wav",
+        "profile_name": "Vito VSP 900 — Vandoren V16 B9",
+        "mpc": "Vandoren V16 B9 hard rubber",
+    },
+    {
+        "file": "#4 Bari.wav",
+        "profile_name": "Vito VSP 900 — Guy Hawkins metal",
+        "mpc": "Guy Hawkins metal",
+    },
+    {
+        "file": "#5 bari_1.wav",
+        "profile_name": "Vito VSP 900 — Vandoren Optimum BL5",
+        "mpc": "Vandoren Optimum BL5 hard rubber",
+    },
+    {
+        "file": "#6 bari_1.wav",
+        "profile_name": "Vito VSP 900 — Rico Metalite B9",
+        "mpc": "Rico Metalite B9 plastic",
+    },
+]
+
+FOSTER_HORN = {
+    "horn_type": "Baritone",
+    "make": "Vito",
+    "model": "VSP 900",
+    "serial": "",
+    "reed": "",  # not specified
+    "notes": "Yanagisawa-built Vito VSP-900 series bari. "
+             "Six recordings of the same horn with six different mouthpieces, "
+             "by Ken Foster. Mic: Electro-Voice RE20 (dynamic).",
+}
 
 
 # ============================================================
@@ -353,6 +420,79 @@ def import_mario(profiles):
     return total_profiles, total_captures
 
 
+def import_foster(profiles):
+    """Import Ken Foster's bari mouthpiece comparison.
+
+    One horn, six mouthpieces — each becomes its own profile so the Analyze
+    tool can do delta comparisons between mouthpieces on the same horn.
+    """
+    # Clear existing to allow clean re-import
+    if FOSTER_LIBRARY in profiles:
+        old_count = len(profiles[FOSTER_LIBRARY])
+        del profiles[FOSTER_LIBRARY]
+        print(f"  Cleared {old_count} old profiles (re-importing)")
+
+    total_captures = 0
+    total_profiles = 0
+
+    print(f"\n--- Baritone (one horn, six mouthpieces) ---\n")
+    for entry in FOSTER_FILES:
+        filepath = os.path.join(FOSTER_DIR, entry["file"])
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+
+        profile_name = entry["profile_name"]
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        print(f"  Analyzing: {stem} ({entry['mpc']}) ...", end="", flush=True)
+
+        engine = TonerEngine()
+        engine.sax_type = FOSTER_HORN["horn_type"]
+        captures = analyze_audio_file(filepath, engine)
+
+        if not captures:
+            print(f" NO STABLE NOTES FOUND")
+            continue
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        for cap in captures:
+            cap["timestamp"] = now
+            cap["source_file"] = os.path.basename(filepath)
+
+        if FOSTER_LIBRARY not in profiles:
+            profiles[FOSTER_LIBRARY] = {}
+
+        profiles[FOSTER_LIBRARY][profile_name] = {
+            "horn_type": FOSTER_HORN["horn_type"],
+            "horn_make": FOSTER_HORN["make"],
+            "horn_model": FOSTER_HORN["model"],
+            "serial": FOSTER_HORN["serial"],
+            "player": FOSTER_PLAYER,
+            "mouthpiece": entry["mpc"],
+            "reed": FOSTER_HORN["reed"],
+            "notes": FOSTER_HORN["notes"],
+            "created": now,
+            "sessions": [],
+        }
+
+        session = {
+            "date": now,
+            "captures": captures,
+            "method": "file",
+            "source_notes": f"Recorded by {FOSTER_PLAYER}",
+            "mic_type": FOSTER_MIC_TYPE,
+            "mic_model": FOSTER_MIC_MODEL,
+        }
+        profiles[FOSTER_LIBRARY][profile_name]["sessions"].append(session)
+
+        unique_notes = set(c["note"] for c in captures)
+        print(f" {len(captures)} captures, {len(unique_notes)} unique notes")
+        total_captures += len(captures)
+        total_profiles += 1
+
+    return total_profiles, total_captures
+
+
 def main():
     which = sys.argv[1].lower() if len(sys.argv) > 1 else "all"
 
@@ -383,6 +523,14 @@ def main():
         print("MARIO LARIOS-GARCÍA")
         print(f"{'='*50}")
         p, c = import_mario(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "foster"):
+        print(f"\n{'='*50}")
+        print("KEN FOSTER — Bari mouthpiece comparison")
+        print(f"{'='*50}")
+        p, c = import_foster(profiles)
         grand_profiles += p
         grand_captures += c
 
