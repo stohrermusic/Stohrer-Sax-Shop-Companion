@@ -4,7 +4,8 @@ Batch import WAV recordings into toner profiles.
 Re-imports Tyler Anderson's library (replacing old H12 data with H20),
 imports Thomas Edinger's Head2Head tenor comparison,
 imports Mario Larios-García's alto and soprano recordings,
-and imports Ken Foster's bari mouthpiece comparison (one horn, six mpcs).
+imports Ken Foster's bari mouthpiece comparison (one horn, six mpcs),
+and imports Grant Smiley's Holton 241 with Selmer C* metal.
 
 Usage:
     python tools/import_wavs.py              # import all
@@ -12,6 +13,7 @@ Usage:
     python tools/import_wavs.py edinger      # Edinger only
     python tools/import_wavs.py mario        # Mario only
     python tools/import_wavs.py foster       # Foster only
+    python tools/import_wavs.py grant        # Grant only
 """
 
 import sys
@@ -241,6 +243,45 @@ FOSTER_HORN = {
     "notes": "Yanagisawa-built Vito VSP-900 series bari. "
              "Six recordings of the same horn with six different mouthpieces, "
              "by Ken Foster. Mic: Electro-Voice RE20 (dynamic).",
+}
+
+
+# ============================================================
+# GRANT SMILEY — Holton 241 with Selmer C* metal
+# ============================================================
+
+GRANT_LIBRARY = "Grant Smiley"
+GRANT_PLAYER = "Grant Smiley"
+GRANT_MIC_TYPE = "ribbon"
+GRANT_MIC_MODEL = "MXL RI44"
+
+GRANT_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "Downloads",
+    "grant smiley-20260406T190559Z-3-001",
+    "grant smiley",
+)
+
+# Both WAVs are the same horn, mouthpiece, mic, player, recording session.
+# They become two sessions of one preset so compute_fingerprint averages
+# across them. The "struggle_bus" prefix is Grant's own labeling — both
+# takes are kept since they're real data.
+GRANT_FILES = [
+    "holton selmer C_ metal_2026-04-03_13-59-55.wav",
+    "struggle_bus_holton selmer C_ metal_2026-04-03_14-08-56.wav",
+]
+
+GRANT_HORN = {
+    "horn_type": "Tenor",
+    "make": "Holton",
+    "model": "241",
+    "serial": "",
+    "mpc": "Selmer C* metal silver plate",
+    "reed": "",  # not specified
+    "notes": "Holton 241 tenor with Selmer C* metal silver plate "
+             "mouthpiece, recorded by Grant Smiley with an MXL RI44 ribbon "
+             "mic. Two takes from a single session — the second is labeled "
+             "\"struggle_bus\" by Grant himself, but both are kept as data.",
 }
 
 
@@ -493,6 +534,84 @@ def import_foster(profiles):
     return total_profiles, total_captures
 
 
+def import_grant(profiles):
+    """Import Grant Smiley's Holton 241 with Selmer C* metal mpc.
+
+    Re-analyzes both WAVs through the current 20-harmonic engine. Both
+    takes go into ONE preset as separate sessions; the "struggle_bus"
+    label on the second take is Grant's own, kept as a session note.
+    """
+    # Clear existing to allow clean re-import
+    if GRANT_LIBRARY in profiles:
+        old_count = len(profiles[GRANT_LIBRARY])
+        del profiles[GRANT_LIBRARY]
+        print(f"  Cleared {old_count} old profiles (re-importing)")
+
+    profile_name = make_profile_name(
+        GRANT_HORN["make"], GRANT_HORN["model"], GRANT_HORN["serial"])
+    total_captures = 0
+
+    print(f"\n--- Tenor (Holton 241, Selmer C* metal silver plate) ---\n")
+    for fname in GRANT_FILES:
+        filepath = os.path.join(GRANT_DIR, fname)
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        is_struggle = stem.lower().startswith("struggle_bus")
+        label = "struggle_bus" if is_struggle else "clean take"
+        print(f"  Analyzing: {stem} ({label}) ...", end="", flush=True)
+
+        engine = TonerEngine()
+        engine.sax_type = GRANT_HORN["horn_type"]
+        captures = analyze_audio_file(filepath, engine)
+
+        if not captures:
+            print(f" NO STABLE NOTES FOUND")
+            continue
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        for cap in captures:
+            cap["timestamp"] = now
+            cap["source_file"] = os.path.basename(filepath)
+
+        if GRANT_LIBRARY not in profiles:
+            profiles[GRANT_LIBRARY] = {}
+
+        if profile_name not in profiles[GRANT_LIBRARY]:
+            profiles[GRANT_LIBRARY][profile_name] = {
+                "horn_type": GRANT_HORN["horn_type"],
+                "horn_make": GRANT_HORN["make"],
+                "horn_model": GRANT_HORN["model"],
+                "serial": GRANT_HORN["serial"],
+                "player": GRANT_PLAYER,
+                "mouthpiece": GRANT_HORN["mpc"],
+                "reed": GRANT_HORN["reed"],
+                "notes": GRANT_HORN["notes"],
+                "created": now,
+                "sessions": [],
+            }
+
+        session = {
+            "date": now,
+            "captures": captures,
+            "method": "file",
+            "source_notes": (f"Re-analyzed by tools/import_wavs.py "
+                             f"({label})"),
+            "mic_type": GRANT_MIC_TYPE,
+            "mic_model": GRANT_MIC_MODEL,
+        }
+        profiles[GRANT_LIBRARY][profile_name]["sessions"].append(session)
+
+        unique_notes = set(c["note"] for c in captures)
+        print(f" {len(captures)} captures, {len(unique_notes)} unique notes")
+        total_captures += len(captures)
+
+    n_profiles = 1 if GRANT_LIBRARY in profiles else 0
+    return n_profiles, total_captures
+
+
 def main():
     which = sys.argv[1].lower() if len(sys.argv) > 1 else "all"
 
@@ -531,6 +650,14 @@ def main():
         print("KEN FOSTER — Bari mouthpiece comparison")
         print(f"{'='*50}")
         p, c = import_foster(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "grant"):
+        print(f"\n{'='*50}")
+        print("GRANT SMILEY — Holton 241 with Selmer C* metal")
+        print(f"{'='*50}")
+        p, c = import_grant(profiles)
         grand_profiles += p
         grand_captures += c
 
