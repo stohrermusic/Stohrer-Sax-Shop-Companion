@@ -109,10 +109,34 @@ SPECTRAL_QUALITY_THRESHOLD = 0.6
 LOW_FREQ_WEAKNESS_RATIO = 0.05
 
 # --- Recording quality (harmonic rolloff) ---
-# Average dB drop per harmonic from H2 to H12.  Good close-mic setups read
-# 1.0–2.0 dB/harmonic; a laptop mic across the room reads 3.0+.
-ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — warn above this
+# Average dB drop per harmonic from H2 to H12.  Good close-mic condenser
+# setups read 1.0–2.0 dB/harmonic; a laptop mic across the room reads 3.0+.
+# Different mic classes have different intrinsic HF response — ribbons and
+# (to a lesser extent) dynamics naturally read higher than condensers
+# regardless of recording quality, so the warning threshold is mic-aware
+# via get_rolloff_threshold() below. The constant remains as the
+# condenser/unknown default.
+ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — condenser default
 ROLLOFF_MIN_CAPTURES = 5       # need this many before checking
+
+
+def get_rolloff_threshold(mic_type):
+    """Mic-class-aware rolloff warning threshold (dB/harmonic).
+
+    Ribbons attenuate high frequencies more than condensers as a matter
+    of physics (the velocity-sensing element falls off above a few kHz).
+    Dynamics fall in between. The thresholds below are conservative —
+    bumped only enough to stop healthy ribbon recordings from triggering
+    a "bad recording quality" warning. They are NOT calibrated against a
+    population (n=1 ribbon, n=1 dynamic in our test corpus as of
+    2026-04-06); refine as more data comes in.
+    """
+    mt = (mic_type or '').lower()
+    if mt == 'ribbon':
+        return 3.5
+    if mt == 'dynamic':
+        return 2.8
+    return ROLLOFF_WARN_THRESHOLD  # condenser, other, or unknown
 
 # Calibration capture: written chromatic scale Bb3 to F6
 # These are WRITTEN pitches — the transposition to concert pitch

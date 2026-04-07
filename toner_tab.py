@@ -33,6 +33,7 @@ try:
         compute_group_fingerprint, compute_rolloff_rate,
 
         ROLLOFF_WARN_THRESHOLD, ROLLOFF_MIN_CAPTURES,
+        get_rolloff_threshold,
         load_tone_presets, save_tone_presets,
         analyze_audio_file, check_mic_quality,
         transpose_note, reverse_transpose_note, note_to_freq,
@@ -2981,7 +2982,11 @@ class TonerTabMixin:
             return
 
         avg_rate = sum(rates) / len(rates)
-        if avg_rate > ROLLOFF_WARN_THRESHOLD:
+        # Mic-class-aware threshold: ribbon and dynamic mics legitimately
+        # read higher rolloff than condensers due to physics, not bad
+        # recording quality.
+        threshold = get_rolloff_threshold(session.get('mic_type', ''))
+        if avg_rate > threshold:
             self._toner_rolloff_warned = True
             self._toner_show_rolloff_warning(avg_rate)
 
@@ -4349,7 +4354,7 @@ class TonerTabMixin:
                 row.pack(fill="x")
                 tk.Label(row, text="Rec. Quality", width=label_width, bg=bg,
                          fg=fg, font=label_font, anchor="w").pack(side="left")
-                for rate in _rolloff_rates:
+                for rate, mt in zip(_rolloff_rates, _mic_types):
                     if not _is_real(rate):
                         text = "\u2014"
                         val_fg = fg
@@ -4357,7 +4362,10 @@ class TonerTabMixin:
                         # Compact mode drops the "/H" to save horizontal space
                         unit = "dB" if compact else "dB/H"
                         text = f"{rate:.1f} {unit}"
-                        val_fg = "#880000" if rate > ROLLOFF_WARN_THRESHOLD else fg
+                        # Mic-class-aware threshold so ribbons and dynamics
+                        # don't get flagged as "bad" for normal HF rolloff.
+                        threshold = get_rolloff_threshold(mt)
+                        val_fg = "#880000" if rate > threshold else fg
                         if population_stats and population_stats['count'] >= 3:
                             pct = percentile_rank(
                                 rate, population_stats['rolloff_values'])

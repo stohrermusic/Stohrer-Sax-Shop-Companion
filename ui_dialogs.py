@@ -3342,6 +3342,17 @@ class UserGuideWindow(tk.Toplevel):
                       "darkness. A mouthpiece can be dark in its upper "
                       "harmonics while still having a weak H2 (reads \"not "
                       "warm\") or a strong H2 (reads \"warm\").")
+        self._bullet("A few setups in our test data \u2014 metal mouthpieces "
+                      "driven hard, in particular \u2014 produce H2 LOUDER than "
+                      "the fundamental itself. That's a \"horn-like\" or "
+                      "\"trumpet-like\" spectrum where the octave dominates "
+                      "the root, and it's a real, recognized phenomenon. The "
+                      "Warmth descriptor reads these as moderately warm "
+                      "rather than maxed-out warm, because beyond H2 \u2248 H1 "
+                      "the perceptual difference saturates. We're tracking "
+                      "this case but haven't yet figured out the right way "
+                      "to characterize it \u2014 expect this part of the formula "
+                      "to evolve as we gather more data.")
         self._blank()
 
         self._bullet("Harmonic Complexity (Pure \u2194 Complex) \u2014 spectral "
@@ -3417,6 +3428,24 @@ class UserGuideWindow(tk.Toplevel):
                     "differences are more likely to reflect the "
                     "equipment. When players differ, it's harder to "
                     "separate the horn signal from the player signal.")
+        self._blank()
+
+        self._body("Measurement noise: how big does a delta have to be "
+                    "to be real?")
+        self._bullet("In our early test data, two takes of the same "
+                      "horn + mouthpiece + mic + player ten minutes apart "
+                      "produced descriptor variation of about 1\u20133% "
+                      "and rolloff variation of about 0.3 dB/H. Treat "
+                      "those numbers as a rough \"measurement noise\" "
+                      "floor: deltas smaller than that, even between "
+                      "different setups, are likely just session-to-"
+                      "session variation rather than real signal. "
+                      "Deltas larger than that are potentially real but "
+                      "still need the other context (same player? same "
+                      "mic? same room?) to interpret.")
+        self._bullet("This is an early estimate from a single two-take "
+                      "data point and will be refined as more same-"
+                      "setup repeat data comes in.")
         self._blank()
 
         # === REPORTS ===
