@@ -165,6 +165,46 @@ result_three = engine.analyze_buffer(audio_three)
 test("low_harmonic_data=False with 3 of H2-H6",
      result_three.descriptors.get('low_harmonic_data') == False)
 
+
+# ================================================
+print("\n=== Test 15: get_rolloff_threshold (mic + sax type aware) ===")
+from toner_engine import get_rolloff_threshold, ROLLOFF_WARN_THRESHOLD
+
+# Mic-only baseline (sax_type omitted) — backward compat
+test("ribbon mic returns 3.5",
+     get_rolloff_threshold("ribbon") == 3.5)
+test("dynamic mic returns 2.8 with no sax type",
+     get_rolloff_threshold("dynamic") == 2.8)
+test("condenser mic returns base threshold",
+     get_rolloff_threshold("condenser") == ROLLOFF_WARN_THRESHOLD)
+test("unknown mic returns base threshold",
+     get_rolloff_threshold("") == ROLLOFF_WARN_THRESHOLD)
+
+# Alto + dynamic gets the bump (Foster Conn 6M data — 2.99 to 3.49)
+test("alto + dynamic returns 3.5 (bumped for Foster Conn 6M)",
+     get_rolloff_threshold("dynamic", "Alto") == 3.5)
+test("alto + dynamic case-insensitive",
+     get_rolloff_threshold("DYNAMIC", "alto") == 3.5)
+
+# Other sax + dynamic: still 2.8 (Foster bari maxed at 2.31)
+test("tenor + dynamic still 2.8",
+     get_rolloff_threshold("dynamic", "Tenor") == 2.8)
+test("baritone + dynamic still 2.8",
+     get_rolloff_threshold("dynamic", "Baritone") == 2.8)
+test("soprano + dynamic still 2.8",
+     get_rolloff_threshold("dynamic", "Soprano") == 2.8)
+
+# Sax type doesn't affect non-dynamic mics (yet)
+test("alto + condenser unchanged",
+     get_rolloff_threshold("condenser", "Alto") == ROLLOFF_WARN_THRESHOLD)
+test("alto + ribbon unchanged",
+     get_rolloff_threshold("ribbon", "Alto") == 3.5)
+
+# None sax_type behaves like backward compat
+test("None sax_type returns base mic threshold",
+     get_rolloff_threshold("dynamic", None) == 2.8)
+
+
 # ================================================
 print(f"\n{'='*50}")
 print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")

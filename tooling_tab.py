@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import os
 import sys
+import webbrowser
 
 from svg_engine import (
     _nest_discs, try_nest_partial, compute_remaining_pads, can_all_pads_fit,
@@ -41,9 +42,39 @@ class ToolingTabMixin:
         tooling = self.settings.get("tooling_settings", {})
         bg = self.root.cget('bg') if IS_MACOS else self.default_bg
 
+        # Phil Noy credit — the die holders and inserts implement his method,
+        # which he gave away for free. Engraved "DESIGNED BY PHIL NOY" on the
+        # parts themselves; this UI text says the same out loud.
+        credit_frame = tk.Frame(parent, bg=bg)
+        credit_frame.pack(fill='x', padx=10, pady=(10, 5))
+
+        line1 = tk.Frame(credit_frame, bg=bg)
+        line1.pack(anchor='w')
+        tk.Label(line1, text="The die holders and die inserts are for the ",
+                 bg=bg, font=("Helvetica", 9)).pack(side='left')
+        noy_link = tk.Label(line1, text="Phil Noy",
+                            bg=bg, fg="#0066CC",
+                            font=("Helvetica", 9, "underline"),
+                            cursor="hand2")
+        noy_link.pack(side='left')
+        noy_link.bind("<Button-1>", lambda e: webbrowser.open(
+            "https://noysaxophonesupplies.com"))
+        tk.Label(line1, text=" method of making saxophone pads.",
+                 bg=bg, font=("Helvetica", 9)).pack(side='left')
+
+        tk.Label(credit_frame,
+                 text='They are engraved "DESIGNED BY PHIL NOY" because Phil '
+                      'gave away this knowledge for free.',
+                 bg=bg, font=("Helvetica", 9),
+                 justify="left").pack(anchor='w')
+        tk.Label(credit_frame,
+                 text="Please pay him the respect of including this in your tooling.",
+                 bg=bg, font=("Helvetica", 9),
+                 justify="left").pack(anchor='w', pady=(0, 4))
+
         # Tool selector buttons at top
         selector_frame = tk.Frame(parent, bg=bg)
-        selector_frame.pack(fill='x', padx=10, pady=(10, 5))
+        selector_frame.pack(fill='x', padx=10, pady=(0, 5))
 
         self._tooling_sections = {}
         self._tooling_buttons = {}

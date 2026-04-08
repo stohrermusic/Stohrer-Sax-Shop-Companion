@@ -873,6 +873,38 @@ def _render_svg_dies(dwg, placed, settings, compatibility_mode, stroke_w):
                                  text_anchor="middle", font_size=f"{font_size}mm",
                                  fill=engraving_color))
 
+        # "NOY" arced opposite the size number (Phil Noy credit on each
+        # die insert). Only render if the ring size label was rendered too —
+        # otherwise there's nothing to be opposite of.
+        # Rendered as polylines via the same gcode arc helpers (filled or
+        # stroke depending on engraving_mode) for SVG/laser parity.
+        if engrave_ring:
+            from gcode_engine import (get_text_strokes_arc,
+                                       get_filled_text_strokes_arc)
+            credit_font = ring_font_size
+            ring_width_local = r - inner_r
+            if credit_font > ring_width_local * 0.9:
+                credit_font = ring_width_local * 0.9
+            if credit_font < 1.0:
+                credit_font = 1.0
+            ring_center_r = (r + inner_r) / 2
+            if engraving_mode == "filled":
+                filled_spacing = acrylic_settings.get("filled_line_spacing", 0.15)
+                noy_strokes = get_filled_text_strokes_arc(
+                    "NOY", credit_font,
+                    cx, 0.0, ring_center_r, -math.pi / 2.0,
+                    filled_spacing, side='bottom')
+            else:
+                noy_strokes = get_text_strokes_arc(
+                    "NOY", credit_font,
+                    cx, 0.0, ring_center_r, -math.pi / 2.0, side='bottom')
+            for stroke in noy_strokes:
+                # Y-up gcode -> SVG Y-down. Raw numbers (no unit suffix)
+                # so svgwrite's Tiny 1.2 polyline validator accepts them.
+                pts = [(x, cy - y) for (x, y) in stroke]
+                dwg.add(dwg.polyline(points=pts, stroke=engraving_color,
+                                     fill='none', stroke_width=stroke_w))
+
         # Engraving on inner cutout disc (actual size after kerf)
         if engrave_cutout:
             actual_size = pad_size - kerf_width
@@ -932,6 +964,13 @@ def generate_holder_svg(variant, filename, settings):
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
     cut_color = layer_colors.get('die_holder_cut', '#FF0000')
     hole_color = layer_colors.get('die_holder_hole', '#0000FF')
+    # Match the engraving mode used by the gcode renderer so the SVG
+    # preview shows the same fill the laser will actually do.
+    tooling_settings = settings.get("tooling_settings", {})
+    engraving_mode = tooling_settings.get("engraving_mode", "filled")
+    gcode_settings_local = settings.get("gcode_settings", {})
+    acrylic_local = gcode_settings_local.get("acrylic", {})
+    filled_line_spacing_svg = acrylic_local.get("filled_line_spacing", 0.15)
 
     spacing = 5.0
     outer_d = HOLDER_OUTER_R * 2
@@ -1004,25 +1043,42 @@ def generate_holder_svg(variant, filename, settings):
             else:
                 dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{inner_r}mm", stroke=cut_color, fill='none', stroke_width=stroke_w))
 
-            # Engrave size range on ring
             eng_color = layer_colors.get('die_engraving', '#00E000')
             tooling = settings.get("tooling_settings", {})
             font_size = tooling.get("ring_font_size", 3.5)
             ring_width = HOLDER_OUTER_R - inner_r
             if font_size > ring_width * 0.9:
                 font_size = ring_width * 0.9
-            if inner_r == HOLDER_LARGE_INNER_R:
-                ring_label = "40\u201360mm"
-            else:
-                ring_label = "7\u201339.5mm"
             ring_center_r = (HOLDER_OUTER_R + inner_r) / 2
-            label_y = cy - ring_center_r + font_size * 0.35
-            if compatibility_mode:
-                dwg.add(dwg.text(ring_label, insert=(cx, label_y),
-                                 text_anchor="middle", font_size=font_size, fill=eng_color))
+
+            # "DESIGNED BY PHIL NOY" arced along the top of the ring annulus.
+            # Phil Noy gave away this method for free; this credit honors him.
+            # Replaces the previous size-range label (which was redundant
+            # with the variant name shown in the UI).
+            #
+            # Rendered as polylines (not textPath) so the SVG preview matches
+            # the laser-cut path exactly, and so the same code path works
+            # under svgwrite's Tiny 1.2 profile (which doesn't support
+            # textPath). The arc helpers compute Y-up gcode coords; we flip
+            # to SVG Y-down by negating the Y component around cy.
+            from gcode_engine import (get_text_strokes_arc,
+                                       get_filled_text_strokes_arc)
+            if engraving_mode == "filled":
+                credit_strokes = get_filled_text_strokes_arc(
+                    "DESIGNED BY PHIL NOY", font_size,
+                    cx, 0.0, ring_center_r, math.pi / 2.0,
+                    filled_line_spacing_svg, side='top')
             else:
-                dwg.add(dwg.text(ring_label, insert=(f"{cx}mm", f"{label_y}mm"),
-                                 text_anchor="middle", font_size=f"{font_size}mm", fill=eng_color))
+                credit_strokes = get_text_strokes_arc(
+                    "DESIGNED BY PHIL NOY", font_size,
+                    cx, 0.0, ring_center_r, math.pi / 2.0, side='top')
+            for stroke in credit_strokes:
+                # Y-up gcode -> SVG Y-down. Polyline points are raw numbers
+                # in viewBox units (which are mm here); svgwrite Tiny 1.2
+                # rejects unit suffixes inside polyline `points`.
+                pts = [(x, cy - y) for (x, y) in stroke]
+                dwg.add(dwg.polyline(points=pts, stroke=eng_color,
+                                     fill='none', stroke_width=stroke_w))
 
     dwg.save()
 

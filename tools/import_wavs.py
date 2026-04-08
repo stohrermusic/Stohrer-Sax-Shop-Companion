@@ -3,13 +3,19 @@ Batch import WAV recordings into toner profiles.
 
 Re-imports Tyler Anderson's library (replacing old H12 data with H20),
 imports Thomas Edinger's Head2Head tenor comparison,
-and imports Mario Larios-García's alto and soprano recordings.
+imports Mario Larios-García's alto and soprano recordings,
+imports Ken Foster's bari mouthpiece comparison (one horn, six mpcs),
+imports Ken Foster's Conn 6M alto mouthpiece comparison (one horn, eight mpcs),
+and imports Grant Smiley's Holton 241 with Selmer C* metal.
 
 Usage:
     python tools/import_wavs.py              # import all
     python tools/import_wavs.py tyler        # Tyler only
     python tools/import_wavs.py edinger      # Edinger only
     python tools/import_wavs.py mario        # Mario only
+    python tools/import_wavs.py foster       # Foster bari only
+    python tools/import_wavs.py foster_6m    # Foster Conn 6M alto only
+    python tools/import_wavs.py grant        # Grant only
 """
 
 import sys
@@ -175,6 +181,179 @@ MARIO_FILES = [
         "notes": "",
     },
 ]
+
+
+# ============================================================
+# KEN FOSTER — Bari mouthpiece comparison (one horn, six mpcs)
+# ============================================================
+
+FOSTER_LIBRARY = "Ken Foster"
+FOSTER_PLAYER = "Ken Foster"
+FOSTER_MIC_TYPE = "dynamic"
+FOSTER_MIC_MODEL = "Electro-Voice RE20"
+
+FOSTER_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "Downloads",
+    "Ken Foster recordings-20260406T190638Z-3-001",
+    "Ken Foster recordings",
+    "Bari sax recordings",
+)
+
+# All six recordings are the same horn (Vito VSP-900 series bari, a
+# Yanagisawa-built stencil) played by Ken Foster with different mouthpieces.
+# Profile name encodes the mouthpiece since the horn doesn't change.
+FOSTER_FILES = [
+    {
+        "file": "#1 Bari .wav",
+        "profile_name": "Vito VSP 900 — Berg Larsen 115/0 HR",
+        "mpc": "Berg Larsen 115/0 hard rubber, medium facing length",
+    },
+    {
+        "file": "#2 Bari.wav",
+        "profile_name": "Vito VSP 900 — Vintage HR large chamber",
+        "mpc": "Vintage hard rubber, very large chamber",
+    },
+    {
+        "file": "#3 bari.wav",
+        "profile_name": "Vito VSP 900 — Vandoren V16 B9",
+        "mpc": "Vandoren V16 B9 hard rubber",
+    },
+    {
+        "file": "#4 Bari.wav",
+        "profile_name": "Vito VSP 900 — Guy Hawkins metal",
+        "mpc": "Guy Hawkins metal",
+    },
+    {
+        "file": "#5 bari_1.wav",
+        "profile_name": "Vito VSP 900 — Vandoren Optimum BL5",
+        "mpc": "Vandoren Optimum BL5 hard rubber",
+    },
+    {
+        "file": "#6 bari_1.wav",
+        "profile_name": "Vito VSP 900 — Rico Metalite B9",
+        "mpc": "Rico Metalite B9 plastic",
+    },
+]
+
+FOSTER_HORN = {
+    "horn_type": "Baritone",
+    "make": "Vito",
+    "model": "VSP 900",
+    "serial": "",
+    "reed": "",  # not specified
+    "notes": "Yanagisawa-built Vito VSP-900 series bari. "
+             "Six recordings of the same horn with six different mouthpieces, "
+             "by Ken Foster. Mic: Electro-Voice RE20 (dynamic).",
+}
+
+
+# ============================================================
+# KEN FOSTER — Conn 6M alto mouthpiece comparison (one horn, eight mpcs)
+# ============================================================
+
+# Same player, mic, library as the bari shootout — different horn.
+FOSTER_6M_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "Downloads",
+    "Conn 6m -20260407T210553Z-3-001",
+    "Conn 6m",
+)
+
+FOSTER_6M_HORN = {
+    "horn_type": "Alto",
+    "make": "Conn",
+    "model": "6M",
+    "serial": "322315",
+    "reed": "",  # not specified
+    "notes": "Conn 6M alto, serial 322315. Eight recordings of the same horn "
+             "with eight different mouthpieces, by Ken Foster. "
+             "Mic: Electro-Voice RE20 (dynamic). Companion to Foster's bari "
+             "mouthpiece shootout.",
+}
+
+FOSTER_6M_FILES = [
+    {
+        "file": "6m #1_1.wav",
+        "profile_name": "Conn 6M — Vintage HR (perhaps Conn New Wonder)",
+        "mpc": "Vintage hard rubber, possibly Conn New Wonder period "
+               "(photo provided, unidentified)",
+    },
+    {
+        "file": "6m #2_1.wav",
+        "profile_name": "Conn 6M — Conn Steelay 5",
+        "mpc": "Conn Steelay #5 — likely original to this horn",
+    },
+    {
+        "file": "6m #3_1.wav",
+        "profile_name": "Conn 6M — Yanagisawa 5 HR",
+        "mpc": "Yanagisawa #5 stock hard rubber",
+    },
+    {
+        "file": "6m #4_1.wav",
+        "profile_name": "Conn 6M — Yanagisawa AC140",
+        "mpc": "Yanagisawa AC140 modern classical",
+    },
+    {
+        "file": "6m #5_1.wav",
+        "profile_name": "Conn 6M — Selmer Soloist long shank C*",
+        "mpc": "Selmer Soloist C* long shank (stamped on facing)",
+    },
+    {
+        "file": "6m #6_1.wav",
+        "profile_name": "Conn 6M — Selmer S80 C** (Elkhart 1981)",
+        "mpc": "Selmer S80 C** — picked out at the Elkhart plant in 1981",
+    },
+    {
+        "file": "6m #7_1.wav",
+        "profile_name": "Conn 6M — Selmer S80 C*",
+        "mpc": "Selmer S80 C*",
+    },
+    {
+        "file": "6m #8_1.wav",
+        "profile_name": "Conn 6M — Morgan Excalibur 7",
+        "mpc": "Morgan Excalibur #7",
+    },
+]
+
+
+# ============================================================
+# GRANT SMILEY — Holton 241 with Selmer C* metal
+# ============================================================
+
+GRANT_LIBRARY = "Grant Smiley"
+GRANT_PLAYER = "Grant Smiley"
+GRANT_MIC_TYPE = "ribbon"
+GRANT_MIC_MODEL = "MXL RI44"
+
+GRANT_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "Downloads",
+    "grant smiley-20260406T190559Z-3-001",
+    "grant smiley",
+)
+
+# Both WAVs are the same horn, mouthpiece, mic, player, recording session.
+# They become two sessions of one preset so compute_fingerprint averages
+# across them. The "struggle_bus" prefix is Grant's own labeling — both
+# takes are kept since they're real data.
+GRANT_FILES = [
+    "holton selmer C_ metal_2026-04-03_13-59-55.wav",
+    "struggle_bus_holton selmer C_ metal_2026-04-03_14-08-56.wav",
+]
+
+GRANT_HORN = {
+    "horn_type": "Tenor",
+    "make": "Holton",
+    "model": "241",
+    "serial": "",
+    "mpc": "Selmer C* metal silver plate",
+    "reed": "",  # not specified
+    "notes": "Holton 241 tenor with Selmer C* metal silver plate "
+             "mouthpiece, recorded by Grant Smiley with an MXL RI44 ribbon "
+             "mic. Two takes from a single session — the second is labeled "
+             "\"struggle_bus\" by Grant himself, but both are kept as data.",
+}
 
 
 # ============================================================
@@ -353,6 +532,245 @@ def import_mario(profiles):
     return total_profiles, total_captures
 
 
+def import_foster(profiles):
+    """Import Ken Foster's bari mouthpiece comparison.
+
+    One horn, six mouthpieces — each becomes its own profile so the Analyze
+    tool can do delta comparisons between mouthpieces on the same horn.
+
+    Idempotent on its own scope: only clears profiles whose names start with
+    "Vito VSP 900" so the Conn 6M alto presets in the same library survive.
+    """
+    # Idempotent re-import: only remove existing bari profiles
+    if FOSTER_LIBRARY in profiles:
+        before = len(profiles[FOSTER_LIBRARY])
+        profiles[FOSTER_LIBRARY] = {
+            name: data for name, data in profiles[FOSTER_LIBRARY].items()
+            if not name.startswith("Vito VSP 900")
+        }
+        cleared = before - len(profiles[FOSTER_LIBRARY])
+        if cleared:
+            print(f"  Cleared {cleared} old bari profiles (re-importing)")
+
+    total_captures = 0
+    total_profiles = 0
+
+    print(f"\n--- Baritone (one horn, six mouthpieces) ---\n")
+    for entry in FOSTER_FILES:
+        filepath = os.path.join(FOSTER_DIR, entry["file"])
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+
+        profile_name = entry["profile_name"]
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        print(f"  Analyzing: {stem} ({entry['mpc']}) ...", end="", flush=True)
+
+        engine = TonerEngine()
+        engine.sax_type = FOSTER_HORN["horn_type"]
+        captures = analyze_audio_file(filepath, engine)
+
+        if not captures:
+            print(f" NO STABLE NOTES FOUND")
+            continue
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        for cap in captures:
+            cap["timestamp"] = now
+            cap["source_file"] = os.path.basename(filepath)
+
+        if FOSTER_LIBRARY not in profiles:
+            profiles[FOSTER_LIBRARY] = {}
+
+        profiles[FOSTER_LIBRARY][profile_name] = {
+            "horn_type": FOSTER_HORN["horn_type"],
+            "horn_make": FOSTER_HORN["make"],
+            "horn_model": FOSTER_HORN["model"],
+            "serial": FOSTER_HORN["serial"],
+            "player": FOSTER_PLAYER,
+            "mouthpiece": entry["mpc"],
+            "reed": FOSTER_HORN["reed"],
+            "notes": FOSTER_HORN["notes"],
+            "created": now,
+            "sessions": [],
+        }
+
+        session = {
+            "date": now,
+            "captures": captures,
+            "method": "file",
+            "source_notes": f"Recorded by {FOSTER_PLAYER}",
+            "mic_type": FOSTER_MIC_TYPE,
+            "mic_model": FOSTER_MIC_MODEL,
+        }
+        profiles[FOSTER_LIBRARY][profile_name]["sessions"].append(session)
+
+        unique_notes = set(c["note"] for c in captures)
+        print(f" {len(captures)} captures, {len(unique_notes)} unique notes")
+        total_captures += len(captures)
+        total_profiles += 1
+
+    return total_profiles, total_captures
+
+
+def import_foster_6m(profiles):
+    """Import Ken Foster's Conn 6M alto mouthpiece comparison.
+
+    One horn, eight mouthpieces — each becomes its own profile under the
+    same Ken Foster library as the bari shootout. Idempotent on its own
+    scope: only clears profiles whose names start with "Conn 6M" so the
+    bari presets survive.
+    """
+    # Idempotent re-import: only remove existing Conn 6M profiles
+    if FOSTER_LIBRARY in profiles:
+        before = len(profiles[FOSTER_LIBRARY])
+        profiles[FOSTER_LIBRARY] = {
+            name: data for name, data in profiles[FOSTER_LIBRARY].items()
+            if not name.startswith("Conn 6M")
+        }
+        cleared = before - len(profiles[FOSTER_LIBRARY])
+        if cleared:
+            print(f"  Cleared {cleared} old Conn 6M profiles (re-importing)")
+
+    total_captures = 0
+    total_profiles = 0
+
+    print(f"\n--- Alto (Conn 6M, eight mouthpieces) ---\n")
+    for entry in FOSTER_6M_FILES:
+        filepath = os.path.join(FOSTER_6M_DIR, entry["file"])
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+
+        profile_name = entry["profile_name"]
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        print(f"  Analyzing: {stem} ({entry['mpc']}) ...", end="", flush=True)
+
+        engine = TonerEngine()
+        engine.sax_type = FOSTER_6M_HORN["horn_type"]
+        captures = analyze_audio_file(filepath, engine)
+
+        if not captures:
+            print(f" NO STABLE NOTES FOUND")
+            continue
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        for cap in captures:
+            cap["timestamp"] = now
+            cap["source_file"] = os.path.basename(filepath)
+
+        if FOSTER_LIBRARY not in profiles:
+            profiles[FOSTER_LIBRARY] = {}
+
+        profiles[FOSTER_LIBRARY][profile_name] = {
+            "horn_type": FOSTER_6M_HORN["horn_type"],
+            "horn_make": FOSTER_6M_HORN["make"],
+            "horn_model": FOSTER_6M_HORN["model"],
+            "serial": FOSTER_6M_HORN["serial"],
+            "player": FOSTER_PLAYER,
+            "mouthpiece": entry["mpc"],
+            "reed": FOSTER_6M_HORN["reed"],
+            "notes": FOSTER_6M_HORN["notes"],
+            "created": now,
+            "sessions": [],
+        }
+
+        session = {
+            "date": now,
+            "captures": captures,
+            "method": "file",
+            "source_notes": f"Recorded by {FOSTER_PLAYER}",
+            "mic_type": FOSTER_MIC_TYPE,
+            "mic_model": FOSTER_MIC_MODEL,
+        }
+        profiles[FOSTER_LIBRARY][profile_name]["sessions"].append(session)
+
+        unique_notes = set(c["note"] for c in captures)
+        print(f" {len(captures)} captures, {len(unique_notes)} unique notes")
+        total_captures += len(captures)
+        total_profiles += 1
+
+    return total_profiles, total_captures
+
+
+def import_grant(profiles):
+    """Import Grant Smiley's Holton 241 with Selmer C* metal mpc.
+
+    Re-analyzes both WAVs through the current 20-harmonic engine. Both
+    takes go into ONE preset as separate sessions; the "struggle_bus"
+    label on the second take is Grant's own, kept as a session note.
+    """
+    # Clear existing to allow clean re-import
+    if GRANT_LIBRARY in profiles:
+        old_count = len(profiles[GRANT_LIBRARY])
+        del profiles[GRANT_LIBRARY]
+        print(f"  Cleared {old_count} old profiles (re-importing)")
+
+    profile_name = make_profile_name(
+        GRANT_HORN["make"], GRANT_HORN["model"], GRANT_HORN["serial"])
+    total_captures = 0
+
+    print(f"\n--- Tenor (Holton 241, Selmer C* metal silver plate) ---\n")
+    for fname in GRANT_FILES:
+        filepath = os.path.join(GRANT_DIR, fname)
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        is_struggle = stem.lower().startswith("struggle_bus")
+        label = "struggle_bus" if is_struggle else "clean take"
+        print(f"  Analyzing: {stem} ({label}) ...", end="", flush=True)
+
+        engine = TonerEngine()
+        engine.sax_type = GRANT_HORN["horn_type"]
+        captures = analyze_audio_file(filepath, engine)
+
+        if not captures:
+            print(f" NO STABLE NOTES FOUND")
+            continue
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        for cap in captures:
+            cap["timestamp"] = now
+            cap["source_file"] = os.path.basename(filepath)
+
+        if GRANT_LIBRARY not in profiles:
+            profiles[GRANT_LIBRARY] = {}
+
+        if profile_name not in profiles[GRANT_LIBRARY]:
+            profiles[GRANT_LIBRARY][profile_name] = {
+                "horn_type": GRANT_HORN["horn_type"],
+                "horn_make": GRANT_HORN["make"],
+                "horn_model": GRANT_HORN["model"],
+                "serial": GRANT_HORN["serial"],
+                "player": GRANT_PLAYER,
+                "mouthpiece": GRANT_HORN["mpc"],
+                "reed": GRANT_HORN["reed"],
+                "notes": GRANT_HORN["notes"],
+                "created": now,
+                "sessions": [],
+            }
+
+        session = {
+            "date": now,
+            "captures": captures,
+            "method": "file",
+            "source_notes": (f"Re-analyzed by tools/import_wavs.py "
+                             f"({label})"),
+            "mic_type": GRANT_MIC_TYPE,
+            "mic_model": GRANT_MIC_MODEL,
+        }
+        profiles[GRANT_LIBRARY][profile_name]["sessions"].append(session)
+
+        unique_notes = set(c["note"] for c in captures)
+        print(f" {len(captures)} captures, {len(unique_notes)} unique notes")
+        total_captures += len(captures)
+
+    n_profiles = 1 if GRANT_LIBRARY in profiles else 0
+    return n_profiles, total_captures
+
+
 def main():
     which = sys.argv[1].lower() if len(sys.argv) > 1 else "all"
 
@@ -383,6 +801,30 @@ def main():
         print("MARIO LARIOS-GARCÍA")
         print(f"{'='*50}")
         p, c = import_mario(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "foster"):
+        print(f"\n{'='*50}")
+        print("KEN FOSTER — Bari mouthpiece comparison")
+        print(f"{'='*50}")
+        p, c = import_foster(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "foster_6m"):
+        print(f"\n{'='*50}")
+        print("KEN FOSTER — Conn 6M alto mouthpiece comparison")
+        print(f"{'='*50}")
+        p, c = import_foster_6m(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "grant"):
+        print(f"\n{'='*50}")
+        print("GRANT SMILEY — Holton 241 with Selmer C* metal")
+        print(f"{'='*50}")
+        p, c = import_grant(profiles)
         grand_profiles += p
         grand_captures += c
 

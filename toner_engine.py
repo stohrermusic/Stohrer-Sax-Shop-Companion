@@ -109,10 +109,49 @@ SPECTRAL_QUALITY_THRESHOLD = 0.6
 LOW_FREQ_WEAKNESS_RATIO = 0.05
 
 # --- Recording quality (harmonic rolloff) ---
-# Average dB drop per harmonic from H2 to H12.  Good close-mic setups read
-# 1.0–2.0 dB/harmonic; a laptop mic across the room reads 3.0+.
-ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — warn above this
+# Average dB drop per harmonic from H2 to H12.  Good close-mic condenser
+# setups read 1.0–2.0 dB/harmonic; a laptop mic across the room reads 3.0+.
+# Different mic classes have different intrinsic HF response — ribbons and
+# (to a lesser extent) dynamics naturally read higher than condensers
+# regardless of recording quality, so the warning threshold is mic-aware
+# via get_rolloff_threshold() below. The constant remains as the
+# condenser/unknown default.
+ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — condenser default
 ROLLOFF_MIN_CAPTURES = 5       # need this many before checking
+
+
+def get_rolloff_threshold(mic_type, sax_type=None):
+    """Mic-class- and sax-type-aware rolloff warning threshold (dB/harmonic).
+
+    Ribbons attenuate high frequencies more than condensers as a matter
+    of physics (the velocity-sensing element falls off above a few kHz).
+    Dynamics fall in between. Higher-pitched horns also read higher
+    rolloff because their upper harmonics reach further into the mic's
+    high-frequency rolloff region.
+
+    Sax-type adjustments are bolted on top of the mic-class base. They
+    are conservative — bumped only enough to stop legitimately-rolloff-
+    heavy combinations from false-firing the warning. NOT calibrated
+    against a population:
+      - alto + dynamic: 3.5 (Foster's Conn 6M with RE20 reads 2.99–3.49
+        across 8 mpcs; same mic on his bari reads 1.5–2.3)
+    Refine as more sax-type × mic-type combinations come in.
+
+    Sax_type defaults to None for backward compat — callers without sax
+    info still get the mic-only behavior.
+    """
+    mt = (mic_type or '').lower()
+    st = (sax_type or '').lower()
+
+    if mt == 'ribbon':
+        return 3.5
+    if mt == 'dynamic':
+        # Alto reads ~1 dB/H higher than tenor/bari with the same dynamic
+        # mic — Foster's two shootouts are the only data point so far.
+        if st == 'alto':
+            return 3.5
+        return 2.8
+    return ROLLOFF_WARN_THRESHOLD  # condenser, other, or unknown
 
 # Calibration capture: written chromatic scale Bb3 to F6
 # These are WRITTEN pitches — the transposition to concert pitch
@@ -960,17 +999,21 @@ def note_name_to_midi(note_name):
     return (octave + 1) * 12 + pc_idx
 
 
-# Expected concert pitch MIDI ranges per sax type (with margin for altissimo).
-# Notes outside these ranges are flagged as potential detection artifacts.
+# Expected concert pitch MIDI ranges per sax type — NORMAL RANGE ONLY,
+# no altissimo. Altissimo notes are harmonic partials of lower fingerings,
+# not closed-tube fundamentals, so their harmonic structure isn't useful
+# for tone analysis. The lower bound is low Bb (universal) extended to
+# low A on bari (common spec) and alto (rare). Captures outside these
+# ranges are dropped from compute_fingerprint as detection artifacts.
 SAX_NOTE_RANGES = {
-    "Sopranino": (68, 96),   # Ab4 – C7
-    "Soprano":   (56, 91),   # Ab3 – G6
-    "Alto":      (49, 84),   # Db3 – C6
-    "F Mezzo":   (44, 80),   # Ab2 – Ab5
-    "C Melody":  (49, 80),   # Db3 – Ab5
-    "Tenor":     (44, 79),   # Ab2 – G5
-    "Baritone":  (37, 72),   # Db2 – C5
-    "Bass":      (32, 67),   # Ab1 – G4
+    "Sopranino": (61, 93),   # Db4 – A6  concert  (low Bb – high F#6 written)
+    "Soprano":   (56, 88),   # Ab3 – E6  concert  (low Bb – high F#6 written)
+    "F Mezzo":   (51, 83),   # Eb3 – B5  concert  (low Bb – high F#6 written)
+    "Alto":      (48, 81),   # C3  – A5  concert  (low A  – high F#6 written)
+    "C Melody":  (46, 78),   # Bb2 – F#5 concert  (low Bb – high F#5 written)
+    "Tenor":     (44, 76),   # Ab2 – E5  concert  (low Bb – high F#5 written)
+    "Baritone":  (36, 69),   # C2  – A4  concert  (low A  – high F#5 written)
+    "Bass":      (32, 64),   # Ab1 – E4  concert  (low Bb – high F#5 written)
 }
 
 
@@ -1112,6 +1155,35 @@ def compute_rolloff_rate(harmonics_db):
     return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
 
 
+def _capture_is_plausible(cap, sax_type):
+    """Return True if a capture should be included in fingerprint averaging.
+
+    Drops two classes of detection artifacts:
+      1. Notes outside SAX_NOTE_RANGES[sax_type] (no margin for altissimo —
+         altissimo is a harmonic partial of a lower fingering, not a true
+         closed-tube fundamental).
+      2. Captures where any harmonic value exceeds +20 dB above the labeled
+         fundamental — physically impossible, a clear sub-octave detection
+         error where the real fundamental landed in an upper-harmonic bin.
+         Real low-register H2 tops out near +10 dB on alto, so +20 dB
+         leaves headroom for the darkest legitimate cases.
+    """
+    note = cap.get('note', '')
+    bounds = SAX_NOTE_RANGES.get(sax_type)
+    if bounds is not None:
+        midi = note_name_to_midi(note)
+        if midi is None or midi < bounds[0] or midi > bounds[1]:
+            return False
+
+    h = cap.get('harmonics_db', [])
+    if len(h) > 1:
+        # Filter NaN/inf and the impossible-positive sentinel
+        for v in h[1:]:
+            if v != v or v > 20.0:  # NaN check + plausibility ceiling
+                return False
+    return True
+
+
 def compute_fingerprint(sessions, sax_type="Tenor"):
     """Compute an aggregate harmonic fingerprint from all sessions in a preset.
 
@@ -1123,11 +1195,17 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
     the averaged harmonics, then averages descriptors across notes with
     equal weight per note. This prevents register skew.
 
+    Captures whose detected note is outside SAX_NOTE_RANGES[sax_type] OR
+    whose harmonics include a physically-impossible value (>+20 dB above
+    the labeled fundamental, indicating a sub-octave detection error) are
+    silently dropped before averaging. The raw on-disk captures are NOT
+    modified — this is a read-side filter.
+
     Returns dict with:
         'harmonics_db': averaged harmonic dB curve across all notes
         'descriptors': computed descriptor values (equal weight per note)
         'note_count': total unique notes
-        'capture_count': total captures
+        'capture_count': total captures kept (after filtering)
         'per_note': dict of note_name -> averaged capture with computed descriptors
     """
     all_captures = []
@@ -1135,6 +1213,8 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
 
     for session in sessions:
         for cap in session.get('captures', []):
+            if not _capture_is_plausible(cap, sax_type):
+                continue
             note = cap.get('note', '')
             entry = {
                 'harmonics_db': cap.get('harmonics_db', []),
@@ -1418,14 +1498,104 @@ def compute_population_stats(all_presets, sax_type):
     }
 
 
+def _read_wav_file(filepath):
+    """Read a RIFF/WAV file and return (samples_float32, framerate, n_channels).
+
+    Handles PCM (format 1) at 16/24/32-bit, IEEE float (format 3) at 32/64-bit,
+    and WAVE_FORMAT_EXTENSIBLE (0xFFFE) by inspecting the SubFormat GUID.
+    Falls back to None on unsupported formats.
+
+    Replaces the stdlib `wave` module, which raises on format 3 — common
+    in DAW exports. Walks chunks manually to find 'fmt ' and 'data'.
+    """
+    import struct
+
+    with open(filepath, 'rb') as f:
+        riff = f.read(12)
+        if len(riff) < 12 or riff[:4] != b'RIFF' or riff[8:12] != b'WAVE':
+            return None
+
+        fmt_tag = None
+        n_channels = None
+        framerate = None
+        bits_per_sample = None
+        raw = None
+
+        while True:
+            header = f.read(8)
+            if len(header) < 8:
+                break
+            chunk_id = header[:4]
+            chunk_size = struct.unpack('<I', header[4:8])[0]
+
+            if chunk_id == b'fmt ':
+                fmt_data = f.read(chunk_size)
+                if len(fmt_data) < 16:
+                    return None
+                fmt_tag = struct.unpack('<H', fmt_data[0:2])[0]
+                n_channels = struct.unpack('<H', fmt_data[2:4])[0]
+                framerate = struct.unpack('<I', fmt_data[4:8])[0]
+                bits_per_sample = struct.unpack('<H', fmt_data[14:16])[0]
+                # WAVE_FORMAT_EXTENSIBLE: read the SubFormat GUID's first 2 bytes
+                if fmt_tag == 0xFFFE and len(fmt_data) >= 26:
+                    sub_format = struct.unpack('<H', fmt_data[24:26])[0]
+                    fmt_tag = sub_format
+                # Pad byte if chunk size is odd
+                if chunk_size & 1:
+                    f.read(1)
+            elif chunk_id == b'data':
+                raw = f.read(chunk_size)
+                break
+            else:
+                # Skip unknown chunk (LIST, INFO, etc.)
+                f.read(chunk_size)
+                if chunk_size & 1:
+                    f.read(1)
+
+    if raw is None or fmt_tag is None or n_channels is None:
+        return None
+
+    sampwidth = bits_per_sample // 8
+    n_samples = len(raw) // sampwidth
+
+    # PCM int formats
+    if fmt_tag == 1:
+        if sampwidth == 2:
+            samples = np.frombuffer(raw, dtype='<i2').astype(np.float32) / 32768.0
+        elif sampwidth == 3:
+            # 24-bit: sign-extend each 3-byte sample to 4 bytes
+            padded = bytearray(4 * n_samples)
+            for i in range(n_samples):
+                padded[i * 4 + 1] = raw[i * 3]
+                padded[i * 4 + 2] = raw[i * 3 + 1]
+                padded[i * 4 + 3] = raw[i * 3 + 2]
+            samples = np.frombuffer(bytes(padded), dtype='<i4').astype(np.float32) / 2147483648.0
+        elif sampwidth == 4:
+            samples = np.frombuffer(raw, dtype='<i4').astype(np.float32) / 2147483648.0
+        else:
+            return None
+    # IEEE float formats
+    elif fmt_tag == 3:
+        if sampwidth == 4:
+            samples = np.frombuffer(raw, dtype='<f4').astype(np.float32)
+        elif sampwidth == 8:
+            samples = np.frombuffer(raw, dtype='<f8').astype(np.float32)
+        else:
+            return None
+    else:
+        return None
+
+    return samples, framerate, n_channels
+
+
 def analyze_audio_file(filepath, engine, progress_cb=None):
     """Analyze an audio file offline. Returns list of capture dicts.
 
     Loads the file, slides a window through it, detects stable note
     segments, and extracts averaged captures — same data as live capture.
 
-    Supports WAV files (via stdlib wave module). For other formats,
-    the file must first be converted to WAV.
+    Supports WAV files: PCM 16/24/32-bit and IEEE float 32/64-bit. For other
+    formats, the file must first be converted to WAV.
 
     Args:
         filepath: Path to a WAV audio file
@@ -1435,40 +1605,10 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     Returns:
         list of capture dicts (same format as session captures)
     """
-    import wave
-    import struct
-
-    # Load WAV file
-    with wave.open(filepath, 'rb') as wf:
-        n_channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
-        framerate = wf.getframerate()
-        n_frames = wf.getnframes()
-        raw = wf.readframes(n_frames)
-
-    # Convert to float32 mono (16-bit, 24-bit, 32-bit int, 32-bit float)
-    n_samples = n_frames * n_channels
-    if sampwidth == 2:
-        samples = np.array(struct.unpack(f'<{n_samples}h', raw),
-                          dtype=np.float32) / 32768.0
-    elif sampwidth == 3:
-        # 24-bit audio: pad each 3-byte sample to 4 bytes (sign-extend)
-        padded = bytearray(4 * n_samples)
-        for i in range(n_samples):
-            padded[i * 4 + 1] = raw[i * 3]
-            padded[i * 4 + 2] = raw[i * 3 + 1]
-            padded[i * 4 + 3] = raw[i * 3 + 2]
-        samples = np.array(struct.unpack(f'<{n_samples}i', bytes(padded)),
-                          dtype=np.float32) / 2147483648.0
-    elif sampwidth == 4:
-        # Try 32-bit float first (common DAW export), fall back to 32-bit int
-        samples = np.frombuffer(raw, dtype=np.float32).copy()
-        if np.any(np.abs(samples) > 2.0):
-            # Values > 2.0 means it's 32-bit int, not float
-            samples = np.array(struct.unpack(f'<{n_samples}i', raw),
-                              dtype=np.float32) / 2147483648.0
-    else:
+    loaded = _read_wav_file(filepath)
+    if loaded is None:
         return []
+    samples, framerate, n_channels = loaded
 
     # Mix to mono if stereo
     if n_channels > 1:

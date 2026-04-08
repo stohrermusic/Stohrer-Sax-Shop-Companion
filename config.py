@@ -177,8 +177,8 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.0"
-APP_BUILD_DATE = "2026-04-06"
+APP_VERSION = "2.0.1"
+APP_BUILD_DATE = "2026-04-07"
 
 def get_config_dir():
     """

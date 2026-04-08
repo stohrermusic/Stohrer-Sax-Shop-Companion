@@ -54,12 +54,62 @@ STROKE_FONT = {
     '-': [
         [(0.1, 0.5), (0.5, 0.5)]
     ],
+    # Letters used by the Phil Noy credit engraving on tooling parts.
+    # Hand-designed single-stroke approximations matching the digits' style
+    # (origin bottom-left, ~0.5-0.65 wide, 1.0 tall).
+    ' ': [],
+    'B': [
+        [(0.1, 0.05), (0.1, 0.95), (0.35, 0.95), (0.5, 0.85), (0.5, 0.6), (0.35, 0.5), (0.1, 0.5)],
+        [(0.35, 0.5), (0.5, 0.4), (0.5, 0.15), (0.35, 0.05), (0.1, 0.05)]
+    ],
+    'D': [
+        [(0.1, 0.05), (0.1, 0.95), (0.35, 0.95), (0.5, 0.8), (0.5, 0.2), (0.35, 0.05), (0.1, 0.05)]
+    ],
+    'E': [
+        [(0.5, 0.95), (0.1, 0.95), (0.1, 0.05), (0.5, 0.05)],
+        [(0.1, 0.5), (0.4, 0.5)]
+    ],
+    'G': [
+        [(0.55, 0.85), (0.5, 0.95), (0.2, 0.95), (0.1, 0.85), (0.1, 0.15), (0.2, 0.05), (0.5, 0.05), (0.55, 0.15), (0.55, 0.45), (0.35, 0.45)]
+    ],
+    'H': [
+        [(0.1, 0.05), (0.1, 0.95)],
+        [(0.5, 0.05), (0.5, 0.95)],
+        [(0.1, 0.5), (0.5, 0.5)]
+    ],
+    'I': [
+        [(0.1, 0.95), (0.3, 0.95)],
+        [(0.2, 0.95), (0.2, 0.05)],
+        [(0.1, 0.05), (0.3, 0.05)]
+    ],
+    'L': [
+        [(0.1, 0.95), (0.1, 0.05), (0.5, 0.05)]
+    ],
+    'N': [
+        [(0.1, 0.05), (0.1, 0.95), (0.5, 0.05), (0.5, 0.95)]
+    ],
+    'O': [
+        [(0.2, 0.05), (0.1, 0.15), (0.1, 0.85), (0.2, 0.95), (0.4, 0.95), (0.5, 0.85), (0.5, 0.15), (0.4, 0.05), (0.2, 0.05)]
+    ],
+    'P': [
+        [(0.1, 0.05), (0.1, 0.95), (0.4, 0.95), (0.5, 0.85), (0.5, 0.6), (0.4, 0.5), (0.1, 0.5)]
+    ],
+    'S': [
+        [(0.5, 0.85), (0.4, 0.95), (0.2, 0.95), (0.1, 0.85), (0.1, 0.6), (0.2, 0.5), (0.4, 0.5), (0.5, 0.4), (0.5, 0.15), (0.4, 0.05), (0.2, 0.05), (0.1, 0.15)]
+    ],
+    'Y': [
+        [(0.1, 0.95), (0.3, 0.5), (0.5, 0.95)],
+        [(0.3, 0.5), (0.3, 0.05)]
+    ],
 }
 
 # Character width for spacing (proportional)
 CHAR_WIDTHS = {
     '0': 0.6, '1': 0.5, '2': 0.6, '3': 0.6, '4': 0.6, '5': 0.6,
-    '6': 0.6, '7': 0.6, '8': 0.6, '9': 0.6, '.': 0.4, '-': 0.6
+    '6': 0.6, '7': 0.6, '8': 0.6, '9': 0.6, '.': 0.4, '-': 0.6,
+    ' ': 0.3,
+    'B': 0.55, 'D': 0.55, 'E': 0.55, 'G': 0.65, 'H': 0.55, 'I': 0.4,
+    'L': 0.55, 'N': 0.55, 'O': 0.65, 'P': 0.55, 'S': 0.65, 'Y': 0.65,
 }
 
 DEFAULT_CHAR_WIDTH = 0.6
@@ -115,11 +165,79 @@ FILLED_FONT = {
     '.': [
         [(0.05, 0.078), (0.05, 0.086), (0.051, 0.094), (0.053, 0.101), (0.055, 0.108), (0.057, 0.114), (0.061, 0.12), (0.065, 0.126), (0.069, 0.132), (0.074, 0.137), (0.08, 0.141), (0.086, 0.145), (0.093, 0.148), (0.1, 0.15), (0.108, 0.152), (0.117, 0.153), (0.126, 0.153), (0.135, 0.153), (0.144, 0.152), (0.152, 0.15), (0.16, 0.148), (0.167, 0.145), (0.173, 0.141), (0.179, 0.137), (0.184, 0.132), (0.189, 0.126), (0.193, 0.12), (0.196, 0.114), (0.199, 0.108), (0.201, 0.101), (0.203, 0.094), (0.203, 0.086), (0.204, 0.078), (0.203, 0.071), (0.203, 0.063), (0.201, 0.057), (0.199, 0.05), (0.196, 0.044), (0.193, 0.038), (0.189, 0.032), (0.184, 0.027), (0.179, 0.022), (0.173, 0.018), (0.167, 0.014), (0.16, 0.011), (0.152, 0.009), (0.144, 0.007), (0.135, 0.006), (0.126, 0.006), (0.117, 0.006), (0.108, 0.007), (0.1, 0.009), (0.093, 0.011), (0.086, 0.014), (0.08, 0.018), (0.074, 0.022), (0.069, 0.027), (0.065, 0.032), (0.061, 0.038), (0.057, 0.044), (0.055, 0.05), (0.053, 0.057), (0.051, 0.063), (0.05, 0.071), (0.05, 0.078)],
     ],
+    '-': [
+        [(0.376, 0.376), (0.05, 0.376), (0.05, 0.477), (0.376, 0.477), (0.376, 0.376)],
+    ],
+    ' ': [],
+    'D': [
+        [(0.05, 0.013), (0.05, 0.987), (0.325, 0.987), (0.356, 0.986), (0.386, 0.983), (0.416, 0.979), (0.444, 0.973), (0.472, 0.965), (0.499, 0.955), (0.524, 0.944), (0.549, 0.93), (0.573, 0.916), (0.595, 0.899), (0.616, 0.882), (0.636, 0.862), (0.654, 0.842), (0.671, 0.82), (0.686, 0.796), (0.7, 0.771), (0.713, 0.744), (0.723, 0.717), (0.733, 0.689), (0.74, 0.659), (0.746, 0.629), (0.75, 0.598), (0.753, 0.566), (0.754, 0.533), (0.754, 0.471), (0.753, 0.437), (0.751, 0.404), (0.746, 0.372), (0.741, 0.341), (0.733, 0.312), (0.724, 0.283), (0.713, 0.256), (0.701, 0.229), (0.687, 0.204), (0.671, 0.18), (0.654, 0.158), (0.636, 0.138), (0.617, 0.119), (0.595, 0.101), (0.573, 0.085), (0.549, 0.07), (0.524, 0.057), (0.498, 0.046), (0.47, 0.036), (0.442, 0.028), (0.413, 0.022), (0.383, 0.017), (0.352, 0.015), (0.319, 0.013), (0.05, 0.013)],
+        [(0.178, 0.881), (0.178, 0.118), (0.313, 0.118), (0.349, 0.12), (0.383, 0.124), (0.415, 0.131), (0.445, 0.141), (0.473, 0.154), (0.499, 0.17), (0.523, 0.189), (0.544, 0.211), (0.564, 0.235), (0.58, 0.262), (0.595, 0.291), (0.606, 0.322), (0.615, 0.356), (0.622, 0.393), (0.626, 0.432), (0.627, 0.473), (0.627, 0.53), (0.626, 0.57), (0.622, 0.608), (0.616, 0.644), (0.607, 0.677), (0.596, 0.708), (0.583, 0.737), (0.567, 0.764), (0.549, 0.788), (0.529, 0.809), (0.506, 0.828), (0.481, 0.844), (0.455, 0.857), (0.426, 0.867), (0.396, 0.875), (0.363, 0.879), (0.328, 0.881), (0.178, 0.881)],
+    ],
+    'E': [
+        [(0.6, 0.463), (0.178, 0.463), (0.178, 0.118), (0.668, 0.118), (0.668, 0.013), (0.05, 0.013), (0.05, 0.987), (0.662, 0.987), (0.662, 0.881), (0.178, 0.881), (0.178, 0.568), (0.6, 0.568), (0.6, 0.463)],
+    ],
+    'S': [
+        [(0.396, 0.447), (0.356, 0.459), (0.319, 0.472), (0.285, 0.486), (0.254, 0.5), (0.225, 0.515), (0.199, 0.531), (0.176, 0.547), (0.156, 0.564), (0.138, 0.582), (0.123, 0.6), (0.11, 0.62), (0.1, 0.641), (0.091, 0.663), (0.085, 0.686), (0.082, 0.71), (0.081, 0.735), (0.082, 0.763), (0.086, 0.79), (0.094, 0.815), (0.104, 0.84), (0.117, 0.863), (0.132, 0.885), (0.151, 0.905), (0.173, 0.925), (0.197, 0.942), (0.222, 0.958), (0.249, 0.971), (0.278, 0.981), (0.309, 0.989), (0.342, 0.995), (0.376, 0.999), (0.412, 1.0), (0.436, 0.999), (0.46, 0.998), (0.484, 0.995), (0.506, 0.99), (0.528, 0.985), (0.55, 0.978), (0.57, 0.97), (0.59, 0.961), (0.61, 0.951), (0.627, 0.94), (0.644, 0.928), (0.66, 0.915), (0.675, 0.901), (0.688, 0.887), (0.701, 0.871), (0.712, 0.854), (0.722, 0.837), (0.731, 0.819), (0.738, 0.801), (0.744, 0.783), (0.749, 0.764), (0.753, 0.745), (0.755, 0.725), (0.755, 0.705), (0.626, 0.705), (0.625, 0.727), (0.623, 0.747), (0.618, 0.766), (0.612, 0.784), (0.604, 0.801), (0.595, 0.816), (0.583, 0.831), (0.57, 0.844), (0.555, 0.856), (0.539, 0.866), (0.521, 0.875), (0.502, 0.882), (0.482, 0.887), (0.46, 0.891), (0.436, 0.894), (0.412, 0.894), (0.389, 0.894), (0.367, 0.892), (0.346, 0.889), (0.327, 0.884), (0.309, 0.878), (0.293, 0.871), (0.278, 0.862), (0.264, 0.853), (0.251, 0.842), (0.24, 0.83), (0.231, 0.817), (0.224, 0.803), (0.218, 0.788), (0.214, 0.772), (0.211, 0.755), (0.21, 0.737), (0.211, 0.722), (0.214, 0.708), (0.218, 0.695), (0.223, 0.682), (0.23, 0.669), (0.239, 0.658), (0.249, 0.647), (0.261, 0.636), (0.275, 0.626), (0.291, 0.616), (0.309, 0.606), (0.329, 0.597), (0.352, 0.587), (0.376, 0.578), (0.403, 0.569), (0.433, 0.561), (0.462, 0.552), (0.49, 0.543), (0.516, 0.534), (0.541, 0.525), (0.564, 0.515), (0.585, 0.506), (0.605, 0.496), (0.623, 0.486), (0.639, 0.475), (0.655, 0.464), (0.669, 0.453), (0.682, 0.441), (0.694, 0.429), (0.705, 0.416), (0.715, 0.403), (0.724, 0.39), (0.732, 0.376), (0.739, 0.361), (0.744, 0.346), (0.749, 0.33), (0.753, 0.314), (0.755, 0.297), (0.757, 0.279), (0.757, 0.261), (0.756, 0.232), (0.751, 0.204), (0.744, 0.179), (0.734, 0.154), (0.721, 0.131), (0.705, 0.11), (0.687, 0.09), (0.665, 0.071), (0.641, 0.055), (0.615, 0.04), (0.587, 0.028), (0.557, 0.018), (0.525, 0.01), (0.492, 0.004), (0.456, 0.001), (0.418, 0.0), (0.393, 0.001), (0.369, 0.002), (0.345, 0.005), (0.321, 0.01), (0.298, 0.015), (0.275, 0.022), (0.253, 0.029), (0.231, 0.038), (0.21, 0.048), (0.19, 0.059), (0.172, 0.071), (0.154, 0.084), (0.138, 0.098), (0.123, 0.112), (0.11, 0.127), (0.097, 0.144), (0.086, 0.161), (0.077, 0.178), (0.068, 0.196), (0.062, 0.215), (0.057, 0.234), (0.053, 0.254), (0.051, 0.275), (0.05, 0.295), (0.179, 0.295), (0.18, 0.274), (0.183, 0.254), (0.188, 0.234), (0.195, 0.216), (0.204, 0.2), (0.216, 0.184), (0.229, 0.169), (0.244, 0.156), (0.261, 0.144), (0.28, 0.134), (0.299, 0.125), (0.32, 0.118), (0.343, 0.112), (0.367, 0.108), (0.392, 0.106), (0.418, 0.105), (0.443, 0.106), (0.466, 0.108), (0.488, 0.111), (0.508, 0.115), (0.527, 0.121), (0.544, 0.128), (0.56, 0.137), (0.574, 0.146), (0.587, 0.157), (0.598, 0.169), (0.607, 0.182), (0.615, 0.195), (0.621, 0.21), (0.625, 0.225), (0.627, 0.242), (0.628, 0.259), (0.627, 0.277), (0.625, 0.293), (0.621, 0.308), (0.616, 0.323), (0.609, 0.336), (0.6, 0.348), (0.59, 0.36), (0.578, 0.37), (0.564, 0.38), (0.548, 0.389), (0.529, 0.399), (0.508, 0.409), (0.484, 0.418), (0.457, 0.428), (0.428, 0.438), (0.396, 0.447)],
+    ],
+    'I': [
+        [(0.178, 0.013), (0.05, 0.013), (0.05, 0.987), (0.178, 0.987), (0.178, 0.013)],
+    ],
+    'G': [
+        [(0.8, 0.141), (0.787, 0.124), (0.773, 0.108), (0.757, 0.093), (0.741, 0.079), (0.723, 0.066), (0.704, 0.055), (0.683, 0.044), (0.662, 0.035), (0.639, 0.027), (0.616, 0.02), (0.591, 0.014), (0.566, 0.009), (0.54, 0.005), (0.513, 0.002), (0.485, 0.001), (0.456, 0.0), (0.426, 0.001), (0.398, 0.003), (0.37, 0.008), (0.343, 0.014), (0.317, 0.022), (0.292, 0.031), (0.268, 0.043), (0.245, 0.056), (0.222, 0.071), (0.201, 0.087), (0.181, 0.104), (0.163, 0.123), (0.146, 0.144), (0.13, 0.166), (0.115, 0.19), (0.102, 0.215), (0.09, 0.241), (0.08, 0.268), (0.071, 0.296), (0.064, 0.326), (0.058, 0.356), (0.054, 0.387), (0.051, 0.42), (0.05, 0.453), (0.05, 0.538), (0.052, 0.592), (0.056, 0.642), (0.064, 0.689), (0.076, 0.733), (0.09, 0.774), (0.108, 0.812), (0.129, 0.847), (0.153, 0.879), (0.18, 0.907), (0.209, 0.932), (0.241, 0.953), (0.276, 0.97), (0.313, 0.983), (0.353, 0.992), (0.396, 0.998), (0.441, 1.0), (0.478, 0.999), (0.514, 0.995), (0.547, 0.989), (0.579, 0.981), (0.608, 0.97), (0.636, 0.956), (0.662, 0.94), (0.686, 0.922), (0.708, 0.902), (0.728, 0.879), (0.746, 0.855), (0.761, 0.828), (0.774, 0.799), (0.785, 0.769), (0.794, 0.736), (0.8, 0.701), (0.672, 0.701), (0.66, 0.746), (0.644, 0.786), (0.622, 0.819), (0.596, 0.846), (0.565, 0.867), (0.529, 0.882), (0.488, 0.891), (0.442, 0.894), (0.41, 0.893), (0.381, 0.889), (0.354, 0.882), (0.328, 0.872), (0.305, 0.859), (0.283, 0.843), (0.264, 0.825), (0.246, 0.804), (0.231, 0.78), (0.217, 0.753), (0.206, 0.724), (0.196, 0.693), (0.189, 0.659), (0.183, 0.622), (0.18, 0.583), (0.179, 0.541), (0.179, 0.462), (0.18, 0.422), (0.184, 0.384), (0.19, 0.349), (0.198, 0.315), (0.208, 0.283), (0.221, 0.254), (0.236, 0.227), (0.254, 0.202), (0.273, 0.179), (0.295, 0.159), (0.317, 0.143), (0.342, 0.129), (0.368, 0.119), (0.396, 0.111), (0.425, 0.106), (0.456, 0.105), (0.474, 0.105), (0.491, 0.106), (0.508, 0.107), (0.524, 0.109), (0.54, 0.111), (0.555, 0.114), (0.569, 0.117), (0.583, 0.121), (0.596, 0.125), (0.609, 0.13), (0.621, 0.136), (0.632, 0.143), (0.643, 0.15), (0.653, 0.157), (0.663, 0.166), (0.672, 0.175), (0.672, 0.394), (0.447, 0.394), (0.447, 0.498), (0.8, 0.498), (0.8, 0.141)],
+    ],
+    'N': [
+        [(0.798, 0.013), (0.669, 0.013), (0.179, 0.763), (0.179, 0.013), (0.05, 0.013), (0.05, 0.987), (0.179, 0.987), (0.67, 0.233), (0.67, 0.987), (0.798, 0.987), (0.798, 0.013)],
+    ],
+    'B': [
+        [(0.05, 0.013), (0.05, 0.987), (0.368, 0.987), (0.407, 0.986), (0.442, 0.983), (0.476, 0.977), (0.507, 0.97), (0.536, 0.961), (0.562, 0.95), (0.585, 0.936), (0.606, 0.921), (0.625, 0.904), (0.641, 0.884), (0.655, 0.863), (0.666, 0.84), (0.675, 0.815), (0.681, 0.788), (0.685, 0.758), (0.686, 0.727), (0.686, 0.71), (0.684, 0.694), (0.681, 0.678), (0.677, 0.663), (0.671, 0.648), (0.665, 0.634), (0.657, 0.62), (0.648, 0.607), (0.637, 0.594), (0.626, 0.582), (0.615, 0.571), (0.602, 0.56), (0.588, 0.55), (0.574, 0.541), (0.558, 0.533), (0.542, 0.525), (0.561, 0.519), (0.579, 0.512), (0.596, 0.503), (0.613, 0.493), (0.628, 0.482), (0.642, 0.47), (0.655, 0.456), (0.667, 0.442), (0.677, 0.426), (0.687, 0.409), (0.695, 0.392), (0.701, 0.374), (0.706, 0.355), (0.71, 0.335), (0.712, 0.315), (0.712, 0.294), (0.711, 0.262), (0.707, 0.232), (0.7, 0.204), (0.691, 0.177), (0.679, 0.152), (0.665, 0.129), (0.647, 0.108), (0.628, 0.088), (0.605, 0.071), (0.581, 0.055), (0.554, 0.043), (0.525, 0.032), (0.494, 0.024), (0.461, 0.018), (0.425, 0.015), (0.388, 0.013), (0.05, 0.013)],
+        [(0.178, 0.469), (0.178, 0.118), (0.39, 0.118), (0.412, 0.119), (0.433, 0.121), (0.452, 0.125), (0.47, 0.13), (0.487, 0.136), (0.503, 0.144), (0.518, 0.154), (0.532, 0.165), (0.544, 0.177), (0.554, 0.19), (0.563, 0.205), (0.57, 0.22), (0.576, 0.237), (0.58, 0.254), (0.583, 0.273), (0.583, 0.293), (0.58, 0.334), (0.571, 0.37), (0.557, 0.4), (0.536, 0.425), (0.509, 0.444), (0.476, 0.458), (0.437, 0.466), (0.392, 0.469), (0.178, 0.469)],
+        [(0.178, 0.572), (0.372, 0.572), (0.393, 0.572), (0.412, 0.574), (0.431, 0.577), (0.448, 0.582), (0.464, 0.588), (0.48, 0.595), (0.494, 0.604), (0.507, 0.614), (0.519, 0.625), (0.529, 0.637), (0.538, 0.649), (0.545, 0.663), (0.55, 0.678), (0.554, 0.694), (0.557, 0.71), (0.557, 0.728), (0.557, 0.747), (0.554, 0.765), (0.551, 0.782), (0.546, 0.797), (0.539, 0.811), (0.531, 0.824), (0.522, 0.835), (0.511, 0.845), (0.498, 0.853), (0.484, 0.861), (0.469, 0.867), (0.452, 0.872), (0.433, 0.876), (0.413, 0.879), (0.391, 0.88), (0.368, 0.881), (0.178, 0.881), (0.178, 0.572)],
+    ],
+    'Y': [
+        [(0.45, 0.498), (0.704, 0.987), (0.849, 0.987), (0.514, 0.376), (0.514, 0.013), (0.386, 0.013), (0.386, 0.376), (0.05, 0.987), (0.197, 0.987), (0.45, 0.498)],
+    ],
+    'P': [
+        [(0.178, 0.394), (0.178, 0.013), (0.05, 0.013), (0.05, 0.987), (0.409, 0.987), (0.448, 0.985), (0.485, 0.982), (0.519, 0.975), (0.551, 0.966), (0.582, 0.955), (0.61, 0.941), (0.636, 0.924), (0.659, 0.905), (0.681, 0.884), (0.699, 0.861), (0.714, 0.836), (0.727, 0.81), (0.737, 0.783), (0.744, 0.753), (0.748, 0.722), (0.75, 0.689), (0.748, 0.655), (0.744, 0.622), (0.737, 0.592), (0.728, 0.564), (0.715, 0.537), (0.7, 0.513), (0.682, 0.491), (0.661, 0.471), (0.638, 0.453), (0.612, 0.437), (0.584, 0.424), (0.554, 0.414), (0.521, 0.405), (0.485, 0.399), (0.448, 0.396), (0.408, 0.394), (0.178, 0.394)],
+        [(0.178, 0.499), (0.409, 0.499), (0.434, 0.5), (0.457, 0.502), (0.479, 0.506), (0.5, 0.511), (0.519, 0.518), (0.536, 0.527), (0.552, 0.536), (0.567, 0.548), (0.58, 0.561), (0.591, 0.575), (0.6, 0.59), (0.608, 0.607), (0.614, 0.625), (0.618, 0.645), (0.621, 0.666), (0.622, 0.688), (0.621, 0.709), (0.618, 0.729), (0.614, 0.748), (0.608, 0.766), (0.6, 0.783), (0.591, 0.799), (0.58, 0.813), (0.567, 0.827), (0.552, 0.839), (0.537, 0.85), (0.52, 0.859), (0.502, 0.866), (0.482, 0.872), (0.462, 0.877), (0.44, 0.88), (0.416, 0.881), (0.178, 0.881), (0.178, 0.499)],
+    ],
+    'H': [
+        [(0.798, 0.013), (0.669, 0.013), (0.669, 0.463), (0.178, 0.463), (0.178, 0.013), (0.05, 0.013), (0.05, 0.987), (0.178, 0.987), (0.178, 0.568), (0.669, 0.568), (0.669, 0.987), (0.798, 0.987), (0.798, 0.013)],
+    ],
+    'L': [
+        [(0.179, 0.118), (0.64, 0.118), (0.64, 0.013), (0.05, 0.013), (0.05, 0.987), (0.179, 0.987), (0.179, 0.118)],
+    ],
+    'O': [
+        [(0.833, 0.469), (0.832, 0.433), (0.83, 0.399), (0.826, 0.366), (0.821, 0.335), (0.814, 0.304), (0.806, 0.275), (0.796, 0.246), (0.785, 0.219), (0.772, 0.193), (0.758, 0.169), (0.743, 0.146), (0.726, 0.125), (0.709, 0.105), (0.69, 0.087), (0.67, 0.071), (0.648, 0.056), (0.626, 0.043), (0.602, 0.032), (0.578, 0.022), (0.553, 0.014), (0.526, 0.008), (0.499, 0.004), (0.471, 0.001), (0.442, 0.0), (0.414, 0.001), (0.387, 0.004), (0.36, 0.008), (0.334, 0.014), (0.309, 0.022), (0.285, 0.032), (0.261, 0.043), (0.239, 0.056), (0.217, 0.071), (0.197, 0.088), (0.177, 0.106), (0.16, 0.125), (0.143, 0.146), (0.128, 0.168), (0.113, 0.192), (0.1, 0.218), (0.089, 0.244), (0.079, 0.272), (0.07, 0.301), (0.063, 0.33), (0.058, 0.361), (0.054, 0.393), (0.051, 0.426), (0.05, 0.46), (0.05, 0.53), (0.051, 0.565), (0.053, 0.598), (0.057, 0.631), (0.062, 0.662), (0.069, 0.693), (0.077, 0.722), (0.087, 0.751), (0.099, 0.778), (0.112, 0.804), (0.126, 0.829), (0.141, 0.852), (0.158, 0.873), (0.176, 0.893), (0.195, 0.911), (0.215, 0.928), (0.237, 0.943), (0.26, 0.956), (0.283, 0.968), (0.307, 0.978), (0.333, 0.986), (0.358, 0.992), (0.385, 0.996), (0.413, 0.999), (0.441, 1.0), (0.47, 0.999), (0.498, 0.996), (0.525, 0.992), (0.551, 0.986), (0.576, 0.978), (0.601, 0.968), (0.625, 0.957), (0.647, 0.944), (0.669, 0.929), (0.689, 0.912), (0.708, 0.894), (0.726, 0.874), (0.743, 0.853), (0.758, 0.83), (0.772, 0.806), (0.785, 0.78), (0.796, 0.752), (0.806, 0.724), (0.814, 0.694), (0.821, 0.664), (0.826, 0.632), (0.83, 0.599), (0.832, 0.565), (0.833, 0.53), (0.833, 0.469)],
+        [(0.705, 0.531), (0.704, 0.573), (0.701, 0.613), (0.695, 0.65), (0.688, 0.684), (0.678, 0.716), (0.666, 0.746), (0.652, 0.773), (0.636, 0.797), (0.617, 0.819), (0.597, 0.838), (0.576, 0.854), (0.552, 0.867), (0.527, 0.877), (0.5, 0.884), (0.471, 0.888), (0.441, 0.89), (0.411, 0.888), (0.383, 0.884), (0.357, 0.877), (0.332, 0.867), (0.309, 0.854), (0.288, 0.838), (0.268, 0.819), (0.25, 0.797), (0.233, 0.773), (0.219, 0.746), (0.207, 0.718), (0.197, 0.687), (0.189, 0.653), (0.183, 0.618), (0.179, 0.58), (0.178, 0.54), (0.178, 0.469), (0.179, 0.428), (0.182, 0.389), (0.188, 0.353), (0.195, 0.319), (0.205, 0.287), (0.217, 0.257), (0.232, 0.23), (0.248, 0.205), (0.267, 0.182), (0.287, 0.163), (0.309, 0.146), (0.332, 0.133), (0.357, 0.122), (0.384, 0.115), (0.412, 0.11), (0.442, 0.109), (0.473, 0.11), (0.501, 0.115), (0.528, 0.122), (0.553, 0.132), (0.576, 0.144), (0.597, 0.16), (0.617, 0.178), (0.635, 0.2), (0.651, 0.223), (0.665, 0.25), (0.677, 0.279), (0.687, 0.31), (0.694, 0.343), (0.7, 0.38), (0.704, 0.418), (0.705, 0.459), (0.705, 0.531)],
+    ],
 }
 
 FILLED_CHAR_WIDTHS = {
-    '0': 0.71, '1': 0.47, '2': 0.76, '3': 0.72, '4': 0.8, '5': 0.71,
-    '6': 0.71, '7': 0.76, '8': 0.72, '9': 0.71, '.': 0.25,
+    '0': 0.71,
+    '1': 0.47,
+    '2': 0.76,
+    '3': 0.72,
+    '4': 0.8,
+    '5': 0.71,
+    '6': 0.71,
+    '7': 0.76,
+    '8': 0.72,
+    '9': 0.71,
+    '.': 0.25,
+    '-': 0.43,
+    ' ': 0.3,
+    'D': 0.8,
+    'E': 0.72,
+    'S': 0.81,
+    'I': 0.23,
+    'G': 0.85,
+    'N': 0.85,
+    'B': 0.76,
+    'Y': 0.9,
+    'P': 0.8,
+    'H': 0.85,
+    'L': 0.69,
+    'O': 0.88,
 }
 
 
@@ -231,6 +349,230 @@ def get_filled_text_strokes(text, font_size_mm, center_x, center_y, line_spacing
 
         line_index += 1
         scan_y += line_spacing_mm
+
+    return strokes
+
+
+def get_filled_text_strokes_arc(text, font_size_mm, cx, cy, radius,
+                                 center_angle_rad, line_spacing_mm,
+                                 side='top'):
+    """
+    Lay out text along an arc using FILLED_FONT scan-line raster fill.
+
+    Each character is filled with horizontal scan lines IN ITS OWN LOCAL
+    FRAME (so the fill is always perpendicular to the character's baseline,
+    regardless of where it sits on the arc), then each scan segment is
+    rotated and translated into world coordinates so the character lies
+    tangent to the arc.
+
+    Use this when engraving_mode == "filled" so the credit text matches
+    the visual style of the size labels.
+
+    Args:
+        text: String to render (must use FILLED_FONT chars)
+        font_size_mm: Character height in mm
+        cx, cy: Center of the arc circle in G-code coords (Y-up)
+        radius: Radius of the text vertical center (mm)
+        center_angle_rad: Angle (radians, math convention, Y-up) for the
+                          centerline of the text. pi/2 = top, -pi/2 = bottom.
+        line_spacing_mm: Spacing between scan lines in mm (same as flat
+                         filled text)
+        side: 'top' (sweep CW, char tops radially outward) or
+              'bottom' (sweep CCW, char tops radially inward, so the text
+              still reads upright when viewed from outside the circle)
+
+    Returns:
+        List of strokes, where each stroke is a list of (x, y) points in mm.
+        Compatible with generate_gcode_layer().
+    """
+    strokes = []
+
+    if radius <= 0 or font_size_mm <= 0 or not text:
+        return strokes
+    if line_spacing_mm <= 0:
+        line_spacing_mm = 0.15
+
+    # Total flat width (uses FILLED widths to match the flat filled renderer)
+    total_width = 0.0
+    for ch in text:
+        total_width += FILLED_CHAR_WIDTHS.get(ch, DEFAULT_CHAR_WIDTH)
+    if len(text) > 1:
+        total_width += CHAR_SPACING * (len(text) - 1)
+    total_width *= font_size_mm
+
+    total_angular = total_width / radius
+
+    if side == 'top':
+        current_angle = center_angle_rad + total_angular / 2.0
+        sweep_sign = -1.0
+
+        def basis(theta):
+            return (math.sin(theta), -math.cos(theta),
+                    math.cos(theta), math.sin(theta))
+    else:
+        current_angle = center_angle_rad - total_angular / 2.0
+        sweep_sign = 1.0
+
+        def basis(theta):
+            return (-math.sin(theta), math.cos(theta),
+                    -math.cos(theta), -math.sin(theta))
+
+    for char in text:
+        char_w_glyph = FILLED_CHAR_WIDTHS.get(char, DEFAULT_CHAR_WIDTH)
+        char_w_mm = char_w_glyph * font_size_mm
+        char_angular_w = char_w_mm / radius
+
+        char_center_angle = current_angle + sweep_sign * (char_angular_w / 2.0)
+
+        ccx = cx + radius * math.cos(char_center_angle)
+        ccy = cy + radius * math.sin(char_center_angle)
+        tx, ty, rx, ry = basis(char_center_angle)
+
+        if char in FILLED_FONT and FILLED_FONT[char]:
+            # Build local-frame contours: glyph (px, py) -> centered mm.
+            # px=0 is char left edge, px=char_w is char right edge,
+            # py=0 is baseline, py=1 is top of cap.
+            # Center: (char_w_glyph/2, 0.5) maps to local origin.
+            local_contours = []
+            for contour in FILLED_FONT[char]:
+                local = []
+                for px, py in contour:
+                    lx = (px - char_w_glyph / 2.0) * font_size_mm
+                    ly = (py - 0.5) * font_size_mm
+                    local.append((lx, ly))
+                local_contours.append(local)
+
+            all_pts = [p for c in local_contours for p in c]
+            if not all_pts:
+                # advance and continue
+                advance_mm = char_w_mm + CHAR_SPACING * font_size_mm
+                current_angle += sweep_sign * (advance_mm / radius)
+                continue
+
+            min_y = min(p[1] for p in all_pts)
+            max_y = max(p[1] for p in all_pts)
+
+            scan_y = min_y + line_spacing_mm / 2.0
+            line_index = 0
+            while scan_y < max_y:
+                intersections = _scanline_intersections(local_contours, scan_y)
+                # Pair using even-odd fill rule
+                for i in range(0, len(intersections) - 1, 2):
+                    x_start = intersections[i]
+                    x_end = intersections[i + 1]
+                    if x_end - x_start > 0.01:
+                        # Local (lx, ly) -> world via the basis
+                        wx1 = ccx + x_start * tx + scan_y * rx
+                        wy1 = ccy + x_start * ty + scan_y * ry
+                        wx2 = ccx + x_end * tx + scan_y * rx
+                        wy2 = ccy + x_end * ty + scan_y * ry
+                        # Alternate scan direction (laser efficiency)
+                        if line_index % 2 == 0:
+                            strokes.append([(wx1, wy1), (wx2, wy2)])
+                        else:
+                            strokes.append([(wx2, wy2), (wx1, wy1)])
+                line_index += 1
+                scan_y += line_spacing_mm
+
+        # Advance to next character
+        advance_mm = char_w_mm + CHAR_SPACING * font_size_mm
+        current_angle += sweep_sign * (advance_mm / radius)
+
+    return strokes
+
+
+def get_text_strokes_arc(text, font_size_mm, cx, cy, radius,
+                         center_angle_rad, side='top'):
+    """
+    Lay out text along an arc using STROKE_FONT, producing rigid characters
+    rotated to follow the curve.
+
+    Each character is placed as a rigid rotated unit (not warped). Use this
+    for the Phil Noy credit engraving on the die holder ring (top of circle)
+    and the die insert ring (bottom of circle, opposite the size number).
+
+    Args:
+        text: String to render (must use STROKE_FONT chars)
+        font_size_mm: Character height in mm
+        cx, cy: Center of the arc circle in G-code coords (Y-up)
+        radius: Radius of the text baseline (mm) — character verticals are
+                centered on this radius, extending +/- font_size_mm/2 in the
+                radial direction
+        center_angle_rad: Angle (radians, math convention, Y-up) of the
+                          centerline of the text. pi/2 = top of circle,
+                          -pi/2 = bottom.
+        side: 'top' — text upright above the radius, sweep CW
+              'bottom' — text upright below the radius, sweep CCW
+
+    Returns:
+        List of strokes, where each stroke is a list of (x, y) points in mm.
+    """
+    strokes = []
+
+    if radius <= 0 or font_size_mm <= 0 or not text:
+        return strokes
+
+    # Total flat width of the text (mm)
+    total_width = 0.0
+    for char in text:
+        total_width += CHAR_WIDTHS.get(char, DEFAULT_CHAR_WIDTH)
+    if len(text) > 1:
+        total_width += CHAR_SPACING * (len(text) - 1)
+    total_width *= font_size_mm
+
+    total_angular = total_width / radius  # radians
+
+    if side == 'top':
+        # Sweep CW (decreasing angle). At the top, the local X axis (along
+        # baseline, char-left to char-right) is the CW tangent direction;
+        # the local Y axis (baseline to char-top) is radially outward.
+        current_angle = center_angle_rad + total_angular / 2.0
+        sweep_sign = -1.0
+
+        def basis(theta):
+            return (math.sin(theta), -math.cos(theta),
+                    math.cos(theta), math.sin(theta))
+    else:
+        # 'bottom' — sweep CCW (increasing angle). Local X is CCW tangent;
+        # local Y is radially INWARD (so the character reads upright to the
+        # viewer when the circle is in normal orientation).
+        current_angle = center_angle_rad - total_angular / 2.0
+        sweep_sign = 1.0
+
+        def basis(theta):
+            return (-math.sin(theta), math.cos(theta),
+                    -math.cos(theta), -math.sin(theta))
+
+    for char in text:
+        char_w_glyph = CHAR_WIDTHS.get(char, DEFAULT_CHAR_WIDTH)
+        char_w_mm = char_w_glyph * font_size_mm
+        char_angular_w = char_w_mm / radius
+
+        # Center angle of this character
+        char_center_angle = current_angle + sweep_sign * (char_angular_w / 2.0)
+
+        # Char center point on the arc circle
+        ccx = cx + radius * math.cos(char_center_angle)
+        ccy = cy + radius * math.sin(char_center_angle)
+
+        # Local basis at this angle
+        tx, ty, rx, ry = basis(char_center_angle)
+
+        if char in STROKE_FONT:
+            for stroke in STROKE_FONT[char]:
+                transformed = []
+                for px, py in stroke:
+                    # Glyph-local coords centered on (char_w/2, 0.5)
+                    lx = (px - char_w_glyph / 2.0) * font_size_mm
+                    ly = (py - 0.5) * font_size_mm
+                    wx = ccx + lx * tx + ly * rx
+                    wy = ccy + lx * ty + ly * ry
+                    transformed.append((wx, wy))
+                strokes.append(transformed)
+
+        # Advance angle (include inter-char spacing)
+        advance_mm = char_w_mm + CHAR_SPACING * font_size_mm
+        current_angle += sweep_sign * (advance_mm / radius)
 
     return strokes
 
@@ -960,6 +1302,22 @@ def generate_die_gcode_from_placed(placed, sheet_width_mm, sheet_height_mm, file
                 strokes = get_text_strokes(text_content, font_size, cx, label_y)
             engraving_strokes.extend(strokes)
 
+            # "NOY" arced opposite the size number (Phil Noy credit on
+            # each die insert). Same engraving mode as the size label so
+            # the visual style is consistent.
+            ring_center_r = (radius + inner_r) / 2
+            # Y-up gcode: -pi/2 = bottom of circle
+            if engraving_mode == "filled":
+                noy_strokes = get_filled_text_strokes_arc(
+                    "NOY", font_size,
+                    cx, cy, ring_center_r, -math.pi / 2.0,
+                    filled_line_spacing, side='bottom')
+            else:
+                noy_strokes = get_text_strokes_arc(
+                    "NOY", font_size,
+                    cx, cy, ring_center_r, -math.pi / 2.0, side='bottom')
+            engraving_strokes.extend(noy_strokes)
+
         # Cutout engraving (actual size on inner disc)
         if engrave_cutout:
             actual_size = pad_size - kerf_width
@@ -1105,27 +1463,35 @@ def generate_holder_gcode(variant, filename, settings):
         elif piece_type == 'ring':
             inner_cut_strokes.append(linearize_circle(cx, cy, inner_r - kerf_offset, segments=72))
 
-            # Engrave size range on ring
+            # "DESIGNED BY PHIL NOY" arced along the top of the ring annulus.
+            # Phil Noy gave away this method for free; this credit honors him.
+            # Replaces the previous size-range label (which was redundant with
+            # the variant name shown in the UI). Uses the same engraving
+            # mode (filled/line) as the size labels so the visual style is
+            # consistent across all the engraved text on the part.
             tooling = settings.get("tooling_settings", {})
             font_size = tooling.get("ring_font_size", 3.5)
             ring_width = HOLDER_OUTER_R - inner_r
             if font_size > ring_width * 0.9:
                 font_size = ring_width * 0.9
-            if inner_r == HOLDER_LARGE_INNER_R:
-                ring_label = "40-60"
-            else:
-                ring_label = "7-39.5"
             ring_center_r = (HOLDER_OUTER_R + inner_r) / 2
-            label_y = cy + ring_center_r - font_size * 0.35
-            filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
+
+            # Engraving speed/power: match the user's engraving_mode.
             if engraving_mode == "filled":
                 eng_speed = mat_settings.get("filled_engraving_speed", 800)
                 eng_power = mat_settings.get("filled_engraving_power", 15)
-                engraving_strokes.extend(get_filled_text_strokes(ring_label, font_size, cx, label_y, filled_line_spacing))
+                filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
+                credit_strokes = get_filled_text_strokes_arc(
+                    "DESIGNED BY PHIL NOY", font_size,
+                    cx, cy, ring_center_r, math.pi / 2.0,
+                    filled_line_spacing, side='top')
             else:
                 eng_speed = mat_settings.get("engraving_speed", 800)
                 eng_power = mat_settings.get("engraving_power", 15)
-                engraving_strokes.extend(get_text_strokes(ring_label, font_size, cx, label_y))
+                credit_strokes = get_text_strokes_arc(
+                    "DESIGNED BY PHIL NOY", font_size,
+                    cx, cy, ring_center_r, math.pi / 2.0, side='top')
+            engraving_strokes.extend(credit_strokes)
 
     # Bounds
     all_x = [0, width_mm]
