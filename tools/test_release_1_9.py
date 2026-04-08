@@ -440,7 +440,10 @@ finally:
 print("\n--- 7. Visible Tabs Defaults ---")
 
 vt = DEFAULT_SETTINGS["visible_tabs"]
-test("Tuner defaults to False", vt.get("Tuner") is False)
+# Tuner became default-on in v2.0 — it's no longer marked experimental.
+# Only Toner remains hidden by default (still beta, requires terms acceptance).
+test("Tuner defaults to True (no longer experimental)",
+     vt.get("Tuner") is True)
 test("Toner defaults to False", vt.get("Toner") is False)
 test("Key Height Library defaults to True", vt.get("Key Height Library") is True)
 test("Serial Lookup defaults to True", vt.get("Serial Lookup") is True)

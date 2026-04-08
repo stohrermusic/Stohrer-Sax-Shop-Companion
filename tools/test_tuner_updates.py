@@ -151,9 +151,11 @@ with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 test("User guide has 'Tuner' heading", 'self._h2("Tuner")' in guide_source)
 test("User guide does NOT mention Simple Mode", "Simple Mode" not in guide_source)
 test("User guide mentions VU meter", "VU meter" in guide_source or "analog" in guide_source.lower())
-test("User guide mentions Per-Ring Brightness", "Per-Ring Brightness" in guide_source)
+test("User guide mentions per-wheel BIAS NOTE control",
+     "BIAS > NOTE" in guide_source)
 test("User guide mentions Faceplate Color", "Faceplate Color" in guide_source)
-test("User guide mentions Overall Brightness", "Overall Brightness" in guide_source)
+test("User guide mentions DISP BRIGHT (master brightness)",
+     "DISP > BRIGHT" in guide_source)
 
 # ============================================================
 # 12. Engine unchanged

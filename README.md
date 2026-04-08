@@ -1,6 +1,6 @@
 # Stohrer Sax Shop Companion
 
-A cross-platform desktop app for saxophone repair shops and saxophonists by [Matt Stohrer](https://www.StohrerMusic.com). Generates SVG and G-code files for laser-cutting pad materials, provides reference databases for key heights, serial numbers, and screw specifications, includes tooling generation for pad-making die inserts and holders, a 12 wheel chromatic strobe tuner, and a harmonic tone analyzer for studying your sound.
+A cross-platform desktop app for saxophone repair shops and saxophonists by [Matt Stohrer](https://www.StohrerMusic.com). Generates SVG and G-code files for laser-cutting pad materials for the [Phil Noy](https://noysaxophonesupplies.com) padmaking method, provides reference databases for key heights, serial numbers, and screw specifications, includes tooling generation for Noy-style pad-making die inserts and holders, a 12 wheel chromatic strobe tuner, and a harmonic tone analyzer for studying your sound.
 
 ## Features
 
