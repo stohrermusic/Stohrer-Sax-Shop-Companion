@@ -120,21 +120,36 @@ ROLLOFF_WARN_THRESHOLD = 2.5   # dB/harmonic — condenser default
 ROLLOFF_MIN_CAPTURES = 5       # need this many before checking
 
 
-def get_rolloff_threshold(mic_type):
-    """Mic-class-aware rolloff warning threshold (dB/harmonic).
+def get_rolloff_threshold(mic_type, sax_type=None):
+    """Mic-class- and sax-type-aware rolloff warning threshold (dB/harmonic).
 
     Ribbons attenuate high frequencies more than condensers as a matter
     of physics (the velocity-sensing element falls off above a few kHz).
-    Dynamics fall in between. The thresholds below are conservative —
-    bumped only enough to stop healthy ribbon recordings from triggering
-    a "bad recording quality" warning. They are NOT calibrated against a
-    population (n=1 ribbon, n=1 dynamic in our test corpus as of
-    2026-04-06); refine as more data comes in.
+    Dynamics fall in between. Higher-pitched horns also read higher
+    rolloff because their upper harmonics reach further into the mic's
+    high-frequency rolloff region.
+
+    Sax-type adjustments are bolted on top of the mic-class base. They
+    are conservative — bumped only enough to stop legitimately-rolloff-
+    heavy combinations from false-firing the warning. NOT calibrated
+    against a population:
+      - alto + dynamic: 3.5 (Foster's Conn 6M with RE20 reads 2.99–3.49
+        across 8 mpcs; same mic on his bari reads 1.5–2.3)
+    Refine as more sax-type × mic-type combinations come in.
+
+    Sax_type defaults to None for backward compat — callers without sax
+    info still get the mic-only behavior.
     """
     mt = (mic_type or '').lower()
+    st = (sax_type or '').lower()
+
     if mt == 'ribbon':
         return 3.5
     if mt == 'dynamic':
+        # Alto reads ~1 dB/H higher than tenor/bari with the same dynamic
+        # mic — Foster's two shootouts are the only data point so far.
+        if st == 'alto':
+            return 3.5
         return 2.8
     return ROLLOFF_WARN_THRESHOLD  # condenser, other, or unknown
 
@@ -984,17 +999,21 @@ def note_name_to_midi(note_name):
     return (octave + 1) * 12 + pc_idx
 
 
-# Expected concert pitch MIDI ranges per sax type (with margin for altissimo).
-# Notes outside these ranges are flagged as potential detection artifacts.
+# Expected concert pitch MIDI ranges per sax type — NORMAL RANGE ONLY,
+# no altissimo. Altissimo notes are harmonic partials of lower fingerings,
+# not closed-tube fundamentals, so their harmonic structure isn't useful
+# for tone analysis. The lower bound is low Bb (universal) extended to
+# low A on bari (common spec) and alto (rare). Captures outside these
+# ranges are dropped from compute_fingerprint as detection artifacts.
 SAX_NOTE_RANGES = {
-    "Sopranino": (68, 96),   # Ab4 – C7
-    "Soprano":   (56, 91),   # Ab3 – G6
-    "Alto":      (49, 84),   # Db3 – C6
-    "F Mezzo":   (44, 80),   # Ab2 – Ab5
-    "C Melody":  (49, 80),   # Db3 – Ab5
-    "Tenor":     (44, 79),   # Ab2 – G5
-    "Baritone":  (37, 72),   # Db2 – C5
-    "Bass":      (32, 67),   # Ab1 – G4
+    "Sopranino": (61, 93),   # Db4 – A6  concert  (low Bb – high F#6 written)
+    "Soprano":   (56, 88),   # Ab3 – E6  concert  (low Bb – high F#6 written)
+    "F Mezzo":   (51, 83),   # Eb3 – B5  concert  (low Bb – high F#6 written)
+    "Alto":      (48, 81),   # C3  – A5  concert  (low A  – high F#6 written)
+    "C Melody":  (46, 78),   # Bb2 – F#5 concert  (low Bb – high F#5 written)
+    "Tenor":     (44, 76),   # Ab2 – E5  concert  (low Bb – high F#5 written)
+    "Baritone":  (36, 69),   # C2  – A4  concert  (low A  – high F#5 written)
+    "Bass":      (32, 64),   # Ab1 – E4  concert  (low Bb – high F#5 written)
 }
 
 
@@ -1136,6 +1155,35 @@ def compute_rolloff_rate(harmonics_db):
     return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
 
 
+def _capture_is_plausible(cap, sax_type):
+    """Return True if a capture should be included in fingerprint averaging.
+
+    Drops two classes of detection artifacts:
+      1. Notes outside SAX_NOTE_RANGES[sax_type] (no margin for altissimo —
+         altissimo is a harmonic partial of a lower fingering, not a true
+         closed-tube fundamental).
+      2. Captures where any harmonic value exceeds +20 dB above the labeled
+         fundamental — physically impossible, a clear sub-octave detection
+         error where the real fundamental landed in an upper-harmonic bin.
+         Real low-register H2 tops out near +10 dB on alto, so +20 dB
+         leaves headroom for the darkest legitimate cases.
+    """
+    note = cap.get('note', '')
+    bounds = SAX_NOTE_RANGES.get(sax_type)
+    if bounds is not None:
+        midi = note_name_to_midi(note)
+        if midi is None or midi < bounds[0] or midi > bounds[1]:
+            return False
+
+    h = cap.get('harmonics_db', [])
+    if len(h) > 1:
+        # Filter NaN/inf and the impossible-positive sentinel
+        for v in h[1:]:
+            if v != v or v > 20.0:  # NaN check + plausibility ceiling
+                return False
+    return True
+
+
 def compute_fingerprint(sessions, sax_type="Tenor"):
     """Compute an aggregate harmonic fingerprint from all sessions in a preset.
 
@@ -1147,11 +1195,17 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
     the averaged harmonics, then averages descriptors across notes with
     equal weight per note. This prevents register skew.
 
+    Captures whose detected note is outside SAX_NOTE_RANGES[sax_type] OR
+    whose harmonics include a physically-impossible value (>+20 dB above
+    the labeled fundamental, indicating a sub-octave detection error) are
+    silently dropped before averaging. The raw on-disk captures are NOT
+    modified — this is a read-side filter.
+
     Returns dict with:
         'harmonics_db': averaged harmonic dB curve across all notes
         'descriptors': computed descriptor values (equal weight per note)
         'note_count': total unique notes
-        'capture_count': total captures
+        'capture_count': total captures kept (after filtering)
         'per_note': dict of note_name -> averaged capture with computed descriptors
     """
     all_captures = []
@@ -1159,6 +1213,8 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
 
     for session in sessions:
         for cap in session.get('captures', []):
+            if not _capture_is_plausible(cap, sax_type):
+                continue
             note = cap.get('note', '')
             entry = {
                 'harmonics_db': cap.get('harmonics_db', []),

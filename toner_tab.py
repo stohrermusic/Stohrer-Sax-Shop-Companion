@@ -2982,10 +2982,13 @@ class TonerTabMixin:
             return
 
         avg_rate = sum(rates) / len(rates)
-        # Mic-class-aware threshold: ribbon and dynamic mics legitimately
-        # read higher rolloff than condensers due to physics, not bad
-        # recording quality.
-        threshold = get_rolloff_threshold(session.get('mic_type', ''))
+        # Mic-class- and sax-type-aware threshold: ribbon/dynamic mics
+        # legitimately read higher rolloff than condensers, and higher-
+        # pitched horns read higher rolloff than lower-pitched ones —
+        # not bad recording quality, just physics.
+        threshold = get_rolloff_threshold(
+            session.get('mic_type', ''),
+            getattr(self.toner_engine, 'sax_type', None))
         if avg_rate > threshold:
             self._toner_rolloff_warned = True
             self._toner_show_rolloff_warning(avg_rate)
@@ -4242,9 +4245,12 @@ class TonerTabMixin:
             "evenness": ("variable", "even"),
         }
 
-        # Rolloff rates and mic types for each preset (for table and mismatch check)
+        # Rolloff rates, mic types, and sax types for each preset
+        # (for table, mismatch check, and sax-aware rolloff threshold)
         _rolloff_rates = [fp.get('rolloff_rate') for fp in fingerprints]
         _mic_types = [fp.get('mic_type', '') for fp in fingerprints]
+        _sax_types = [fp.get('_preset', {}).get('horn_type', '')
+                      for fp in fingerprints]
 
         # --- Analysis text ---
         analysis_frame = tk.LabelFrame(main, text="Analysis", bg=bg, fg=fg,
@@ -4354,7 +4360,7 @@ class TonerTabMixin:
                 row.pack(fill="x")
                 tk.Label(row, text="Rec. Quality", width=label_width, bg=bg,
                          fg=fg, font=label_font, anchor="w").pack(side="left")
-                for rate, mt in zip(_rolloff_rates, _mic_types):
+                for rate, mt, st in zip(_rolloff_rates, _mic_types, _sax_types):
                     if not _is_real(rate):
                         text = "\u2014"
                         val_fg = fg
@@ -4362,9 +4368,10 @@ class TonerTabMixin:
                         # Compact mode drops the "/H" to save horizontal space
                         unit = "dB" if compact else "dB/H"
                         text = f"{rate:.1f} {unit}"
-                        # Mic-class-aware threshold so ribbons and dynamics
-                        # don't get flagged as "bad" for normal HF rolloff.
-                        threshold = get_rolloff_threshold(mt)
+                        # Mic-class- and sax-type-aware threshold so ribbons,
+                        # dynamics, and higher-pitched horns don't get flagged
+                        # as "bad" for normal HF rolloff.
+                        threshold = get_rolloff_threshold(mt, st)
                         val_fg = "#880000" if rate > threshold else fg
                         if population_stats and population_stats['count'] >= 3:
                             pct = percentile_rank(

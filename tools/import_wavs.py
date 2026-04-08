@@ -5,6 +5,7 @@ Re-imports Tyler Anderson's library (replacing old H12 data with H20),
 imports Thomas Edinger's Head2Head tenor comparison,
 imports Mario Larios-García's alto and soprano recordings,
 imports Ken Foster's bari mouthpiece comparison (one horn, six mpcs),
+imports Ken Foster's Conn 6M alto mouthpiece comparison (one horn, eight mpcs),
 and imports Grant Smiley's Holton 241 with Selmer C* metal.
 
 Usage:
@@ -12,7 +13,8 @@ Usage:
     python tools/import_wavs.py tyler        # Tyler only
     python tools/import_wavs.py edinger      # Edinger only
     python tools/import_wavs.py mario        # Mario only
-    python tools/import_wavs.py foster       # Foster only
+    python tools/import_wavs.py foster       # Foster bari only
+    python tools/import_wavs.py foster_6m    # Foster Conn 6M alto only
     python tools/import_wavs.py grant        # Grant only
 """
 
@@ -247,6 +249,75 @@ FOSTER_HORN = {
 
 
 # ============================================================
+# KEN FOSTER — Conn 6M alto mouthpiece comparison (one horn, eight mpcs)
+# ============================================================
+
+# Same player, mic, library as the bari shootout — different horn.
+FOSTER_6M_DIR = os.path.join(
+    os.path.expanduser("~"),
+    "Downloads",
+    "Conn 6m -20260407T210553Z-3-001",
+    "Conn 6m",
+)
+
+FOSTER_6M_HORN = {
+    "horn_type": "Alto",
+    "make": "Conn",
+    "model": "6M",
+    "serial": "322315",
+    "reed": "",  # not specified
+    "notes": "Conn 6M alto, serial 322315. Eight recordings of the same horn "
+             "with eight different mouthpieces, by Ken Foster. "
+             "Mic: Electro-Voice RE20 (dynamic). Companion to Foster's bari "
+             "mouthpiece shootout.",
+}
+
+FOSTER_6M_FILES = [
+    {
+        "file": "6m #1_1.wav",
+        "profile_name": "Conn 6M — Vintage HR (perhaps Conn New Wonder)",
+        "mpc": "Vintage hard rubber, possibly Conn New Wonder period "
+               "(photo provided, unidentified)",
+    },
+    {
+        "file": "6m #2_1.wav",
+        "profile_name": "Conn 6M — Conn Steelay 5",
+        "mpc": "Conn Steelay #5 — likely original to this horn",
+    },
+    {
+        "file": "6m #3_1.wav",
+        "profile_name": "Conn 6M — Yanagisawa 5 HR",
+        "mpc": "Yanagisawa #5 stock hard rubber",
+    },
+    {
+        "file": "6m #4_1.wav",
+        "profile_name": "Conn 6M — Yanagisawa AC140",
+        "mpc": "Yanagisawa AC140 modern classical",
+    },
+    {
+        "file": "6m #5_1.wav",
+        "profile_name": "Conn 6M — Selmer Soloist long shank C*",
+        "mpc": "Selmer Soloist C* long shank (stamped on facing)",
+    },
+    {
+        "file": "6m #6_1.wav",
+        "profile_name": "Conn 6M — Selmer S80 C** (Elkhart 1981)",
+        "mpc": "Selmer S80 C** — picked out at the Elkhart plant in 1981",
+    },
+    {
+        "file": "6m #7_1.wav",
+        "profile_name": "Conn 6M — Selmer S80 C*",
+        "mpc": "Selmer S80 C*",
+    },
+    {
+        "file": "6m #8_1.wav",
+        "profile_name": "Conn 6M — Morgan Excalibur 7",
+        "mpc": "Morgan Excalibur #7",
+    },
+]
+
+
+# ============================================================
 # GRANT SMILEY — Holton 241 with Selmer C* metal
 # ============================================================
 
@@ -466,12 +537,20 @@ def import_foster(profiles):
 
     One horn, six mouthpieces — each becomes its own profile so the Analyze
     tool can do delta comparisons between mouthpieces on the same horn.
+
+    Idempotent on its own scope: only clears profiles whose names start with
+    "Vito VSP 900" so the Conn 6M alto presets in the same library survive.
     """
-    # Clear existing to allow clean re-import
+    # Idempotent re-import: only remove existing bari profiles
     if FOSTER_LIBRARY in profiles:
-        old_count = len(profiles[FOSTER_LIBRARY])
-        del profiles[FOSTER_LIBRARY]
-        print(f"  Cleared {old_count} old profiles (re-importing)")
+        before = len(profiles[FOSTER_LIBRARY])
+        profiles[FOSTER_LIBRARY] = {
+            name: data for name, data in profiles[FOSTER_LIBRARY].items()
+            if not name.startswith("Vito VSP 900")
+        }
+        cleared = before - len(profiles[FOSTER_LIBRARY])
+        if cleared:
+            print(f"  Cleared {cleared} old bari profiles (re-importing)")
 
     total_captures = 0
     total_profiles = 0
@@ -512,6 +591,86 @@ def import_foster(profiles):
             "mouthpiece": entry["mpc"],
             "reed": FOSTER_HORN["reed"],
             "notes": FOSTER_HORN["notes"],
+            "created": now,
+            "sessions": [],
+        }
+
+        session = {
+            "date": now,
+            "captures": captures,
+            "method": "file",
+            "source_notes": f"Recorded by {FOSTER_PLAYER}",
+            "mic_type": FOSTER_MIC_TYPE,
+            "mic_model": FOSTER_MIC_MODEL,
+        }
+        profiles[FOSTER_LIBRARY][profile_name]["sessions"].append(session)
+
+        unique_notes = set(c["note"] for c in captures)
+        print(f" {len(captures)} captures, {len(unique_notes)} unique notes")
+        total_captures += len(captures)
+        total_profiles += 1
+
+    return total_profiles, total_captures
+
+
+def import_foster_6m(profiles):
+    """Import Ken Foster's Conn 6M alto mouthpiece comparison.
+
+    One horn, eight mouthpieces — each becomes its own profile under the
+    same Ken Foster library as the bari shootout. Idempotent on its own
+    scope: only clears profiles whose names start with "Conn 6M" so the
+    bari presets survive.
+    """
+    # Idempotent re-import: only remove existing Conn 6M profiles
+    if FOSTER_LIBRARY in profiles:
+        before = len(profiles[FOSTER_LIBRARY])
+        profiles[FOSTER_LIBRARY] = {
+            name: data for name, data in profiles[FOSTER_LIBRARY].items()
+            if not name.startswith("Conn 6M")
+        }
+        cleared = before - len(profiles[FOSTER_LIBRARY])
+        if cleared:
+            print(f"  Cleared {cleared} old Conn 6M profiles (re-importing)")
+
+    total_captures = 0
+    total_profiles = 0
+
+    print(f"\n--- Alto (Conn 6M, eight mouthpieces) ---\n")
+    for entry in FOSTER_6M_FILES:
+        filepath = os.path.join(FOSTER_6M_DIR, entry["file"])
+        if not os.path.exists(filepath):
+            print(f"  MISSING: {filepath}")
+            continue
+
+        profile_name = entry["profile_name"]
+        stem = os.path.splitext(os.path.basename(filepath))[0]
+        print(f"  Analyzing: {stem} ({entry['mpc']}) ...", end="", flush=True)
+
+        engine = TonerEngine()
+        engine.sax_type = FOSTER_6M_HORN["horn_type"]
+        captures = analyze_audio_file(filepath, engine)
+
+        if not captures:
+            print(f" NO STABLE NOTES FOUND")
+            continue
+
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        for cap in captures:
+            cap["timestamp"] = now
+            cap["source_file"] = os.path.basename(filepath)
+
+        if FOSTER_LIBRARY not in profiles:
+            profiles[FOSTER_LIBRARY] = {}
+
+        profiles[FOSTER_LIBRARY][profile_name] = {
+            "horn_type": FOSTER_6M_HORN["horn_type"],
+            "horn_make": FOSTER_6M_HORN["make"],
+            "horn_model": FOSTER_6M_HORN["model"],
+            "serial": FOSTER_6M_HORN["serial"],
+            "player": FOSTER_PLAYER,
+            "mouthpiece": entry["mpc"],
+            "reed": FOSTER_6M_HORN["reed"],
+            "notes": FOSTER_6M_HORN["notes"],
             "created": now,
             "sessions": [],
         }
@@ -650,6 +809,14 @@ def main():
         print("KEN FOSTER — Bari mouthpiece comparison")
         print(f"{'='*50}")
         p, c = import_foster(profiles)
+        grand_profiles += p
+        grand_captures += c
+
+    if which in ("all", "foster_6m"):
+        print(f"\n{'='*50}")
+        print("KEN FOSTER — Conn 6M alto mouthpiece comparison")
+        print(f"{'='*50}")
+        p, c = import_foster_6m(profiles)
         grand_profiles += p
         grand_captures += c
 
