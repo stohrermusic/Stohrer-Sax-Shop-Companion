@@ -84,7 +84,7 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental and overtones of your sound and lets you compare setups (horn, mouthpiece, reed, mic, mic placement, embouchure) over time. **A quality microphone is essential — laptop mics do not provide reliable results.**
 
 #### Live Display
-- Detects fundamental pitch, extracts up to 20 harmonics with parabolic amplitude correction
+- Detects fundamental pitch, extracts up to 20 harmonics
 - Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
 - Intonation gauge with cents readout and ±4¢ "in tune" lamp
 - Auto-transposition by saxophone type (alto/tenor/soprano/baritone/etc.) with concert pitch toggle
