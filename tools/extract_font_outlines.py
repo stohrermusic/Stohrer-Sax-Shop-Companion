@@ -16,7 +16,10 @@ import math
 import os
 
 FONT_PATH = os.path.join(os.path.dirname(__file__), "Roboto-Regular.ttf")
-CHARS = "0123456789.-"
+# Digits + the letters needed to engrave "DESIGNED BY PHIL NOY" / "NOY" credit.
+# Letters deduped: D E S I G N B Y P H L O.
+# Space is needed for the holder ring credit "DESIGNED BY PHIL NOY".
+CHARS = "0123456789.- DESIGNBYPHLO"
 
 # Target coordinate system: origin at bottom-left, ~0.6 wide, 1.0 tall
 # (matching existing STROKE_FONT convention)
@@ -182,6 +185,13 @@ def main():
     widths = {}
 
     for char in CHARS:
+        # Space has no contours but still needs an entry so the renderer
+        # advances the cursor through it. Hardcode a sensible width.
+        if char == ' ':
+            widths[char] = 0.3
+            print(f"    {repr(char)}: [],")
+            continue
+
         if char not in all_contours:
             continue
 
