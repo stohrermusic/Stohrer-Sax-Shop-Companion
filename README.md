@@ -129,7 +129,7 @@ Download the latest release for your platform from the [Releases](https://github
 
 **macOS users**: Two builds are available — **Apple Silicon** (M1/M2/M3/M4) with full features, and **Intel** with all features except the Tuner and Tone Analyzer (which require audio libraries not available on Intel Macs).
 
-The app is not signed with an Apple Developer certificate, so macOS will block it on first launch with either an "unidentified developer" warning or a "damaged and can't be opened" error. To unblock it:
+The app is not signed with an Apple Developer certificate (they charge $100 a year for that), so macOS will block it on first launch with either an "unidentified developer" warning or a "damaged and can't be opened" error. To unblock it:
 
 1. Double-click the downloaded `.zip` to unzip it.
 2. Drag `SaxShopCompanion.app` into your **Applications** folder.
