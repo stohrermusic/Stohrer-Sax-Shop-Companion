@@ -129,13 +129,17 @@ Download the latest release for your platform from the [Releases](https://github
 
 **macOS users**: Two builds are available — **Apple Silicon** (M1/M2/M3/M4) with full features, and **Intel** with all features except the Tuner and Tone Analyzer (which require audio libraries not available on Intel Macs).
 
-The app is not signed with an Apple Developer certificate, so macOS will block it on first launch. To open it, right-click (or Control-click) the app and select **Open**, then click **Open** in the dialog. You only need to do this once — after that it launches normally.
+The app is not signed with an Apple Developer certificate, so macOS will block it on first launch with either an "unidentified developer" warning or a "damaged and can't be opened" error. To unblock it:
 
-If the download shows as "damaged," open Terminal and run:
-```
-xattr -cr ~/Downloads/StohrerSaxShopCompanion-macOS.zip
-```
-Then unzip and open again. This strips the quarantine flag that macOS adds to downloaded files.
+1. Double-click the downloaded `.zip` to unzip it.
+2. Drag `SaxShopCompanion.app` into your **Applications** folder.
+3. Open **Terminal** (in `/Applications/Utilities/`) and paste this one command:
+   ```
+   xattr -cr /Applications/SaxShopCompanion.app
+   ```
+4. Open the app normally. You only need to do this once.
+
+This strips the quarantine flag that macOS adds to downloaded files, which is what triggers both warnings. The same command works on every macOS version.
 
 **Linux users**: The tuner and toner require PortAudio. Install it with:
 ```
