@@ -2988,7 +2988,7 @@ class TonerTabMixin:
         # not bad recording quality, just physics.
         threshold = get_rolloff_threshold(
             session.get('mic_type', ''),
-            getattr(self.toner_engine, 'sax_type', None))
+            getattr(self._toner_engine, 'sax_type', None))
         if avg_rate > threshold:
             self._toner_rolloff_warned = True
             self._toner_show_rolloff_warning(avg_rate)
