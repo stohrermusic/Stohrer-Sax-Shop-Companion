@@ -74,7 +74,7 @@ Two mechanisms:
 - `tuner_tab.py`: All tkinter UI — `StrobeWheel` class renders one disc (annular sector polygons with wedge mask), `TunerTabMixin` builds the tab with control panel: three labeled slider groups (DISP: SENS/BRIGHT/FPS | PITCH: A=/KEY | BIAS: NOTE per-wheel/OCT. per-ring), flat/pilot/sharp indicator, vintage backlit VU meter. The VU needle has damped movement (lerp toward target each frame). Sensitivity uses a quadratic gain curve (`sens**2`) so the low end of the slider has fine control. Theme walker is bypassed via `_skip_theme` and `_dark_canvas` flags on all dark widgets.
 - The tuner auto-starts/stops when switching tabs (`_tuner_start`/`_tuner_stop` called from `on_tab_changed` in main.py).
 - Transposition support: wheel labels and VU readout both apply the shift from TRANSPOSITION_SHIFTS, with octave correction when the shift wraps past C.
-- **GPU/Canvas constant alignment**: `DIM_MULTIPLIER` exists in three places that must stay in sync: `tuner_tab.py` (Python canvas path), `tuner_renderer/src/shader.wgsl` (GPU shader), and `tuner_renderer/src/renderer.rs` (GPU host). `BRIGHTNESS_GAMMA` exists in two places: `tuner_tab.py` and `renderer.rs` (applied in host code, not the shader). If you change either constant, update all locations.
+- **GPU/Canvas constant alignment**: `DIM_MULTIPLIER` exists in two places that must stay in sync: `tuner_tab.py` (Python canvas path) and `tuner_renderer/src/shader.wgsl` (GPU shader). `BRIGHTNESS_GAMMA` exists in two places: `tuner_tab.py` and `tuner_renderer/src/renderer.rs` (applied in host code, not the shader). If you change either constant, update all locations.
 
 ## Audio Stream Health
 

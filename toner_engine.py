@@ -367,8 +367,9 @@ class TonerEngine:
     def _audio_callback(self, indata, frames, time_info, status):
         if self._ring_buffer is not None:
             self._ring_buffer.write(indata[:, 0])
-        if self._recording_chunks is not None:
-            self._recording_chunks.append(indata[:, 0].copy())
+        chunks = self._recording_chunks
+        if chunks is not None:
+            chunks.append(indata[:, 0].copy())
 
     def analyze(self):
         """Analyze current audio buffer. Returns TonerResult.

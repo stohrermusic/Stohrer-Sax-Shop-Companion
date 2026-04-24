@@ -27,6 +27,7 @@ AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
+AppCopyright=Copyright (C) Matt Stohrer
 DefaultDirName={autopf}\SaxShopCompanion
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
@@ -39,7 +40,9 @@ Compression=lzma2/ultra
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
+; Require Windows 10 or newer (Python 3.11 / PyInstaller drop support below this).
+MinVersion=10.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
