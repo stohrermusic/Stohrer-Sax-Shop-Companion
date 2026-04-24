@@ -398,8 +398,6 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
 
     # Edge bias: compute a target point that pulls discs toward the biased edge/corner
     edge_bias = settings.get("edge_bias", "center")
-    bbox_w = max_x - min_x
-    bbox_h = max_y - min_y
     # Map bias direction to a target point on/near the polygon bounding box
     _bias_targets = {
         "center": (centroid_x, centroid_y),

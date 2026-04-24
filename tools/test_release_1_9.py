@@ -19,13 +19,11 @@ import unittest.mock
 sys.modules['tkinter'] = unittest.mock.MagicMock()
 sys.modules['tkinter.messagebox'] = unittest.mock.MagicMock()
 
-from config import DEFAULT_SETTINGS, load_settings, SETTINGS_FILE
+from config import DEFAULT_SETTINGS, load_settings
 from svg_engine import (
     get_disc_diameter, _nest_discs, can_all_pads_fit,
-    _point_in_polygon, _circle_fits_in_polygon, _nest_discs_polygon,
-    _distance_point_to_segment, _distance_to_nearest_edge,
-    try_nest_partial, compute_remaining_pads,
-    leather_back_wrap, get_felt_thickness_mm,
+    _point_in_polygon, _circle_fits_in_polygon, _distance_point_to_segment, try_nest_partial, compute_remaining_pads,
+    get_felt_thickness_mm,
 )
 
 # ---------------------------------------------------------------------------

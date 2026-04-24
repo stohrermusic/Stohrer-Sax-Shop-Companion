@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import math
 from toner_engine import (
-    load_tone_presets, compute_fingerprint, MIN_PRESET_NOTES,
+    load_tone_presets, compute_fingerprint,
 )
 from config import TONER_DATA_FILE
 
@@ -175,7 +175,7 @@ def main():
         # Most variable notes
         if note_variations:
             note_variations.sort(key=lambda x: x[3], reverse=True)
-            print(f"\nMost variable notes (total descriptor spread):")
+            print("\nMost variable notes (total descriptor spread):")
             for note, ranges, count, total in note_variations[:5]:
                 top_desc = max(ranges.items(), key=lambda x: x[1])
                 print(f"  {note}: total spread {total:.0%} "
@@ -200,8 +200,8 @@ def main():
 
         if spread < 0.05:
             print(f"\n  {key}: All profiles read similarly ({mn:.0%}-{mx:.0%}).")
-            print(f"    Not enough variation to calibrate. Need more diverse horns,")
-            print(f"    or this descriptor may not differentiate horns well.")
+            print("    Not enough variation to calibrate. Need more diverse horns,")
+            print("    or this descriptor may not differentiate horns well.")
         else:
             print(f"\n  {key}: Range {mn:.0%} to {mx:.0%} (spread {spread:.0%})")
             # Suggest a mapping that uses 10%-90% of gauge range
@@ -210,8 +210,8 @@ def main():
             suggested_lo = max(0, mn - margin)
             suggested_hi = min(1, mx + margin)
             print(f"    Suggested gauge range: {suggested_lo:.0%} to {suggested_hi:.0%}")
-            print(f"    This would map the observed spread to ~20%-80% of the gauge,")
-            print(f"    leaving room for horns outside this dataset.")
+            print("    This would map the observed spread to ~20%-80% of the gauge,")
+            print("    leaving room for horns outside this dataset.")
 
             # Show where each horn would sit on the rescaled gauge
             for name, val in desc_data[key]:
@@ -239,7 +239,7 @@ def main():
         by_type[ht].append(fp)
 
     if len(by_type) > 1:
-        print(f"\nBy horn type:")
+        print("\nBy horn type:")
         for ht, fps in sorted(by_type.items()):
             if len(fps) < 1:
                 continue
@@ -262,7 +262,7 @@ def main():
         by_make[make].append(fp)
 
     if len(by_make) > 1:
-        print(f"\nBy manufacturer:")
+        print("\nBy manufacturer:")
         for make, fps in sorted(by_make.items()):
             if not make or len(fps) < 1:
                 continue

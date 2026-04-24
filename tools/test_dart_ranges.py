@@ -11,7 +11,7 @@ import copy
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import DEFAULT_SETTINGS, get_dart_settings_for_size
-from svg_engine import get_disc_diameter, generate_svg, _render_svg_discs
+from svg_engine import get_disc_diameter, _render_svg_discs
 from gcode_engine import generate_gcode_from_placed
 
 passed = 0
@@ -152,7 +152,6 @@ check("Range: card unaffected", get_disc_diameter(10.0, 'card', sr2) == get_disc
 # =============================================================================
 print("\n--- SVG Rendering: Range Mode ---")
 
-import io
 import svgwrite
 
 def render_svg_test(pad_size, material, settings):

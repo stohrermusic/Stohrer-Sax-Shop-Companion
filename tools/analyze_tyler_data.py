@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
     load_tone_presets, compute_fingerprint,
-    descriptors_from_harmonics,
 )
 from config import TONER_DATA_FILE
 

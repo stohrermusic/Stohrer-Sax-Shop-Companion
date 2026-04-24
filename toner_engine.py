@@ -13,7 +13,6 @@ Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 """
 
 import math
-import time
 import json
 import os
 from collections import deque, namedtuple

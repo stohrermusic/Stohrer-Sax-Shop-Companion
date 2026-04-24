@@ -6,8 +6,8 @@ sys.path.insert(0, '.')
 import numpy as np
 from tuner_engine import (
     TunerEngine, AudioRingBuffer, ReferencePlayer, TunerResult,
-    SAMPLE_RATE, FFT_SIZE, PITCH_CLASSES, AUDIO_AVAILABLE,
-    DISC_BASE_SEGMENTS, MIN_OCTAVE, MAX_OCTAVE,
+    SAMPLE_RATE, FFT_SIZE, AUDIO_AVAILABLE,
+    DISC_BASE_SEGMENTS, MIN_OCTAVE,
 )
 
 passed = 0

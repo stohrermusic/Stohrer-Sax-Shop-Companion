@@ -8,7 +8,6 @@ perf log compatibility, icon loading.
 
 import sys
 import os
-import math
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 passed = 0
@@ -98,9 +97,9 @@ if layout:
     # Check accidentals are in top row (is_up=True)
     for pc, cx, cy, radius, is_up in layout:
         if pc in {1, 3, 6, 8, 10}:
-            test(f"pc {pc} (accidental) is_up=True", is_up == True)
+            test(f"pc {pc} (accidental) is_up=True", is_up is True)
         else:
-            test(f"pc {pc} (natural) is_up=False", is_up == False)
+            test(f"pc {pc} (natural) is_up=False", is_up is False)
 
     # All radii should be the same
     radii = [l[3] for l in layout]
@@ -411,7 +410,7 @@ if _has_gpu:
 print("\n--- Tuner Engine ---")
 
 try:
-    from tuner_engine import TunerEngine, TunerResult, PITCH_CLASSES
+    from tuner_engine import TunerEngine, TunerResult
 
     engine = TunerEngine()
     test("TunerEngine instantiates", True)

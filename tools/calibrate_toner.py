@@ -26,7 +26,7 @@ import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
-    load_tone_presets, compute_fingerprint, MIN_PRESET_NOTES,
+    load_tone_presets, compute_fingerprint,
 )
 from config import TONER_DATA_FILE
 
@@ -201,9 +201,9 @@ def main():
     print(f"\nAgreement: {agreements}/{total_checks} ({pct:.0f}%)")
 
     if disagreements > 0:
-        print(f"\n  Mismatches suggest the scaling constants need adjustment.")
+        print("\n  Mismatches suggest the scaling constants need adjustment.")
     else:
-        print(f"\n  Engine agrees with all expert annotations!")
+        print("\n  Engine agrees with all expert annotations!")
 
     # Per-descriptor breakdown
     print(f"\n{'='*60}")
@@ -256,7 +256,7 @@ def main():
                 any_suggestions = True
             elif avg_h > 0.95:
                 print(f"\n  {descriptor}: Expert-tagged 'high' profiles are pegged at {avg_h:.0%}.")
-                print(f"    => The scaling may be too aggressive (everything reads high).")
+                print("    => The scaling may be too aggressive (everything reads high).")
                 any_suggestions = True
 
         if low_vals:

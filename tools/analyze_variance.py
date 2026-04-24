@@ -5,12 +5,10 @@ Looking for patterns the current descriptors might miss.
 
 import sys
 import os
-import math
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
     load_tone_presets, compute_fingerprint,
-    descriptors_from_harmonics,
 )
 from config import TONER_DATA_FILE
 import numpy as np
@@ -91,7 +89,7 @@ for name, d in tyler.items():
         alto_harmonics.append(d["fp"]["harmonics_db"][:12])
 
 arr_a = np.array(alto_harmonics)
-print(f"\n  Tyler's altos (same player/mpc/reed):")
+print("\n  Tyler's altos (same player/mpc/reed):")
 print(f"  {'Harmonic':<10} {'Mean':>8} {'StdDev':>8} {'Min':>8} {'Max':>8} {'Range':>8}")
 print(f"  {'-'*52}")
 for i in range(min(12, arr_a.shape[1])):

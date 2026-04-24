@@ -82,21 +82,32 @@ def main():
     check("Exception hook wired",
           lambda: sys.excepthook.__name__ != 'excepthook' or sys.excepthook is not sys.__excepthook__)
 
-    # Dialog-class imports (constructor only, no windows shown)
+    # Dialog-class imports (constructor only, no windows shown).
+    # assert is used so ruff sees these names as "used" and doesn't strip them.
     def import_dialogs():
         from ui_dialogs import (
-            OptionsWindow, ColorsWindow, GcodeSettingsWindow,
+            OptionsWindow, LayerColorWindow, GcodeSettingsWindow,
             PolygonDrawWindow, PadNotesWindow, UserGuideWindow,
-            NestingPreviewWindow, AboutDialog,
+            NestingPreviewWindow, AboutDialog, ConfirmationDialog,
+            ExportPresetsWindow, ImportPresetsWindow,
         )
+        assert all([
+            OptionsWindow, LayerColorWindow, GcodeSettingsWindow,
+            PolygonDrawWindow, PadNotesWindow, UserGuideWindow,
+            NestingPreviewWindow, AboutDialog, ConfirmationDialog,
+            ExportPresetsWindow, ImportPresetsWindow,
+        ])
     check("All dialog classes importable", import_dialogs)
 
-    # Engine imports
     def import_engines():
         from svg_engine import generate_svg, nest_pads
         from gcode_engine import generate_gcode_from_placed
         from tuner_engine import TunerEngine, TunerResult
         from toner_engine import TonerEngine, descriptors_from_harmonics
+        assert all([
+            generate_svg, nest_pads, generate_gcode_from_placed,
+            TunerEngine, TunerResult, TonerEngine, descriptors_from_harmonics,
+        ])
     check("All engines importable", import_engines)
 
     try:

@@ -1,5 +1,8 @@
 """Test web pad preset import logic (selective merge, no network needed)."""
-import sys, os, json, copy
+import sys
+import os
+import json
+import copy
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 passed = 0

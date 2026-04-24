@@ -18,7 +18,7 @@ IS_MACOS = sys.platform == 'darwin'
 try:
     from tuner_engine import (
         TunerEngine, ReferencePlayer, AUDIO_AVAILABLE,
-        PITCH_CLASSES, MIN_OCTAVE, MAX_OCTAVE,
+        PITCH_CLASSES, MIN_OCTAVE,
     )
     _TUNER_IMPORTS_OK = True
 except ImportError:
@@ -731,7 +731,6 @@ class TunerTabMixin:
 
         radius = min(col_w * LAYOUT_RADIUS_COL_LIMIT, row_h * LAYOUT_RADIUS_ROW_LIMIT)
 
-        top_pcs = {1, 3, 6, 8, 10}
         result = []
         for pc, col in naturals:
             cx = margin_x + col_w * (col + 0.5)
@@ -1456,7 +1455,8 @@ class TunerTabMixin:
 
     def _tuner_dump_perf_log(self):
         """Write collected perf samples to a debug log file."""
-        import os, tempfile
+        import os
+        import tempfile
         tools_dir = os.path.join(os.path.dirname(__file__), 'tools')
         if os.path.isdir(tools_dir):
             log_path = os.path.join(tools_dir, 'tuner_perf.log')
@@ -1505,7 +1505,7 @@ class TunerTabMixin:
                 f.write(f"{label:25s} {avg(key):8.1f} {mn(key):8.1f} {mx(key):8.1f}\n")
 
             # Histogram of total frame time
-            f.write(f"\nFrame time distribution:\n")
+            f.write("\nFrame time distribution:\n")
             buckets = [0]*10  # 0-10, 10-20, ... 90-100+ ms
             for s in samples:
                 b = min(9, int(s['total_ms'] / 10))
@@ -1517,7 +1517,7 @@ class TunerTabMixin:
                 f.write(f"  {lo:3d}-{hi:>3s}ms: {count:4d} ({count*100//n:2d}%) {bar}\n")
 
             # Sample of individual frames (first 20)
-            f.write(f"\nFirst 20 frames:\n")
+            f.write("\nFirst 20 frames:\n")
             f.write(f"{'Frame':>6s} {'Analyze':>8s} {'Wheels':>8s} {'VU':>6s} "
                     f"{'Total':>8s} {'Active':>7s}\n")
             for s in samples[:20]:

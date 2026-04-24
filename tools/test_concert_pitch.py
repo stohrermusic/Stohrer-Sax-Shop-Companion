@@ -13,8 +13,7 @@ import sys
 sys.path.insert(0, '.')
 from toner_engine import (
     transpose_note, reverse_transpose_note, note_to_freq,
-    SAX_TRANSPOSITIONS, PITCH_CLASSES,
-    CALIBRATION_NOTES, MIN_FUNDAMENTAL_HZ,
+    SAX_TRANSPOSITIONS, CALIBRATION_NOTES, MIN_FUNDAMENTAL_HZ,
 )
 
 passes = 0

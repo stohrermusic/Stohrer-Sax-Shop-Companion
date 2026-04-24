@@ -378,7 +378,7 @@ def import_file(filepath, horn_type, make, model, serial, mpc, reed,
     captures = analyze_audio_file(filepath, engine)
 
     if not captures:
-        print(f" NO STABLE NOTES FOUND")
+        print(" NO STABLE NOTES FOUND")
         return 0
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -487,7 +487,7 @@ def import_edinger(profiles):
     total_captures = 0
     total_profiles = 0
 
-    print(f"\n--- Tenors (Head2Head comparison) ---\n")
+    print("\n--- Tenors (Head2Head comparison) ---\n")
     for stem, (make, model, serial, notes) in sorted(EDINGER_FILES.items()):
         filepath = os.path.join(EDINGER_DIR, stem + ".wav")
         if not os.path.exists(filepath):
@@ -555,7 +555,7 @@ def import_foster(profiles):
     total_captures = 0
     total_profiles = 0
 
-    print(f"\n--- Baritone (one horn, six mouthpieces) ---\n")
+    print("\n--- Baritone (one horn, six mouthpieces) ---\n")
     for entry in FOSTER_FILES:
         filepath = os.path.join(FOSTER_DIR, entry["file"])
         if not os.path.exists(filepath):
@@ -571,7 +571,7 @@ def import_foster(profiles):
         captures = analyze_audio_file(filepath, engine)
 
         if not captures:
-            print(f" NO STABLE NOTES FOUND")
+            print(" NO STABLE NOTES FOUND")
             continue
 
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -635,7 +635,7 @@ def import_foster_6m(profiles):
     total_captures = 0
     total_profiles = 0
 
-    print(f"\n--- Alto (Conn 6M, eight mouthpieces) ---\n")
+    print("\n--- Alto (Conn 6M, eight mouthpieces) ---\n")
     for entry in FOSTER_6M_FILES:
         filepath = os.path.join(FOSTER_6M_DIR, entry["file"])
         if not os.path.exists(filepath):
@@ -651,7 +651,7 @@ def import_foster_6m(profiles):
         captures = analyze_audio_file(filepath, engine)
 
         if not captures:
-            print(f" NO STABLE NOTES FOUND")
+            print(" NO STABLE NOTES FOUND")
             continue
 
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -710,7 +710,7 @@ def import_grant(profiles):
         GRANT_HORN["make"], GRANT_HORN["model"], GRANT_HORN["serial"])
     total_captures = 0
 
-    print(f"\n--- Tenor (Holton 241, Selmer C* metal silver plate) ---\n")
+    print("\n--- Tenor (Holton 241, Selmer C* metal silver plate) ---\n")
     for fname in GRANT_FILES:
         filepath = os.path.join(GRANT_DIR, fname)
         if not os.path.exists(filepath):
@@ -727,7 +727,7 @@ def import_grant(profiles):
         captures = analyze_audio_file(filepath, engine)
 
         if not captures:
-            print(f" NO STABLE NOTES FOUND")
+            print(" NO STABLE NOTES FOUND")
             continue
 
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")

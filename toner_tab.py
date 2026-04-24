@@ -14,7 +14,7 @@ Requires: numpy, sounddevice (graceful fallback if unavailable)
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 import math
 import os
 import sys
@@ -26,13 +26,13 @@ try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
         MIN_PRESET_NOTES, SAX_TYPES, MIN_FUNDAMENTAL_HZ,
-        SAX_TRANSPOSITIONS, FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
+        FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
         ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
-        compute_session_fingerprint, compute_session_variation,
+        compute_session_fingerprint,
         compute_group_fingerprint, compute_rolloff_rate,
 
-        ROLLOFF_WARN_THRESHOLD, ROLLOFF_MIN_CAPTURES,
+        ROLLOFF_MIN_CAPTURES,
         get_rolloff_threshold,
         load_tone_presets, save_tone_presets,
         analyze_audio_file, check_mic_quality,
@@ -3523,7 +3523,7 @@ class TonerTabMixin:
         scroll_vbar.config(command=scroll_canvas.yview)
 
         main = tk.Frame(scroll_canvas, bg=bg)
-        scroll_window = scroll_canvas.create_window(
+        scroll_canvas.create_window(
             (0, 0), window=main, anchor="nw", tags="scroll_inner")
 
         # Update the scrollregion whenever the inner frame's natural size
@@ -4564,7 +4564,6 @@ class TonerTabMixin:
                         # Component interpretation based on where shifts concentrate
                         low_shift = sum(abs(d) for i, d in deltas if i < 6) / max(1, min(5, n - 1))
                         mid_shift = sum(abs(d) for i, d in deltas if 6 <= i < 12) / max(1, len([d for i, d in deltas if 6 <= i < 12]))
-                        hi_shift = sum(abs(d) for i, d in deltas if i >= 12) / max(1, len([d for i, d in deltas if i >= 12])) if n > 12 else 0
 
                         if mid_shift > 3.0 and mid_shift > low_shift * 1.5:
                             # Shifts concentrated in upper harmonics
@@ -5258,8 +5257,6 @@ class TonerTabMixin:
         source_notes_var = tk.StringVar(value=f"Imported from {filename}")
         tk.Entry(frame, textvariable=source_notes_var, width=45).pack(
             fill="x", pady=(0, 10))
-
-        result_holder = [None]  # [filepath] if confirmed
 
         def do_import():
             source_notes = source_notes_var.get().strip()

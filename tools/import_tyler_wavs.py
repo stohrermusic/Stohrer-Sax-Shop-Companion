@@ -101,7 +101,7 @@ def import_file(filepath, horn_type, make, model, serial, mpc, profiles):
     captures = analyze_audio_file(filepath, engine)
 
     if not captures:
-        print(f" NO STABLE NOTES FOUND")
+        print(" NO STABLE NOTES FOUND")
         return 0
 
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")

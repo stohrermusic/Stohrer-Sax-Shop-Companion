@@ -11,7 +11,6 @@ Research script — does not modify any source files or profiles.
 
 import sys
 import os
-import json
 import math
 
 # Add project root so we can import toner_engine
@@ -23,11 +22,6 @@ from toner_engine import (
     compute_fingerprint,
     load_tone_presets,
     flatten_presets,
-    BREAK_FREQUENCIES,
-    DEFAULT_BREAK_FREQ,
-    BRIGHTNESS_HARMONIC_WEIGHTS,
-    BRIGHTNESS_DB_FLOOR,
-    BRIGHTNESS_DB_RANGE,
 )
 
 

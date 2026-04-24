@@ -1,0 +1,20 @@
+# Ruff config. Runs as:  ruff check .   or   ruff check --fix .
+target-version = "py311"
+line-length = 120
+
+[lint]
+# Default ruleset (E = pycodestyle errors, F = pyflakes) catches real bugs
+# like unused imports, undefined names, and redefinitions. We relax a few
+# purely-stylistic rules that don't flag bugs and that tkinter-heavy code
+# generates constantly without benefit.
+select = ["E", "F"]
+ignore = [
+    "E501",  # line too long — pure aesthetic, not a bug finder
+    "E701",  # multi-statement on one line — common in tkinter callbacks
+    "E731",  # lambda assignment — also common in tk callbacks
+    "E741",  # ambiguous variable names (l, I, O) — subjective
+]
+
+[lint.per-file-ignores]
+# Test scripts legitimately insert sys.path before importing the app modules.
+"tools/*.py" = ["E402"]

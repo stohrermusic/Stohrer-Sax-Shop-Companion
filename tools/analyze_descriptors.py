@@ -16,7 +16,6 @@ This is a read-only research tool; it does not modify any files.
 
 import sys
 import os
-import json
 import math
 from collections import defaultdict
 
@@ -25,10 +24,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
     descriptors_from_harmonics, compute_fingerprint, load_tone_presets,
-    BREAK_FREQUENCIES, DEFAULT_BREAK_FREQ, BRIGHTNESS_HARMONIC_WEIGHTS,
-    BRIGHTNESS_DB_FLOOR, BRIGHTNESS_DB_RANGE, RICHNESS_RAW_MIN, RICHNESS_RAW_RANGE,
-    RESONANCE_RAW_MIN, RESONANCE_RAW_RANGE, FULLNESS_BALANCE_EXPONENT,
-    FULLNESS_BASE_WEIGHT, FULLNESS_ENERGY_WEIGHT, FULLNESS_ENERGY_DIVISOR,
     flatten_presets,
 )
 from config import TONER_DATA_FILE
@@ -257,10 +252,10 @@ for pname, pdata in profiles_flat.items():
     for c in caps:
         methods[c['method']] += 1
     print(', '.join(f"{m}={n}" for m, n in sorted(methods.items())))
-    print(f"    Fingerprint descriptors:")
+    print("    Fingerprint descriptors:")
     for dk in desc_keys:
         print(f"      {dk:12s}: {fmt_pct(fp['descriptors'].get(dk, 0))}")
-    print(f"    Spectral metrics (mean across captures):")
+    print("    Spectral metrics (mean across captures):")
     print(f"      centroid:     {fmt_f(mean([c['spectral_centroid'] for c in caps]))}")
     print(f"      slope:        {fmt_f(mean([c['spectral_slope'] for c in caps]))} dB/harmonic")
     print(f"      H above -40:  {fmt_f(mean([c['h_above_40'] for c in caps]), 4, 1)}")
@@ -335,7 +330,7 @@ for dk in desc_keys:
 pass
 # Re-do this more cleanly
 global_within = {}
-print(f"    ", end='')
+print("    ", end='')
 for dk in desc_keys:
     all_sd = []
     for pname_sd in within_profile_stdevs[dk].values():
@@ -394,7 +389,7 @@ for note in sorted_notes:
 
 print()
 print("  AVERAGE BETWEEN-PROFILE STDEV (signal):")
-print(f"    ", end='')
+print("    ", end='')
 global_between = {}
 for dk in desc_keys:
     avg = mean(between_stdevs[dk]) if between_stdevs[dk] else 0
@@ -562,7 +557,7 @@ if len(found_tenors) < 2:
     print(f"  Found: {found_tenors}")
     print()
 else:
-    print(f"  Profiles found:")
+    print("  Profiles found:")
     for short, full in found_tenors.items():
         print(f"    {short:>8s}: {full}")
     print()
@@ -863,7 +858,7 @@ else:
     print()
 
 # Discrimination summary
-print(f"  3. Discrimination power (F-ratios):")
+print("  3. Discrimination power (F-ratios):")
 for dk in desc_keys:
     within_vars = []
     between_vars = []
@@ -889,7 +884,7 @@ for dk in desc_keys:
     print(f"     {dk:>12s}: F={f:5.2f}  [{verdict}]")
 
 # Check for redundant descriptors
-print(f"  4. Redundancy check (|r| > 0.8 between descriptors):")
+print("  4. Redundancy check (|r| > 0.8 between descriptors):")
 found_redundant = False
 for i, dk1 in enumerate(dk_list):
     for dk2 in dk_list[i+1:]:
@@ -898,11 +893,11 @@ for i, dk1 in enumerate(dk_list):
             print(f"     {dk1} vs {dk2}: r = {r:+.3f}  *** POTENTIALLY REDUNDANT ***")
             found_redundant = True
 if not found_redundant:
-    print(f"     None found (all |r| < 0.8)")
+    print("     None found (all |r| < 0.8)")
 
 
 # Per-profile brightness vs f0 correlations
-print(f"  5. Per-profile brightness-pitch correlations (register confound):")
+print("  5. Per-profile brightness-pitch correlations (register confound):")
 for pname in real_profiles:
     caps = profile_captures[pname]
     bvals = [c['descriptors']['brightness'] for c in caps]
@@ -917,7 +912,7 @@ for pname in real_profiles:
 
 # Register-corrected ranking
 print()
-print(f"  6. Register-corrected brightness ranking (horn character):")
+print("  6. Register-corrected brightness ranking (horn character):")
 if profile_rc:
     for pname in sorted(profile_rc.keys(), key=lambda p: profile_rc[p][0], reverse=True):
         rc_val, _, _ = profile_rc[pname]
@@ -925,13 +920,13 @@ if profile_rc:
 
 # Sample profile issues
 print()
-print(f"  7. SAMPLE PROFILE DATA QUALITY WARNING:")
+print("  7. SAMPLE PROFILE DATA QUALITY WARNING:")
 print(f"     {len(sample_profiles)} sample profiles have f0=440 Hz for ALL notes.")
-print(f"     This means the harmonic data is synthetic/templated, not real measurements.")
-print(f"     These profiles produce constant descriptors across the 'register' (no register")
-print(f"     variation) because the f0 never changes. The fullness descriptor uses break")
-print(f"     frequency relative to f0*harmonic_number, so fake f0 corrupts fullness values.")
-print(f"     All statistical analysis above uses REAL profiles only to avoid contamination.")
+print("     This means the harmonic data is synthetic/templated, not real measurements.")
+print("     These profiles produce constant descriptors across the 'register' (no register")
+print("     variation) because the f0 never changes. The fullness descriptor uses break")
+print("     frequency relative to f0*harmonic_number, so fake f0 corrupts fullness values.")
+print("     All statistical analysis above uses REAL profiles only to avoid contamination.")
 
 print()
 print("  8. RESONANCE IS USELESS (F=0.07):")

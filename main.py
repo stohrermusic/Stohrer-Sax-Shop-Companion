@@ -10,13 +10,12 @@ import time
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
-    DEFAULT_SETTINGS,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
     setup_logging, get_log_file
 )
-from svg_engine import generate_svg, can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
-from gcode_engine import generate_gcode, generate_gcode_from_placed
+from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
+from gcode_engine import generate_gcode_from_placed
 from ui_dialogs import (
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
@@ -43,7 +42,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         # App icon (taskbar + title bar)
         try:
-            import os, sys
+            import os
+            import sys
             if getattr(sys, 'frozen', False):
                 base = sys._MEIPASS
             else:
@@ -2397,7 +2397,8 @@ if __name__ == '__main__':
 
     def _handle_exception(exc_type, exc_value, exc_tb):
         """Log unhandled exceptions to the log file and show a dialog."""
-        import traceback, logging
+        import traceback
+        import logging
         tb_text = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
         logging.error("Unhandled exception:\n%s", tb_text)
         try:

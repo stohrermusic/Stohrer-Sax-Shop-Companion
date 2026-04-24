@@ -2,7 +2,10 @@
 Test that old config files generate SVGs and G-code without crashing.
 Simulates upgrading from v1.0 and v1.61 to current version.
 """
-import json, os, sys, copy, tempfile
+import json
+import os
+import sys
+import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import load_settings, SETTINGS_FILE, DEFAULT_SETTINGS
@@ -155,7 +158,7 @@ def check(label, condition):
         failed += 1
 
 from svg_engine import (generate_svg, get_disc_diameter,
-                        check_for_oversized_engravings, nest_pads)
+                        nest_pads)
 from gcode_engine import generate_gcode_from_placed
 
 pads = [
