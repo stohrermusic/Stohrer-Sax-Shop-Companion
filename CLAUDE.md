@@ -30,11 +30,25 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (26 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_release_1_9`, `test_sizing_ranges`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (27 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_release_1_9`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
-**Portability note**: 25 of these suites are self-contained and run anywhere. `test_descriptor_validity` is the exception — it hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI, clean checkouts, and when contributing from other machines; the other 25 exercise the real code paths.
+**Portability notes**:
+- `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
+- `test_smoke_ui` constructs the full `PadSVGGeneratorApp` in a withdrawn Tk root — requires a display, so works on Windows/macOS and GitHub Actions Windows runners. On headless Linux it self-skips with a "no display" message.
 
-Before committing, run the suites affected by your changes. For releases, run all (other than `test_descriptor_validity` unless the WAV corpus is available). If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
+Before committing, run the suites affected by your changes. For releases, run all (minus `test_descriptor_validity` unless the WAV corpus is available). If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
+
+### Linting
+
+```bash
+pip install ruff
+ruff check .          # zero errors expected on beta/main
+ruff check --fix .    # auto-fix safe issues (unused imports, empty f-strings, etc.)
+```
+
+Config lives in `ruff.toml` (py311 target, 120-char lines, default E+F rules with E501/E701/E731/E741 relaxed, tools/ exempts E402 for `sys.path.insert` patterns). The CI `lint` job runs `ruff check .` and fails the workflow on any violation — keep the tree clean.
+
+**Ruff gotcha for test scripts**: `ruff --fix` will strip "unused" imports even when they're the whole point (e.g. a test that verifies names import cleanly). Reference the imported names afterward (`assert all([Class1, Class2, ...])`) so ruff sees them as used. See `tools/test_smoke_ui.py` for the pattern.
 
 ## Building Executables
 
@@ -72,6 +86,19 @@ pip install --find-links tuner_renderer/target/wheels tuner_render
 
 After this, `import tuner_render` succeeds and the tuner uses GPU rendering at 60-120 fps. If the import fails for any reason the tuner transparently falls back to canvas rendering — the app still runs, just slower. See the `_skip_theme` / `_dark_canvas` flag notes in the Strobe Tuner architecture section for integration details, and the GPU/Canvas constant alignment warning (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) for what has to stay in sync between the Python path and the shader.
 
+On Windows, Rust needs the MSVC linker. The one-time machine setup is `winget install Rustlang.Rustup` followed by `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`.
+
+### Windows Installer (Inno Setup)
+
+CI wraps `dist\SaxShopCompanion.exe` into a versioned `SaxShopCompanion-Windows-Setup-{version}.exe` via `installer.iss`. The installer creates Start Menu + optional desktop shortcuts, registers an uninstaller, and installs to `{autopf}\SaxShopCompanion` (requires admin UAC). User data in `%APPDATA%\StohrerSaxShopCompanion\` is untouched on uninstall. Local build:
+
+```bash
+python build.py
+iscc /DAppVersion=2.0.1 installer.iss   # requires Inno Setup 6
+```
+
+**Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
+
 ## Branching Strategy
 
 - **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
@@ -80,17 +107,22 @@ After this, `import tuner_render` succeeds and the tuner uses GPU rendering at 6
 
 ## Versioning
 
-`APP_VERSION` and `APP_BUILD_DATE` are defined in `config.py`. Update both when preparing a release. The About dialog reads these constants via `ui_dialogs.py`.
+`APP_VERSION` in `config.py` is the manual source of truth — bump it when preparing a release. `APP_BUILD_DATE` is auto-derived from `sys.executable`'s mtime in frozen builds (installer/zip copies preserve mtime) and falls back to the manual constant when running from source. The About dialog reads both via `ui_dialogs.py`.
 
 ## CI/CD (GitHub Actions)
 
-The `.github/workflows/build.yml` workflow automatically builds for all platforms:
-- Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually
-- Builds four binaries in parallel: Windows .exe, macOS Apple Silicon .app (zipped), macOS Intel .app (zipped, no audio features), and Linux binary
+The `.github/workflows/build.yml` workflow has two jobs:
+- **`lint`** (ubuntu-latest, ~10s): runs `ruff check .` — fails the workflow on any violation
+- **`build`** (4-platform matrix): Windows .exe + Inno Setup installer, macOS Apple Silicon .app, macOS Intel .app, and Linux binary
+
+Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually.
+
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
 - `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer
-- Uploads artifacts to the workflow run
-- Auto-attaches binaries to GitHub Releases
+- The Windows job also installs Inno Setup 6 via Chocolatey and builds the installer; version is extracted from `config.py`'s `APP_VERSION` via PowerShell regex
+- Uploads artifacts (including `SaxShopCompanion-Windows-Setup-*.exe`) to the workflow run; attaches all to GitHub Releases on release events
+
+**Action pins**: `actions/checkout@v5`, `actions/setup-python@v6`, `actions/upload-artifact@v6` — all on Node 24. Don't downgrade; GitHub removes Node 20 from runners in September 2026.
 
 ## Config File Locations
 
