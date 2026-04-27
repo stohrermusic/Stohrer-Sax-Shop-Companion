@@ -159,6 +159,104 @@ def main():
         assert not preview.winfo_exists()
     check("Closing OptionsWindow destroys an open preview", options_close_destroys_preview)
 
+    def render_with_sizing_range_mode():
+        # When sizing rules are in range mode, the preview should still
+        # render — both for a pad inside a defined range and one outside
+        # (which falls back to universal values).
+        opts = make_options()
+        try:
+            preview = PadPreviewWindow(opts)
+            preview.withdraw()
+            preview._cancel_poll()
+            try:
+                opts.sizing_range_mode_var.set("range")
+                opts.sizing_ranges = [{
+                    "min_size": 12.0, "max_size": 20.0,
+                    "felt_offset": 0.85, "card_to_felt_offset": 0.3,
+                    "leather_wrap_multiplier": 1.05, "min_hole_size": 14.0,
+                    "felt_thickness": 3.5, "felt_thickness_unit": "mm",
+                }]
+                # In-range pad
+                preview.preview_size_var.set(15.0)
+                preview._render()
+                # Out-of-range pad (falls back to universal)
+                preview.preview_size_var.set(30.0)
+                preview._render()
+                # Below all ranges
+                preview.preview_size_var.set(8.0)
+                preview._render()
+            finally:
+                preview.destroy()
+        finally:
+            opts.top.destroy()
+    check("Preview renders cleanly under sizing-range mode (in-range, out-of-range, below)", render_with_sizing_range_mode)
+
+    def render_with_dart_range_mode():
+        # Range-mode darts: pads in a defined range get a dart, pads
+        # outside get a plain disc. Either branch must render cleanly.
+        opts = make_options()
+        try:
+            preview = PadPreviewWindow(opts)
+            preview.withdraw()
+            preview._cancel_poll()
+            try:
+                opts.dart_range_mode_var.set("range")
+                opts.dart_ranges = [{
+                    "min_size": 6.0, "max_size": 11.5,
+                    "overwrap": 0.4, "wrap_bonus": 0.5,
+                    "frequency_multiplier": 1.2,
+                    "shape_factor": 0.0,  # triangle, exercises the math edge
+                    "engraving_on": True,
+                }]
+                # In-range pad → dart
+                preview.preview_size_var.set(9.0)
+                preview._render()
+                # Out-of-range pad → plain disc (no dart)
+                preview.preview_size_var.set(15.0)
+                preview._render()
+            finally:
+                preview.destroy()
+        finally:
+            opts.top.destroy()
+    check("Preview renders cleanly under dart-range mode (in-range and out-of-range)", render_with_dart_range_mode)
+
+    def render_at_shape_anchors():
+        # Triangle / sine / square anchors should each produce a renderable
+        # leather dart shape without exception.
+        opts = make_options()
+        try:
+            preview = PadPreviewWindow(opts)
+            preview.withdraw()
+            preview._cancel_poll()
+            try:
+                preview.preview_size_var.set(12.0)
+                for sf in (0.0, 0.5, 1.0, 0.25, 0.75):
+                    opts.dart_shape_factor_var.set(sf)
+                    preview._render()
+            finally:
+                preview.destroy()
+        finally:
+            opts.top.destroy()
+    check("Preview renders across the dart shape spectrum (triangle/sine/square)", render_at_shape_anchors)
+
+    def render_with_darts_disabled():
+        # darts_enabled=False should produce plain leather circles even
+        # below the threshold — no dart pattern attempt.
+        opts = make_options()
+        try:
+            preview = PadPreviewWindow(opts)
+            preview.withdraw()
+            preview._cancel_poll()
+            try:
+                opts.darts_enabled_var.set(False)
+                preview.preview_size_var.set(10.0)  # would normally dart
+                preview._render()
+            finally:
+                preview.destroy()
+        finally:
+            opts.top.destroy()
+    check("Preview renders cleanly with darts disabled", render_with_darts_disabled)
+
     def parent_form_change_triggers_rerender():
         opts = make_options()
         try:

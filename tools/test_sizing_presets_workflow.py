@@ -168,6 +168,33 @@ def main():
             dlg.destroy()
     check("Save dialog defaults to 'new' when no presets exist", save_dialog_disables_overwrite_when_empty)
 
+    def default_bootstrap_when_library_empty():
+        # Mirror the bootstrap logic in main.py: if no sizing presets are
+        # loaded, the app should auto-create a "Default" preset from the
+        # current settings so at least one preset always exists.
+        empty_presets = {}
+        if not empty_presets:
+            empty_presets["Default"] = settings_to_sizing_preset(copy.deepcopy(DEFAULT_SETTINGS))
+        assert "Default" in empty_presets
+        # The bootstrapped preset should be a complete sizing-preset dict
+        for required_key in ("units", "felt_offset", "dart_shape_factor", "compatibility_mode"):
+            assert required_key in empty_presets["Default"], f"missing {required_key}"
+        # And it should be loadable cleanly via _apply_dict_to_form
+        opts = OptionsWindow(
+            root, StubApp(), copy.deepcopy(DEFAULT_SETTINGS),
+            lambda: None, lambda: None,
+            sizing_presets=empty_presets,
+            sizing_presets_save_callback=lambda: None,
+        )
+        try:
+            opts.top.withdraw()
+            opts._apply_dict_to_form(empty_presets["Default"])
+            opts._set_baseline_to_current()
+            assert not opts._is_dirty(), "fresh bootstrap preset should produce a clean form"
+        finally:
+            opts.top.destroy()
+    check("Default preset bootstrap from empty library produces a loadable preset", default_bootstrap_when_library_empty)
+
     def save_dialog_defaults_to_overwrite_when_active():
         class NoWaitSavePresetDialog(SaveSizingPresetDialog):
             def wait_window(self, _w=None):

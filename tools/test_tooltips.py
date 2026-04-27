@@ -122,6 +122,29 @@ def main():
             assert tooltips_enabled() is True
     check("Global disable blocks Tooltip._show", global_disable_blocks_show)
 
+    def app_startup_honors_saved_setting():
+        # Mirror what main.py does: read tooltips_enabled from settings,
+        # call set_tooltips_enabled(value). When False, _show should be
+        # blocked even after a successful Tooltip() construction.
+        from config import DEFAULT_SETTINGS
+        # Simulate "user disabled tooltips and saved that"
+        settings_with_off = dict(DEFAULT_SETTINGS, tooltips_enabled=False)
+        try:
+            set_tooltips_enabled(settings_with_off.get("tooltips_enabled", True))
+            assert tooltips_enabled() is False
+            tip = Tooltip(label, "should not appear after disabled-on-startup")
+            tip._show()
+            assert tip._tip is None
+        finally:
+            # Reset for downstream tests
+            set_tooltips_enabled(True)
+
+        # And the True case
+        settings_with_on = dict(DEFAULT_SETTINGS, tooltips_enabled=True)
+        set_tooltips_enabled(settings_with_on.get("tooltips_enabled", True))
+        assert tooltips_enabled() is True
+    check("Startup honors saved tooltips_enabled value (off/on)", app_startup_honors_saved_setting)
+
     def widget_destroy_cleans_up():
         scratch = tk.Label(root, text="scratch")
         tip = Tooltip(scratch, "doomed")
