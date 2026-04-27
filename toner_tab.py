@@ -1035,6 +1035,7 @@ class TonerTabMixin:
         """Open consolidated toner settings dialog."""
         from config import get_input_devices, save_settings
         from tkinter import filedialog
+        from ui_dialogs import add_tooltip
 
         dlg = tk.Toplevel(self.root)
         dlg.title("Tone Analyzer Settings")
@@ -1090,6 +1091,11 @@ class TonerTabMixin:
                         break
             listbox.selection_set(current_idx)
             listbox.see(current_idx)
+            add_tooltip(listbox,
+                        "Microphone the toner uses for capture and "
+                        "live analysis. The mic type and model that get "
+                        "saved with each capture are configured per "
+                        "preset (File → Presets), not here.")
         else:
             tk.Label(input_frame, text="No audio input devices found.",
                      bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
@@ -1116,17 +1122,29 @@ class TonerTabMixin:
             else:
                 wav_warning.pack(anchor="w", padx=(16, 0), pady=(0, 2))
 
-        tk.Checkbutton(rec_frame, text="Record WAV during capture",
-                       variable=record_var, bg=bg, fg=fg,
-                       command=_on_record_toggled,
-                       font=("Helvetica", 9)).pack(anchor="w")
+        rec_cb = tk.Checkbutton(rec_frame, text="Record WAV during capture",
+                                variable=record_var, bg=bg, fg=fg,
+                                command=_on_record_toggled,
+                                font=("Helvetica", 9))
+        rec_cb.pack(anchor="w")
+        add_tooltip(rec_cb,
+                    "Save the raw audio for each capture as a WAV file. "
+                    "WAV recording lets the post-capture re-analysis "
+                    "average over the full take (much more accurate than "
+                    "the live readings). Strongly recommended.")
         if not record_var.get():
             wav_warning.pack(anchor="w", padx=(16, 0), pady=(0, 2))
 
         auto_delete_var = tk.BooleanVar(value=self.settings.get("toner_wav_auto_delete", False))
-        tk.Checkbutton(rec_frame, text="Delete WAV after analysis",
-                       variable=auto_delete_var, bg=bg, fg=fg,
-                       font=("Helvetica", 9)).pack(anchor="w", padx=(16, 0))
+        del_cb = tk.Checkbutton(rec_frame, text="Delete WAV after analysis",
+                                variable=auto_delete_var, bg=bg, fg=fg,
+                                font=("Helvetica", 9))
+        del_cb.pack(anchor="w", padx=(16, 0))
+        add_tooltip(del_cb,
+                    "Automatically delete each WAV after the post-capture "
+                    "analysis runs. Saves disk space, but you lose the "
+                    "ability to re-analyze a session if descriptors or "
+                    "algorithms change later.")
 
         folder_frame = tk.Frame(rec_frame, bg=bg)
         folder_frame.pack(fill="x", pady=(2, 0))
@@ -1140,9 +1158,15 @@ class TonerTabMixin:
                 parent=dlg)
             if chosen:
                 folder_label.configure(text=chosen)
-        tk.Button(folder_frame, text="Folder...", font=("Helvetica", 8),
-                  command=choose_folder).pack(side="left", padx=(0, 5))
+        folder_btn = tk.Button(folder_frame, text="Folder...", font=("Helvetica", 8),
+                               command=choose_folder)
+        folder_btn.pack(side="left", padx=(0, 5))
         folder_label.pack(side="left", fill="x")
+        folder_tip = ("Where capture WAVs are written. Pick a folder on a "
+                      "drive with plenty of space — saxophone takes can "
+                      "be a few MB each.")
+        add_tooltip(folder_btn, folder_tip)
+        add_tooltip(folder_label, folder_tip)
 
         # --- Pitch ---
         pitch_frame = tk.LabelFrame(gen_frame, text="Pitch", bg=bg,
@@ -1151,22 +1175,39 @@ class TonerTabMixin:
 
         pitch_row = tk.Frame(pitch_frame, bg=bg)
         pitch_row.pack(fill="x", pady=(0, 4))
-        tk.Label(pitch_row, text="Reference pitch  A =", bg=bg, fg=fg,
-                 font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
+        ref_lbl = tk.Label(pitch_row, text="Reference pitch  A =", bg=bg, fg=fg,
+                           font=("Helvetica", 9))
+        ref_lbl.pack(side="left", padx=(0, 5))
         ref_pitch_var = tk.DoubleVar(value=self._toner_pitch_var.get())
-        tk.Entry(pitch_row, textvariable=ref_pitch_var, width=6,
-                 font=("Helvetica", 9)).pack(side="left")
-        tk.Label(pitch_row, text="Hz", bg=bg, fg=fg,
-                 font=("Helvetica", 9)).pack(side="left", padx=(3, 0))
+        ref_ent = tk.Entry(pitch_row, textvariable=ref_pitch_var, width=6,
+                           font=("Helvetica", 9))
+        ref_ent.pack(side="left")
+        ref_unit = tk.Label(pitch_row, text="Hz", bg=bg, fg=fg,
+                            font=("Helvetica", 9))
+        ref_unit.pack(side="left", padx=(3, 0))
+        ref_tip = ("Reference frequency for A4. Standard is 440 Hz; many "
+                   "orchestras tune to 442 or 443. Range is 420–460 Hz; "
+                   "values outside that are ignored.")
+        for w in (ref_lbl, ref_ent, ref_unit):
+            add_tooltip(w, ref_tip)
 
         display_pitch_var = tk.StringVar(
             value="concert" if self._toner_concert_pitch.get() else "written")
-        tk.Radiobutton(pitch_frame, text="Written pitch (what the player fingers)",
-                       variable=display_pitch_var, value="written", bg=bg, fg=fg,
-                       font=("Helvetica", 9)).pack(anchor="w")
-        tk.Radiobutton(pitch_frame, text="Concert pitch (actual sounding frequency)",
-                       variable=display_pitch_var, value="concert", bg=bg, fg=fg,
-                       font=("Helvetica", 9)).pack(anchor="w")
+        written_rb = tk.Radiobutton(pitch_frame, text="Written pitch (what the player fingers)",
+                                    variable=display_pitch_var, value="written", bg=bg, fg=fg,
+                                    font=("Helvetica", 9))
+        written_rb.pack(anchor="w")
+        concert_rb = tk.Radiobutton(pitch_frame, text="Concert pitch (actual sounding frequency)",
+                                    variable=display_pitch_var, value="concert", bg=bg, fg=fg,
+                                    font=("Helvetica", 9))
+        concert_rb.pack(anchor="w")
+        add_tooltip(written_rb,
+                    "Show note names as the player reads them on the page. "
+                    "An alto sax fingering A sounds C — written pitch "
+                    "still shows it as A.")
+        add_tooltip(concert_rb,
+                    "Show note names at actual sounding frequency. An alto "
+                    "fingering A is shown as C in concert pitch.")
 
         # ==================================================================
         # ANALYSIS TAB
@@ -1191,13 +1232,32 @@ class TonerTabMixin:
             ("preamp", "Preamp / Interface"),
             ("notes", "Notes"),
         ]
+        field_help = {
+            "serial": "Adds a Serial number field to the preset form so "
+                      "you can pin captures to a specific instrument.",
+            "reed": "Adds a Reed field — useful when reed brand/strength is "
+                    "the variable you're testing.",
+            "ligature": "Adds a Ligature field — relevant for setup-comparison "
+                        "tests where the ligature changes.",
+            "mic_position": "Adds a Mic Position field — vital if you record "
+                            "from multiple distances or angles, since position "
+                            "drives much of the upper-harmonic variance.",
+            "room": "Adds a Room / Environment field for tracking takes "
+                    "across spaces with different acoustics.",
+            "preamp": "Adds a Preamp / Interface field for tracking the "
+                      "front-of-chain electronics.",
+            "notes": "Adds a free-text Notes field for whatever else "
+                     "you want recorded with the take.",
+        }
         vis = self.settings.get("visible_preset_fields", {})
         field_vars = {}
         for key, label in field_labels:
             var = tk.BooleanVar(value=vis.get(key, False))
-            tk.Checkbutton(pf_frame, text=label, variable=var, bg=bg, fg=fg,
-                           font=("Helvetica", 9)).pack(anchor="w")
+            cb = tk.Checkbutton(pf_frame, text=label, variable=var, bg=bg, fg=fg,
+                                font=("Helvetica", 9))
+            cb.pack(anchor="w")
             field_vars[key] = var
+            add_tooltip(cb, field_help[key])
 
         # Easter egg
         _ns_var = tk.BooleanVar(value=False)
@@ -1298,18 +1358,27 @@ class TonerTabMixin:
 
             var = tk.BooleanVar(value=analysis_desc.get(key, key in ("richness", "warmth", "even_odd")))
             desc_vars[key] = var
-            tk.Checkbutton(row, variable=var, bg=bg).pack(side="left")
+            cb = tk.Checkbutton(row, variable=var, bg=bg)
+            cb.pack(side="left")
 
             display = label
             if badge:
                 display += f"  [{badge}]"
-            tk.Label(row, text=display, bg=bg, fg=fg,
-                     font=("Helvetica", 9)).pack(side="left")
+            row_lbl = tk.Label(row, text=display, bg=bg, fg=fg,
+                               font=("Helvetica", 9))
+            row_lbl.pack(side="left")
 
             def make_info_cmd(title=label, text=info_text):
                 return lambda: messagebox.showinfo(title, text, parent=dlg)
-            tk.Button(row, text="?", width=2, font=("Helvetica", 8),
-                      command=make_info_cmd()).pack(side="left", padx=(6, 0))
+            info_btn = tk.Button(row, text="?", width=2, font=("Helvetica", 8),
+                                 command=make_info_cmd())
+            info_btn.pack(side="left", padx=(6, 0))
+
+            cb_tip = (f"Show {label} in the Analyze tool. Click ? for "
+                      "details on what this descriptor measures.")
+            add_tooltip(cb, cb_tip)
+            add_tooltip(row_lbl, cb_tip)
+            add_tooltip(info_btn, f"Detailed description of {label}.")
 
         # --- Sandbox Mode ---
         sandbox_frame = tk.LabelFrame(ana_frame, text="Sandbox Mode", bg=bg,
@@ -1317,16 +1386,23 @@ class TonerTabMixin:
         sandbox_frame.pack(fill="x", pady=(0, 8))
 
         sandbox_var = tk.BooleanVar(value=self.settings.get("toner_sandbox_enabled", False))
-        tk.Checkbutton(sandbox_frame, text="Allow sandbox mode",
-                       variable=sandbox_var, bg=bg, fg=fg,
-                       font=("Helvetica", 9)).pack(anchor="w")
-        tk.Label(sandbox_frame,
-                 text="Sandbox presets can capture any pitched sound\n"
-                      "without requiring mic type or instrument fields.\n"
-                      "Good for experiments, non-sax instruments, or\n"
-                      "unconventional setups like contact mics.",
-                 bg=bg, fg="#888888", font=("Helvetica", 8),
-                 justify="left").pack(anchor="w", pady=(2, 0))
+        sandbox_cb = tk.Checkbutton(sandbox_frame, text="Allow sandbox mode",
+                                    variable=sandbox_var, bg=bg, fg=fg,
+                                    font=("Helvetica", 9))
+        sandbox_cb.pack(anchor="w")
+        sandbox_caption = tk.Label(sandbox_frame,
+                                   text="Sandbox presets can capture any pitched sound\n"
+                                        "without requiring mic type or instrument fields.\n"
+                                        "Good for experiments, non-sax instruments, or\n"
+                                        "unconventional setups like contact mics.",
+                                   bg=bg, fg="#888888", font=("Helvetica", 8),
+                                   justify="left")
+        sandbox_caption.pack(anchor="w", pady=(2, 0))
+        sandbox_tip = ("Enables a relaxed preset type that skips the "
+                       "required mic-type and instrument fields. Use it "
+                       "for one-off experiments or non-saxophone sources.")
+        add_tooltip(sandbox_cb, sandbox_tip)
+        add_tooltip(sandbox_caption, sandbox_tip)
 
         # ==================================================================
         # OK / CANCEL
@@ -1387,8 +1463,12 @@ class TonerTabMixin:
 
             dlg.destroy()
 
-        tk.Button(btn_frame, text="OK", width=10, command=save).pack(side="right", padx=(5, 0))
-        tk.Button(btn_frame, text="Cancel", width=10, command=dlg.destroy).pack(side="right")
+        ok_btn = tk.Button(btn_frame, text="OK", width=10, command=save)
+        ok_btn.pack(side="right", padx=(5, 0))
+        cancel_btn = tk.Button(btn_frame, text="Cancel", width=10, command=dlg.destroy)
+        cancel_btn.pack(side="right")
+        add_tooltip(ok_btn, "Apply all changes and close.")
+        add_tooltip(cancel_btn, "Close without applying any changes.")
 
     def _toner_transpose_note(self, concert_note):
         """Transpose a concert pitch note name to written pitch for display.

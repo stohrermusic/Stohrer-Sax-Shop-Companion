@@ -44,7 +44,7 @@ check("Universal: pad above threshold returns None", get_dart_settings_for_size(
 check("Universal: returns correct overwrap", get_dart_settings_for_size(10.0, s)["overwrap"] == 0.5)
 check("Universal: returns correct wrap_bonus", get_dart_settings_for_size(10.0, s)["wrap_bonus"] == 0.75)
 check("Universal: returns correct frequency_multiplier", get_dart_settings_for_size(10.0, s)["frequency_multiplier"] == 1.0)
-check("Universal: returns correct shape_factor", get_dart_settings_for_size(10.0, s)["shape_factor"] == 0.0)
+check("Universal: returns correct shape_factor", get_dart_settings_for_size(10.0, s)["shape_factor"] == 0.5)
 check("Universal: returns correct engraving_on", get_dart_settings_for_size(10.0, s)["engraving_on"] is True)
 
 # Custom universal settings

@@ -12,7 +12,8 @@ from config import (
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
-    setup_logging, get_log_file
+    setup_logging, get_log_file,
+    settings_to_sizing_preset,
 )
 from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
 from gcode_engine import generate_gcode_from_placed
@@ -64,6 +65,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.settings = load_settings()
 
+        # Apply tooltip on/off setting at startup so settings dialogs
+        # opened later honor the user's choice from the Feature Set menu.
+        from ui_dialogs import set_tooltips_enabled
+        set_tooltips_enabled(self.settings.get("tooltips_enabled", True))
+
         # Ensure Toner is hidden unless explicitly unlocked
         if not self.settings.get("toner_unlocked"):
             visible = self.settings.get("visible_tabs", {})
@@ -74,6 +80,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
         self.sizing_presets = load_presets(SIZING_PRESET_FILE, preset_type_name="Sizing Preset")
+
+        # The app requires at least one sizing preset; if the library is
+        # empty (first run, or a wiped config) bootstrap a "Default" preset
+        # from the current settings so users always have something to load.
+        if not self.sizing_presets:
+            self.sizing_presets["Default"] = settings_to_sizing_preset(self.settings)
+            save_presets(self.sizing_presets, SIZING_PRESET_FILE)
+
         self.custom_polygon = None  # For custom shape nesting
 
         # --- Scrap Mode Session State ---
@@ -2125,6 +2139,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                  "The Pad Maker is always on.",
                  bg=bg, font=("Helvetica", 9)).pack(pady=(0, 10))
 
+        # --- Tooltips toggle (applies immediately, no restart) ---
+        tk.Label(frame, text="Tool Tips", bg=bg,
+                 font=("Helvetica", 11, "bold")).pack(anchor="w")
+        tooltips_var = tk.BooleanVar(value=self.settings.get("tooltips_enabled", True))
+        tk.Checkbutton(frame,
+                       text="Show tool tips when hovering over settings",
+                       variable=tooltips_var, bg=bg,
+                       font=("Helvetica", 10)).pack(anchor="w")
+        tk.Label(frame, text="\nTabs", bg=bg,
+                 font=("Helvetica", 11, "bold")).pack(anchor="w")
+
         visible = self.settings.get("visible_tabs", {})
 
         main_tabs = [
@@ -2297,11 +2322,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     return
                 self.settings["toner_unlocked"] = True
 
+            tabs_changed = (new_visible != self.settings.get("visible_tabs", {}))
+
+            # Tooltip toggle takes effect immediately — no restart needed.
+            from ui_dialogs import set_tooltips_enabled
+            self.settings["tooltips_enabled"] = tooltips_var.get()
+            set_tooltips_enabled(tooltips_var.get())
+
             self.settings["visible_tabs"] = new_visible
             save_settings(self.settings)
             dlg.destroy()
-            messagebox.showinfo("Feature Set",
-                "Changes will take effect next time you open the app.")
+            if tabs_changed:
+                messagebox.showinfo("Feature Set",
+                    "Tab changes will take effect next time you open the app.")
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x", pady=(10, 0))

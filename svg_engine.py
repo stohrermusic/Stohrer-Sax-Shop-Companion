@@ -7,42 +7,65 @@ from config import (DEFAULT_SETTINGS, get_dart_settings_for_size, get_sizing_for
 # CORE MATH & LOGIC
 # ==========================================
 
-def calculate_star_path(cx, cy, outer_r, inner_r, num_points=12, shape_factor=0.0):
+_SQUARE_POWER = 0.01  # small power → sign(c) * |c|^p approaches a square wave
+
+
+def _wave_value(raw_cos, shape_factor):
+    """Map a raw cosine value (-1..1) to a shaped wave value (-1..1).
+
+    shape_factor spans triangle → sine → square:
+      0.0  = Triangle (linear ramps between peak and valley)
+      0.5  = Sine (the raw cosine itself)
+      1.0  = Square (sharp transitions between flats at +/-1)
+    Values in between blend smoothly — 0..0.5 blends triangle→sine,
+    0.5..1 blends sine→square.
     """
-    Generates an SVG path string for a smooth Sine Wave (Flower) shape.
-    shape_factor: 0.0 = Sine, 1.0 = Flattened (Square-ish)
+    s = max(0.0, min(1.0, shape_factor))
+
+    # Clamp for numerical safety before arcsin
+    raw_c = max(-1.0, min(1.0, raw_cos))
+
+    triangle = (2.0 / math.pi) * math.asin(raw_c)
+    sine = raw_c
+    sign = 1.0 if raw_c >= 0 else -1.0
+    square = sign * (abs(raw_c) ** _SQUARE_POWER)
+
+    if s <= 0.5:
+        t = s * 2.0
+        return (1.0 - t) * triangle + t * sine
+    t = (s - 0.5) * 2.0
+    return (1.0 - t) * sine + t * square
+
+
+def calculate_star_path(cx, cy, outer_r, inner_r, num_points=12, shape_factor=0.5):
+    """
+    Generates an SVG path string for a darted (geared) leather pad shape.
+    shape_factor spans 0.0 (Triangle) → 0.5 (Sine) → 1.0 (Square).
     """
     path_data = []
-    
+
     avg_r = (outer_r + inner_r) / 2.0
     amplitude = (outer_r - inner_r) / 2.0
-    
-    steps = int(num_points * 8) 
-    if steps < 64: steps = 64
-    
-    angle_step = (2 * math.pi) / steps
 
-    # Calculate power for shaping. 
-    power = 1.0 - (0.9 * shape_factor)
+    steps = int(num_points * 8)
+    if steps < 64:
+        steps = 64
+
+    angle_step = (2 * math.pi) / steps
 
     for i in range(steps + 1):
         theta = i * angle_step
-        
-        # Raw Sine Wave (-1 to 1)
         raw_wave = math.cos(num_points * theta)
-        
-        # Apply Shaping: sign * |raw|^power
-        shaped_wave = (1 if raw_wave >= 0 else -1) * (abs(raw_wave) ** power)
-        
+        shaped_wave = _wave_value(raw_wave, shape_factor)
         r = avg_r + amplitude * shaped_wave
-        
+
         x = cx + r * math.cos(theta)
         y = cy + r * math.sin(theta)
-        
+
         command = "M" if i == 0 else "L"
         path_data.append(f"{command} {x:.3f} {y:.3f}")
-        
-    path_data.append("Z") 
+
+    path_data.append("Z")
     return " ".join(path_data)
 
 def leather_back_wrap(pad_size, multiplier, extra_base=0.0):

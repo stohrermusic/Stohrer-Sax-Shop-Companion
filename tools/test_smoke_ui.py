@@ -110,6 +110,43 @@ def main():
         ])
     check("All engines importable", import_engines)
 
+    # Actually instantiate the settings dialogs so tooltip wiring runs at
+    # construction time. Withdraw each dialog so it doesn't pop into view.
+    def open_settings_dialogs():
+        from ui_dialogs import (
+            OptionsWindow, LayerColorWindow, GcodeSettingsWindow,
+            KeyLayoutWindow,
+        )
+        from config import save_settings as _save
+
+        opts = OptionsWindow(
+            root, a, a.settings, a.update_ui_from_settings, lambda: _save(a.settings),
+            sizing_presets={}, sizing_presets_save_callback=lambda: None,
+        )
+        opts.top.withdraw()
+        opts.top.destroy()
+
+        lc = LayerColorWindow(root, a.settings, lambda: _save(a.settings))
+        lc.top.withdraw()
+        lc.top.destroy()
+
+        kl = KeyLayoutWindow(root, a.settings, lambda: None, lambda: _save(a.settings))
+        kl.top.withdraw()
+        kl.top.destroy()
+
+        gc = GcodeSettingsWindow(root, a.settings, lambda s: _save(s))
+        gc.top.withdraw()
+        gc.top.destroy()
+
+        # Tooling variant (acrylic only + die engraving)
+        gc2 = GcodeSettingsWindow(
+            root, a.settings, lambda s: _save(s),
+            materials=[("acrylic", "Acrylic")], show_tooling_engraving=True,
+        )
+        gc2.top.withdraw()
+        gc2.top.destroy()
+    check("Settings dialogs construct (tooltip wiring runs)", open_settings_dialogs)
+
     try:
         root.destroy()
     except Exception:
