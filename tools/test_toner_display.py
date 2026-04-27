@@ -11,7 +11,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from toner_engine import TonerEngine, SAMPLE_RATE, FFT_SIZE, MAX_HARMONICS
+from toner_engine import TonerEngine, SAMPLE_RATE
 
 passed = 0
 failed = 0
@@ -85,7 +85,7 @@ amps = {1: 0.5, 2: 1.0, 3: 0.7, 4: 0.4, 5: 0.2}
 audio = make_audio(300.0, amps)
 r = engine.analyze_buffer(audio)
 
-print(f"  Input: H1=0.5, H2=1.0 (stronger!), H3=0.7, H4=0.4, H5=0.2")
+print("  Input: H1=0.5, H2=1.0 (stronger!), H3=0.7, H4=0.4, H5=0.2")
 print(f"  Detected fundamental: {r.fundamental_freq:.1f} Hz (expected ~300)")
 if r.harmonics:
     for h in r.harmonics[:6]:

@@ -1,7 +1,7 @@
 """Test edge bias feature in nesting algorithms."""
 import sys
 sys.path.insert(0, '.')
-from svg_engine import _nest_discs, _nest_discs_polygon, get_disc_diameter
+from svg_engine import _nest_discs, _nest_discs_polygon
 from config import DEFAULT_SETTINGS
 
 passed = 0

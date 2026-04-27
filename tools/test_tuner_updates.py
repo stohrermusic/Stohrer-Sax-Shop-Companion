@@ -48,8 +48,8 @@ test("fps default is '60'", ts.get("fps") == "60")
 print("\n--- Import Checks ---")
 from tuner_tab import (
     StrobeWheel, TunerTabMixin, _scale_color, _build_ref_notes,
-    TRANSPOSITION_SHIFTS, TRANSPOSITION_KEYS, DEFAULT_FACEPLATE,
-    NUM_RINGS, RING_SEGMENTS, FRAME_RATES,
+    TRANSPOSITION_KEYS, DEFAULT_FACEPLATE,
+    NUM_RINGS, RING_SEGMENTS,
 )
 
 test("DEFAULT_FACEPLATE is #1A1A1A", DEFAULT_FACEPLATE == "#1A1A1A")
@@ -161,7 +161,7 @@ test("User guide mentions DISP BRIGHT (master brightness)",
 # 12. Engine unchanged
 # ============================================================
 print("\n--- Engine Stability ---")
-from tuner_engine import TunerEngine, TunerResult, AUDIO_AVAILABLE
+from tuner_engine import TunerEngine
 import numpy as np
 
 engine = TunerEngine()

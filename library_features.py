@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 import json
-import os
 
 from config import (
     ALL_KEY_HEIGHT_FIELDS, SCREW_SPECS_FILE, KEY_PRESET_FILE,
@@ -415,7 +414,6 @@ class LibraryFeaturesMixin:
         import urllib.error
 
         MATTS_KEYS_URL = "https://www.stohrermusic.com/data/key_height_library.json"
-        SUFFIX = " (Matt's)"
         LIBRARY_NAME = "Matt's Library"
 
         try:

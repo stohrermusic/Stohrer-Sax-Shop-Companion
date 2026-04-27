@@ -15,12 +15,12 @@ candidate before re-adding one.
 
 Run:  python tools/test_descriptor_validity.py
 """
-import sys, os, math
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
-    TonerEngine, analyze_audio_file, descriptors_from_harmonics,
-    compute_fingerprint, compute_rolloff_rate,
+    TonerEngine, analyze_audio_file, compute_fingerprint,
 )
 
 RECORDINGS = r"C:\sax shop companion\recordings"
@@ -145,7 +145,7 @@ def analyze_group(name, file_dict, sax_type):
         print(f" {d.get('evenness',0):5.1%} {rr_str:>6}")
 
     # ── Compute differentiation power for each descriptor ──
-    print(f"\n  -- Differentiation Analysis --")
+    print("\n  -- Differentiation Analysis --")
 
     for k in desc_keys:
         vals = [fp['descriptors'].get(k, 0) for fp in fingerprints.values()]
@@ -201,7 +201,7 @@ def analyze_group(name, file_dict, sax_type):
                 m = sum(h_diffs[i]) / len(h_diffs[i])
                 print(f" {m:+5.1f}", end="")
             else:
-                print(f"   n/a", end="")
+                print("   n/a", end="")
         print(" dB")
 
         # Absolute mean (how big are the differences regardless of direction)
@@ -211,7 +211,7 @@ def analyze_group(name, file_dict, sax_type):
                 m = sum(abs(d) for d in h_diffs[i]) / len(h_diffs[i])
                 print(f"  {m:5.1f}", end="")
             else:
-                print(f"   n/a", end="")
+                print("   n/a", end="")
         print(" dB")
 
         # Overall: average absolute delta across all harmonics and notes
@@ -221,11 +221,11 @@ def analyze_group(name, file_dict, sax_type):
             print(f"\n  Overall avg |delta|: {overall_avg:.1f} dB across "
                   f"{len(common)} notes x {max_h} harmonics")
             if overall_avg > 3.0:
-                print(f"  -> These horns sound measurably different")
+                print("  -> These horns sound measurably different")
             elif overall_avg > 1.5:
-                print(f"  -> Moderate differences (may be audible)")
+                print("  -> Moderate differences (may be audible)")
             else:
-                print(f"  -> Small differences (borderline audible)")
+                print("  -> Small differences (borderline audible)")
 
     # Delta descriptors (spectral_tilt, mid_harmonic) were removed from the
     # app after data analysis showed live comparison is unreliable; the
@@ -256,7 +256,7 @@ def main():
         "TYLER TENORS (15 horns, same player/setup)",
         TYLER_TENORS, "Tenor")
 
-    tyler_a = analyze_group(
+    analyze_group(
         "TYLER ALTOS (9 horns, same player/setup)",
         TYLER_ALTOS, "Alto")
 

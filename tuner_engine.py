@@ -11,7 +11,6 @@ Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 """
 
 import math
-import threading
 import time
 
 try:

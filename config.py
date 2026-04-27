@@ -32,7 +32,7 @@ def get_dart_settings_for_size(pad_size, settings):
                 "overwrap": settings.get("dart_overwrap", 0.5),
                 "wrap_bonus": settings.get("dart_wrap_bonus", 0.75),
                 "frequency_multiplier": settings.get("dart_frequency_multiplier", 1.0),
-                "shape_factor": settings.get("dart_shape_factor", 0.0),
+                "shape_factor": settings.get("dart_shape_factor", 0.5),
                 "engraving_on": settings.get("dart_engraving_on", True),
                 "engraving_loc": settings.get("dart_engraving_loc", {"mode": "from_outside", "value": 2.5}),
             }
@@ -177,8 +177,23 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.0.1"
-APP_BUILD_DATE = "2026-04-07"
+APP_VERSION = "2.1"
+
+def _detect_build_date():
+    # In a PyInstaller-frozen build, the exe's mtime is the build time —
+    # preserved across zip/installer copies on all three platforms.
+    # Falls back to the manual date when running from source.
+    manual = "2026-04-27"
+    if getattr(sys, 'frozen', False):
+        try:
+            import datetime
+            mtime = os.path.getmtime(sys.executable)
+            return datetime.date.fromtimestamp(mtime).isoformat()
+        except Exception:
+            pass
+    return manual
+
+APP_BUILD_DATE = _detect_build_date()
 
 def get_config_dir():
     """
@@ -335,6 +350,19 @@ SIZING_PRESET_KEYS = (
     "compatibility_mode",
 )
 
+
+def settings_to_sizing_preset(settings):
+    """Pull just the sizing-preset keys out of a full settings dict.
+
+    Used to bootstrap a Default preset on first run when the preset
+    library is empty, so we can guarantee at least one preset exists.
+    """
+    out = {}
+    for key in SIZING_PRESET_KEYS:
+        if key in settings:
+            out[key] = copy.deepcopy(settings[key])
+    return out
+
 # Auto-migrate old filename → new
 _old_toner_file = os.path.join(_CONFIG_DIR, "tone_profiles.json")
 if os.path.exists(_old_toner_file) and not os.path.exists(TONER_DATA_FILE):
@@ -401,7 +429,8 @@ DEFAULT_SETTINGS = {
     "dart_overwrap": 0.5,
     "dart_wrap_bonus": 0.75,
     "dart_frequency_multiplier": 1.0,
-    "dart_shape_factor": 0.0,
+    "dart_shape_factor": 0.5,  # 0.0 = Triangle, 0.5 = Sine, 1.0 = Square
+    "dart_shape_v2": True,  # marks the new triangle/sine/square spectrum (legacy=False/missing)
 
     "dart_engraving_on": True,
     "dart_engraving_loc": {"mode": "from_outside", "value": 2.5},
@@ -598,6 +627,9 @@ DEFAULT_SETTINGS = {
     "last_pad_library": "My Presets",
     "last_key_library": "My Presets",
 
+    # SETTINGS-DIALOG TOOLTIPS (Feature Set toggle, default on)
+    "tooltips_enabled": True,
+
     # VISIBLE TABS (Feature Set)
     "visible_tabs": {
         "Key Height Library": True,
@@ -703,6 +735,26 @@ def load_settings():
                     for key, val in settings["layer_colors"].items():
                         if not isinstance(val, str) or not val.startswith("#"):
                             settings["layer_colors"][key] = default_colors.get(key, "#000000")
+
+                # Migrate dart_shape_factor from the old sine→square spectrum
+                # (0.0=sine, 1.0=square) to the new triangle→sine→square one
+                # (0.0=triangle, 0.5=sine, 1.0=square). Old value v maps to
+                # 0.5 + 0.5*v. Run once, gated on dart_shape_v2.
+                if not loaded_settings.get("dart_shape_v2"):
+                    if "dart_shape_factor" in loaded_settings:
+                        try:
+                            old_v = float(loaded_settings["dart_shape_factor"])
+                            settings["dart_shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
+                        except (TypeError, ValueError):
+                            pass
+                    for r in settings.get("dart_ranges", []):
+                        if "shape_factor" in r:
+                            try:
+                                old_v = float(r["shape_factor"])
+                                r["shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
+                            except (TypeError, ValueError):
+                                pass
+                    settings["dart_shape_v2"] = True
 
                 return settings
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError, ValueError):

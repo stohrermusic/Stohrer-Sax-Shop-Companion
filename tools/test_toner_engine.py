@@ -5,7 +5,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-from toner_engine import TonerEngine, TonerResult, SAMPLE_RATE, FFT_SIZE
+from toner_engine import TonerEngine, SAMPLE_RATE, FFT_SIZE
 
 passed = 0
 failed = 0
@@ -132,7 +132,7 @@ test("Detects high fundamental", result.fundamental_freq > 0)
 test("Fundamental near 1400 Hz", abs(result.fundamental_freq - 1400.0) < 10.0)
 
 # === Test 13: Warmth with varying H2 strength ===
-print(f"\n=== Test 13: Warmth with varying H2 strength ===")
+print("\n=== Test 13: Warmth with varying H2 strength ===")
 # Strong H2 = warm, weak H2 = thin
 audio_warm = make_audio(440.0, harmonics=[(2, 0.9), (3, 0.5)])
 audio_thin = make_audio(440.0, harmonics=[(2, 0.05), (3, 0.5)])
@@ -141,29 +141,29 @@ result_thin = engine.analyze_buffer(audio_thin)
 test("Strong H2 gives higher warmth", result_warm.descriptors['warmth'] > result_thin.descriptors['warmth'])
 
 # === Test 14: low_harmonic_data flag ===
-print(f"\n=== Test 14: low_harmonic_data flag ===")
+print("\n=== Test 14: low_harmonic_data flag ===")
 # With strong harmonics — flag should be False
 audio_good = make_audio(440.0, harmonics=[
     (2, 0.8), (3, 0.9), (4, 0.7), (5, 0.5), (6, 0.3),
 ])
 result_good = engine.analyze_buffer(audio_good)
 test("low_harmonic_data=False with full harmonics",
-     result_good.descriptors.get('low_harmonic_data') == False)
+     result_good.descriptors.get('low_harmonic_data') is False)
 # Pure tone (only fundamental) — fewer than 3 of H2-H6, flag should be True
 audio_pure = make_audio(440.0)
 result_pure = engine.analyze_buffer(audio_pure)
 test("low_harmonic_data=True for pure tone (no H2-H6)",
-     result_pure.descriptors.get('low_harmonic_data') == True)
+     result_pure.descriptors.get('low_harmonic_data') is True)
 # Just barely enough: H3 and H4 only (2 of H2-H6 = not enough, need 3)
 audio_two = make_audio(440.0, harmonics=[(3, 0.5), (4, 0.5)])
 result_two = engine.analyze_buffer(audio_two)
 test("low_harmonic_data=True with only 2 of H2-H6",
-     result_two.descriptors.get('low_harmonic_data') == True)
+     result_two.descriptors.get('low_harmonic_data') is True)
 # Three of H2-H6 present — should be enough
 audio_three = make_audio(440.0, harmonics=[(3, 0.8), (4, 0.7), (5, 0.6)])
 result_three = engine.analyze_buffer(audio_three)
 test("low_harmonic_data=False with 3 of H2-H6",
-     result_three.descriptors.get('low_harmonic_data') == False)
+     result_three.descriptors.get('low_harmonic_data') is False)
 
 
 # ================================================

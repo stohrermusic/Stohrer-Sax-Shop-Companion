@@ -14,16 +14,13 @@ Tests everything that can be verified without a real microphone:
 import sys
 import os
 import json
-import math
 import tempfile
 import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 from toner_engine import (
-    TonerEngine, TonerResult, HarmonicInfo,
-    SAMPLE_RATE, FFT_SIZE, MAX_HARMONICS, MIN_PRESET_NOTES,
-    CAPTURE_DELAY_S, DEFAULT_LIBRARY,
+    TonerEngine, TonerResult, SAMPLE_RATE, FFT_SIZE, DEFAULT_LIBRARY,
     average_captures, compute_fingerprint,
     compute_session_fingerprint, compute_session_variation,
     compute_group_fingerprint,

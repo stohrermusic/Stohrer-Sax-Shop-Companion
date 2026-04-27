@@ -15,7 +15,6 @@ No GUI windows are opened. All output goes to stdout.
 """
 
 import copy
-import math
 import os
 import re
 import sys
@@ -43,14 +42,11 @@ from gcode_engine import (
     generate_gcode_from_placed,
     generate_gcode_header,
     generate_gcode_layer,
-    linearize_circle,
 )
 from svg_engine import (
     _nest_discs,
-    _nest_discs_polygon,
     generate_svg,
     generate_svg_from_placed,
-    get_disc_diameter,
     try_nest_partial,
 )
 
@@ -620,7 +616,6 @@ def test_gcode_air_assist_markers():
     """G-code should contain M8 (air on) or M9 (air off) for each layer."""
     filepath, lines = _generate_material_gcode("felt")
     try:
-        joined = "\n".join(lines)
         # With default settings, air assist is on for all layers
         m8_count = sum(1 for l in lines if l.strip() == "M8")
         assert_true(m8_count >= 1, "Expected at least one M8 (air assist on) in felt G-code")

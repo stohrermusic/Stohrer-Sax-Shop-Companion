@@ -12,8 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DEFAULT_SETTINGS
 from svg_engine import (
     get_disc_diameter, _nest_discs, can_all_pads_fit,
-    try_nest_partial, compute_remaining_pads,
-    generate_die_svg, generate_die_svg_from_placed,
+    try_nest_partial, generate_die_svg, generate_die_svg_from_placed,
     generate_holder_svg, generate_kerf_test_svg,
     HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
     HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R,

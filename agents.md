@@ -17,7 +17,7 @@
 
 ### Data & Configuration (JSON)
 * **`app_settings.json`**: Persists user preferences.
-    * **Note:** "Star/Dart" settings (e.g., `darts_enabled`) are stored at the **root level**, not nested.
+    * **Note:** Dart settings (e.g., `darts_enabled`, `dart_*` keys) are stored at the **root level**, not nested. Internal variable names retain the `dart_` prefix; the user-facing label is just "Darts".
 * **`pad_presets.json`**: Stores measurements for pads.
 * **`key_height_library.json`**: Stores key height measurements.
 * **`screw_specs.json`**: Stores thread pitch/rod diameter data.
@@ -28,8 +28,8 @@
 
 ### 1. Pad Maker (The "Factory")
 * **Location:** Logic in `svg_engine.py`; UI in `main.py`.
-* **Star/Dart Pattern:** Generates "geared" shapes for leather pads.
-    * **Math:** `calculate_star_path` uses a cosine wave modified by a `shape_factor` (0.0=Sine to 1.0=Square).
+* **Dart Pattern:** Generates "geared" shapes for leather pads.
+    * **Math:** `calculate_star_path` uses a cosine wave modified by a `shape_factor`. Spectrum: 0.0=Triangle, 0.5=Sine, 1.0=Square (with smooth blends in between).
     * **Sizing:** `get_disc_diameter` and `leather_back_wrap` handle material expansions.
 * **Nesting:** `can_all_pads_fit` uses a greedy algorithm to place circles on the sheet.
 

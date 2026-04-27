@@ -11,8 +11,6 @@ Usage:
 
 from fontTools.ttLib import TTFont
 from fontTools.pens.recordingPen import RecordingPen
-from fontTools.pens.pointPen import SegmentToPointPen
-import math
 import os
 
 FONT_PATH = os.path.join(os.path.dirname(__file__), "Roboto-Regular.ttf")
@@ -202,7 +200,7 @@ def main():
         for contour in normalized:
             points_str = ", ".join(f"({x}, {y})" for x, y in contour)
             print(f"        [{points_str}],")
-        print(f"    ],")
+        print("    ],")
 
     print("}")
     print()

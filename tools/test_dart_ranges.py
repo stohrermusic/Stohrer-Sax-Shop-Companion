@@ -11,7 +11,7 @@ import copy
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import DEFAULT_SETTINGS, get_dart_settings_for_size
-from svg_engine import get_disc_diameter, generate_svg, _render_svg_discs
+from svg_engine import get_disc_diameter, _render_svg_discs
 from gcode_engine import generate_gcode_from_placed
 
 passed = 0
@@ -44,7 +44,7 @@ check("Universal: pad above threshold returns None", get_dart_settings_for_size(
 check("Universal: returns correct overwrap", get_dart_settings_for_size(10.0, s)["overwrap"] == 0.5)
 check("Universal: returns correct wrap_bonus", get_dart_settings_for_size(10.0, s)["wrap_bonus"] == 0.75)
 check("Universal: returns correct frequency_multiplier", get_dart_settings_for_size(10.0, s)["frequency_multiplier"] == 1.0)
-check("Universal: returns correct shape_factor", get_dart_settings_for_size(10.0, s)["shape_factor"] == 0.0)
+check("Universal: returns correct shape_factor", get_dart_settings_for_size(10.0, s)["shape_factor"] == 0.5)
 check("Universal: returns correct engraving_on", get_dart_settings_for_size(10.0, s)["engraving_on"] is True)
 
 # Custom universal settings
@@ -152,7 +152,6 @@ check("Range: card unaffected", get_disc_diameter(10.0, 'card', sr2) == get_disc
 # =============================================================================
 print("\n--- SVG Rendering: Range Mode ---")
 
-import io
 import svgwrite
 
 def render_svg_test(pad_size, material, settings):

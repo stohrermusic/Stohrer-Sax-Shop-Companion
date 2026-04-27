@@ -11,7 +11,7 @@ import sys
 import webbrowser
 
 from svg_engine import (
-    _nest_discs, try_nest_partial, compute_remaining_pads, can_all_pads_fit,
+    _nest_discs, try_nest_partial, can_all_pads_fit,
     generate_die_svg, generate_die_svg_from_placed,
     generate_holder_svg, generate_kerf_test_svg
 )

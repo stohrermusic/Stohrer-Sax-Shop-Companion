@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from config import DEFAULT_SETTINGS
 from svg_engine import generate_svg, get_disc_diameter
-from gcode_engine import get_text_strokes, get_filled_text_strokes, generate_gcode
+from gcode_engine import get_text_strokes, generate_gcode
 
 pass_count = 0
 fail_count = 0

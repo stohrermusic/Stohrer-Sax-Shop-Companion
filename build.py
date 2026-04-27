@@ -158,8 +158,8 @@ def build():
     # Hidden imports for optional audio dependencies (tuner/toner)
     # Only include if numpy/sounddevice are installed (not present in legacy Mac build)
     try:
-        import numpy
-        import sounddevice
+        import numpy  # noqa: F401  (capability check)
+        import sounddevice  # noqa: F401  (capability check)
         cmd.extend([
             '--hidden-import', 'numpy',
             '--hidden-import', 'sounddevice',
@@ -172,7 +172,7 @@ def build():
 
     # Hidden import for PIL (used by strobe tuner wheel rendering)
     try:
-        import PIL
+        import PIL  # noqa: F401  (capability check)
         cmd.extend([
             '--hidden-import', 'PIL',
             '--hidden-import', 'PIL.Image',
@@ -185,7 +185,7 @@ def build():
 
     # GPU-accelerated tuner renderer (Rust/wgpu via pyo3)
     try:
-        import tuner_render
+        import tuner_render  # noqa: F401  (capability check)
         cmd.extend([
             '--hidden-import', 'tuner_render',
         ])
@@ -200,8 +200,8 @@ def build():
     result = subprocess.run(cmd)
 
     if result.returncode == 0:
-        print(f"\nBuild successful!")
-        print(f"Output location: dist/")
+        print("\nBuild successful!")
+        print("Output location: dist/")
 
         if sys.platform == 'win32':
             print(f"  Executable: dist/{APP_NAME}.exe")

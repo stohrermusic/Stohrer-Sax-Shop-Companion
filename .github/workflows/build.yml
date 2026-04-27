@@ -11,13 +11,24 @@ permissions:
   contents: write
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install ruff
+      - run: ruff check .
+
   build:
     strategy:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: SaxShopCompanion.exe
-            asset_name: SaxShopCompanion-Windows.exe
+            # No asset_name: Windows ships only the Inno Setup installer
+            # (SaxShopCompanion-Windows-Setup-{version}.exe), uploaded by
+            # its own dedicated step.
             full_build: true
           - os: macos-latest
             artifact_name: SaxShopCompanion.app
@@ -36,10 +47,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -74,11 +85,35 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      # Rename artifacts for release
-      - name: Rename Windows artifact
+      # Windows installer (Inno Setup). installer.iss sources
+      # dist\SaxShopCompanion.exe directly, so this runs after PyInstaller.
+      - name: Extract app version from config.py
         if: matrix.os == 'windows-latest'
-        run: mv dist/SaxShopCompanion.exe dist/SaxShopCompanion-Windows.exe
+        shell: pwsh
+        run: |
+          $content = Get-Content config.py -Raw
+          if ($content -match 'APP_VERSION\s*=\s*"([^"]+)"') {
+            $ver = $Matches[1]
+            "APP_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            Write-Host "APP_VERSION=$ver"
+          } else {
+            Write-Error "Could not find APP_VERSION in config.py"
+            exit 1
+          }
 
+      - name: Install Inno Setup
+        if: matrix.os == 'windows-latest'
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Windows installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Rename artifacts for release. Windows ships only the Inno Setup
+      # installer — the bare PyInstaller .exe is no longer published.
       - name: Rename Linux artifact
         if: matrix.os == 'ubuntu-latest'
         run: mv dist/SaxShopCompanion dist/SaxShopCompanion-Linux
@@ -90,19 +125,37 @@ jobs:
           cd dist
           zip -r ${{ matrix.asset_name }} SaxShopCompanion.app
 
-      # Upload artifacts
+      # Upload artifacts (Linux + macOS use matrix.asset_name; Windows
+      # uploads only the installer below).
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        if: matrix.os != 'windows-latest'
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset_name }}
           path: dist/${{ matrix.asset_name }}
 
+      - name: Upload Windows installer artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v6
+        with:
+          name: SaxShopCompanion-Windows-Setup
+          path: dist/SaxShopCompanion-Windows-Setup-*.exe
+
       # Attach to release if this is a release event
       - name: Upload to Release
-        if: github.event_name == 'release'
+        if: matrix.os != 'windows-latest' && github.event_name == 'release'
         uses: softprops/action-gh-release@v1
         with:
           files: |
             dist/${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows installer to Release
+        if: matrix.os == 'windows-latest' && github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/SaxShopCompanion-Windows-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

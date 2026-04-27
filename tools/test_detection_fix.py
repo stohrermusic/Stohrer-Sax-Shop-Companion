@@ -195,7 +195,7 @@ section("Transposition helper test")
 # Test that _toner_transpose_note logic works for common cases
 # (We can't easily test the full UI method, but we can test the logic)
 
-from toner_engine import SAX_TRANSPOSITIONS, PITCH_CLASSES
+from toner_engine import SAX_TRANSPOSITIONS
 
 def transpose_note(concert_note, sax_type):
     """Standalone version of _toner_transpose_note for testing."""

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import copy
+import math
 import random
 import json
 import sys
@@ -9,7 +10,11 @@ from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, RESONANCE_MESSAGES,
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets,
     SIZING_PRESET_KEYS,
-    APP_VERSION, APP_BUILD_DATE
+    APP_VERSION, APP_BUILD_DATE,
+    get_dart_settings_for_size, get_sizing_for_size,
+)
+from svg_engine import (
+    get_disc_diameter, get_felt_thickness_mm, _wave_value,
 )
 
 # On macOS, use native system colors for dark/light mode support.
@@ -42,6 +47,146 @@ def bind_mousewheel(widget, canvas):
         widget.bind('<Button-5>', _on_mousewheel_linux)
     else:
         widget.bind('<MouseWheel>', _on_mousewheel)
+
+# ==========================================
+# TOOLTIP HELPER
+# ==========================================
+
+# Module-level on/off so the Feature Set dialog can disable tooltips at
+# runtime without us having to walk every existing widget. Tooltip._show
+# checks this before constructing its popup; existing bindings stay in
+# place but become no-ops while disabled.
+_TOOLTIPS_ENABLED = True
+
+
+def set_tooltips_enabled(enabled):
+    """Globally enable or disable tooltip popups. Applies immediately."""
+    global _TOOLTIPS_ENABLED
+    _TOOLTIPS_ENABLED = bool(enabled)
+
+
+def tooltips_enabled():
+    return _TOOLTIPS_ENABLED
+
+
+class Tooltip:
+    """Lightweight hover-to-explain tooltip for any tk widget.
+
+    Shows a small borderless popup near the cursor after a short hover delay,
+    hides on leave / click / focus-out. Safe across Windows/macOS/Linux:
+    uses an overrideredirect Toplevel and avoids grabbing focus.
+    """
+
+    _BG = "#FFFFE0"  # pale yellow, readable on every platform
+    _FG = "#000000"
+    _BORDER = "#7A7A7A"
+    DELAY_MS = 500
+    WRAPLENGTH = 360
+
+    def __init__(self, widget, text, delay_ms=None, wraplength=None):
+        self.widget = widget
+        self.text = text
+        self.delay_ms = self.DELAY_MS if delay_ms is None else delay_ms
+        self.wraplength = self.WRAPLENGTH if wraplength is None else wraplength
+        self._after_id = None
+        self._tip = None
+        self._label = None
+
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<FocusOut>", self._hide, add="+")
+        widget.bind("<Destroy>", self._on_destroy, add="+")
+
+    def update_text(self, text):
+        self.text = text
+        if self._tip and self._label is not None:
+            try:
+                self._label.configure(text=text)
+            except tk.TclError:
+                pass
+
+    def _schedule(self, _event=None):
+        self._cancel()
+        self._after_id = self.widget.after(self.delay_ms, self._show)
+
+    def _cancel(self):
+        if self._after_id is not None:
+            try:
+                self.widget.after_cancel(self._after_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._after_id = None
+
+    def _show(self):
+        if self._tip is not None or not self.text:
+            return
+        if not _TOOLTIPS_ENABLED:
+            return
+        try:
+            x = self.widget.winfo_pointerx() + 14
+            y = self.widget.winfo_pointery() + 18
+        except tk.TclError:
+            return
+        try:
+            tip = tk.Toplevel(self.widget)
+        except tk.TclError:
+            return
+        tip.wm_overrideredirect(True)
+        # Keep tooltip out of the taskbar / above grabbed dialogs.
+        try:
+            tip.wm_attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        tip.configure(bg=self._BORDER)
+        self._label = tk.Label(
+            tip, text=self.text,
+            bg=self._BG, fg=self._FG,
+            justify="left", relief="flat",
+            wraplength=self.wraplength,
+            padx=6, pady=3,
+            font=("Helvetica", 9),
+        )
+        self._label.pack(padx=1, pady=1)
+        tip.update_idletasks()
+        # Nudge back on screen if we'd overflow the right/bottom edge.
+        try:
+            sw = self.widget.winfo_screenwidth()
+            sh = self.widget.winfo_screenheight()
+            tw = tip.winfo_reqwidth()
+            th = tip.winfo_reqheight()
+            if x + tw > sw:
+                x = max(0, sw - tw - 4)
+            if y + th > sh:
+                y = max(0, sh - th - 4)
+        except tk.TclError:
+            pass
+        tip.wm_geometry(f"+{x}+{y}")
+        self._tip = tip
+
+    def _hide(self, _event=None):
+        self._cancel()
+        if self._tip is not None:
+            try:
+                self._tip.destroy()
+            except tk.TclError:
+                pass
+            self._tip = None
+            self._label = None
+
+    def _on_destroy(self, _event=None):
+        self._hide()
+
+
+def add_tooltip(widget, text, **kwargs):
+    """Attach a Tooltip to `widget`. Returns the Tooltip for further tweaking."""
+    return Tooltip(widget, text, **kwargs)
+
+
+def add_tooltips(text, *widgets, **kwargs):
+    """Attach the same tooltip text to multiple widgets in one call."""
+    return [Tooltip(w, text, **kwargs) for w in widgets]
+
 
 # ==========================================
 # HELPER UTILS
@@ -127,12 +272,37 @@ class OptionsWindow:
         bottom_button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         bottom_button_frame.pack(side="bottom", fill="x", pady=10, padx=10)
 
-        tk.Button(bottom_button_frame, text="Save", command=self.save_options).pack(side="left", padx=5)
-        tk.Button(bottom_button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
+        apply_btn = tk.Button(bottom_button_frame, text="Apply", command=self.on_apply)
+        apply_btn.pack(side="left", padx=5)
+        cancel_btn = tk.Button(bottom_button_frame, text="Cancel", command=self.on_cancel)
+        cancel_btn.pack(side="left", padx=5)
+        add_tooltip(apply_btn,
+                    "Apply the values in this dialog to the running app. "
+                    "If you have edits not yet captured in a preset, "
+                    "you'll be asked to save them as a preset first.")
+        add_tooltip(cancel_btn,
+                    "Close without applying. If you have unsaved edits, "
+                    "you'll be asked whether to save them as a preset.")
+        # Override window-close (X) so it goes through the same dirty-check.
+        self.top.protocol("WM_DELETE_WINDOW", self.on_cancel)
+
+        # When the OptionsWindow goes away (any path), tear down the
+        # preview Toplevel too so it doesn't stay floating with stale data.
+        def _on_top_destroy(event):
+            if event.widget is self.top:
+                self._close_preview_if_open()
+        self.top.bind("<Destroy>", _on_top_destroy, add="+")
 
         if not IS_MACOS:
-            tk.Button(bottom_button_frame, text="Advanced", command=self.app.open_resonance_window).pack(side="right", padx=5)
-        tk.Button(bottom_button_frame, text="Revert to Defaults", command=self.revert_to_defaults).pack(side="right", padx=5)
+            adv_btn = tk.Button(bottom_button_frame, text="Advanced", command=self.app.open_resonance_window)
+            adv_btn.pack(side="right", padx=5)
+            add_tooltip(adv_btn, "Hidden corner.")
+        revert_btn = tk.Button(bottom_button_frame, text="Revert to Defaults", command=self.revert_to_defaults)
+        revert_btn.pack(side="right", padx=5)
+        add_tooltip(revert_btn,
+                    "Reset every value in this dialog back to the app's "
+                    "factory defaults (use with caution — this clears your "
+                    "current settings here).")
 
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(side="top", fill="both", expand=True)
@@ -219,17 +389,99 @@ class OptionsWindow:
         self.eng_placement_range_max_var = tk.DoubleVar(value=60.0)
         self.eng_placement_range_loc_vars = {}
 
+        # Active preset name (the preset whose values currently sit in the
+        # form). Updated on Load and Save Preset. Drives dirty checks and
+        # the Save Preset overwrite default.
+        self.active_preset_name = None
+
+        # Live preview window state — toggle var + open Toplevel handle.
+        self.show_preview_var = tk.BooleanVar(value=False)
+        self.preview_window = None
+
         self.create_option_widgets()
         self._refresh_sizing_preset_combo()
 
+        # Baseline = whatever the form holds right after construction.
+        # _is_dirty() compares the current form to this baseline. We reset
+        # the baseline after Load and Save Preset so post-load edits are
+        # what register as dirty.
+        self._baseline = self._capture_form_to_dict()
+
+    # ------------------------------------------------------------------
+    # Dirty / baseline tracking
+    # ------------------------------------------------------------------
+
+    def _is_dirty(self):
+        """True if the form has unsaved edits relative to the baseline."""
+        return self._capture_form_to_dict() != self._baseline
+
+    def _set_baseline_to_current(self):
+        """Mark the current form state as the new clean baseline."""
+        self._baseline = self._capture_form_to_dict()
+
+    # ------------------------------------------------------------------
+    # Live preview toggle
+    # ------------------------------------------------------------------
+
+    def _toggle_preview_window(self):
+        """Open or close the live PadPreviewWindow per the toggle var."""
+        if self.show_preview_var.get():
+            if self.preview_window is None or not self.preview_window.winfo_exists():
+                self.preview_window = PadPreviewWindow(self)
+            else:
+                self.preview_window.lift()
+        else:
+            if self.preview_window is not None and self.preview_window.winfo_exists():
+                self.preview_window.destroy()
+            self.preview_window = None
+
+    def _close_preview_if_open(self):
+        if self.preview_window is not None and self.preview_window.winfo_exists():
+            try:
+                self.preview_window.destroy()
+            except tk.TclError:
+                pass
+        self.preview_window = None
+
     def create_option_widgets(self):
         main_frame = self.scrollable_frame
-        
+
+        # Presets live at the top — that's the natural entry point: load a
+        # known recipe, tweak, save back. The rest of the form follows.
+        self._build_sizing_preset_section(main_frame)
+
+        # Preview toggle. Lives just under the preset row so the user can
+        # flip it on, then watch the preview update as they edit values
+        # below.
+        preview_row = tk.Frame(main_frame, bg=DIALOG_BG)
+        preview_row.pack(fill="x", pady=(0, 5))
+        preview_cb = tk.Checkbutton(
+            preview_row,
+            text="Show live pad preview",
+            variable=self.show_preview_var, bg=DIALOG_BG,
+            command=self._toggle_preview_window,
+        )
+        preview_cb.pack(side="left")
+        add_tooltip(
+            preview_cb,
+            "Open a resizable window that draws what the pad will look "
+            "like with the current sizing rules. Pick a pad size and "
+            "which materials to show; the preview updates live as you "
+            "edit settings here.",
+        )
+
         unit_frame = tk.LabelFrame(main_frame, text="Sheet Units", bg=DIALOG_BG, padx=5, pady=5)
         unit_frame.pack(fill="x", pady=5)
-        tk.Radiobutton(unit_frame, text="Inches (in)", variable=self.unit_var, value="in", bg=DIALOG_BG).pack(side="left", padx=5)
-        tk.Radiobutton(unit_frame, text="Centimeters (cm)", variable=self.unit_var, value="cm", bg=DIALOG_BG).pack(side="left", padx=5)
-        tk.Radiobutton(unit_frame, text="Millimeters (mm)", variable=self.unit_var, value="mm", bg=DIALOG_BG).pack(side="left", padx=5)
+        unit_tip = ("Units used for pad-size and sheet-dimension entries "
+                    "throughout the app. Internal calculations and output "
+                    "files always use millimeters regardless of this setting.")
+        unit_in = tk.Radiobutton(unit_frame, text="Inches (in)", variable=self.unit_var, value="in", bg=DIALOG_BG)
+        unit_in.pack(side="left", padx=5)
+        unit_cm = tk.Radiobutton(unit_frame, text="Centimeters (cm)", variable=self.unit_var, value="cm", bg=DIALOG_BG)
+        unit_cm.pack(side="left", padx=5)
+        unit_mm = tk.Radiobutton(unit_frame, text="Millimeters (mm)", variable=self.unit_var, value="mm", bg=DIALOG_BG)
+        unit_mm.pack(side="left", padx=5)
+        add_tooltips(unit_tip, unit_in, unit_cm, unit_mm)
 
         rules_frame = tk.LabelFrame(main_frame, text="Sizing Rules (Advanced)", bg=DIALOG_BG, padx=5, pady=5)
         rules_frame.pack(fill="x", pady=5)
@@ -237,10 +489,19 @@ class OptionsWindow:
 
         sizing_mode_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
         sizing_mode_frame.grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
-        tk.Radiobutton(sizing_mode_frame, text="Universal", variable=self.sizing_range_mode_var,
-                       value="universal", bg=DIALOG_BG, command=self._toggle_sizing_mode).pack(side="left", padx=(0, 10))
-        tk.Radiobutton(sizing_mode_frame, text="Per Size Range", variable=self.sizing_range_mode_var,
-                       value="range", bg=DIALOG_BG, command=self._toggle_sizing_mode).pack(side="left")
+        sizing_mode_tip = (
+            "Universal: one set of sizing rules for every pad size.\n"
+            "Per Size Range: define different rules for different "
+            "size bands. Pads outside any defined range fall back to the "
+            "universal values."
+        )
+        sm_uni = tk.Radiobutton(sizing_mode_frame, text="Universal", variable=self.sizing_range_mode_var,
+                                value="universal", bg=DIALOG_BG, command=self._toggle_sizing_mode)
+        sm_uni.pack(side="left", padx=(0, 10))
+        sm_rng = tk.Radiobutton(sizing_mode_frame, text="Per Size Range", variable=self.sizing_range_mode_var,
+                                value="range", bg=DIALOG_BG, command=self._toggle_sizing_mode)
+        sm_rng.pack(side="left")
+        add_tooltips(sizing_mode_tip, sm_uni, sm_rng)
 
         # === Sizing Universal Sub-Frame ===
         self.sizing_universal_frame = tk.Frame(rules_frame, bg=DIALOG_BG)
@@ -260,11 +521,26 @@ class OptionsWindow:
         self.sizing_range_combo = ttk.Combobox(sr_sel, state="readonly", width=25)
         self.sizing_range_combo.pack(side="left", padx=5)
         self.sizing_range_combo.bind("<<ComboboxSelected>>", self._on_sizing_range_selected)
+        add_tooltip(self.sizing_range_combo,
+                    "Pick a defined size range to edit, or use Add Range "
+                    "below to create a new one.")
 
-        tk.Label(self.sizing_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(self.sizing_range_frame, textvariable=self.sizing_range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
-        tk.Label(self.sizing_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(self.sizing_range_frame, textvariable=self.sizing_range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        sr_min_lbl = tk.Label(self.sizing_range_frame, text="Min Size (mm):", bg=DIALOG_BG)
+        sr_min_lbl.grid(row=1, column=0, sticky='w', pady=2)
+        sr_min_ent = tk.Entry(self.sizing_range_frame, textvariable=self.sizing_range_min_var, width=10)
+        sr_min_ent.grid(row=1, column=1, sticky='w', pady=2)
+        sr_max_lbl = tk.Label(self.sizing_range_frame, text="Max Size (mm):", bg=DIALOG_BG)
+        sr_max_lbl.grid(row=2, column=0, sticky='w', pady=2)
+        sr_max_ent = tk.Entry(self.sizing_range_frame, textvariable=self.sizing_range_max_var, width=10)
+        sr_max_ent.grid(row=2, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Lower bound (inclusive) of this size range, in millimeters.",
+            sr_min_lbl, sr_min_ent,
+        )
+        add_tooltips(
+            "Upper bound (inclusive) of this size range, in millimeters.",
+            sr_max_lbl, sr_max_ent,
+        )
 
         self._build_sizing_fields(self.sizing_range_frame,
                                   self.sizing_range_felt_offset_var, self.sizing_range_card_offset_var,
@@ -274,54 +550,122 @@ class OptionsWindow:
 
         sr_btn = tk.Frame(self.sizing_range_frame, bg=DIALOG_BG)
         sr_btn.grid(row=8, column=0, columnspan=2, sticky='ew', pady=5)
-        tk.Button(sr_btn, text="Add Range", command=self._add_sizing_range).pack(side="left", padx=2)
-        tk.Button(sr_btn, text="Update", command=self._update_sizing_range).pack(side="left", padx=2)
-        tk.Button(sr_btn, text="Delete", command=self._delete_sizing_range).pack(side="left", padx=2)
+        sr_add = tk.Button(sr_btn, text="Add Range", command=self._add_sizing_range)
+        sr_add.pack(side="left", padx=2)
+        sr_upd = tk.Button(sr_btn, text="Update", command=self._update_sizing_range)
+        sr_upd.pack(side="left", padx=2)
+        sr_del = tk.Button(sr_btn, text="Delete", command=self._delete_sizing_range)
+        sr_del.pack(side="left", padx=2)
+        add_tooltip(sr_add, "Add a new size range using the values entered above.")
+        add_tooltip(sr_upd, "Save the values above into the currently selected range.")
+        add_tooltip(sr_del, "Delete the currently selected range.")
 
         self._toggle_sizing_mode()
 
         # --- DART SETTINGS FRAME ---
-        darts_frame = tk.LabelFrame(main_frame, text="Star / Dart Settings", bg=DIALOG_BG, padx=5, pady=5)
+        darts_frame = tk.LabelFrame(main_frame, text="Darts", bg=DIALOG_BG, padx=5, pady=5)
         darts_frame.pack(fill="x", pady=5)
         darts_frame.columnconfigure(1, weight=1)
 
-        tk.Checkbutton(darts_frame, text="Enable Star / Dart Pattern", variable=self.darts_enabled_var, bg=DIALOG_BG).grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
+        darts_enable_cb = tk.Checkbutton(darts_frame, text="Enable Darts",
+                                         variable=self.darts_enabled_var, bg=DIALOG_BG)
+        darts_enable_cb.grid(row=0, column=0, columnspan=2, sticky='w', pady=2)
+        add_tooltip(
+            darts_enable_cb,
+            "When on, leather discs below the threshold size get a dart "
+            "cutout so the leather can fold around the felt without bunching."
+        )
 
         # Mode toggle: Universal vs Range
         mode_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
         mode_frame.grid(row=1, column=0, columnspan=2, sticky='w', pady=2)
-        tk.Radiobutton(mode_frame, text="Universal", variable=self.dart_range_mode_var,
-                       value="universal", bg=DIALOG_BG, command=self._toggle_dart_mode).pack(side="left", padx=(0, 10))
-        tk.Radiobutton(mode_frame, text="Per Size Range", variable=self.dart_range_mode_var,
-                       value="range", bg=DIALOG_BG, command=self._toggle_dart_mode).pack(side="left")
+        dart_mode_tip = (
+            "Universal: one set of dart values applies to all small pads.\n"
+            "Per Size Range: define different dart settings for different "
+            "size bands. Pads not in any range get no dart pattern (rather "
+            "than falling back to universal)."
+        )
+        dm_uni = tk.Radiobutton(mode_frame, text="Universal", variable=self.dart_range_mode_var,
+                                value="universal", bg=DIALOG_BG, command=self._toggle_dart_mode)
+        dm_uni.pack(side="left", padx=(0, 10))
+        dm_rng = tk.Radiobutton(mode_frame, text="Per Size Range", variable=self.dart_range_mode_var,
+                                value="range", bg=DIALOG_BG, command=self._toggle_dart_mode)
+        dm_rng.pack(side="left")
+        add_tooltips(dart_mode_tip, dm_uni, dm_rng)
 
         # === UNIVERSAL SUB-FRAME ===
         self.dart_universal_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
         self.dart_universal_frame.columnconfigure(1, weight=1)
 
-        tk.Label(self.dart_universal_frame, text="Use Star Pattern below (mm):", bg=DIALOG_BG).grid(row=0, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_universal_frame, textvariable=self.dart_threshold_var, width=10).grid(row=0, column=1, sticky='w', pady=2)
+        thr_lbl = tk.Label(self.dart_universal_frame, text="Use Darts below (mm):", bg=DIALOG_BG)
+        thr_lbl.grid(row=0, column=0, sticky='w', pady=2)
+        thr_ent = tk.Entry(self.dart_universal_frame, textvariable=self.dart_threshold_var, width=10)
+        thr_ent.grid(row=0, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Pad sizes at or below this value get a darted cut. Larger "
+            "pads are cut as a plain wrap with no darts.",
+            thr_lbl, thr_ent,
+        )
 
-        tk.Label(self.dart_universal_frame, text="Star Safe Overwrap (Valley) (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_universal_frame, textvariable=self.dart_overwrap_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+        ow_lbl = tk.Label(self.dart_universal_frame, text="Dart Safe Overwrap (Valley) (mm):", bg=DIALOG_BG)
+        ow_lbl.grid(row=1, column=0, sticky='w', pady=2)
+        ow_ent = tk.Entry(self.dart_universal_frame, textvariable=self.dart_overwrap_var, width=10)
+        ow_ent.grid(row=1, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "How far each dart valley overlaps the felt edge. Larger "
+            "values leave more material in the valleys (safer wrap, more "
+            "bunching). 0.5 mm is a typical default.",
+            ow_lbl, ow_ent,
+        )
 
-        tk.Label(self.dart_universal_frame, text="Star Wrap Bonus (Adds to Tip) (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_universal_frame, textvariable=self.dart_wrap_bonus_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        wb_lbl = tk.Label(self.dart_universal_frame, text="Dart Wrap Bonus (Adds to Tip) (mm):", bg=DIALOG_BG)
+        wb_lbl.grid(row=2, column=0, sticky='w', pady=2)
+        wb_ent = tk.Entry(self.dart_universal_frame, textvariable=self.dart_wrap_bonus_var, width=10)
+        wb_ent.grid(row=2, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Extra material added to each dart tip. Larger values produce "
+            "longer, pointier tips with more leather to wrap with.",
+            wb_lbl, wb_ent,
+        )
 
-        tk.Label(self.dart_universal_frame, text="Star Frequency Multiplier (1.0=Default):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_universal_frame, textvariable=self.dart_frequency_multiplier_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
+        fm_lbl = tk.Label(self.dart_universal_frame, text="Dart Frequency Multiplier (1.0=Default):", bg=DIALOG_BG)
+        fm_lbl.grid(row=3, column=0, sticky='w', pady=2)
+        fm_ent = tk.Entry(self.dart_universal_frame, textvariable=self.dart_frequency_multiplier_var, width=10)
+        fm_ent.grid(row=3, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Scales the number of dart points. 1.0 = default count; "
+            ">1.0 = more, finer points; <1.0 = fewer, chunkier points.",
+            fm_lbl, fm_ent,
+        )
 
         shape_frame = tk.Frame(self.dart_universal_frame, bg=DIALOG_BG)
         shape_frame.grid(row=4, column=0, columnspan=2, sticky='ew', pady=5)
-        tk.Label(shape_frame, text="Shape:", bg=DIALOG_BG).pack(side="left")
-        tk.Label(shape_frame, text="Sine", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left", padx=(5, 0))
-        tk.Scale(shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL,
-                 variable=self.dart_shape_factor_var, showvalue=0,
-                 bg=DIALOG_BG, highlightthickness=0, length=150, resolution=0.01).pack(side="left", fill="x", expand=True, padx=5)
-        tk.Label(shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left")
+        shape_tip = (
+            "Shape of the dart wave. Triangle (left) = sharp linear ramps "
+            "between peaks and valleys. Sine (slider centered) = smooth, "
+            "rounded curves. Square (right) = flats at peaks and valleys "
+            "with steep transitions. The slider blends smoothly across "
+            "the spectrum."
+        )
+        sh_lbl = tk.Label(shape_frame, text="Shape:", bg=DIALOG_BG)
+        sh_lbl.pack(side="left")
+        sh_tri = tk.Label(shape_frame, text="Triangle", bg=DIALOG_BG, font=("Arial", 8))
+        sh_tri.pack(side="left", padx=(5, 0))
+        sh_scale = tk.Scale(shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL,
+                            variable=self.dart_shape_factor_var, showvalue=0,
+                            bg=DIALOG_BG, highlightthickness=0, length=170, resolution=0.01)
+        sh_scale.pack(side="left", fill="x", expand=True, padx=4)
+        sh_sq = tk.Label(shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8))
+        sh_sq.pack(side="left")
+        add_tooltips(shape_tip, sh_lbl, sh_tri, sh_scale, sh_sq)
 
         tk.Label(self.dart_universal_frame, text="-------------------------", bg=DIALOG_BG).grid(row=5, column=0, columnspan=2, pady=5)
-        tk.Checkbutton(self.dart_universal_frame, text="Show Label on Star Pads", variable=self.dart_engraving_on_var, bg=DIALOG_BG).grid(row=6, column=0, columnspan=2, sticky='w', pady=2)
+        dart_eng_cb = tk.Checkbutton(self.dart_universal_frame, text="Show Label on Dart Pads",
+                                     variable=self.dart_engraving_on_var, bg=DIALOG_BG)
+        dart_eng_cb.grid(row=6, column=0, columnspan=2, sticky='w', pady=2)
+        add_tooltip(dart_eng_cb,
+                    "Engrave the size number on darted leather pads. "
+                    "Helpful for sorting them out after cutting.")
 
         # === RANGE SUB-FRAME ===
         self.dart_range_frame = tk.Frame(darts_frame, bg=DIALOG_BG)
@@ -334,41 +678,90 @@ class OptionsWindow:
         self.range_combo = ttk.Combobox(range_sel_frame, state="readonly", width=25)
         self.range_combo.pack(side="left", padx=5)
         self.range_combo.bind("<<ComboboxSelected>>", self._on_range_selected)
+        add_tooltip(self.range_combo,
+                    "Pick a defined dart size range to edit, or use Add "
+                    "Range to define a new one.")
 
         # Range editing fields
-        tk.Label(self.dart_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_range_frame, textvariable=self.range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
+        rmin_lbl = tk.Label(self.dart_range_frame, text="Min Size (mm):", bg=DIALOG_BG)
+        rmin_lbl.grid(row=1, column=0, sticky='w', pady=2)
+        rmin_ent = tk.Entry(self.dart_range_frame, textvariable=self.range_min_var, width=10)
+        rmin_ent.grid(row=1, column=1, sticky='w', pady=2)
+        add_tooltips("Lower bound (inclusive) of this dart size range.", rmin_lbl, rmin_ent)
 
-        tk.Label(self.dart_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_range_frame, textvariable=self.range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        rmax_lbl = tk.Label(self.dart_range_frame, text="Max Size (mm):", bg=DIALOG_BG)
+        rmax_lbl.grid(row=2, column=0, sticky='w', pady=2)
+        rmax_ent = tk.Entry(self.dart_range_frame, textvariable=self.range_max_var, width=10)
+        rmax_ent.grid(row=2, column=1, sticky='w', pady=2)
+        add_tooltips("Upper bound (inclusive) of this dart size range.", rmax_lbl, rmax_ent)
 
-        tk.Label(self.dart_range_frame, text="Overwrap (Valley) (mm):", bg=DIALOG_BG).grid(row=3, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_range_frame, textvariable=self.range_overwrap_var, width=10).grid(row=3, column=1, sticky='w', pady=2)
+        row_lbl = tk.Label(self.dart_range_frame, text="Overwrap (Valley) (mm):", bg=DIALOG_BG)
+        row_lbl.grid(row=3, column=0, sticky='w', pady=2)
+        row_ent = tk.Entry(self.dart_range_frame, textvariable=self.range_overwrap_var, width=10)
+        row_ent.grid(row=3, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Overlap at the dart valleys for this range. Larger values "
+            "leave more material in the valleys.",
+            row_lbl, row_ent,
+        )
 
-        tk.Label(self.dart_range_frame, text="Wrap Bonus (Tip) (mm):", bg=DIALOG_BG).grid(row=4, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_range_frame, textvariable=self.range_wrap_bonus_var, width=10).grid(row=4, column=1, sticky='w', pady=2)
+        rwb_lbl = tk.Label(self.dart_range_frame, text="Wrap Bonus (Tip) (mm):", bg=DIALOG_BG)
+        rwb_lbl.grid(row=4, column=0, sticky='w', pady=2)
+        rwb_ent = tk.Entry(self.dart_range_frame, textvariable=self.range_wrap_bonus_var, width=10)
+        rwb_ent.grid(row=4, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Extra material added to each dart tip for this range.",
+            rwb_lbl, rwb_ent,
+        )
 
-        tk.Label(self.dart_range_frame, text="Frequency Multiplier:", bg=DIALOG_BG).grid(row=5, column=0, sticky='w', pady=2)
-        tk.Entry(self.dart_range_frame, textvariable=self.range_freq_mult_var, width=10).grid(row=5, column=1, sticky='w', pady=2)
+        rfm_lbl = tk.Label(self.dart_range_frame, text="Frequency Multiplier:", bg=DIALOG_BG)
+        rfm_lbl.grid(row=5, column=0, sticky='w', pady=2)
+        rfm_ent = tk.Entry(self.dart_range_frame, textvariable=self.range_freq_mult_var, width=10)
+        rfm_ent.grid(row=5, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Number of points multiplier for this range. 1.0 = default; "
+            ">1.0 = more, finer points; <1.0 = fewer, chunkier points.",
+            rfm_lbl, rfm_ent,
+        )
 
         range_shape_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
         range_shape_frame.grid(row=6, column=0, columnspan=2, sticky='ew', pady=5)
-        tk.Label(range_shape_frame, text="Shape:", bg=DIALOG_BG).pack(side="left")
-        tk.Label(range_shape_frame, text="Sine", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left", padx=(5, 0))
-        tk.Scale(range_shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL,
-                 variable=self.range_shape_factor_var, showvalue=0,
-                 bg=DIALOG_BG, highlightthickness=0, length=150, resolution=0.01).pack(side="left", fill="x", expand=True, padx=5)
-        tk.Label(range_shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8)).pack(side="left")
+        rsh_lbl = tk.Label(range_shape_frame, text="Shape:", bg=DIALOG_BG)
+        rsh_lbl.pack(side="left")
+        rsh_tri = tk.Label(range_shape_frame, text="Triangle", bg=DIALOG_BG, font=("Arial", 8))
+        rsh_tri.pack(side="left", padx=(5, 0))
+        rsh_scale = tk.Scale(range_shape_frame, from_=0.0, to=1.0, orient=tk.HORIZONTAL,
+                             variable=self.range_shape_factor_var, showvalue=0,
+                             bg=DIALOG_BG, highlightthickness=0, length=170, resolution=0.01)
+        rsh_scale.pack(side="left", fill="x", expand=True, padx=4)
+        rsh_sq = tk.Label(range_shape_frame, text="Square", bg=DIALOG_BG, font=("Arial", 8))
+        rsh_sq.pack(side="left")
+        add_tooltips(
+            "Dart wave shape for this range. Triangle = sharp linear "
+            "ramps; Sine (slider centered) = smooth curves; Square = "
+            "flats with steep transitions.",
+            rsh_lbl, rsh_tri, rsh_scale, rsh_sq,
+        )
 
         tk.Label(self.dart_range_frame, text="-------------------------", bg=DIALOG_BG).grid(row=7, column=0, columnspan=2, pady=5)
-        tk.Checkbutton(self.dart_range_frame, text="Show Label on Star Pads", variable=self.range_engraving_on_var, bg=DIALOG_BG).grid(row=8, column=0, columnspan=2, sticky='w', pady=2)
+        rdart_eng_cb = tk.Checkbutton(self.dart_range_frame, text="Show Label on Dart Pads",
+                                      variable=self.range_engraving_on_var, bg=DIALOG_BG)
+        rdart_eng_cb.grid(row=8, column=0, columnspan=2, sticky='w', pady=2)
+        add_tooltip(rdart_eng_cb,
+                    "Engrave the size number on darted leather pads in this range.")
 
         # Range action buttons
         btn_frame = tk.Frame(self.dart_range_frame, bg=DIALOG_BG)
         btn_frame.grid(row=10, column=0, columnspan=2, sticky='ew', pady=5)
-        tk.Button(btn_frame, text="Add Range", command=self._add_range).pack(side="left", padx=2)
-        tk.Button(btn_frame, text="Update", command=self._update_range).pack(side="left", padx=2)
-        tk.Button(btn_frame, text="Delete", command=self._delete_range).pack(side="left", padx=2)
+        dr_add = tk.Button(btn_frame, text="Add Range", command=self._add_range)
+        dr_add.pack(side="left", padx=2)
+        dr_upd = tk.Button(btn_frame, text="Update", command=self._update_range)
+        dr_upd.pack(side="left", padx=2)
+        dr_del = tk.Button(btn_frame, text="Delete", command=self._delete_range)
+        dr_del.pack(side="left", padx=2)
+        add_tooltip(dr_add, "Add a new dart range using the values entered above.")
+        add_tooltip(dr_upd, "Save the values above into the currently selected range.")
+        add_tooltip(dr_del, "Delete the currently selected range.")
 
         # Show the correct sub-frame
         self._toggle_dart_mode()
@@ -379,22 +772,42 @@ class OptionsWindow:
 
         es_mode_frame = tk.Frame(engraving_frame, bg=DIALOG_BG)
         es_mode_frame.pack(fill="x", pady=2)
-        tk.Radiobutton(es_mode_frame, text="Universal", variable=self.eng_settings_range_mode_var,
-                       value="universal", bg=DIALOG_BG, command=self._toggle_eng_settings_mode).pack(side="left", padx=(0, 10))
-        tk.Radiobutton(es_mode_frame, text="Per Size Range", variable=self.eng_settings_range_mode_var,
-                       value="range", bg=DIALOG_BG, command=self._toggle_eng_settings_mode).pack(side="left")
+        es_mode_tip = (
+            "Universal: same engraving settings for all pad sizes.\n"
+            "Per Size Range: define different engraving settings for "
+            "different size bands; pads outside any range fall back to "
+            "the universal values."
+        )
+        es_uni = tk.Radiobutton(es_mode_frame, text="Universal", variable=self.eng_settings_range_mode_var,
+                                value="universal", bg=DIALOG_BG, command=self._toggle_eng_settings_mode)
+        es_uni.pack(side="left", padx=(0, 10))
+        es_rng = tk.Radiobutton(es_mode_frame, text="Per Size Range", variable=self.eng_settings_range_mode_var,
+                                value="range", bg=DIALOG_BG, command=self._toggle_eng_settings_mode)
+        es_rng.pack(side="left")
+        add_tooltips(es_mode_tip, es_uni, es_rng)
 
         # === Engraving Settings Universal ===
         self.eng_settings_universal_frame = tk.Frame(engraving_frame, bg=DIALOG_BG)
-        tk.Checkbutton(self.eng_settings_universal_frame, text="Show Size Label", variable=self.engraving_on_var, bg=DIALOG_BG).pack(anchor='w')
+        eng_on_cb = tk.Checkbutton(self.eng_settings_universal_frame, text="Show Size Label",
+                                   variable=self.engraving_on_var, bg=DIALOG_BG)
+        eng_on_cb.pack(anchor='w')
+        add_tooltip(eng_on_cb, "Engrave the pad-size number on each disc for identification.")
+
         fs_frame = tk.LabelFrame(self.eng_settings_universal_frame, text="Font Sizes (mm)", bg=DIALOG_BG, padx=5, pady=5)
         fs_frame.pack(fill='x', pady=5)
         materials = ['felt', 'card', 'leather', 'exact_size']
         for i, mat in enumerate(materials):
-            tk.Label(fs_frame, text=f"{mat.replace('_', ' ').capitalize()}:", bg=DIALOG_BG).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            mat_label = mat.replace('_', ' ').capitalize()
+            mat_lbl = tk.Label(fs_frame, text=f"{mat_label}:", bg=DIALOG_BG)
+            mat_lbl.grid(row=i, column=0, sticky='w', padx=5, pady=2)
             fvar = tk.DoubleVar(value=self.settings["engraving_font_size"].get(mat, 2.0))
             self.engraving_font_size_vars[mat] = fvar
-            tk.Entry(fs_frame, textvariable=fvar, width=8).grid(row=i, column=1, sticky='w', padx=5, pady=2)
+            mat_ent = tk.Entry(fs_frame, textvariable=fvar, width=8)
+            mat_ent.grid(row=i, column=1, sticky='w', padx=5, pady=2)
+            add_tooltips(
+                f"Engraving font size in millimeters for {mat_label.lower()} discs.",
+                mat_lbl, mat_ent,
+            )
 
         # === Engraving Settings Range ===
         self.eng_settings_range_frame = tk.Frame(engraving_frame, bg=DIALOG_BG)
@@ -406,26 +819,52 @@ class OptionsWindow:
         self.eng_settings_range_combo = ttk.Combobox(esr_sel, state="readonly", width=25)
         self.eng_settings_range_combo.pack(side="left", padx=5)
         self.eng_settings_range_combo.bind("<<ComboboxSelected>>", self._on_eng_settings_range_selected)
+        add_tooltip(self.eng_settings_range_combo,
+                    "Pick an engraving-settings range to edit, or use Add "
+                    "Range to define a new one.")
 
-        tk.Label(self.eng_settings_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(self.eng_settings_range_frame, textvariable=self.eng_settings_range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
-        tk.Label(self.eng_settings_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(self.eng_settings_range_frame, textvariable=self.eng_settings_range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
-        tk.Checkbutton(self.eng_settings_range_frame, text="Show Size Label", variable=self.eng_settings_range_on_var, bg=DIALOG_BG).grid(row=3, column=0, columnspan=2, sticky='w', pady=2)
+        esr_min_lbl = tk.Label(self.eng_settings_range_frame, text="Min Size (mm):", bg=DIALOG_BG)
+        esr_min_lbl.grid(row=1, column=0, sticky='w', pady=2)
+        esr_min_ent = tk.Entry(self.eng_settings_range_frame, textvariable=self.eng_settings_range_min_var, width=10)
+        esr_min_ent.grid(row=1, column=1, sticky='w', pady=2)
+        esr_max_lbl = tk.Label(self.eng_settings_range_frame, text="Max Size (mm):", bg=DIALOG_BG)
+        esr_max_lbl.grid(row=2, column=0, sticky='w', pady=2)
+        esr_max_ent = tk.Entry(self.eng_settings_range_frame, textvariable=self.eng_settings_range_max_var, width=10)
+        esr_max_ent.grid(row=2, column=1, sticky='w', pady=2)
+        add_tooltips("Lower bound (inclusive) of this size range.", esr_min_lbl, esr_min_ent)
+        add_tooltips("Upper bound (inclusive) of this size range.", esr_max_lbl, esr_max_ent)
+
+        esr_on_cb = tk.Checkbutton(self.eng_settings_range_frame, text="Show Size Label",
+                                   variable=self.eng_settings_range_on_var, bg=DIALOG_BG)
+        esr_on_cb.grid(row=3, column=0, columnspan=2, sticky='w', pady=2)
+        add_tooltip(esr_on_cb, "Engrave the size number on pads in this size range.")
 
         esr_fs = tk.LabelFrame(self.eng_settings_range_frame, text="Font Sizes (mm)", bg=DIALOG_BG, padx=5, pady=5)
         esr_fs.grid(row=4, column=0, columnspan=2, sticky='ew', pady=2)
         for i, mat in enumerate(materials):
-            tk.Label(esr_fs, text=f"{mat.replace('_', ' ').capitalize()}:", bg=DIALOG_BG).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            mat_label = mat.replace('_', ' ').capitalize()
+            mat_lbl = tk.Label(esr_fs, text=f"{mat_label}:", bg=DIALOG_BG)
+            mat_lbl.grid(row=i, column=0, sticky='w', padx=5, pady=2)
             fvar = tk.DoubleVar(value=2.0)
             self.eng_settings_range_font_vars[mat] = fvar
-            tk.Entry(esr_fs, textvariable=fvar, width=8).grid(row=i, column=1, sticky='w', padx=5, pady=2)
+            mat_ent = tk.Entry(esr_fs, textvariable=fvar, width=8)
+            mat_ent.grid(row=i, column=1, sticky='w', padx=5, pady=2)
+            add_tooltips(
+                f"Engraving font size for {mat_label.lower()} pads in this range.",
+                mat_lbl, mat_ent,
+            )
 
         esr_btn = tk.Frame(self.eng_settings_range_frame, bg=DIALOG_BG)
         esr_btn.grid(row=5, column=0, columnspan=2, sticky='ew', pady=5)
-        tk.Button(esr_btn, text="Add Range", command=self._add_eng_settings_range).pack(side="left", padx=2)
-        tk.Button(esr_btn, text="Update", command=self._update_eng_settings_range).pack(side="left", padx=2)
-        tk.Button(esr_btn, text="Delete", command=self._delete_eng_settings_range).pack(side="left", padx=2)
+        esr_add = tk.Button(esr_btn, text="Add Range", command=self._add_eng_settings_range)
+        esr_add.pack(side="left", padx=2)
+        esr_upd = tk.Button(esr_btn, text="Update", command=self._update_eng_settings_range)
+        esr_upd.pack(side="left", padx=2)
+        esr_del = tk.Button(esr_btn, text="Delete", command=self._delete_eng_settings_range)
+        esr_del.pack(side="left", padx=2)
+        add_tooltip(esr_add, "Add a new engraving-settings range using the values above.")
+        add_tooltip(esr_upd, "Save the values above into the currently selected range.")
+        add_tooltip(esr_del, "Delete the currently selected range.")
 
         self._toggle_eng_settings_mode()
 
@@ -435,29 +874,63 @@ class OptionsWindow:
 
         ep_mode_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         ep_mode_frame.pack(fill="x", pady=2)
-        tk.Radiobutton(ep_mode_frame, text="Universal", variable=self.eng_placement_range_mode_var,
-                       value="universal", bg=DIALOG_BG, command=self._toggle_eng_placement_mode).pack(side="left", padx=(0, 10))
-        tk.Radiobutton(ep_mode_frame, text="Per Size Range", variable=self.eng_placement_range_mode_var,
-                       value="range", bg=DIALOG_BG, command=self._toggle_eng_placement_mode).pack(side="left")
+        ep_mode_tip = (
+            "Universal: same engraving placement for all pad sizes.\n"
+            "Per Size Range: define different placement for different "
+            "size bands; pads outside any range fall back to the "
+            "universal values."
+        )
+        ep_uni = tk.Radiobutton(ep_mode_frame, text="Universal", variable=self.eng_placement_range_mode_var,
+                                value="universal", bg=DIALOG_BG, command=self._toggle_eng_placement_mode)
+        ep_uni.pack(side="left", padx=(0, 10))
+        ep_rng = tk.Radiobutton(ep_mode_frame, text="Per Size Range", variable=self.eng_placement_range_mode_var,
+                                value="range", bg=DIALOG_BG, command=self._toggle_eng_placement_mode)
+        ep_rng.pack(side="left")
+        add_tooltips(ep_mode_tip, ep_uni, ep_rng)
 
         # === Engraving Placement Universal ===
         placement_materials = ['leather', 'darted_leather', 'felt', 'card', 'exact_size']
         placement_labels = {'darted_leather': 'Darted leather', 'exact_size': 'Exact size'}
+        placement_help = {
+            'leather': "Where the size label sits on plain leather wraps.",
+            'darted_leather': "Where the size label sits on darted leather pads.",
+            'felt': "Where the size label sits on felt discs.",
+            'card': "Where the size label sits on card backing discs.",
+            'exact_size': "Where the size label sits on exact-size discs.",
+        }
+        mode_help = (
+            "out = distance measured inward from the outer edge.\n"
+            "in = distance measured outward from the center hole.\n"
+            "ctr = centered between the two."
+        )
         self.eng_placement_universal_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         for mat in placement_materials:
             frame = tk.Frame(self.eng_placement_universal_frame, bg=DIALOG_BG)
             frame.pack(fill='x', pady=2)
             label = placement_labels.get(mat, mat.capitalize())
-            tk.Label(frame, text=label + ":", bg=DIALOG_BG, width=15, anchor='w').pack(side="left")
+            row_lbl = tk.Label(frame, text=label + ":", bg=DIALOG_BG, width=15, anchor='w')
+            row_lbl.pack(side="left")
             loc = self.settings["engraving_location"].get(mat, {"mode": "from_outside", "value": 2.5})
             mode_var = tk.StringVar(value=loc['mode'])
             val_var = tk.DoubleVar(value=loc['value'])
             self.engraving_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
-            tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
-            tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
-            tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
-            tk.Entry(frame, textvariable=val_var, width=5).pack(side="left", padx=5)
-            tk.Label(frame, text="mm", bg=DIALOG_BG).pack(side="left")
+            rb_out = tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG)
+            rb_out.pack(side="left")
+            rb_in = tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG)
+            rb_in.pack(side="left")
+            rb_ctr = tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr.pack(side="left")
+            val_ent = tk.Entry(frame, textvariable=val_var, width=5)
+            val_ent.pack(side="left", padx=5)
+            mm_lbl = tk.Label(frame, text="mm", bg=DIALOG_BG)
+            mm_lbl.pack(side="left")
+            add_tooltip(row_lbl, placement_help[mat])
+            add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
+            add_tooltips(
+                "Distance in millimeters from the chosen reference "
+                "(outside, inside, or centered).",
+                val_ent, mm_lbl,
+            )
 
         # === Engraving Placement Range ===
         self.eng_placement_range_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
@@ -469,11 +942,20 @@ class OptionsWindow:
         self.eng_placement_range_combo = ttk.Combobox(epr_sel, state="readonly", width=25)
         self.eng_placement_range_combo.pack(side="left", padx=5)
         self.eng_placement_range_combo.bind("<<ComboboxSelected>>", self._on_eng_placement_range_selected)
+        add_tooltip(self.eng_placement_range_combo,
+                    "Pick an engraving-placement range to edit, or use Add "
+                    "Range to define a new one.")
 
-        tk.Label(self.eng_placement_range_frame, text="Min Size (mm):", bg=DIALOG_BG).grid(row=1, column=0, sticky='w', pady=2)
-        tk.Entry(self.eng_placement_range_frame, textvariable=self.eng_placement_range_min_var, width=10).grid(row=1, column=1, sticky='w', pady=2)
-        tk.Label(self.eng_placement_range_frame, text="Max Size (mm):", bg=DIALOG_BG).grid(row=2, column=0, sticky='w', pady=2)
-        tk.Entry(self.eng_placement_range_frame, textvariable=self.eng_placement_range_max_var, width=10).grid(row=2, column=1, sticky='w', pady=2)
+        epr_min_lbl = tk.Label(self.eng_placement_range_frame, text="Min Size (mm):", bg=DIALOG_BG)
+        epr_min_lbl.grid(row=1, column=0, sticky='w', pady=2)
+        epr_min_ent = tk.Entry(self.eng_placement_range_frame, textvariable=self.eng_placement_range_min_var, width=10)
+        epr_min_ent.grid(row=1, column=1, sticky='w', pady=2)
+        epr_max_lbl = tk.Label(self.eng_placement_range_frame, text="Max Size (mm):", bg=DIALOG_BG)
+        epr_max_lbl.grid(row=2, column=0, sticky='w', pady=2)
+        epr_max_ent = tk.Entry(self.eng_placement_range_frame, textvariable=self.eng_placement_range_max_var, width=10)
+        epr_max_ent.grid(row=2, column=1, sticky='w', pady=2)
+        add_tooltips("Lower bound (inclusive) of this size range.", epr_min_lbl, epr_min_ent)
+        add_tooltips("Upper bound (inclusive) of this size range.", epr_max_lbl, epr_max_ent)
 
         epr_loc = tk.Frame(self.eng_placement_range_frame, bg=DIALOG_BG)
         epr_loc.grid(row=3, column=0, columnspan=2, sticky='ew', pady=2)
@@ -481,48 +963,97 @@ class OptionsWindow:
             frame = tk.Frame(epr_loc, bg=DIALOG_BG)
             frame.pack(fill='x', pady=2)
             label = placement_labels.get(mat, mat.capitalize())
-            tk.Label(frame, text=label + ":", bg=DIALOG_BG, width=15, anchor='w').pack(side="left")
+            row_lbl = tk.Label(frame, text=label + ":", bg=DIALOG_BG, width=15, anchor='w')
+            row_lbl.pack(side="left")
             mode_var = tk.StringVar(value="from_outside")
             val_var = tk.DoubleVar(value=2.5)
             self.eng_placement_range_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
-            tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG).pack(side="left")
-            tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG).pack(side="left")
-            tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG).pack(side="left")
-            tk.Entry(frame, textvariable=val_var, width=5).pack(side="left", padx=5)
-            tk.Label(frame, text="mm", bg=DIALOG_BG).pack(side="left")
+            rb_out = tk.Radiobutton(frame, text="out", variable=mode_var, value="from_outside", bg=DIALOG_BG)
+            rb_out.pack(side="left")
+            rb_in = tk.Radiobutton(frame, text="in", variable=mode_var, value="from_inside", bg=DIALOG_BG)
+            rb_in.pack(side="left")
+            rb_ctr = tk.Radiobutton(frame, text="ctr", variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr.pack(side="left")
+            val_ent = tk.Entry(frame, textvariable=val_var, width=5)
+            val_ent.pack(side="left", padx=5)
+            mm_lbl = tk.Label(frame, text="mm", bg=DIALOG_BG)
+            mm_lbl.pack(side="left")
+            add_tooltip(row_lbl, placement_help[mat] + " (this size range)")
+            add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
+            add_tooltips(
+                "Distance from the chosen reference, in millimeters.",
+                val_ent, mm_lbl,
+            )
 
         epr_btn = tk.Frame(self.eng_placement_range_frame, bg=DIALOG_BG)
         epr_btn.grid(row=4, column=0, columnspan=2, sticky='ew', pady=5)
-        tk.Button(epr_btn, text="Add Range", command=self._add_eng_placement_range).pack(side="left", padx=2)
-        tk.Button(epr_btn, text="Update", command=self._update_eng_placement_range).pack(side="left", padx=2)
-        tk.Button(epr_btn, text="Delete", command=self._delete_eng_placement_range).pack(side="left", padx=2)
+        epr_add = tk.Button(epr_btn, text="Add Range", command=self._add_eng_placement_range)
+        epr_add.pack(side="left", padx=2)
+        epr_upd = tk.Button(epr_btn, text="Update", command=self._update_eng_placement_range)
+        epr_upd.pack(side="left", padx=2)
+        epr_del = tk.Button(epr_btn, text="Delete", command=self._delete_eng_placement_range)
+        epr_del.pack(side="left", padx=2)
+        add_tooltip(epr_add, "Add a new engraving-placement range using the values above.")
+        add_tooltip(epr_upd, "Save the values above into the currently selected range.")
+        add_tooltip(epr_del, "Delete the currently selected range.")
 
         self._toggle_eng_placement_mode()
 
         export_frame = tk.LabelFrame(main_frame, text="Export Settings", bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
-        tk.Checkbutton(export_frame, text="Enable Inkscape/Compatibility Mode (unitless SVG)", variable=self.compatibility_mode_var, bg=DIALOG_BG).pack(anchor='w')
-
-        self._build_sizing_preset_section(main_frame)
+        compat_cb = tk.Checkbutton(export_frame,
+                                   text="Enable Inkscape/Compatibility Mode (unitless SVG)",
+                                   variable=self.compatibility_mode_var, bg=DIALOG_BG)
+        compat_cb.pack(anchor='w')
+        add_tooltip(compat_cb,
+                    "Write SVGs without explicit unit attributes. Turn on "
+                    "if Inkscape (or other software) misinterprets the file "
+                    "scale. LightBurn does not need this.")
 
     def _build_sizing_preset_section(self, parent):
-        """Add the Sizing Rules Presets controls at the bottom of the form."""
-        preset_frame = tk.LabelFrame(parent, text="Sizing Rules Presets", bg=DIALOG_BG, padx=5, pady=5)
-        preset_frame.pack(fill="x", pady=5)
+        """Top-of-dialog preset controls: pick a preset, load, save, rename, delete."""
+        preset_frame = tk.LabelFrame(parent, text="Sizing Rules Preset", bg=DIALOG_BG, padx=5, pady=5)
+        preset_frame.pack(fill="x", pady=(0, 5))
 
         select_row = tk.Frame(preset_frame, bg=DIALOG_BG)
         select_row.pack(fill="x", pady=(0, 4))
         tk.Label(select_row, text="Preset:", bg=DIALOG_BG).pack(side="left")
         self.preset_combo = ttk.Combobox(select_row, state="readonly", width=28)
         self.preset_combo.pack(side="left", padx=5, fill="x", expand=True)
-        tk.Button(select_row, text="Load", command=self.on_load_sizing_preset).pack(side="left", padx=2)
+        load_btn = tk.Button(select_row, text="Load", command=self.on_load_sizing_preset)
+        load_btn.pack(side="left", padx=2)
+        save_btn = tk.Button(select_row, text="Save Preset", command=self.on_save_sizing_preset)
+        save_btn.pack(side="left", padx=2)
+        add_tooltip(self.preset_combo,
+                    "Saved snapshots of every value in this dialog. Pick "
+                    "one and click Load to fill the form below.")
+        add_tooltip(load_btn,
+                    "Fill the form below from the selected preset. "
+                    "Click Apply at the bottom to commit it to the app.")
+        add_tooltip(save_btn,
+                    "Save the current form as a preset — overwrite an "
+                    "existing one or create a new one (you'll be asked).")
 
         button_row = tk.Frame(preset_frame, bg=DIALOG_BG)
         button_row.pack(fill="x")
-        tk.Button(button_row, text="Save As...", command=self.on_save_as_sizing_preset).pack(side="left", padx=2)
-        tk.Button(button_row, text="Delete", command=self.on_delete_sizing_preset).pack(side="left", padx=2)
-        tk.Button(button_row, text="Import...", command=self.on_import_sizing_presets).pack(side="left", padx=2)
-        tk.Button(button_row, text="Export...", command=self.on_export_sizing_presets).pack(side="left", padx=2)
+        rename_btn = tk.Button(button_row, text="Rename", command=self.on_rename_sizing_preset)
+        rename_btn.pack(side="left", padx=2)
+        del_btn = tk.Button(button_row, text="Delete", command=self.on_delete_sizing_preset)
+        del_btn.pack(side="left", padx=2)
+        imp_btn = tk.Button(button_row, text="Import...", command=self.on_import_sizing_presets)
+        imp_btn.pack(side="left", padx=2)
+        exp_btn = tk.Button(button_row, text="Export...", command=self.on_export_sizing_presets)
+        exp_btn.pack(side="left", padx=2)
+        add_tooltip(rename_btn,
+                    "Rename the selected preset.")
+        add_tooltip(del_btn,
+                    "Remove the selected preset (cannot be undone). At "
+                    "least one preset must remain.")
+        add_tooltip(imp_btn,
+                    "Add presets from a JSON file shared by another tech.")
+        add_tooltip(exp_btn,
+                    "Save the entire preset library to a JSON file you "
+                    "can share.")
 
     # --- Dart Range Management ---
 
@@ -537,11 +1068,18 @@ class OptionsWindow:
             self._refresh_range_combo()
 
     def _refresh_range_combo(self):
-        """Update the range combobox values from self.dart_ranges."""
+        """Update the range combobox values from self.dart_ranges.
+
+        Always reloads the editing fields when there's a valid selection so
+        that loading a different preset (which keeps the same index but
+        changes the underlying range data) doesn't leave the editor showing
+        stale values.
+        """
         labels = [f"{r['min_size']:.1f} - {r['max_size']:.1f} mm" for r in self.dart_ranges]
         self.range_combo['values'] = labels
         if labels and self.selected_range_index is not None and self.selected_range_index < len(labels):
             self.range_combo.current(self.selected_range_index)
+            self._load_range_fields(self.selected_range_index)
         elif labels:
             self.range_combo.current(len(labels) - 1)
             self.selected_range_index = len(labels) - 1
@@ -619,20 +1157,64 @@ class OptionsWindow:
 
     def _build_sizing_fields(self, parent, felt_var, card_var, leather_var, hole_var, thick_var, thick_unit_var, row_start=0):
         """Build the common sizing rule fields into a grid frame."""
-        tk.Label(parent, text="Felt Diameter Reduction (mm):", bg=DIALOG_BG).grid(row=row_start, column=0, sticky='w', pady=2)
-        tk.Entry(parent, textvariable=felt_var, width=10).grid(row=row_start, column=1, sticky='w', pady=2)
-        tk.Label(parent, text="Card Additional Reduction (mm):", bg=DIALOG_BG).grid(row=row_start+1, column=0, sticky='w', pady=2)
-        tk.Entry(parent, textvariable=card_var, width=10).grid(row=row_start+1, column=1, sticky='w', pady=2)
-        tk.Label(parent, text="Leather Wrap Multiplier (1.00=default):", bg=DIALOG_BG).grid(row=row_start+2, column=0, sticky='w', pady=2)
-        tk.Entry(parent, textvariable=leather_var, width=10).grid(row=row_start+2, column=1, sticky='w', pady=2)
-        tk.Label(parent, text="Min. Pad Size for Hole (mm):", bg=DIALOG_BG).grid(row=row_start+3, column=0, sticky='w', pady=2)
-        tk.Entry(parent, textvariable=hole_var, width=10).grid(row=row_start+3, column=1, sticky='w', pady=2)
+        felt_lbl = tk.Label(parent, text="Felt Diameter Reduction (mm):", bg=DIALOG_BG)
+        felt_lbl.grid(row=row_start, column=0, sticky='w', pady=2)
+        felt_ent = tk.Entry(parent, textvariable=felt_var, width=10)
+        felt_ent.grid(row=row_start, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "How much smaller the felt disc is than the pad-cup size you "
+            "enter. 0.75 mm means the felt disc is cut 0.75 mm under the "
+            "stated diameter.",
+            felt_lbl, felt_ent,
+        )
+
+        card_lbl = tk.Label(parent, text="Card Additional Reduction (mm):", bg=DIALOG_BG)
+        card_lbl.grid(row=row_start + 1, column=0, sticky='w', pady=2)
+        card_ent = tk.Entry(parent, textvariable=card_var, width=10)
+        card_ent.grid(row=row_start + 1, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Extra reduction applied on top of the felt offset for the "
+            "cardboard backing disc — keeps the card just under the felt.",
+            card_lbl, card_ent,
+        )
+
+        lea_lbl = tk.Label(parent, text="Leather Wrap Multiplier (1.00=default):", bg=DIALOG_BG)
+        lea_lbl.grid(row=row_start + 2, column=0, sticky='w', pady=2)
+        lea_ent = tk.Entry(parent, textvariable=leather_var, width=10)
+        lea_ent.grid(row=row_start + 2, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Controls how much extra leather is added to wrap around the "
+            "felt. 1.00 = standard wrap; raise to add more wrap, lower to "
+            "take some away.",
+            lea_lbl, lea_ent,
+        )
+
+        hole_lbl = tk.Label(parent, text="Min. Pad Size for Hole (mm):", bg=DIALOG_BG)
+        hole_lbl.grid(row=row_start + 3, column=0, sticky='w', pady=2)
+        hole_ent = tk.Entry(parent, textvariable=hole_var, width=10)
+        hole_ent.grid(row=row_start + 3, column=1, sticky='w', pady=2)
+        add_tooltips(
+            "Pads smaller than this size skip the center mounting hole "
+            "automatically — they're too small for it to be useful.",
+            hole_lbl, hole_ent,
+        )
+
         ft_frame = tk.Frame(parent, bg=DIALOG_BG)
-        ft_frame.grid(row=row_start+4, column=0, columnspan=2, sticky='w', pady=2)
-        tk.Label(ft_frame, text="Felt Thickness:", bg=DIALOG_BG).pack(side="left")
-        tk.Entry(ft_frame, textvariable=thick_var, width=10).pack(side="left", padx=5)
-        tk.Radiobutton(ft_frame, text="in", variable=thick_unit_var, value="in", bg=DIALOG_BG).pack(side="left")
-        tk.Radiobutton(ft_frame, text="mm", variable=thick_unit_var, value="mm", bg=DIALOG_BG).pack(side="left")
+        ft_frame.grid(row=row_start + 4, column=0, columnspan=2, sticky='w', pady=2)
+        ft_lbl = tk.Label(ft_frame, text="Felt Thickness:", bg=DIALOG_BG)
+        ft_lbl.pack(side="left")
+        ft_ent = tk.Entry(ft_frame, textvariable=thick_var, width=10)
+        ft_ent.pack(side="left", padx=5)
+        ft_in = tk.Radiobutton(ft_frame, text="in", variable=thick_unit_var, value="in", bg=DIALOG_BG)
+        ft_in.pack(side="left")
+        ft_mm = tk.Radiobutton(ft_frame, text="mm", variable=thick_unit_var, value="mm", bg=DIALOG_BG)
+        ft_mm.pack(side="left")
+        add_tooltips(
+            "Thickness of the felt you're using. Feeds into the "
+            "leather-wrap calculation so the wrap accounts for the felt's "
+            "side wall.",
+            ft_lbl, ft_ent, ft_in, ft_mm,
+        )
 
     # --- Sizing Range Management ---
 
@@ -650,6 +1232,9 @@ class OptionsWindow:
         self.sizing_range_combo['values'] = labels
         if labels and self.sizing_selected_range_index is not None and self.sizing_selected_range_index < len(labels):
             self.sizing_range_combo.current(self.sizing_selected_range_index)
+            # Reload fields too: a preset Load may keep the same index but
+            # point it at completely different range data.
+            self._load_sizing_range_fields(self.sizing_selected_range_index)
         elif labels:
             self.sizing_range_combo.current(len(labels) - 1)
             self.sizing_selected_range_index = len(labels) - 1
@@ -734,6 +1319,8 @@ class OptionsWindow:
         self.eng_settings_range_combo['values'] = labels
         if labels and self.eng_settings_selected_range_index is not None and self.eng_settings_selected_range_index < len(labels):
             self.eng_settings_range_combo.current(self.eng_settings_selected_range_index)
+            # Reload fields: preset Load may have replaced the underlying data.
+            self._load_eng_settings_range_fields(self.eng_settings_selected_range_index)
         elif labels:
             self.eng_settings_range_combo.current(len(labels) - 1)
             self.eng_settings_selected_range_index = len(labels) - 1
@@ -812,6 +1399,8 @@ class OptionsWindow:
         self.eng_placement_range_combo['values'] = labels
         if labels and self.eng_placement_selected_range_index is not None and self.eng_placement_selected_range_index < len(labels):
             self.eng_placement_range_combo.current(self.eng_placement_selected_range_index)
+            # Reload fields: preset Load may have replaced the underlying data.
+            self._load_eng_placement_range_fields(self.eng_placement_selected_range_index)
         elif labels:
             self.eng_placement_range_combo.current(len(labels) - 1)
             self.eng_placement_selected_range_index = len(labels) - 1
@@ -876,6 +1465,69 @@ class OptionsWindow:
         del self.eng_placement_ranges[self.eng_placement_selected_range_index]
         self.eng_placement_selected_range_index = None
         self._refresh_eng_placement_range_combo()
+
+    # ------------------------------------------------------------------
+    # Apply / Cancel
+    # ------------------------------------------------------------------
+
+    def on_apply(self):
+        """Apply form values to the live app.
+
+        If the form is clean (matches the loaded preset / initial state),
+        commit and close. If dirty, prompt the user to save the changes
+        as a preset first — they can either run the save flow (then commit
+        and close) or back out to keep editing.
+        """
+        if not self._is_dirty():
+            self.save_options()
+            return
+
+        choice = messagebox.askyesno(
+            "Save changes as a preset?",
+            "You have edits that aren't captured in any preset.\n\n"
+            "Save them as a preset before applying?\n\n"
+            "Yes  — open the Save Preset dialog.\n"
+            "No   — go back to the sizing dialog without applying.",
+            parent=self.top,
+        )
+        if not choice:
+            return  # back to dialog, no commit
+        # Run the save flow. If the user cancels it, don't apply either —
+        # they're explicitly choosing not to save, so we treat this as
+        # "back to dialog" rather than a silent apply of unsaved changes.
+        before_baseline = self._baseline
+        self.on_save_sizing_preset()
+        if self._baseline is before_baseline:
+            return  # save was cancelled inside the SaveSizingPresetDialog
+        self.save_options()
+
+    def on_cancel(self):
+        """Close the dialog. If dirty, prompt to save as preset first."""
+        if not self._is_dirty():
+            self.top.destroy()
+            return
+
+        # Three-way prompt via two stacked questions: simpler than building
+        # a custom 3-button dialog, and matches existing app conventions.
+        save_first = messagebox.askyesnocancel(
+            "Unsaved changes",
+            "You have edits that aren't captured in any preset.\n\n"
+            "Yes     — save them as a preset, then close.\n"
+            "No      — discard edits and close.\n"
+            "Cancel  — keep editing.",
+            parent=self.top,
+        )
+        if save_first is None:
+            return  # keep editing
+        if save_first:
+            before_baseline = self._baseline
+            self.on_save_sizing_preset()
+            if self._baseline is before_baseline:
+                return  # user cancelled the save flow → back to dialog
+            self.top.destroy()
+            return
+        # Discard
+        self.top.destroy()
 
     def save_options(self):
         # Sizing
@@ -1081,48 +1733,92 @@ class OptionsWindow:
     def on_load_sizing_preset(self):
         name = self.preset_combo.get().strip()
         if not name:
-            messagebox.showinfo("Load Preset", "Pick a preset from the dropdown first.")
+            messagebox.showinfo("Load Preset", "Pick a preset from the dropdown first.", parent=self.top)
             return
         if name not in self.sizing_presets:
-            messagebox.showerror("Load Preset", f"Preset '{name}' not found.")
+            messagebox.showerror("Load Preset", f"Preset '{name}' not found.", parent=self.top)
             return
-        self._apply_dict_to_form(self.sizing_presets[name])
-        messagebox.showinfo(
-            "Preset Loaded",
-            f"Loaded '{name}' into the form.\n\n"
-            "Click Save to apply these values to the app, or Cancel to discard.",
-        )
-
-    def on_save_as_sizing_preset(self):
-        name = simpledialog.askstring(
-            "Save Sizing Preset",
-            "Preset name:",
-            parent=self.top,
-        )
-        if name is None:
-            return
-        name = name.strip()
-        if not name:
-            messagebox.showwarning("Save Preset", "Preset name cannot be empty.")
-            return
-        if name in self.sizing_presets:
+        # Warn before clobbering unsaved edits.
+        if self._is_dirty():
+            label = self.active_preset_name or "the current values"
             if not messagebox.askyesno(
-                "Overwrite Preset",
-                f"A preset named '{name}' already exists.\nOverwrite it?",
+                "Discard unsaved changes?",
+                f"You have unsaved edits to {label}.\n\n"
+                f"Loading '{name}' will discard them. Continue?",
+                parent=self.top,
             ):
                 return
-        self.sizing_presets[name] = self._capture_form_to_dict()
+        self._apply_dict_to_form(self.sizing_presets[name])
+        self.active_preset_name = name
+        self._set_baseline_to_current()
+
+    def on_save_sizing_preset(self):
+        """Open the Save Preset dialog (overwrite existing or save as new)."""
+        dlg = SaveSizingPresetDialog(
+            self.top,
+            existing_names=sorted(self.sizing_presets.keys()),
+            default_existing=self.active_preset_name,
+        )
+        result = dlg.result
+        if result is None:
+            return  # user cancelled
+        target = result["name"]
+        self.sizing_presets[target] = self._capture_form_to_dict()
         self.sizing_presets_save_callback()
-        self._refresh_sizing_preset_combo(select=name)
+        self.active_preset_name = target
+        self._set_baseline_to_current()
+        self._refresh_sizing_preset_combo(select=target)
+
+    def on_rename_sizing_preset(self):
+        old = self.preset_combo.get().strip()
+        if not old or old not in self.sizing_presets:
+            messagebox.showinfo("Rename Preset", "Pick a preset from the dropdown first.", parent=self.top)
+            return
+        new = simpledialog.askstring(
+            "Rename Preset",
+            f"New name for '{old}':",
+            initialvalue=old,
+            parent=self.top,
+        )
+        if new is None:
+            return
+        new = new.strip()
+        if not new:
+            messagebox.showwarning("Rename Preset", "Preset name cannot be empty.", parent=self.top)
+            return
+        if new == old:
+            return
+        if new in self.sizing_presets:
+            messagebox.showerror(
+                "Rename Preset",
+                f"A preset named '{new}' already exists.",
+                parent=self.top,
+            )
+            return
+        self.sizing_presets[new] = self.sizing_presets.pop(old)
+        if self.active_preset_name == old:
+            self.active_preset_name = new
+        self.sizing_presets_save_callback()
+        self._refresh_sizing_preset_combo(select=new)
 
     def on_delete_sizing_preset(self):
         name = self.preset_combo.get().strip()
         if not name or name not in self.sizing_presets:
-            messagebox.showinfo("Delete Preset", "Pick a preset from the dropdown first.")
+            messagebox.showinfo("Delete Preset", "Pick a preset from the dropdown first.", parent=self.top)
             return
-        if not messagebox.askyesno("Delete Preset", f"Delete preset '{name}'?"):
+        if len(self.sizing_presets) <= 1:
+            messagebox.showinfo(
+                "Delete Preset",
+                "At least one sizing preset must remain. Save another "
+                "preset before deleting this one.",
+                parent=self.top,
+            )
+            return
+        if not messagebox.askyesno("Delete Preset", f"Delete preset '{name}'?", parent=self.top):
             return
         del self.sizing_presets[name]
+        if self.active_preset_name == name:
+            self.active_preset_name = None
         self.sizing_presets_save_callback()
         self._refresh_sizing_preset_combo()
 
@@ -1198,6 +1894,515 @@ class OptionsWindow:
             msg += f"\nRenamed due to conflict: {renamed}."
         messagebox.showinfo("Import Successful", msg)
 
+
+class PadPreviewWindow(tk.Toplevel):
+    """Live, resizable preview of a pad based on the parent OptionsWindow form.
+
+    The user picks a pad size and which materials to show (leather / felt /
+    card / exact size). The window draws each material onto a tk.Canvas
+    using the same geometry helpers as svg_engine, so what you see here
+    matches what the SVG / G-code will cut. A 200 ms polling tick re-reads
+    the parent form and re-renders whenever any value has changed.
+    """
+
+    # Visually distinct, on-paper-readable colors per material.
+    COLORS = {
+        'leather':    '#6B4423',
+        'felt':       '#A33333',
+        'card':       '#C4A484',
+        'exact_size': '#444444',
+    }
+    LABELS = {
+        'leather':    'Leather',
+        'felt':       'Felt',
+        'card':       'Card',
+        'exact_size': 'Exact size',
+    }
+    MATERIALS = ('leather', 'felt', 'card', 'exact_size')
+    POLL_MS = 200
+
+    def __init__(self, parent_options):
+        super().__init__(parent_options.top)
+        self.parent_options = parent_options
+        self.title("Pad Preview")
+        self.geometry("620x520")
+        self.minsize(380, 320)
+        self.configure(bg=DIALOG_BG)
+        self.resizable(True, True)
+        self.transient(parent_options.top)
+
+        # Local controls
+        self.preview_size_var = tk.DoubleVar(value=18.0)
+        self.show_vars = {
+            'leather':    tk.BooleanVar(value=True),
+            'felt':       tk.BooleanVar(value=True),
+            'card':       tk.BooleanVar(value=True),
+            'exact_size': tk.BooleanVar(value=False),
+        }
+        self.layout_var = tk.StringVar(value='layered')
+
+        # Polling state
+        self._last_form_snapshot = None
+        self._poll_after_id = None
+
+        self._build_widgets()
+
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Trigger a render after the geometry has settled.
+        self.after(50, self._render)
+        self._schedule_poll()
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
+    def _build_widgets(self):
+        ctrls = tk.Frame(self, bg=DIALOG_BG, padx=10, pady=8)
+        ctrls.pack(fill="x")
+
+        # Pad-size row
+        size_row = tk.Frame(ctrls, bg=DIALOG_BG)
+        size_row.pack(fill="x", pady=(0, 4))
+        tk.Label(size_row, text="Preview pad size:", bg=DIALOG_BG).pack(side="left")
+        size_ent = tk.Entry(size_row, textvariable=self.preview_size_var, width=8)
+        size_ent.pack(side="left", padx=5)
+        tk.Label(size_row, text="mm", bg=DIALOG_BG).pack(side="left")
+        add_tooltip(
+            size_ent,
+            "Diameter (in mm) of the pad to render. The preview applies "
+            "the parent dialog's sizing rules to this size.",
+        )
+        # Live update on size edit
+        self.preview_size_var.trace_add("write", lambda *_a: self._render())
+
+        # Materials row
+        mat_row = tk.Frame(ctrls, bg=DIALOG_BG)
+        mat_row.pack(fill="x", pady=(0, 4))
+        tk.Label(mat_row, text="Materials:", bg=DIALOG_BG).pack(side="left", padx=(0, 5))
+        for mat in self.MATERIALS:
+            cb = tk.Checkbutton(
+                mat_row, text=self.LABELS[mat],
+                variable=self.show_vars[mat], bg=DIALOG_BG,
+                command=self._render,
+            )
+            cb.pack(side="left", padx=2)
+
+        # Layout row
+        layout_row = tk.Frame(ctrls, bg=DIALOG_BG)
+        layout_row.pack(fill="x", pady=(0, 4))
+        tk.Label(layout_row, text="Layout:", bg=DIALOG_BG).pack(side="left")
+        layered_rb = tk.Radiobutton(
+            layout_row, text="Layered (concentric)",
+            variable=self.layout_var, value='layered', bg=DIALOG_BG,
+            command=self._render,
+        )
+        layered_rb.pack(side="left", padx=5)
+        side_rb = tk.Radiobutton(
+            layout_row, text="Side by side",
+            variable=self.layout_var, value='side_by_side', bg=DIALOG_BG,
+            command=self._render,
+        )
+        side_rb.pack(side="left", padx=5)
+        add_tooltip(
+            layered_rb,
+            "Stack each material on the same center, like the layers of "
+            "a finished pad. Smaller materials draw on top.",
+        )
+        add_tooltip(
+            side_rb,
+            "Lay the discs out in a row at consistent scale, so you can "
+            "compare diameters at a glance.",
+        )
+
+        # Canvas
+        canvas_frame = tk.Frame(self, bg=DIALOG_BG)
+        canvas_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.canvas = tk.Canvas(
+            canvas_frame, bg="#FFFFFF",
+            highlightthickness=1, highlightbackground="#888888",
+        )
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", lambda _e: self._render())
+
+    # ------------------------------------------------------------------
+    # Polling — re-render whenever the parent form changes.
+    # ------------------------------------------------------------------
+
+    def _schedule_poll(self):
+        self._poll_after_id = self.after(self.POLL_MS, self._poll)
+
+    def _poll(self):
+        if not self.winfo_exists():
+            return
+        try:
+            snap = self.parent_options._capture_form_to_dict()
+        except (tk.TclError, ValueError, KeyError, AttributeError):
+            snap = None  # mid-edit (empty entry, etc.) — skip this tick
+        if snap is not None and snap != self._last_form_snapshot:
+            self._last_form_snapshot = snap
+            self._render()
+        self._poll_after_id = self.after(self.POLL_MS, self._poll)
+
+    def _cancel_poll(self):
+        if self._poll_after_id is not None:
+            try:
+                self.after_cancel(self._poll_after_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._poll_after_id = None
+
+    def _on_close(self):
+        self._cancel_poll()
+        # Sync the parent toggle so the checkbox reflects the closed state.
+        try:
+            self.parent_options.show_preview_var.set(False)
+            self.parent_options.preview_window = None
+        except (tk.TclError, AttributeError):
+            pass
+        self.destroy()
+
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
+
+    def _render(self):
+        if not self.winfo_exists():
+            return
+        self.canvas.delete("all")
+
+        try:
+            pad_size = float(self.preview_size_var.get())
+        except (tk.TclError, ValueError):
+            self._draw_message("Enter a pad size to preview")
+            return
+        if pad_size <= 0:
+            self._draw_message("Pad size must be positive")
+            return
+
+        try:
+            settings = self.parent_options._capture_form_to_dict()
+        except (tk.TclError, ValueError, KeyError, AttributeError):
+            self._draw_message("Waiting for valid settings…")
+            return
+
+        materials = [m for m in self.MATERIALS if self.show_vars[m].get()]
+        if not materials:
+            self._draw_message("No materials selected")
+            return
+
+        # Compute disc diameters for each requested material.
+        diams = {}
+        for mat in materials:
+            try:
+                d = get_disc_diameter(pad_size, mat, settings)
+            except Exception:
+                d = 0
+            if d and d > 0:
+                diams[mat] = d
+        if not diams:
+            self._draw_message("No materials produce a valid disc at this size")
+            return
+
+        cw = max(self.canvas.winfo_width(), 1)
+        ch = max(self.canvas.winfo_height(), 1)
+
+        if self.layout_var.get() == 'layered':
+            self._draw_layered(pad_size, settings, diams, cw, ch)
+        else:
+            self._draw_side_by_side(pad_size, settings, diams, cw, ch)
+
+    def _draw_message(self, text):
+        cw = max(self.canvas.winfo_width(), 1)
+        ch = max(self.canvas.winfo_height(), 1)
+        self.canvas.create_text(cw / 2, ch / 2, text=text,
+                                fill="#888888", font=("Helvetica", 10))
+
+    # --- Layered (concentric) ---
+
+    def _draw_layered(self, pad_size, settings, diams, cw, ch):
+        margin = 30
+        avail = max(min(cw, ch) - 2 * margin, 50)
+        largest_mm = max(diams.values())
+        scale = avail / largest_mm  # px per mm
+        cx = cw / 2
+        cy = ch / 2
+
+        # Draw largest first so smaller materials end up visually "on top".
+        for mat in sorted(self.MATERIALS,
+                          key=lambda m: -diams.get(m, 0)):
+            if mat not in diams:
+                continue
+            d_mm = diams[mat]
+            r_px = (d_mm / 2) * scale
+            color = self.COLORS[mat]
+            if mat == 'leather':
+                self._draw_leather(cx, cy, pad_size, settings, r_px, color, scale)
+            else:
+                self.canvas.create_oval(
+                    cx - r_px, cy - r_px, cx + r_px, cy + r_px,
+                    outline=color, width=2, fill='',
+                )
+            self._draw_center_hole(cx, cy, mat, pad_size, settings, scale, color)
+
+        self._draw_legend(diams)
+
+    # --- Side by side ---
+
+    def _draw_side_by_side(self, pad_size, settings, diams, cw, ch):
+        margin = 30
+        gap_mm = 5.0
+        # Stable left-to-right order: largest material first
+        ordered = sorted(diams.items(), key=lambda kv: -kv[1])
+
+        total_w_mm = sum(d for _, d in ordered) + gap_mm * (len(ordered) - 1)
+        max_h_mm = max(d for _, d in ordered)
+        avail_w = max(cw - 2 * margin, 50)
+        avail_h = max(ch - 2 * margin - 26, 50)  # leave room for labels
+        scale = min(avail_w / total_w_mm, avail_h / max_h_mm)
+
+        cy = ch / 2
+        cur_left_mm = -total_w_mm / 2  # in mm relative to canvas center
+        for mat, d_mm in ordered:
+            r_mm = d_mm / 2
+            cx_mm = cur_left_mm + r_mm
+            cx_px = cw / 2 + cx_mm * scale
+            r_px = r_mm * scale
+            color = self.COLORS[mat]
+            if mat == 'leather':
+                self._draw_leather(cx_px, cy, pad_size, settings, r_px, color, scale)
+            else:
+                self.canvas.create_oval(
+                    cx_px - r_px, cy - r_px, cx_px + r_px, cy + r_px,
+                    outline=color, width=2, fill='',
+                )
+            self._draw_center_hole(cx_px, cy, mat, pad_size, settings, scale, color)
+            self.canvas.create_text(
+                cx_px, cy + r_px + 14,
+                text=f"{self.LABELS[mat]}\n{d_mm:.1f} mm",
+                fill=color, justify="center",
+                font=("Helvetica", 9),
+            )
+            cur_left_mm += d_mm + gap_mm
+
+    # --- Leather (with optional dart pattern) ---
+
+    def _draw_leather(self, cx, cy, pad_size, settings, outer_r_px, color, scale):
+        dart_cfg = get_dart_settings_for_size(pad_size, settings)
+        if not dart_cfg:
+            self.canvas.create_oval(
+                cx - outer_r_px, cy - outer_r_px, cx + outer_r_px, cy + outer_r_px,
+                outline=color, width=2, fill='',
+            )
+            return
+
+        # Replicate svg_engine's dart geometry exactly.
+        sizing = get_sizing_for_size(pad_size, settings)
+        felt_thick = get_felt_thickness_mm(settings, sizing)
+        overwrap = dart_cfg.get("overwrap", 0.5)
+        felt_r_mm = (pad_size - sizing["felt_offset"]) / 2
+        inner_r_mm = felt_r_mm + felt_thick + overwrap
+        outer_r_mm = get_disc_diameter(pad_size, 'leather', settings) / 2
+        if inner_r_mm >= outer_r_mm:
+            inner_r_mm = max(outer_r_mm - 0.2, 0.1)
+
+        circumference = 2 * math.pi * inner_r_mm
+        freq_mult = dart_cfg.get("frequency_multiplier", 1.0)
+        num_points = int((circumference / 3.5) * freq_mult)
+        if num_points < 12:
+            num_points = 12
+        if num_points % 2 != 0:
+            num_points += 1
+
+        shape_factor = dart_cfg.get("shape_factor", 0.5)
+        steps = max(int(num_points * 8), 64)
+        avg_r_px = (outer_r_mm + inner_r_mm) * 0.5 * scale
+        amp_px = (outer_r_mm - inner_r_mm) * 0.5 * scale
+
+        coords = []
+        for i in range(steps + 1):
+            theta = 2 * math.pi * i / steps
+            raw = math.cos(num_points * theta)
+            shaped = _wave_value(raw, shape_factor)
+            r = avg_r_px + amp_px * shaped
+            x = cx + r * math.cos(theta)
+            y = cy + r * math.sin(theta)
+            coords.extend([x, y])
+        # Use create_line on a closed loop (polygon would auto-fill its
+        # interior, smoothing the perceived shape; we want crisp outlines).
+        self.canvas.create_line(*coords, fill=color, width=2, smooth=False)
+
+    # --- Center hole (info-only; matches should_have_center_hole rules) ---
+
+    def _draw_center_hole(self, cx, cy, material, pad_size, settings, scale, color):
+        if material == 'exact_size':
+            return  # no center hole on exact-size discs
+        sizing = get_sizing_for_size(pad_size, settings)
+        min_size = sizing.get("min_hole_size", 16.5)
+        if pad_size < min_size:
+            return
+        # Use 3 mm as a conventional preview hole size — the real hole
+        # diameter is selected on the Pad Maker tab, not in Sizing Rules,
+        # so we just draw an indicator dot that won't be confused for a
+        # cut path.
+        hole_r_px = (3.0 / 2) * scale
+        if hole_r_px < 1.5:
+            hole_r_px = 1.5
+        self.canvas.create_oval(
+            cx - hole_r_px, cy - hole_r_px, cx + hole_r_px, cy + hole_r_px,
+            outline=color, width=1, fill='',
+        )
+
+    # --- Legend ---
+
+    def _draw_legend(self, diams):
+        y = 10
+        for mat in self.MATERIALS:
+            if mat not in diams:
+                continue
+            color = self.COLORS[mat]
+            self.canvas.create_rectangle(
+                10, y + 2, 22, y + 12, fill=color, outline=color,
+            )
+            text = f"{self.LABELS[mat]} — {diams[mat]:.1f} mm"
+            self.canvas.create_text(
+                28, y + 7, text=text, fill="#222222",
+                anchor="w", font=("Helvetica", 9),
+            )
+            y += 16
+
+
+class SaveSizingPresetDialog(tk.Toplevel):
+    """Two-mode save dialog: overwrite an existing preset, or save as new.
+
+    On close, sets `self.result` to None (cancelled) or {"name": str}.
+    """
+
+    def __init__(self, parent, existing_names, default_existing=None):
+        super().__init__(parent)
+        self.title("Save Sizing Preset")
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+        self.result = None
+
+        existing_names = list(existing_names)
+        has_existing = bool(existing_names)
+        # Default to "new" if there's nothing to overwrite or no active
+        # preset; default to "overwrite" otherwise so the common case
+        # (load → tweak → re-save) is one click.
+        initial = "overwrite" if (has_existing and default_existing in existing_names) else "new"
+        self.mode_var = tk.StringVar(value=initial)
+        self.existing_var = tk.StringVar(
+            value=default_existing if default_existing in existing_names
+                  else (existing_names[0] if existing_names else "")
+        )
+        self.new_name_var = tk.StringVar(value="")
+
+        frame = tk.Frame(self, bg=DIALOG_BG, padx=15, pady=12)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(
+            frame,
+            text="Save the current sizing-rules form as a preset.",
+            bg=DIALOG_BG, justify="left",
+        ).pack(anchor="w", pady=(0, 8))
+
+        # --- Overwrite row ---
+        overwrite_row = tk.Frame(frame, bg=DIALOG_BG)
+        overwrite_row.pack(fill="x", pady=2)
+        rb_over = tk.Radiobutton(
+            overwrite_row, text="Overwrite existing:", variable=self.mode_var,
+            value="overwrite", bg=DIALOG_BG,
+            command=self._sync_state,
+        )
+        rb_over.pack(side="left")
+        self.existing_combo = ttk.Combobox(
+            overwrite_row, textvariable=self.existing_var,
+            values=existing_names, state="readonly", width=24,
+        )
+        self.existing_combo.pack(side="left", padx=8)
+
+        if not has_existing:
+            rb_over.configure(state="disabled")
+            self.existing_combo.configure(state="disabled")
+
+        # --- New row ---
+        new_row = tk.Frame(frame, bg=DIALOG_BG)
+        new_row.pack(fill="x", pady=2)
+        rb_new = tk.Radiobutton(
+            new_row, text="Save as new preset:", variable=self.mode_var,
+            value="new", bg=DIALOG_BG,
+            command=self._sync_state,
+        )
+        rb_new.pack(side="left")
+        self.new_entry = tk.Entry(new_row, textvariable=self.new_name_var, width=24)
+        self.new_entry.pack(side="left", padx=8)
+
+        # --- Buttons ---
+        btn_row = tk.Frame(frame, bg=DIALOG_BG)
+        btn_row.pack(fill="x", pady=(12, 0))
+        save_btn = tk.Button(btn_row, text="Save", command=self._on_save, width=10)
+        save_btn.pack(side="right", padx=(5, 0))
+        cancel_btn = tk.Button(btn_row, text="Cancel", command=self.destroy, width=10)
+        cancel_btn.pack(side="right")
+
+        self.bind("<Return>", lambda _e: self._on_save())
+        self.bind("<Escape>", lambda _e: self.destroy())
+
+        # Existing names cached for collision checks
+        self._existing = existing_names
+        self._sync_state()
+        self.update_idletasks()
+        self.geometry("")
+        if initial == "new":
+            self.new_entry.focus_set()
+        else:
+            self.existing_combo.focus_set()
+
+        self.wait_window(self)
+
+    def _sync_state(self):
+        if self.mode_var.get() == "overwrite":
+            self.new_entry.configure(state="disabled")
+            self.existing_combo.configure(state="readonly" if self._existing else "disabled")
+        else:
+            self.new_entry.configure(state="normal")
+            self.existing_combo.configure(state="disabled")
+            self.new_entry.focus_set()
+
+    def _on_save(self):
+        if self.mode_var.get() == "overwrite":
+            target = self.existing_var.get().strip()
+            if not target:
+                messagebox.showinfo("Save Preset", "Pick a preset to overwrite.", parent=self)
+                return
+            if not messagebox.askyesno(
+                "Overwrite Preset",
+                f"Overwrite '{target}' with the current values?",
+                parent=self,
+            ):
+                return
+            self.result = {"name": target}
+            self.destroy()
+            return
+
+        name = self.new_name_var.get().strip()
+        if not name:
+            messagebox.showwarning("Save Preset", "Preset name cannot be empty.", parent=self)
+            return
+        if name in self._existing:
+            messagebox.showerror(
+                "Save Preset",
+                f"A preset named '{name}' already exists.\n"
+                "Use Overwrite, or choose a different name.",
+                parent=self,
+            )
+            return
+        self.result = {"name": name}
+        self.destroy()
+
+
 class LayerColorWindow:
     def __init__(self, parent, settings, save_callback):
         self.settings = settings
@@ -1227,23 +2432,39 @@ class LayerColorWindow:
             'exact_size_outline', 'exact_size_center_hole', 'exact_size_engraving'
         ]
         
+        op_word = {"outline": "outer cut",
+                   "center_hole": "center hole",
+                   "engraving": "engraving"}
         for i, key in enumerate(layer_map_keys):
             label_text = key.replace('_', ' ').capitalize() + ":"
-            tk.Label(main_frame, text=label_text, bg=DIALOG_BG).grid(row=i, column=0, sticky='w', pady=3)
-            
+            row_lbl = tk.Label(main_frame, text=label_text, bg=DIALOG_BG)
+            row_lbl.grid(row=i, column=0, sticky='w', pady=3)
+
             var = tk.StringVar()
             current_hex = self.settings["layer_colors"].get(key, "#000000")
             current_name = self.hex_to_name_map.get(current_hex, color_names[0])
             var.set(current_name)
-            
+
             combo = ttk.Combobox(main_frame, textvariable=var, values=color_names, state="readonly")
             combo.grid(row=i, column=1, sticky='ew', padx=5)
             self.color_vars[key] = var
 
+            # Build a useful description: e.g. "felt outer cut" -> LightBurn layer color
+            mat = key.split('_', 1)[0]
+            op_key = key.split('_', 1)[1] if '_' in key else key
+            op_name = op_word.get(op_key, op_key.replace('_', ' '))
+            tip = (f"LightBurn layer color used for the {mat} {op_name} "
+                   "lines in the SVG output.")
+            add_tooltips(tip, row_lbl, combo)
+
         button_frame = tk.Frame(main_frame, bg=DIALOG_BG)
         button_frame.grid(row=len(layer_map_keys), column=0, columnspan=2, pady=20)
-        tk.Button(button_frame, text="Save", command=self.save_colors).pack(side="left", padx=10)
-        tk.Button(button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=10)
+        save_btn = tk.Button(button_frame, text="Save", command=self.save_colors)
+        save_btn.pack(side="left", padx=10)
+        cancel_btn = tk.Button(button_frame, text="Cancel", command=self.top.destroy)
+        cancel_btn.pack(side="left", padx=10)
+        add_tooltip(save_btn, "Apply the color choices and close.")
+        add_tooltip(cancel_btn, "Close without changing layer colors.")
 
     def save_colors(self):
         for key, var in self.color_vars.items():
@@ -1269,9 +2490,13 @@ class KeyLayoutWindow:
         # --- Main Layout Frames ---
         bottom_button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         bottom_button_frame.pack(side="bottom", fill="x", pady=10, padx=10)
-        
-        tk.Button(bottom_button_frame, text="Save", command=self.save_options).pack(side="left", padx=5)
-        tk.Button(bottom_button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
+
+        kl_save = tk.Button(bottom_button_frame, text="Save", command=self.save_options)
+        kl_save.pack(side="left", padx=5)
+        kl_cancel = tk.Button(bottom_button_frame, text="Cancel", command=self.top.destroy)
+        kl_cancel.pack(side="left", padx=5)
+        add_tooltip(kl_save, "Apply the layout changes and close.")
+        add_tooltip(kl_cancel, "Close without changing the layout.")
 
         main_canvas_frame = tk.Frame(self.top)
         main_canvas_frame.pack(side="top", fill="both", expand=True, padx=10, pady=10)
@@ -1301,21 +2526,35 @@ class KeyLayoutWindow:
         # Serial Number Checkbox
         var = tk.BooleanVar(value=self.key_layout_settings.get("show_serial", False))
         self.key_layout_vars["show_serial"] = var
-        tk.Checkbutton(info_frame, text="Show 'Serial' field", variable=var, bg=DIALOG_BG).pack(anchor='w')
+        serial_cb = tk.Checkbutton(info_frame, text="Show 'Serial' field", variable=var, bg=DIALOG_BG)
+        serial_cb.pack(anchor='w')
+        add_tooltip(serial_cb,
+                    "Show a Serial field in the horn-info header for each "
+                    "key-height set, so you can record the saxophone's "
+                    "serial number alongside the measurements.")
 
         # Large Notes Checkbox
         var = tk.BooleanVar(value=self.key_layout_settings.get("large_notes", False))
         self.key_layout_vars["large_notes"] = var
-        tk.Checkbutton(info_frame, text="Use large 'Notes' field", variable=var, bg=DIALOG_BG).pack(anchor='w')
+        notes_cb = tk.Checkbutton(info_frame, text="Use large 'Notes' field", variable=var, bg=DIALOG_BG)
+        notes_cb.pack(anchor='w')
+        add_tooltip(notes_cb,
+                    "Use a multi-line Notes field instead of a single line, "
+                    "good for jotting setup observations or repair history.")
 
         keys_frame = tk.LabelFrame(self.scrollable_frame, text="Visible Key Heights", bg=DIALOG_BG, padx=5, pady=5)
         keys_frame.pack(fill="x", pady=5, expand=True)
 
         for key_name in ALL_KEY_HEIGHT_FIELDS:
             setting_key = f"show_{key_name.replace(' ', '_')}"
-            var = tk.BooleanVar(value=self.key_layout_settings.get(setting_key, True)) 
+            var = tk.BooleanVar(value=self.key_layout_settings.get(setting_key, True))
             self.key_layout_vars[setting_key] = var
-            tk.Checkbutton(keys_frame, text=f"Show '{key_name}' field", variable=var, bg=DIALOG_BG).pack(anchor='w')
+            kh_cb = tk.Checkbutton(keys_frame, text=f"Show '{key_name}' field", variable=var, bg=DIALOG_BG)
+            kh_cb.pack(anchor='w')
+            add_tooltip(kh_cb,
+                        f"Show the '{key_name}' measurement field on key-"
+                        "height sets. Hide fields you never measure to "
+                        "keep the layout compact.")
 
     def save_options(self):
         for key, var in self.key_layout_vars.items():
@@ -2178,14 +3417,21 @@ class GcodeSettingsWindow:
         overscan_frame.pack(fill="x", padx=5, pady=(5, 0))
 
         self.overscan_var = tk.BooleanVar(value=self.settings.get("filled_overscan_enabled", False))
-        tk.Checkbutton(overscan_frame,
-                        text='"Filled" engraving overscan optimization',
-                        variable=self.overscan_var, bg=DIALOG_BG,
-                        ).pack(anchor="w", padx=5)
-        tk.Label(overscan_frame,
-                 text="(extends scan lines so laser is at full speed at character edges)",
-                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666"
-                 ).pack(anchor="w", padx=(28, 5))
+        overscan_cb = tk.Checkbutton(overscan_frame,
+                                     text='"Filled" engraving overscan optimization',
+                                     variable=self.overscan_var, bg=DIALOG_BG)
+        overscan_cb.pack(anchor="w", padx=5)
+        overscan_caption = tk.Label(overscan_frame,
+                                    text="(extends scan lines so laser is at full speed at character edges)",
+                                    bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666")
+        overscan_caption.pack(anchor="w", padx=(28, 5))
+        add_tooltips(
+            "Extends each filled scan line a few millimeters past the "
+            "character edges so the laser head reaches full speed before "
+            "burning. Produces cleaner edges on filled engraving at the "
+            "cost of slightly more travel time.",
+            overscan_cb, overscan_caption,
+        )
 
         # --- Global G-code Settings ---
         global_frame = tk.LabelFrame(scrollable_frame, text="Global Settings", bg=DIALOG_BG, padx=10, pady=10)
@@ -2194,28 +3440,57 @@ class GcodeSettingsWindow:
         # Return-to-home speed
         return_frame = tk.Frame(global_frame, bg=DIALOG_BG)
         return_frame.pack(fill="x")
-        tk.Label(return_frame, text="Return-to-home speed:", bg=DIALOG_BG).pack(side="left")
+        ret_lbl = tk.Label(return_frame, text="Return-to-home speed:", bg=DIALOG_BG)
+        ret_lbl.pack(side="left")
         self.return_speed_var = tk.IntVar(value=int(self.settings.get("gcode_return_speed", 1000)))
-        tk.Entry(return_frame, textvariable=self.return_speed_var, width=8).pack(side="left", padx=5)
-        tk.Label(return_frame, text="mm/min", bg=DIALOG_BG).pack(side="left")
+        ret_ent = tk.Entry(return_frame, textvariable=self.return_speed_var, width=8)
+        ret_ent.pack(side="left", padx=5)
+        ret_unit = tk.Label(return_frame, text="mm/min", bg=DIALOG_BG)
+        ret_unit.pack(side="left")
+        add_tooltips(
+            "How fast the laser head returns home after a job. Slower "
+            "settings can avoid endstop crashes on machines with cheap "
+            "limit switches; faster gets you to the next job sooner.",
+            ret_lbl, ret_ent, ret_unit,
+        )
 
         # Cut grouping
         grouping_frame = tk.Frame(global_frame, bg=DIALOG_BG)
         grouping_frame.pack(fill="x", pady=(8, 0))
         tk.Label(grouping_frame, text="Cut grouping:", bg=DIALOG_BG).pack(anchor="w")
         self.grouping_var = tk.StringVar(value=self.settings.get("gcode_cut_grouping", "layer"))
-        tk.Radiobutton(grouping_frame, text="By layer (all engravings, then all holes, then all cuts)",
-                       variable=self.grouping_var, value="layer", bg=DIALOG_BG).pack(anchor="w", padx=(20, 0))
-        tk.Radiobutton(grouping_frame, text="By pad (engrave + hole + cut for each pad, then next)",
-                       variable=self.grouping_var, value="pad", bg=DIALOG_BG).pack(anchor="w", padx=(20, 0))
+        grp_layer = tk.Radiobutton(grouping_frame,
+                                   text="By layer (all engravings, then all holes, then all cuts)",
+                                   variable=self.grouping_var, value="layer", bg=DIALOG_BG)
+        grp_layer.pack(anchor="w", padx=(20, 0))
+        grp_pad = tk.Radiobutton(grouping_frame,
+                                 text="By pad (engrave + hole + cut for each pad, then next)",
+                                 variable=self.grouping_var, value="pad", bg=DIALOG_BG)
+        grp_pad.pack(anchor="w", padx=(20, 0))
+        add_tooltip(grp_layer,
+                    "Run every engraving, then every hole, then every cut "
+                    "across the whole sheet. Good when you want to swap "
+                    "settings or check progress between layers.")
+        add_tooltip(grp_pad,
+                    "Finish each pad completely (engrave, hole, then cut) "
+                    "before moving on to the next. Good when you want each "
+                    "finished pad to drop free as it completes.")
 
         # Buttons
         button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         button_frame.pack(fill="x", padx=10, pady=10)
 
-        tk.Button(button_frame, text="Save", command=self._on_save).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Cancel", command=self.top.destroy).pack(side="left", padx=5)
-        tk.Button(button_frame, text="Reset to Defaults", command=self._reset_defaults).pack(side="right", padx=5)
+        save_btn = tk.Button(button_frame, text="Save", command=self._on_save)
+        save_btn.pack(side="left", padx=5)
+        cancel_btn = tk.Button(button_frame, text="Cancel", command=self.top.destroy)
+        cancel_btn.pack(side="left", padx=5)
+        reset_btn = tk.Button(button_frame, text="Reset to Defaults", command=self._reset_defaults)
+        reset_btn.pack(side="right", padx=5)
+        add_tooltip(save_btn, "Apply the values in this dialog and close.")
+        add_tooltip(cancel_btn, "Close without applying any changes.")
+        add_tooltip(reset_btn,
+                    "Reset every value in this dialog back to factory "
+                    "defaults (tuned for the Creality Falcon2 Pro 40W).")
 
     def _on_engraving_mode_changed(self, mat_key, mode):
         """Handle engraving mode checkbox toggle - ensure exactly one is checked."""
@@ -2235,10 +3510,23 @@ class GcodeSettingsWindow:
         mat_settings = self.gcode_settings.get(mat_key, {})
 
         # Header row
-        tk.Label(frame, text="Operation", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=0, sticky="w", padx=5)
-        tk.Label(frame, text="Speed (mm/min)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=1, padx=5)
-        tk.Label(frame, text="Power (%)", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=2, padx=5)
-        tk.Label(frame, text="Air", bg=DIALOG_BG, font=("Helvetica", 9, "bold")).grid(row=0, column=3, padx=5)
+        op_hdr = tk.Label(frame, text="Operation", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        op_hdr.grid(row=0, column=0, sticky="w", padx=5)
+        sp_hdr = tk.Label(frame, text="Speed (mm/min)", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        sp_hdr.grid(row=0, column=1, padx=5)
+        pw_hdr = tk.Label(frame, text="Power (%)", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        pw_hdr.grid(row=0, column=2, padx=5)
+        air_hdr = tk.Label(frame, text="Air", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        air_hdr.grid(row=0, column=3, padx=5)
+        add_tooltip(sp_hdr, "Feed rate in millimeters per minute.")
+        add_tooltip(pw_hdr,
+                    "Laser power, 0–100 %. Mapped onto Grbl's S0–S1000 "
+                    "scale, so check that your machine's $30 setting is "
+                    "1000 (`$30=1000` in your console) for the percentage "
+                    "to mean what it says.")
+        add_tooltip(air_hdr,
+                    "Per-operation air-assist toggle. Sends M8 (on) before "
+                    "the operation and M9 (off) after.")
 
         # --- Engraving mode section (rows 1-2) ---
         current_mode = mat_settings.get("engraving_mode", "line")
@@ -2261,12 +3549,21 @@ class GcodeSettingsWindow:
                                  variable=mode_var, value="line",
                                  command=lambda mk=mat_key: self._on_engraving_mode_changed(mk, "line"))
         line_rb.grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        tk.Entry(frame, textvariable=eng_speed_var, width=10).grid(row=1, column=1, padx=5, pady=2)
-        tk.Entry(frame, textvariable=eng_power_var, width=10).grid(row=1, column=2, padx=5, pady=2)
+        line_speed_ent = tk.Entry(frame, textvariable=eng_speed_var, width=10)
+        line_speed_ent.grid(row=1, column=1, padx=5, pady=2)
+        line_power_ent = tk.Entry(frame, textvariable=eng_power_var, width=10)
+        line_power_ent.grid(row=1, column=2, padx=5, pady=2)
+        add_tooltip(line_rb,
+                    "Single-stroke outline engraving — traces each "
+                    "character path once. Faster, simpler text on this material.")
+        add_tooltip(line_speed_ent, "Feed rate for line-engraving on this material.")
+        add_tooltip(line_power_ent, "Laser power for line-engraving on this material.")
 
         air_eng_var = tk.BooleanVar(value=mat_settings.get("air_assist_engraving", True))
         self.vars[mat_key]['air_assist_engraving'] = air_eng_var
-        tk.Checkbutton(frame, variable=air_eng_var, bg=DIALOG_BG).grid(row=1, column=3, padx=5, pady=2)
+        air_eng_cb = tk.Checkbutton(frame, variable=air_eng_var, bg=DIALOG_BG)
+        air_eng_cb.grid(row=1, column=3, padx=5, pady=2)
+        add_tooltip(air_eng_cb, "Air-assist on during line-engraving on this material.")
 
         # "Filled" engraving row
         self.vars[mat_key]['filled_engraving'] = {}
@@ -2284,12 +3581,22 @@ class GcodeSettingsWindow:
                                  variable=mode_var, value="filled",
                                  command=lambda mk=mat_key: self._on_engraving_mode_changed(mk, "filled"))
         fill_rb.grid(row=2, column=0, sticky="w", padx=5, pady=2)
-        tk.Entry(frame, textvariable=fill_speed_var, width=10).grid(row=2, column=1, padx=5, pady=2)
-        tk.Entry(frame, textvariable=fill_power_var, width=10).grid(row=2, column=2, padx=5, pady=2)
+        fill_speed_ent = tk.Entry(frame, textvariable=fill_speed_var, width=10)
+        fill_speed_ent.grid(row=2, column=1, padx=5, pady=2)
+        fill_power_ent = tk.Entry(frame, textvariable=fill_power_var, width=10)
+        fill_power_ent.grid(row=2, column=2, padx=5, pady=2)
+        add_tooltip(fill_rb,
+                    "Scan-line raster fill of each character — solid "
+                    "filled glyphs. Slower than line-engraving but more "
+                    "legible on dark / soft materials.")
+        add_tooltip(fill_speed_ent, "Feed rate for filled engraving on this material.")
+        add_tooltip(fill_power_ent, "Laser power for filled engraving on this material.")
 
         air_fill_var = tk.BooleanVar(value=mat_settings.get("air_assist_filled_engraving", True))
         self.vars[mat_key]['air_assist_filled_engraving'] = air_fill_var
-        tk.Checkbutton(frame, variable=air_fill_var, bg=DIALOG_BG).grid(row=2, column=3, padx=5, pady=2)
+        air_fill_cb = tk.Checkbutton(frame, variable=air_fill_var, bg=DIALOG_BG)
+        air_fill_cb.grid(row=2, column=3, padx=5, pady=2)
+        add_tooltip(air_fill_cb, "Air-assist on during filled engraving on this material.")
 
         # Fill density slider (row 3)
         default_spacing = self._get_default(mat_key, "filled_line_spacing")
@@ -2303,17 +3610,28 @@ class GcodeSettingsWindow:
 
         density_frame = tk.Frame(frame, bg=DIALOG_BG)
         density_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 4))
-        tk.Label(density_frame, text="Fill density:", bg=DIALOG_BG,
-                 font=("Helvetica", 8)).pack(side="left", padx=(20, 5))
-        tk.Label(density_frame, text="less", bg=DIALOG_BG,
-                 font=("Helvetica", 8), fg="#666666").pack(side="left")
-        tk.Scale(density_frame, from_=0, to=100, orient="horizontal",
-                 variable=density_var, showvalue=False, length=150,
-                 bg=DIALOG_BG, highlightthickness=0).pack(side="left", padx=2)
-        tk.Label(density_frame, text="more", bg=DIALOG_BG,
-                 font=("Helvetica", 8), fg="#666666").pack(side="left")
+        density_lbl = tk.Label(density_frame, text="Fill density:", bg=DIALOG_BG, font=("Helvetica", 8))
+        density_lbl.pack(side="left", padx=(20, 5))
+        density_less = tk.Label(density_frame, text="less", bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666")
+        density_less.pack(side="left")
+        density_scale = tk.Scale(density_frame, from_=0, to=100, orient="horizontal",
+                                 variable=density_var, showvalue=False, length=150,
+                                 bg=DIALOG_BG, highlightthickness=0)
+        density_scale.pack(side="left", padx=2)
+        density_more = tk.Label(density_frame, text="more", bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666")
+        density_more.pack(side="left")
+        add_tooltips(
+            "Spacing between scan lines for filled engraving. Less = wider "
+            "lines (faster, slightly visible gaps). More = tighter lines "
+            "(slower, fully solid coverage).",
+            density_lbl, density_less, density_scale, density_more,
+        )
 
         # --- Non-engraving operations (rows 4+) ---
+        op_help = {
+            "hole": ("center mounting hole", "centre-hole cut"),
+            "cut": ("outer disc cut", "outer cut"),
+        }
         for i, (op_key, op_label) in enumerate(self.OPERATIONS, start=4):
             self.vars[mat_key][op_key] = {}
 
@@ -2328,17 +3646,27 @@ class GcodeSettingsWindow:
             self.vars[mat_key][op_key]['speed'] = speed_var
             self.vars[mat_key][op_key]['power'] = power_var
 
-            tk.Label(frame, text=op_label, bg=DIALOG_BG).grid(row=i, column=0, sticky="w", padx=5, pady=2)
-            tk.Entry(frame, textvariable=speed_var, width=10).grid(row=i, column=1, padx=5, pady=2)
-            tk.Entry(frame, textvariable=power_var, width=10).grid(row=i, column=2, padx=5, pady=2)
+            descr, short = op_help.get(op_key, (op_label.lower(), op_label.lower()))
+            row_lbl = tk.Label(frame, text=op_label, bg=DIALOG_BG)
+            row_lbl.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+            speed_ent = tk.Entry(frame, textvariable=speed_var, width=10)
+            speed_ent.grid(row=i, column=1, padx=5, pady=2)
+            power_ent = tk.Entry(frame, textvariable=power_var, width=10)
+            power_ent.grid(row=i, column=2, padx=5, pady=2)
+            add_tooltip(row_lbl, f"Settings for the {descr} on this material.")
+            add_tooltip(speed_ent, f"Feed rate for the {short} on this material.")
+            add_tooltip(power_ent, f"Laser power for the {short} on this material.")
 
             air_var = tk.BooleanVar(value=mat_settings.get(f"air_assist_{op_key}", True))
             self.vars[mat_key][f'air_assist_{op_key}'] = air_var
-            tk.Checkbutton(frame, variable=air_var, bg=DIALOG_BG).grid(row=i, column=3, padx=5, pady=2)
+            air_cb = tk.Checkbutton(frame, variable=air_var, bg=DIALOG_BG)
+            air_cb.grid(row=i, column=3, padx=5, pady=2)
+            add_tooltip(air_cb, f"Air-assist on during the {short} on this material.")
 
         # Kerf width row
         kerf_row = 4 + len(self.OPERATIONS)
-        tk.Label(frame, text="Kerf width:", bg=DIALOG_BG).grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
+        kerf_lbl = tk.Label(frame, text="Kerf width:", bg=DIALOG_BG)
+        kerf_lbl.grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
 
         default_kerf = self._get_default(mat_key, "kerf_width")
         current_kerf = mat_settings.get("kerf_width", default_kerf)
@@ -2348,7 +3676,16 @@ class GcodeSettingsWindow:
         kerf_entry = tk.Spinbox(frame, textvariable=kerf_var, from_=0.0, to=1.0,
                                 increment=0.05, width=8, format="%.2f")
         kerf_entry.grid(row=kerf_row, column=1, sticky="w", padx=5, pady=(8, 2))
-        tk.Label(frame, text="mm", bg=DIALOG_BG).grid(row=kerf_row, column=2, sticky="w", padx=5, pady=(8, 2))
+        kerf_unit = tk.Label(frame, text="mm", bg=DIALOG_BG)
+        kerf_unit.grid(row=kerf_row, column=2, sticky="w", padx=5, pady=(8, 2))
+        add_tooltips(
+            "Full kerf width measured from a calibration cut on this "
+            "material (hole ID minus disc OD). The app splits this in half "
+            "automatically — outer cuts expand by half-kerf, hole "
+            "cuts shrink by half-kerf. Note: LightBurn asks for half-kerf; "
+            "this dialog wants the full measured width.",
+            kerf_lbl, kerf_entry, kerf_unit,
+        )
 
     def _create_tooling_engraving_section(self, parent):
         """Create the engraving settings section for tooling (die inserts)."""
@@ -2363,38 +3700,81 @@ class GcodeSettingsWindow:
 
         tk.Label(mode_frame, text="Engraving:", bg=DIALOG_BG).pack(side="left")
         self.tooling_eng_mode_var = tk.StringVar(value=tooling.get("engraving_mode", "filled"))
-        tk.Radiobutton(mode_frame, text="Filled", variable=self.tooling_eng_mode_var,
-                       value="filled", bg=DIALOG_BG).pack(side="left", padx=(5, 10))
-        tk.Radiobutton(mode_frame, text="Line", variable=self.tooling_eng_mode_var,
-                       value="line", bg=DIALOG_BG).pack(side="left")
+        die_filled_rb = tk.Radiobutton(mode_frame, text="Filled", variable=self.tooling_eng_mode_var,
+                                       value="filled", bg=DIALOG_BG)
+        die_filled_rb.pack(side="left", padx=(5, 10))
+        die_line_rb = tk.Radiobutton(mode_frame, text="Line", variable=self.tooling_eng_mode_var,
+                                     value="line", bg=DIALOG_BG)
+        die_line_rb.pack(side="left")
+        add_tooltip(die_filled_rb,
+                    "Solid raster fill of the size labels on dies. More "
+                    "legible on dark acrylic but slower.")
+        add_tooltip(die_line_rb,
+                    "Single-stroke outline of the size labels on dies. "
+                    "Fastest; readable on light acrylic.")
 
         # Font sizes
         font_frame = tk.Frame(frame, bg=DIALOG_BG)
         font_frame.pack(fill="x", pady=(0, 5))
 
-        tk.Label(font_frame, text="Ring font size:", bg=DIALOG_BG).pack(side="left")
+        ring_font_lbl = tk.Label(font_frame, text="Ring font size:", bg=DIALOG_BG)
+        ring_font_lbl.pack(side="left")
         self.tooling_ring_font_var = tk.DoubleVar(value=tooling.get("ring_font_size", 3.5))
-        tk.Entry(font_frame, textvariable=self.tooling_ring_font_var, width=5).pack(side="left", padx=(2, 5))
-        tk.Label(font_frame, text="mm", bg=DIALOG_BG).pack(side="left", padx=(0, 15))
+        ring_font_ent = tk.Entry(font_frame, textvariable=self.tooling_ring_font_var, width=5)
+        ring_font_ent.pack(side="left", padx=(2, 5))
+        ring_font_unit = tk.Label(font_frame, text="mm", bg=DIALOG_BG)
+        ring_font_unit.pack(side="left", padx=(0, 15))
+        add_tooltips(
+            "Font size in millimeters for the size label engraved on the "
+            "die ring (the outer annulus that stays in the holder).",
+            ring_font_lbl, ring_font_ent, ring_font_unit,
+        )
 
-        tk.Label(font_frame, text="Cutout font size:", bg=DIALOG_BG).pack(side="left")
+        cutout_font_lbl = tk.Label(font_frame, text="Cutout font size:", bg=DIALOG_BG)
+        cutout_font_lbl.pack(side="left")
         self.tooling_cutout_font_var = tk.DoubleVar(value=tooling.get("cutout_font_size", 3.5))
-        tk.Entry(font_frame, textvariable=self.tooling_cutout_font_var, width=5).pack(side="left", padx=(2, 5))
-        tk.Label(font_frame, text="mm", bg=DIALOG_BG).pack(side="left")
+        cutout_font_ent = tk.Entry(font_frame, textvariable=self.tooling_cutout_font_var, width=5)
+        cutout_font_ent.pack(side="left", padx=(2, 5))
+        cutout_font_unit = tk.Label(font_frame, text="mm", bg=DIALOG_BG)
+        cutout_font_unit.pack(side="left")
+        add_tooltips(
+            "Font size in millimeters for the actual-size label engraved "
+            "on the inner cutout disc (the piece that drops out of the "
+            "ring — useful as a pad-cup tool).",
+            cutout_font_lbl, cutout_font_ent, cutout_font_unit,
+        )
 
         # Ring engraving placement
         loc_frame = tk.Frame(frame, bg=DIALOG_BG)
         loc_frame.pack(fill="x", pady=(0, 0))
 
-        tk.Label(loc_frame, text="Ring engraving placement:", bg=DIALOG_BG).pack(side="left")
+        ring_loc_lbl = tk.Label(loc_frame, text="Ring engraving placement:", bg=DIALOG_BG)
+        ring_loc_lbl.pack(side="left")
         self.tooling_ring_loc_var = tk.StringVar(value=tooling.get("ring_engraving_location", "centered"))
-        tk.Radiobutton(loc_frame, text="Centered", variable=self.tooling_ring_loc_var,
-                       value="centered", bg=DIALOG_BG).pack(side="left", padx=(5, 5))
-        tk.Radiobutton(loc_frame, text="From outside", variable=self.tooling_ring_loc_var,
-                       value="from_outside", bg=DIALOG_BG).pack(side="left", padx=(0, 5))
+        ring_loc_ctr = tk.Radiobutton(loc_frame, text="Centered", variable=self.tooling_ring_loc_var,
+                                      value="centered", bg=DIALOG_BG)
+        ring_loc_ctr.pack(side="left", padx=(5, 5))
+        ring_loc_out = tk.Radiobutton(loc_frame, text="From outside", variable=self.tooling_ring_loc_var,
+                                      value="from_outside", bg=DIALOG_BG)
+        ring_loc_out.pack(side="left", padx=(0, 5))
         self.tooling_ring_offset_var = tk.DoubleVar(value=tooling.get("ring_engraving_offset", 0.0))
-        tk.Entry(loc_frame, textvariable=self.tooling_ring_offset_var, width=5).pack(side="left", padx=(2, 2))
-        tk.Label(loc_frame, text="mm", bg=DIALOG_BG).pack(side="left")
+        ring_loc_ent = tk.Entry(loc_frame, textvariable=self.tooling_ring_offset_var, width=5)
+        ring_loc_ent.pack(side="left", padx=(2, 2))
+        ring_loc_unit = tk.Label(loc_frame, text="mm", bg=DIALOG_BG)
+        ring_loc_unit.pack(side="left")
+        add_tooltip(ring_loc_lbl,
+                    "Where the size label sits on the die ring annulus.")
+        add_tooltip(ring_loc_ctr,
+                    "Place the label centered between the inner hole and "
+                    "the outer edge of the ring.")
+        add_tooltip(ring_loc_out,
+                    "Place the label a fixed distance inward from the "
+                    "outer edge of the ring (set the distance below).")
+        add_tooltips(
+            "Distance from the ring's outer edge, in millimeters (used "
+            "only with the From outside option).",
+            ring_loc_ent, ring_loc_unit,
+        )
 
     def _get_default(self, material, setting_key):
         """Get default value from DEFAULT_SETTINGS."""
@@ -2771,9 +4151,10 @@ class UserGuideWindow(tk.Toplevel):
                     "fall back to the universal values. Star/dart ranges work slightly differently: "
                     "pads not in a range simply get no star pattern.")
         self._blank()
-        self._body("Star/Dart Settings: for leather pads below a size threshold, "
-                    "star or dart patterns are added so the leather can fold around the felt. "
-                    "Overwrap, wrap bonus, frequency multiplier, and shape factor are all adjustable.")
+        self._body("Darts: for leather pads below a size threshold, a dart "
+                    "pattern is added so the leather can fold around the "
+                    "felt. Overwrap, wrap bonus, frequency multiplier, and "
+                    "shape (triangle / sine / square) are all adjustable.")
         self._blank()
         self._body("Sizing-rules presets: at the bottom of the Sizing Rules dialog you can "
                     "save the entire configuration as a named preset, load presets from the "

@@ -17,7 +17,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
-    compute_fingerprint, _capture_is_plausible, SAX_NOTE_RANGES,
+    compute_fingerprint, _capture_is_plausible,
 )
 
 passed = 0

@@ -354,6 +354,137 @@ def test_roundtrip_all_defaults():
 
 
 # ============================================================================
+# TESTS: Session-feature persistence (tooltips toggle, dart shape v2)
+# ============================================================================
+
+def test_tooltips_enabled_default_is_true():
+    """Newly-loaded settings (no file) default tooltips_enabled to True."""
+    s = copy.deepcopy(DEFAULT_SETTINGS)
+    assert_equal(s.get("tooltips_enabled"), True)
+
+
+def test_tooltips_enabled_roundtrip():
+    """A saved tooltips_enabled value survives save → load."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmpdir, "settings.json")
+        original = copy.deepcopy(DEFAULT_SETTINGS)
+        original["tooltips_enabled"] = False
+        _save_with_file(original, path)
+        loaded = _load_with_file(path)
+        assert_equal(loaded["tooltips_enabled"], False)
+
+        # Flip back to True and verify again
+        original["tooltips_enabled"] = True
+        _save_with_file(original, path)
+        loaded = _load_with_file(path)
+        assert_equal(loaded["tooltips_enabled"], True)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+def test_dart_shape_factor_migrates_legacy_universal():
+    """Legacy config (no dart_shape_v2) maps old 0..1 sine→square scale to
+    the new 0.5..1 segment of the triangle→sine→square scale."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmpdir, "settings.json")
+        # An old settings file: sine anchor in the legacy scheme
+        legacy = copy.deepcopy(DEFAULT_SETTINGS)
+        legacy["dart_shape_factor"] = 0.0  # legacy "sine" anchor
+        legacy.pop("dart_shape_v2", None)  # ensure migration triggers
+        with open(path, 'w') as f:
+            json.dump(legacy, f)
+
+        loaded = _load_with_file(path)
+        assert_equal(loaded["dart_shape_factor"], 0.5)
+        assert_equal(loaded["dart_shape_v2"], True)
+
+        # Square anchor stays at the spectrum's high end
+        legacy["dart_shape_factor"] = 1.0
+        legacy.pop("dart_shape_v2", None)
+        with open(path, 'w') as f:
+            json.dump(legacy, f)
+        loaded = _load_with_file(path)
+        assert_equal(loaded["dart_shape_factor"], 1.0)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+def test_dart_shape_factor_no_double_migration():
+    """An already-migrated config (dart_shape_v2: True) is left alone."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmpdir, "settings.json")
+        already = copy.deepcopy(DEFAULT_SETTINGS)
+        # User set the slider to a custom blend after migration
+        already["dart_shape_factor"] = 0.3
+        already["dart_shape_v2"] = True
+        with open(path, 'w') as f:
+            json.dump(already, f)
+
+        loaded = _load_with_file(path)
+        # Value preserved exactly — no re-migration
+        assert_equal(loaded["dart_shape_factor"], 0.3)
+        assert_equal(loaded["dart_shape_v2"], True)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+def test_dart_ranges_shape_factor_migrates():
+    """dart_ranges entries also have their shape_factor migrated."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmpdir, "settings.json")
+        legacy = copy.deepcopy(DEFAULT_SETTINGS)
+        legacy["dart_ranges"] = [
+            {"min_size": 6.0, "max_size": 11.5, "overwrap": 0.5,
+             "wrap_bonus": 0.75, "frequency_multiplier": 1.0,
+             "shape_factor": 0.0, "engraving_on": True},
+            {"min_size": 12.0, "max_size": 17.5, "overwrap": 0.5,
+             "wrap_bonus": 0.75, "frequency_multiplier": 1.0,
+             "shape_factor": 1.0, "engraving_on": True},
+        ]
+        legacy.pop("dart_shape_v2", None)
+        with open(path, 'w') as f:
+            json.dump(legacy, f)
+
+        loaded = _load_with_file(path)
+        # First range: legacy 0.0 (sine) → new 0.5 (sine)
+        assert_equal(loaded["dart_ranges"][0]["shape_factor"], 0.5)
+        # Second range: legacy 1.0 (square) → new 1.0 (square)
+        assert_equal(loaded["dart_ranges"][1]["shape_factor"], 1.0)
+        assert_equal(loaded["dart_shape_v2"], True)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+def test_settings_to_sizing_preset_roundtrips():
+    """settings_to_sizing_preset → save → load yields back the same preset."""
+    from config import settings_to_sizing_preset
+    tmpdir = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmpdir, "sizing_presets.json")
+        s = copy.deepcopy(DEFAULT_SETTINGS)
+        s["felt_offset"] = 0.85
+        s["dart_shape_factor"] = 0.42
+        preset = settings_to_sizing_preset(s)
+        assert_equal(preset["felt_offset"], 0.85)
+        assert_equal(preset["dart_shape_factor"], 0.42)
+
+        # Save into the preset library format and reload
+        save_presets({"Default": preset}, path)
+        loaded = load_presets(path, preset_type_name="Sizing Preset")
+        assert_equal(loaded["Default"]["felt_offset"], 0.85)
+        assert_equal(loaded["Default"]["dart_shape_factor"], 0.42)
+        # Internal-only keys must NOT leak into the preset
+        assert_equal("tooltips_enabled" in loaded["Default"], False)
+        assert_equal("toner_unlocked" in loaded["Default"], False)
+    finally:
+        shutil.rmtree(tmpdir)
+
+
+# ============================================================================
 # TESTS: Tone profiles load/save (toner_engine)
 # ============================================================================
 
@@ -727,6 +858,14 @@ def main():
             ("Empty file returns defaults", test_load_empty_file_returns_defaults),
             ("Full defaults round-trip", test_roundtrip_all_defaults),
             ("Two loads return independent objects", test_load_settings_returns_copy_not_reference),
+        ]),
+        ("Session features (tooltips toggle, dart shape v2)", [
+            ("tooltips_enabled defaults to True", test_tooltips_enabled_default_is_true),
+            ("tooltips_enabled survives save/load round-trip", test_tooltips_enabled_roundtrip),
+            ("dart_shape_factor migrates legacy universal value", test_dart_shape_factor_migrates_legacy_universal),
+            ("dart_shape_factor not double-migrated on subsequent load", test_dart_shape_factor_no_double_migration),
+            ("dart_ranges shape_factor entries migrate alongside", test_dart_ranges_shape_factor_migrates),
+            ("settings_to_sizing_preset round-trips through load_presets", test_settings_to_sizing_preset_roundtrips),
         ]),
         ("Tone Profiles (toner_engine)", [
             ("Tone profiles round-trip", test_tone_profiles_roundtrip),

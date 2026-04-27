@@ -1,5 +1,8 @@
-svgwrite
-pyinstaller
-numpy
-sounddevice
-Pillow
+# Runtime and build dependencies. Lower bounds prevent ancient-version
+# surprises (e.g. pre-numpy-2 APIs). For fully reproducible CI builds,
+# generate a lockfile:  pip freeze > requirements-lock.txt
+svgwrite>=1.4
+pyinstaller>=6.0
+numpy>=1.26
+sounddevice>=0.4
+Pillow>=10.0

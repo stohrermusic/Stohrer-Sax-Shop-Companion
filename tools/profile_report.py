@@ -16,8 +16,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from toner_engine import (
-    load_tone_presets, compute_fingerprint, MIN_PRESET_NOTES,
-    BREAK_FREQUENCIES,
+    load_tone_presets, compute_fingerprint, BREAK_FREQUENCIES,
 )
 from config import TONER_DATA_FILE
 
@@ -99,7 +98,7 @@ def report(profile_name, profile_data):
     # Overall harmonic profile
     hdb = fp.get('harmonics_db', [])
     if hdb:
-        print(f"\n  Harmonic profile (avg dB relative to fundamental):")
+        print("\n  Harmonic profile (avg dB relative to fundamental):")
         for i, db in enumerate(hdb):
             bar_len = max(0, int((db + 60) / 60 * 30))
             bar = "#" * bar_len + "." * (30 - bar_len)
@@ -241,7 +240,7 @@ def main():
             sessions = data.get('sessions', [])
             caps = sum(len(s.get('captures', [])) for s in sessions)
             print(f"  [{lib}] {name} ({caps} captures)")
-        print(f"\nUsage: python tools/profile_report.py <profile name>")
+        print("\nUsage: python tools/profile_report.py <profile name>")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ from collections import defaultdict
 
 # Import toner_engine for descriptors_from_harmonics
 sys.path.insert(0, 'C:/code/saxshopcompanion')
-from toner_engine import descriptors_from_harmonics, compute_fingerprint
+from toner_engine import compute_fingerprint
 
 
 # ============================================
@@ -249,7 +249,7 @@ def main():
     print(f"Between-profile std:  {between_std:.3f}")
     print(f"Mean within-profile variance: {mean_within_var:.4f}")
     print(f"F-ratio (discrimination power): {f_ratio:.2f}")
-    print(f"  (F >> 1 means saturation discriminates well between horns)")
+    print("  (F >> 1 means saturation discriminates well between horns)")
     print()
 
     # ============================================
@@ -358,11 +358,11 @@ def main():
         rho = 1 - (6 * d_sq_sum) / (n * (n**2 - 1))
         print(f"  Saturation vs Brightness rank correlation (Spearman rho): {rho:.3f}")
         if abs(rho) < 0.3:
-            print(f"    -> Weak correlation: saturation measures something different from brightness")
+            print("    -> Weak correlation: saturation measures something different from brightness")
         elif abs(rho) < 0.7:
-            print(f"    -> Moderate correlation: partially overlapping but distinct")
+            print("    -> Moderate correlation: partially overlapping but distinct")
         else:
-            print(f"    -> Strong correlation: these metrics are measuring similar things")
+            print("    -> Strong correlation: these metrics are measuring similar things")
 
     # Saturation range and spread
     print(f"\n  Saturation range: {min(fp_sats):.2f} to {max(fp_sats):.2f} (spread: {max(fp_sats)-min(fp_sats):.2f})")
@@ -372,13 +372,13 @@ def main():
     conn = by_name.get("Conn NW2 Virtuoso Deluxe 205k")
     shadow = by_name.get("Keilwerth Shadow Tenor")
     if conn and shadow:
-        print(f"\n  Conn alto vs Shadow tenor:")
+        print("\n  Conn alto vs Shadow tenor:")
         print(f"    Brightness: Conn {conn['descriptors'].get('brightness',0)*100:.1f}% vs Shadow {shadow['descriptors'].get('brightness',0)*100:.1f}%")
         print(f"    Saturation: Conn {conn['fingerprint_sat']:.2f} vs Shadow {shadow['fingerprint_sat']:.2f}")
         if conn['fingerprint_sat'] > shadow['fingerprint_sat']:
-            print(f"    -> Saturation correctly captures that Conn sounds 'full/saturated' while Shadow sounds 'weak/unsaturated'")
+            print("    -> Saturation correctly captures that Conn sounds 'full/saturated' while Shadow sounds 'weak/unsaturated'")
         else:
-            print(f"    -> Saturation does NOT distinguish these two as expected")
+            print("    -> Saturation does NOT distinguish these two as expected")
 
 
 if __name__ == '__main__':

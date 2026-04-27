@@ -9,7 +9,6 @@ import urllib.request
 import json
 import re
 import time
-import sys
 import html as html_module
 
 
@@ -257,7 +256,7 @@ def fetch_page(url, retries=2):
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=15) as resp:
                 return resp.read().decode("utf-8", errors="replace")
-        except Exception as e:
+        except Exception:
             if attempt < retries:
                 time.sleep(2)
             else:
