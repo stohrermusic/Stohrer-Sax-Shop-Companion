@@ -47,6 +47,15 @@ MinVersion=10.0
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+; Custom wording on the welcome and finish pages. Most existing users have
+; been running a bare SaxShopCompanion-Windows.exe (downloaded into a
+; folder of their choosing — Downloads, Desktop, etc.) since the installer
+; only just became the published Windows distribution. Tell them they can
+; safely delete the old .exe and that their saved data will carry over.
+[Messages]
+WelcomeLabel2=This will install Matt Stohrer's "Sax Shop Companion" on to your PC. I guess they let anyone put out software now?%n%nAnyways, PLEASE NOTE if you are upgrading from a previous bare .exe that you dropped in a folder, this version will not remove it, only add itself to your PC. If you want the old one gone, delete it. Your old settings should "just work".
+FinishedLabel=Setup has finished installing [name] on your computer. The application may be launched by selecting the installed shortcuts.%n%nIf you previously ran this app as a downloaded SaxShopCompanion-Windows.exe, you can delete that file now — your settings have already been picked up by the installed copy. The Start Menu (and optional desktop) shortcut you just installed is now the canonical way to launch the app.%n%nClick Finish to exit Setup.
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
