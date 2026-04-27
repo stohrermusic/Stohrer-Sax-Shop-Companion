@@ -1068,11 +1068,18 @@ class OptionsWindow:
             self._refresh_range_combo()
 
     def _refresh_range_combo(self):
-        """Update the range combobox values from self.dart_ranges."""
+        """Update the range combobox values from self.dart_ranges.
+
+        Always reloads the editing fields when there's a valid selection so
+        that loading a different preset (which keeps the same index but
+        changes the underlying range data) doesn't leave the editor showing
+        stale values.
+        """
         labels = [f"{r['min_size']:.1f} - {r['max_size']:.1f} mm" for r in self.dart_ranges]
         self.range_combo['values'] = labels
         if labels and self.selected_range_index is not None and self.selected_range_index < len(labels):
             self.range_combo.current(self.selected_range_index)
+            self._load_range_fields(self.selected_range_index)
         elif labels:
             self.range_combo.current(len(labels) - 1)
             self.selected_range_index = len(labels) - 1
@@ -1225,6 +1232,9 @@ class OptionsWindow:
         self.sizing_range_combo['values'] = labels
         if labels and self.sizing_selected_range_index is not None and self.sizing_selected_range_index < len(labels):
             self.sizing_range_combo.current(self.sizing_selected_range_index)
+            # Reload fields too: a preset Load may keep the same index but
+            # point it at completely different range data.
+            self._load_sizing_range_fields(self.sizing_selected_range_index)
         elif labels:
             self.sizing_range_combo.current(len(labels) - 1)
             self.sizing_selected_range_index = len(labels) - 1
@@ -1309,6 +1319,8 @@ class OptionsWindow:
         self.eng_settings_range_combo['values'] = labels
         if labels and self.eng_settings_selected_range_index is not None and self.eng_settings_selected_range_index < len(labels):
             self.eng_settings_range_combo.current(self.eng_settings_selected_range_index)
+            # Reload fields: preset Load may have replaced the underlying data.
+            self._load_eng_settings_range_fields(self.eng_settings_selected_range_index)
         elif labels:
             self.eng_settings_range_combo.current(len(labels) - 1)
             self.eng_settings_selected_range_index = len(labels) - 1
@@ -1387,6 +1399,8 @@ class OptionsWindow:
         self.eng_placement_range_combo['values'] = labels
         if labels and self.eng_placement_selected_range_index is not None and self.eng_placement_selected_range_index < len(labels):
             self.eng_placement_range_combo.current(self.eng_placement_selected_range_index)
+            # Reload fields: preset Load may have replaced the underlying data.
+            self._load_eng_placement_range_fields(self.eng_placement_selected_range_index)
         elif labels:
             self.eng_placement_range_combo.current(len(labels) - 1)
             self.eng_placement_selected_range_index = len(labels) - 1

@@ -195,6 +195,85 @@ def main():
             opts.top.destroy()
     check("Default preset bootstrap from empty library produces a loadable preset", default_bootstrap_when_library_empty)
 
+    def load_refreshes_range_edit_fields():
+        # Regression: when two presets define a range at the same index but
+        # with different values, Load should refresh the editing fields,
+        # not just the combobox label.
+        preset_a = {
+            "sizing_range_mode": "range",
+            "sizing_ranges": [{
+                "min_size": 5.0, "max_size": 15.0,
+                "felt_offset": 0.5, "card_to_felt_offset": 0.3,
+                "leather_wrap_multiplier": 1.0, "min_hole_size": 12.0,
+                "felt_thickness": 3.0, "felt_thickness_unit": "mm",
+            }],
+            "dart_range_mode": "range",
+            "dart_ranges": [{
+                "min_size": 6.0, "max_size": 11.0,
+                "overwrap": 0.4, "wrap_bonus": 0.5,
+                "frequency_multiplier": 1.0, "shape_factor": 0.0,
+                "engraving_on": True,
+            }],
+            "engraving_settings_range_mode": "range",
+            "engraving_settings_ranges": [{
+                "min_size": 5.0, "max_size": 15.0,
+                "engraving_on": True,
+                "engraving_font_size": {"felt": 2.0, "card": 2.0,
+                                         "leather": 2.0, "exact_size": 2.0},
+            }],
+            "engraving_placement_range_mode": "range",
+            "engraving_placement_ranges": [{
+                "min_size": 5.0, "max_size": 15.0,
+                "engraving_location": {
+                    "leather": {"mode": "from_outside", "value": 2.0},
+                    "darted_leather": {"mode": "from_outside", "value": 2.0},
+                    "felt": {"mode": "from_outside", "value": 2.0},
+                    "card": {"mode": "from_outside", "value": 2.0},
+                    "exact_size": {"mode": "from_outside", "value": 2.0},
+                },
+            }],
+        }
+        # Same indices, different values
+        preset_b = copy.deepcopy(preset_a)
+        preset_b["sizing_ranges"][0]["felt_offset"] = 0.99
+        preset_b["sizing_ranges"][0]["min_hole_size"] = 17.5
+        preset_b["dart_ranges"][0]["overwrap"] = 0.95
+        preset_b["dart_ranges"][0]["wrap_bonus"] = 1.5
+        preset_b["engraving_settings_ranges"][0]["engraving_font_size"]["felt"] = 4.5
+        preset_b["engraving_placement_ranges"][0]["engraving_location"]["leather"]["value"] = 7.7
+
+        opts = OptionsWindow(
+            root, StubApp(), copy.deepcopy(DEFAULT_SETTINGS),
+            lambda: None, lambda: None,
+            sizing_presets={"A": preset_a, "B": preset_b},
+            sizing_presets_save_callback=lambda: None,
+        )
+        try:
+            opts.top.withdraw()
+            # Load A → fields should reflect A
+            opts._apply_dict_to_form(preset_a)
+            assert opts.sizing_range_felt_offset_var.get() == 0.5
+            assert opts.range_overwrap_var.get() == 0.4
+            assert opts.eng_settings_range_font_vars["felt"].get() == 2.0
+            assert opts.eng_placement_range_loc_vars["leather"]["value"].get() == 2.0
+            # Load B at the same index — without the fix, fields stay at A's values.
+            opts._apply_dict_to_form(preset_b)
+            assert opts.sizing_range_felt_offset_var.get() == 0.99, \
+                "sizing range fields stale after Load (felt_offset)"
+            assert opts.sizing_range_min_hole_var.get() == 17.5, \
+                "sizing range fields stale after Load (min_hole)"
+            assert opts.range_overwrap_var.get() == 0.95, \
+                "dart range fields stale after Load (overwrap)"
+            assert opts.range_wrap_bonus_var.get() == 1.5, \
+                "dart range fields stale after Load (wrap_bonus)"
+            assert opts.eng_settings_range_font_vars["felt"].get() == 4.5, \
+                "engraving-settings range fields stale after Load"
+            assert opts.eng_placement_range_loc_vars["leather"]["value"].get() == 7.7, \
+                "engraving-placement range fields stale after Load"
+        finally:
+            opts.top.destroy()
+    check("Load refreshes range-edit fields when index is preserved (regression)", load_refreshes_range_edit_fields)
+
     def save_dialog_defaults_to_overwrite_when_active():
         class NoWaitSavePresetDialog(SaveSizingPresetDialog):
             def wait_window(self, _w=None):
