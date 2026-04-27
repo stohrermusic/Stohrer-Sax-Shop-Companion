@@ -134,7 +134,7 @@ CI wraps `dist\SaxShopCompanion.exe` into a versioned `SaxShopCompanion-Windows-
 
 ```bash
 python build.py
-iscc /DAppVersion=2.0.1 installer.iss   # requires Inno Setup 6
+iscc /DAppVersion=2.1 installer.iss     # requires Inno Setup 6
 ```
 
 **Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
