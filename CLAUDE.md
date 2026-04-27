@@ -153,14 +153,14 @@ iscc /DAppVersion=2.0.1 installer.iss   # requires Inno Setup 6
 
 The `.github/workflows/build.yml` workflow has two jobs:
 - **`lint`** (ubuntu-latest, ~10s): runs `ruff check .` — fails the workflow on any violation
-- **`build`** (4-platform matrix): Windows .exe + Inno Setup installer, macOS Apple Silicon .app, macOS Intel .app, and Linux binary
+- **`build`** (4-platform matrix): Windows Inno Setup installer (the bare PyInstaller .exe is built but not published — only the installer ships), macOS Apple Silicon .app, macOS Intel .app, and Linux binary
 
 Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually.
 
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
 - `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer
 - The Windows job also installs Inno Setup 6 via Chocolatey and builds the installer; version is extracted from `config.py`'s `APP_VERSION` via PowerShell regex
-- Uploads artifacts (including `SaxShopCompanion-Windows-Setup-*.exe`) to the workflow run; attaches all to GitHub Releases on release events
+- Uploads artifacts to the workflow run; on Windows that's the installer only (`SaxShopCompanion-Windows-Setup-*.exe`). All published artifacts also attach to GitHub Releases on release events.
 
 **Action pins**: `actions/checkout@v5`, `actions/setup-python@v6`, `actions/upload-artifact@v6` — all on Node 24. Don't downgrade; GitHub removes Node 20 from runners in September 2026.
 

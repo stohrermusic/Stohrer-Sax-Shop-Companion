@@ -26,8 +26,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: SaxShopCompanion.exe
-            asset_name: SaxShopCompanion-Windows.exe
+            # No asset_name: Windows ships only the Inno Setup installer
+            # (SaxShopCompanion-Windows-Setup-{version}.exe), uploaded by
+            # its own dedicated step.
             full_build: true
           - os: macos-latest
             artifact_name: SaxShopCompanion.app
@@ -84,8 +85,8 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      # Windows installer (Inno Setup). Must run before the bare-exe rename
-      # because installer.iss sources dist\SaxShopCompanion.exe.
+      # Windows installer (Inno Setup). installer.iss sources
+      # dist\SaxShopCompanion.exe directly, so this runs after PyInstaller.
       - name: Extract app version from config.py
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -111,11 +112,8 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" installer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      # Rename artifacts for release
-      - name: Rename Windows artifact
-        if: matrix.os == 'windows-latest'
-        run: mv dist/SaxShopCompanion.exe dist/SaxShopCompanion-Windows.exe
-
+      # Rename artifacts for release. Windows ships only the Inno Setup
+      # installer — the bare PyInstaller .exe is no longer published.
       - name: Rename Linux artifact
         if: matrix.os == 'ubuntu-latest'
         run: mv dist/SaxShopCompanion dist/SaxShopCompanion-Linux
@@ -127,8 +125,10 @@ jobs:
           cd dist
           zip -r ${{ matrix.asset_name }} SaxShopCompanion.app
 
-      # Upload artifacts
+      # Upload artifacts (Linux + macOS use matrix.asset_name; Windows
+      # uploads only the installer below).
       - name: Upload artifact
+        if: matrix.os != 'windows-latest'
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset_name }}
@@ -143,7 +143,7 @@ jobs:
 
       # Attach to release if this is a release event
       - name: Upload to Release
-        if: github.event_name == 'release'
+        if: matrix.os != 'windows-latest' && github.event_name == 'release'
         uses: softprops/action-gh-release@v1
         with:
           files: |
