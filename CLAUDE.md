@@ -149,6 +149,12 @@ iscc /DAppVersion=2.1 installer.iss     # requires Inno Setup 6
 
 `APP_VERSION` in `config.py` is the manual source of truth — bump it when preparing a release. `APP_BUILD_DATE` is auto-derived from `sys.executable`'s mtime in frozen builds (installer/zip copies preserve mtime) and falls back to the manual constant when running from source. The About dialog reads both via `ui_dialogs.py`.
 
+## Release Notes Style
+
+Every GitHub release uses the same body template: a short single-paragraph lead describing the app, then the **full feature overview** organized tab-by-tab (Pad Maker, Tooling, Chromatic Strobe Tuner, Harmonic Tone Analyzer, Cross-platform & General), followed by **Known limitations** and **Upgrading from v1.x**. Every release is the complete picture of the app, so a user landing on any release page cold gets the full story — no "What's new since" sections or fix logs.
+
+Items new *in that specific release* get a plain `**(new)**` marker prefixed before the relevant bullet (or interpolated into a longer bullet that has both old and new content). Items from prior releases carry no marker. v2.1 is the canonical example — see [the v2.1 release page](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases/tag/v2.1) for the exact format. Don't mix in `(new in v2.X.Y)` cross-version tags or "Fixes & polish" sections — both got tried and rejected.
+
 ## CI/CD (GitHub Actions)
 
 The `.github/workflows/build.yml` workflow has two jobs:
