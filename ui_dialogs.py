@@ -3359,7 +3359,7 @@ class GcodeSettingsWindow:
         self.top = tk.Toplevel(parent)
         title = "Tooling Settings" if show_tooling_engraving else "G-code Laser Settings"
         self.top.title(title)
-        self.top.geometry("550x500")
+        self.top.geometry("640x500")
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
@@ -3516,14 +3516,20 @@ class GcodeSettingsWindow:
         sp_hdr.grid(row=0, column=1, padx=5)
         pw_hdr = tk.Label(frame, text="Power (%)", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
         pw_hdr.grid(row=0, column=2, padx=5)
+        ps_hdr = tk.Label(frame, text="Passes", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        ps_hdr.grid(row=0, column=3, padx=5)
         air_hdr = tk.Label(frame, text="Air", bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
-        air_hdr.grid(row=0, column=3, padx=5)
+        air_hdr.grid(row=0, column=4, padx=5)
         add_tooltip(sp_hdr, "Feed rate in millimeters per minute.")
         add_tooltip(pw_hdr,
                     "Laser power, 0–100 %. Mapped onto Grbl's S0–S1000 "
                     "scale, so check that your machine's $30 setting is "
                     "1000 (`$30=1000` in your console) for the percentage "
                     "to mean what it says.")
+        add_tooltip(ps_hdr,
+                    "How many times to repeat each stroke in this layer. "
+                    "Two or more lower-power passes often cut thicker "
+                    "leather or acrylic cleaner than one high-power pass.")
         add_tooltip(air_hdr,
                     "Per-operation air-assist toggle. Sends M8 (on) before "
                     "the operation and M9 (off) after.")
@@ -3537,13 +3543,17 @@ class GcodeSettingsWindow:
         self.vars[mat_key]['engraving'] = {}
         default_eng_speed = self._get_default(mat_key, "engraving_speed")
         default_eng_power = self._get_default(mat_key, "engraving_power")
+        default_eng_passes = self._get_default(mat_key, "engraving_passes", 1)
         current_eng_speed = mat_settings.get("engraving_speed", default_eng_speed)
         current_eng_power = mat_settings.get("engraving_power", default_eng_power)
+        current_eng_passes = mat_settings.get("engraving_passes", default_eng_passes)
 
         eng_speed_var = tk.IntVar(value=int(current_eng_speed))
         eng_power_var = tk.DoubleVar(value=current_eng_power)
+        eng_passes_var = tk.IntVar(value=int(current_eng_passes))
         self.vars[mat_key]['engraving']['speed'] = eng_speed_var
         self.vars[mat_key]['engraving']['power'] = eng_power_var
+        self.vars[mat_key]['engraving']['passes'] = eng_passes_var
 
         line_rb = tk.Radiobutton(frame, text="Engraving (Line)", bg=DIALOG_BG,
                                  variable=mode_var, value="line",
@@ -3553,29 +3563,39 @@ class GcodeSettingsWindow:
         line_speed_ent.grid(row=1, column=1, padx=5, pady=2)
         line_power_ent = tk.Entry(frame, textvariable=eng_power_var, width=10)
         line_power_ent.grid(row=1, column=2, padx=5, pady=2)
+        line_passes_ent = tk.Spinbox(frame, textvariable=eng_passes_var, from_=1, to=10, width=5)
+        line_passes_ent.grid(row=1, column=3, padx=5, pady=2)
         add_tooltip(line_rb,
                     "Single-stroke outline engraving — traces each "
                     "character path once. Faster, simpler text on this material.")
         add_tooltip(line_speed_ent, "Feed rate for line-engraving on this material.")
         add_tooltip(line_power_ent, "Laser power for line-engraving on this material.")
+        add_tooltip(line_passes_ent,
+                    "How many times to repeat the line-engraving strokes. "
+                    "Default 1; raise it if a single pass leaves the text "
+                    "too faint on this material.")
 
         air_eng_var = tk.BooleanVar(value=mat_settings.get("air_assist_engraving", True))
         self.vars[mat_key]['air_assist_engraving'] = air_eng_var
         air_eng_cb = tk.Checkbutton(frame, variable=air_eng_var, bg=DIALOG_BG)
-        air_eng_cb.grid(row=1, column=3, padx=5, pady=2)
+        air_eng_cb.grid(row=1, column=4, padx=5, pady=2)
         add_tooltip(air_eng_cb, "Air-assist on during line-engraving on this material.")
 
         # "Filled" engraving row
         self.vars[mat_key]['filled_engraving'] = {}
         default_fill_speed = self._get_default(mat_key, "filled_engraving_speed")
         default_fill_power = self._get_default(mat_key, "filled_engraving_power")
+        default_fill_passes = self._get_default(mat_key, "filled_engraving_passes", 1)
         current_fill_speed = mat_settings.get("filled_engraving_speed", default_fill_speed)
         current_fill_power = mat_settings.get("filled_engraving_power", default_fill_power)
+        current_fill_passes = mat_settings.get("filled_engraving_passes", default_fill_passes)
 
         fill_speed_var = tk.IntVar(value=int(current_fill_speed))
         fill_power_var = tk.DoubleVar(value=current_fill_power)
+        fill_passes_var = tk.IntVar(value=int(current_fill_passes))
         self.vars[mat_key]['filled_engraving']['speed'] = fill_speed_var
         self.vars[mat_key]['filled_engraving']['power'] = fill_power_var
+        self.vars[mat_key]['filled_engraving']['passes'] = fill_passes_var
 
         fill_rb = tk.Radiobutton(frame, text='Engraving ("Filled")', bg=DIALOG_BG,
                                  variable=mode_var, value="filled",
@@ -3585,17 +3605,22 @@ class GcodeSettingsWindow:
         fill_speed_ent.grid(row=2, column=1, padx=5, pady=2)
         fill_power_ent = tk.Entry(frame, textvariable=fill_power_var, width=10)
         fill_power_ent.grid(row=2, column=2, padx=5, pady=2)
+        fill_passes_ent = tk.Spinbox(frame, textvariable=fill_passes_var, from_=1, to=10, width=5)
+        fill_passes_ent.grid(row=2, column=3, padx=5, pady=2)
         add_tooltip(fill_rb,
                     "Scan-line raster fill of each character — solid "
                     "filled glyphs. Slower than line-engraving but more "
                     "legible on dark / soft materials.")
         add_tooltip(fill_speed_ent, "Feed rate for filled engraving on this material.")
         add_tooltip(fill_power_ent, "Laser power for filled engraving on this material.")
+        add_tooltip(fill_passes_ent,
+                    "How many times to repeat the filled-engraving scan. "
+                    "Default 1; raise it for darker, more solid coverage.")
 
         air_fill_var = tk.BooleanVar(value=mat_settings.get("air_assist_filled_engraving", True))
         self.vars[mat_key]['air_assist_filled_engraving'] = air_fill_var
         air_fill_cb = tk.Checkbutton(frame, variable=air_fill_var, bg=DIALOG_BG)
-        air_fill_cb.grid(row=2, column=3, padx=5, pady=2)
+        air_fill_cb.grid(row=2, column=4, padx=5, pady=2)
         add_tooltip(air_fill_cb, "Air-assist on during filled engraving on this material.")
 
         # Fill density slider (row 3)
@@ -3609,7 +3634,7 @@ class GcodeSettingsWindow:
         self.vars[mat_key]['fill_density'] = density_var
 
         density_frame = tk.Frame(frame, bg=DIALOG_BG)
-        density_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=5, pady=(0, 4))
+        density_frame.grid(row=3, column=0, columnspan=4, sticky="ew", padx=5, pady=(0, 4))
         density_lbl = tk.Label(density_frame, text="Fill density:", bg=DIALOG_BG, font=("Helvetica", 8))
         density_lbl.pack(side="left", padx=(20, 5))
         density_less = tk.Label(density_frame, text="less", bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666")
@@ -3637,14 +3662,18 @@ class GcodeSettingsWindow:
 
             default_speed = self._get_default(mat_key, f"{op_key}_speed")
             default_power = self._get_default(mat_key, f"{op_key}_power")
+            default_passes = self._get_default(mat_key, f"{op_key}_passes", 1)
             current_speed = mat_settings.get(f"{op_key}_speed", default_speed)
             current_power = mat_settings.get(f"{op_key}_power", default_power)
+            current_passes = mat_settings.get(f"{op_key}_passes", default_passes)
 
             speed_var = tk.IntVar(value=int(current_speed))
             power_var = tk.DoubleVar(value=current_power)
+            passes_var = tk.IntVar(value=int(current_passes))
 
             self.vars[mat_key][op_key]['speed'] = speed_var
             self.vars[mat_key][op_key]['power'] = power_var
+            self.vars[mat_key][op_key]['passes'] = passes_var
 
             descr, short = op_help.get(op_key, (op_label.lower(), op_label.lower()))
             row_lbl = tk.Label(frame, text=op_label, bg=DIALOG_BG)
@@ -3653,14 +3682,20 @@ class GcodeSettingsWindow:
             speed_ent.grid(row=i, column=1, padx=5, pady=2)
             power_ent = tk.Entry(frame, textvariable=power_var, width=10)
             power_ent.grid(row=i, column=2, padx=5, pady=2)
+            passes_ent = tk.Spinbox(frame, textvariable=passes_var, from_=1, to=10, width=5)
+            passes_ent.grid(row=i, column=3, padx=5, pady=2)
             add_tooltip(row_lbl, f"Settings for the {descr} on this material.")
             add_tooltip(speed_ent, f"Feed rate for the {short} on this material.")
             add_tooltip(power_ent, f"Laser power for the {short} on this material.")
+            add_tooltip(passes_ent,
+                        f"How many times to repeat the {short} on this "
+                        f"material. Default 1; raise it for thicker stock "
+                        f"where one high-power pass leaves rough edges.")
 
             air_var = tk.BooleanVar(value=mat_settings.get(f"air_assist_{op_key}", True))
             self.vars[mat_key][f'air_assist_{op_key}'] = air_var
             air_cb = tk.Checkbutton(frame, variable=air_var, bg=DIALOG_BG)
-            air_cb.grid(row=i, column=3, padx=5, pady=2)
+            air_cb.grid(row=i, column=4, padx=5, pady=2)
             add_tooltip(air_cb, f"Air-assist on during the {short} on this material.")
 
         # Kerf width row
@@ -3776,10 +3811,10 @@ class GcodeSettingsWindow:
             ring_loc_ent, ring_loc_unit,
         )
 
-    def _get_default(self, material, setting_key):
+    def _get_default(self, material, setting_key, fallback=100):
         """Get default value from DEFAULT_SETTINGS."""
         defaults = DEFAULT_SETTINGS.get("gcode_settings", {}).get(material, {})
-        return defaults.get(setting_key, 100)  # Fallback to 100 if not found
+        return defaults.get(setting_key, fallback)
 
     def _on_save(self):
         """Save settings and close."""
@@ -3792,20 +3827,22 @@ class GcodeSettingsWindow:
             # Engraving mode
             new_gcode_settings[mat_key]["engraving_mode"] = self.vars[mat_key]['engraving_mode'].get()
 
-            # Line engraving speed/power
+            # Line engraving speed/power/passes
             try:
                 new_gcode_settings[mat_key]["engraving_speed"] = self.vars[mat_key]['engraving']['speed'].get()
                 new_gcode_settings[mat_key]["engraving_power"] = self.vars[mat_key]['engraving']['power'].get()
+                new_gcode_settings[mat_key]["engraving_passes"] = max(1, int(self.vars[mat_key]['engraving']['passes'].get()))
             except tk.TclError:
                 messagebox.showerror("Invalid Input",
                                      f"Invalid value for {mat_key} line engraving. Please enter valid numbers.",
                                      parent=self.top)
                 return
 
-            # "Filled" engraving speed/power
+            # "Filled" engraving speed/power/passes
             try:
                 new_gcode_settings[mat_key]["filled_engraving_speed"] = self.vars[mat_key]['filled_engraving']['speed'].get()
                 new_gcode_settings[mat_key]["filled_engraving_power"] = self.vars[mat_key]['filled_engraving']['power'].get()
+                new_gcode_settings[mat_key]["filled_engraving_passes"] = max(1, int(self.vars[mat_key]['filled_engraving']['passes'].get()))
             except tk.TclError:
                 messagebox.showerror("Invalid Input",
                                      f"Invalid value for {mat_key} filled engraving. Please enter valid numbers.",
@@ -3822,8 +3859,10 @@ class GcodeSettingsWindow:
                 try:
                     speed = self.vars[mat_key][op_key]['speed'].get()
                     power = self.vars[mat_key][op_key]['power'].get()
+                    passes = max(1, int(self.vars[mat_key][op_key]['passes'].get()))
                     new_gcode_settings[mat_key][f"{op_key}_speed"] = speed
                     new_gcode_settings[mat_key][f"{op_key}_power"] = power
+                    new_gcode_settings[mat_key][f"{op_key}_passes"] = passes
                 except tk.TclError:
                     messagebox.showerror("Invalid Input",
                                          f"Invalid value for {mat_key} {op_key}. Please enter valid numbers.",
@@ -3887,10 +3926,12 @@ class GcodeSettingsWindow:
             # Reset line engraving
             self.vars[mat_key]['engraving']['speed'].set(mat_defaults.get("engraving_speed", 1200))
             self.vars[mat_key]['engraving']['power'].set(mat_defaults.get("engraving_power", 8))
+            self.vars[mat_key]['engraving']['passes'].set(mat_defaults.get("engraving_passes", 1))
 
             # Reset filled engraving
             self.vars[mat_key]['filled_engraving']['speed'].set(mat_defaults.get("filled_engraving_speed", 1000))
             self.vars[mat_key]['filled_engraving']['power'].set(mat_defaults.get("filled_engraving_power", 12))
+            self.vars[mat_key]['filled_engraving']['passes'].set(mat_defaults.get("filled_engraving_passes", 1))
 
             # Reset fill density
             default_spacing = mat_defaults.get("filled_line_spacing", 0.15)
@@ -3902,8 +3943,10 @@ class GcodeSettingsWindow:
             for op_key, _ in self.OPERATIONS:
                 default_speed = mat_defaults.get(f"{op_key}_speed", 100)
                 default_power = mat_defaults.get(f"{op_key}_power", 10)
+                default_passes = mat_defaults.get(f"{op_key}_passes", 1)
                 self.vars[mat_key][op_key]['speed'].set(default_speed)
                 self.vars[mat_key][op_key]['power'].set(default_power)
+                self.vars[mat_key][op_key]['passes'].set(default_passes)
 
             # Reset kerf width
             default_kerf = mat_defaults.get("kerf_width", 0.0)

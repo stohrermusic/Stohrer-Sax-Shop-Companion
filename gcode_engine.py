@@ -825,7 +825,7 @@ def generate_gcode_footer(return_speed=1000):
     return lines
 
 
-def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overscan_mm=0, air_assist=True):
+def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overscan_mm=0, air_assist=True, passes=1):
     """
     Generate G-code for a layer (set of strokes).
 
@@ -838,6 +838,9 @@ def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overs
                      on each side with laser off, so the head is at full speed
                      when it reaches the actual fill area.
         air_assist: If True, emit M8 (air on); if False, emit M9 (air off).
+        passes: Number of times to run the strokes (>=1). Useful for thicker
+                materials where multiple lower-power passes cut cleaner than
+                one high-power pass.
 
     Returns:
         List of G-code lines
@@ -845,62 +848,73 @@ def generate_gcode_layer(strokes, speed_mm_min, power_percent, layer_name, overs
     if not strokes:
         return []
 
+    try:
+        passes = int(passes)
+    except (TypeError, ValueError):
+        passes = 1
+    if passes < 1:
+        passes = 1
+
     lines = []
 
     # Layer header
-    lines.append(f"; Cut @ {speed_mm_min} mm/min, {power_percent}% power")
+    pass_note = f", x{passes} passes" if passes > 1 else ""
+    lines.append(f"; Cut @ {speed_mm_min} mm/min, {power_percent}% power{pass_note}")
     lines.append("M8" if air_assist else "M9")
 
     # Power value for S parameter (percentage * 10 for 0-1000 scale)
     s_value = int(power_percent * 10)
 
-    first_move = True
+    for pass_idx in range(passes):
+        if passes > 1:
+            lines.append(f"; Pass {pass_idx + 1} of {passes}")
+        first_move = True
 
-    for stroke in strokes:
-        if len(stroke) < 2:
-            continue
+        for stroke in strokes:
+            if len(stroke) < 2:
+                continue
 
-        # Check if this is a horizontal scan line eligible for overscan
-        is_scanline = (overscan_mm > 0 and len(stroke) == 2
-                       and abs(stroke[0][1] - stroke[1][1]) < 0.001)
+            # Check if this is a horizontal scan line eligible for overscan
+            is_scanline = (overscan_mm > 0 and len(stroke) == 2
+                           and abs(stroke[0][1] - stroke[1][1]) < 0.001)
 
-        if is_scanline:
-            x0, y0 = stroke[0]
-            x1, y1 = stroke[1]
-            # Determine scan direction and extend
-            if x1 > x0:
-                approach_x = x0 - overscan_mm
-                exit_x = x1 + overscan_mm
-            else:
-                approach_x = x0 + overscan_mm
-                exit_x = x1 - overscan_mm
-
-            # Rapid to overscan start
-            lines.append(f"G0 X{approach_x:.3f}Y{y0:.3f}")
-            if first_move:
-                lines.append(f"; Layer {layer_name}")
-                first_move = False
-            # Approach at engrave speed, laser off
-            lines.append(f"G1 X{x0:.3f}Y{y0:.3f}S0F{speed_mm_min}")
-            # Engrave through fill area, laser on
-            lines.append(f"G1 X{x1:.3f}S{s_value}")
-            # Exit overscan, laser off
-            lines.append(f"G1 X{exit_x:.3f}S0")
-        else:
-            # Standard stroke: rapid to start, then cut
-            x0, y0 = stroke[0]
-            lines.append(f"G0 X{x0:.3f}Y{y0:.3f}")
-
-            if first_move:
-                lines.append(f"; Layer {layer_name}")
-                first_move = False
-
-            # Cut moves
-            for i, (x, y) in enumerate(stroke[1:], 1):
-                if i == 1:
-                    lines.append(f"G1 X{x:.3f}Y{y:.3f}S{s_value}F{speed_mm_min}")
+            if is_scanline:
+                x0, y0 = stroke[0]
+                x1, y1 = stroke[1]
+                # Determine scan direction and extend
+                if x1 > x0:
+                    approach_x = x0 - overscan_mm
+                    exit_x = x1 + overscan_mm
                 else:
-                    lines.append(f"G1 X{x:.3f}Y{y:.3f}")
+                    approach_x = x0 + overscan_mm
+                    exit_x = x1 - overscan_mm
+
+                # Rapid to overscan start
+                lines.append(f"G0 X{approach_x:.3f}Y{y0:.3f}")
+                if first_move:
+                    lines.append(f"; Layer {layer_name}")
+                    first_move = False
+                # Approach at engrave speed, laser off
+                lines.append(f"G1 X{x0:.3f}Y{y0:.3f}S0F{speed_mm_min}")
+                # Engrave through fill area, laser on
+                lines.append(f"G1 X{x1:.3f}S{s_value}")
+                # Exit overscan, laser off
+                lines.append(f"G1 X{exit_x:.3f}S0")
+            else:
+                # Standard stroke: rapid to start, then cut
+                x0, y0 = stroke[0]
+                lines.append(f"G0 X{x0:.3f}Y{y0:.3f}")
+
+                if first_move:
+                    lines.append(f"; Layer {layer_name}")
+                    first_move = False
+
+                # Cut moves
+                for i, (x, y) in enumerate(stroke[1:], 1):
+                    if i == 1:
+                        lines.append(f"G1 X{x:.3f}Y{y:.3f}S{s_value}F{speed_mm_min}")
+                    else:
+                        lines.append(f"G1 X{x:.3f}Y{y:.3f}")
 
     return lines
 
@@ -979,10 +993,12 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     if engraving_mode == "filled":
         engraving_speed = mat_settings.get("filled_engraving_speed", 1000)
         engraving_power = mat_settings.get("filled_engraving_power", 12)
+        engraving_passes = mat_settings.get("filled_engraving_passes", 1)
         filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
     else:
         engraving_speed = mat_settings.get("engraving_speed", 1500)
         engraving_power = mat_settings.get("engraving_power", 10)
+        engraving_passes = mat_settings.get("engraving_passes", 1)
 
     # Overscan: extend filled scan lines so the head is at speed at the character edge
     overscan_mm = 0
@@ -990,8 +1006,10 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         overscan_mm = settings.get("filled_overscan_mm", 1.5)
     hole_speed = mat_settings.get("hole_speed", 400)
     hole_power = mat_settings.get("hole_power", 25)
+    hole_passes = mat_settings.get("hole_passes", 1)
     cut_speed = mat_settings.get("cut_speed", 900)
     cut_power = mat_settings.get("cut_power", 35)
+    cut_passes = mat_settings.get("cut_passes", 1)
 
     # Global G-code options
     return_speed = settings.get("gcode_return_speed", 1000)
@@ -1176,13 +1194,14 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
             if disc_eng:
                 gcode_lines.extend(generate_gcode_layer(disc_eng, engraving_speed, engraving_power, eng_layer,
-                                                         overscan_mm=overscan_mm, air_assist=air_assist_engraving))
+                                                         overscan_mm=overscan_mm, air_assist=air_assist_engraving,
+                                                         passes=engraving_passes))
             if disc_hole:
                 gcode_lines.extend(generate_gcode_layer(disc_hole, hole_speed, hole_power, hole_layer,
-                                                         air_assist=air_assist_hole))
+                                                         air_assist=air_assist_hole, passes=hole_passes))
             if disc_cut:
                 gcode_lines.extend(generate_gcode_layer(disc_cut, cut_speed, cut_power, cut_layer,
-                                                         air_assist=air_assist_cut))
+                                                         air_assist=air_assist_cut, passes=cut_passes))
     else:
         # Layer grouping (default): all engravings, then all holes, then all cuts
         engraving_strokes = []
@@ -1197,15 +1216,16 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
         if engraving_strokes:
             gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer,
-                                                     overscan_mm=overscan_mm, air_assist=air_assist_engraving))
+                                                     overscan_mm=overscan_mm, air_assist=air_assist_engraving,
+                                                     passes=engraving_passes))
 
         if hole_strokes:
             gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer,
-                                                     air_assist=air_assist_hole))
+                                                     air_assist=air_assist_hole, passes=hole_passes))
 
         if cut_strokes:
             gcode_lines.extend(generate_gcode_layer(cut_strokes, cut_speed, cut_power, cut_layer,
-                                                     air_assist=air_assist_cut))
+                                                     air_assist=air_assist_cut, passes=cut_passes))
 
     gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
 
@@ -1241,10 +1261,12 @@ def generate_die_gcode_from_placed(placed, sheet_width_mm, sheet_height_mm, file
     if engraving_mode == "filled":
         engraving_speed = mat_settings.get("filled_engraving_speed", 800)
         engraving_power = mat_settings.get("filled_engraving_power", 15)
+        engraving_passes = mat_settings.get("filled_engraving_passes", 1)
         filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
     else:
         engraving_speed = mat_settings.get("engraving_speed", 800)
         engraving_power = mat_settings.get("engraving_power", 15)
+        engraving_passes = mat_settings.get("engraving_passes", 1)
 
     overscan_mm = 0
     if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
@@ -1252,6 +1274,7 @@ def generate_die_gcode_from_placed(placed, sheet_width_mm, sheet_height_mm, file
 
     cut_speed = mat_settings.get("cut_speed", 150)
     cut_power = mat_settings.get("cut_power", 100)
+    cut_passes = mat_settings.get("cut_passes", 1)
 
     kerf_width = mat_settings.get("kerf_width", 0.15)
     kerf_offset = kerf_width / 2
@@ -1357,13 +1380,14 @@ def generate_die_gcode_from_placed(placed, sheet_width_mm, sheet_height_mm, file
 
     if engraving_strokes:
         gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, 'C03',
-                                                 overscan_mm=overscan_mm, air_assist=air_assist_engraving))
+                                                 overscan_mm=overscan_mm, air_assist=air_assist_engraving,
+                                                 passes=engraving_passes))
     if inner_cut_strokes:
         gcode_lines.extend(generate_gcode_layer(inner_cut_strokes, cut_speed, cut_power, 'C01',
-                                                 air_assist=air_assist_cut))
+                                                 air_assist=air_assist_cut, passes=cut_passes))
     if outer_cut_strokes:
         gcode_lines.extend(generate_gcode_layer(outer_cut_strokes, cut_speed, cut_power, 'C02',
-                                                 air_assist=air_assist_cut))
+                                                 air_assist=air_assist_cut, passes=cut_passes))
 
     gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
 
@@ -1392,8 +1416,10 @@ def generate_holder_gcode(variant, filename, settings):
 
     hole_speed = mat_settings.get("hole_speed", 200)
     hole_power = mat_settings.get("hole_power", 80)
+    hole_passes = mat_settings.get("hole_passes", 1)
     cut_speed = mat_settings.get("cut_speed", 150)
     cut_power = mat_settings.get("cut_power", 100)
+    cut_passes = mat_settings.get("cut_passes", 1)
     kerf_width = mat_settings.get("kerf_width", 0.15)
     kerf_offset = kerf_width / 2
     return_speed = settings.get("gcode_return_speed", 1000)
@@ -1440,6 +1466,7 @@ def generate_holder_gcode(variant, filename, settings):
     engraving_mode = mat_settings.get("engraving_mode", "filled")
     eng_speed = mat_settings.get("engraving_speed", 800)
     eng_power = mat_settings.get("engraving_power", 15)
+    eng_passes = mat_settings.get("engraving_passes", 1)
 
     for i, (piece_type, inner_r) in enumerate(pieces):
         col = i % cols
@@ -1480,6 +1507,7 @@ def generate_holder_gcode(variant, filename, settings):
             if engraving_mode == "filled":
                 eng_speed = mat_settings.get("filled_engraving_speed", 800)
                 eng_power = mat_settings.get("filled_engraving_power", 15)
+                eng_passes = mat_settings.get("filled_engraving_passes", 1)
                 filled_line_spacing = mat_settings.get("filled_line_spacing", 0.15)
                 credit_strokes = get_filled_text_strokes_arc(
                     "DESIGNED BY PHIL NOY", font_size,
@@ -1488,6 +1516,7 @@ def generate_holder_gcode(variant, filename, settings):
             else:
                 eng_speed = mat_settings.get("engraving_speed", 800)
                 eng_power = mat_settings.get("engraving_power", 15)
+                eng_passes = mat_settings.get("engraving_passes", 1)
                 credit_strokes = get_text_strokes_arc(
                     "DESIGNED BY PHIL NOY", font_size,
                     cx, cy, ring_center_r, math.pi / 2.0, side='top')
@@ -1507,17 +1536,18 @@ def generate_holder_gcode(variant, filename, settings):
         if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
             overscan_mm = settings.get("filled_overscan_mm", 1.5)
         gcode_lines.extend(generate_gcode_layer(engraving_strokes, eng_speed, eng_power, 'C03',
-                                                 overscan_mm=overscan_mm, air_assist=air_assist_eng))
+                                                 overscan_mm=overscan_mm, air_assist=air_assist_eng,
+                                                 passes=eng_passes))
 
     if hole_strokes:
         gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, 'C01',
-                                                 air_assist=air_assist_hole))
+                                                 air_assist=air_assist_hole, passes=hole_passes))
     if inner_cut_strokes:
         gcode_lines.extend(generate_gcode_layer(inner_cut_strokes, cut_speed, cut_power, 'C02',
-                                                 air_assist=air_assist_cut))
+                                                 air_assist=air_assist_cut, passes=cut_passes))
     if outer_cut_strokes:
         gcode_lines.extend(generate_gcode_layer(outer_cut_strokes, cut_speed, cut_power, 'C00',
-                                                 air_assist=air_assist_cut))
+                                                 air_assist=air_assist_cut, passes=cut_passes))
 
     gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
 

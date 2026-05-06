@@ -30,7 +30,7 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (31 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_pad_preview`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (32 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_pad_preview`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
@@ -148,6 +148,12 @@ iscc /DAppVersion=2.1 installer.iss     # requires Inno Setup 6
 ## Versioning
 
 `APP_VERSION` in `config.py` is the manual source of truth — bump it when preparing a release. `APP_BUILD_DATE` is auto-derived from `sys.executable`'s mtime in frozen builds (installer/zip copies preserve mtime) and falls back to the manual constant when running from source. The About dialog reads both via `ui_dialogs.py`.
+
+## Release Notes Style
+
+Every GitHub release uses the same body template: a short single-paragraph lead describing the app, then the **full feature overview** organized tab-by-tab (Pad Maker, Tooling, Chromatic Strobe Tuner, Harmonic Tone Analyzer, Cross-platform & General), followed by **Known limitations** and **Upgrading from v1.x**. Every release is the complete picture of the app, so a user landing on any release page cold gets the full story — no "What's new since" sections or fix logs.
+
+Items new *in that specific release* get a plain `**(new)**` marker prefixed before the relevant bullet (or interpolated into a longer bullet that has both old and new content). Items from prior releases carry no marker. v2.1 is the canonical example — see [the v2.1 release page](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases/tag/v2.1) for the exact format. Don't mix in `(new in v2.X.Y)` cross-version tags or "Fixes & polish" sections — both got tried and rejected.
 
 ## CI/CD (GitHub Actions)
 
