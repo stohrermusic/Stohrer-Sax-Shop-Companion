@@ -973,14 +973,80 @@ HOLDER_SMALL_INNER_R = 25.0  # 50mm inner for small holder
 HOLDER_LAYERS = 6            # Total layers in a holder stack
 HOLDER_THICKNESS_MM = HOLDER_LAYERS * 3.0  # 18mm total
 
-def generate_holder_svg(variant, filename, settings):
+def _holder_pieces_for(variant, layer_count):
+    """Return the piece list for a holder variant and layer count.
+
+    Each piece is (type, inner_r). 5-layer = 2x pin, 6-layer = 3x pin.
+    "both" = two complete independent holders (no shared layers).
+    """
+    if layer_count not in (5, 6):
+        raise ValueError(f"layer_count must be 5 or 6, got {layer_count}")
+    if variant not in ("large", "small", "both"):
+        raise ValueError(f"variant must be 'large', 'small', or 'both', got {variant!r}")
+
+    pin_count = layer_count - 3  # solid + magnet + Npin + ring = layer_count
+
+    def one_holder(inner_r):
+        return [('solid', None), ('magnet', None)] + \
+               [('pin', None)] * pin_count + \
+               [('ring', inner_r)]
+
+    if variant == 'large':
+        return one_holder(HOLDER_LARGE_INNER_R)
+    if variant == 'small':
+        return one_holder(HOLDER_SMALL_INNER_R)
+    return one_holder(HOLDER_LARGE_INNER_R) + one_holder(HOLDER_SMALL_INNER_R)
+
+
+def _pack_holder_grid(num_pieces, sheet_w_mm, sheet_h_mm,
+                      outer_d=HOLDER_OUTER_R * 2, spacing=5.0):
+    """Pick a grid (cols, rows) that fits num_pieces uniform OD circles into the sheet.
+
+    Returns (cols, rows) for the layout closest to square that fits, or None
+    if the sheet is too small. Pieces sit on a 5mm gutter from the top-left.
+    """
+    if num_pieces <= 0:
+        return None
+    pitch = outer_d + spacing
+    max_cols = int((sheet_w_mm - spacing) // pitch)
+    max_rows = int((sheet_h_mm - spacing) // pitch)
+    if max_cols < 1 or max_rows < 1:
+        return None
+    if max_cols * max_rows < num_pieces:
+        return None
+    best = None
+    for cols in range(1, max_cols + 1):
+        rows = (num_pieces + cols - 1) // cols
+        if rows > max_rows:
+            continue
+        score = (abs(cols - rows), cols * rows)
+        if best is None or score < best[0]:
+            best = (score, cols, rows)
+    return (best[1], best[2]) if best else None
+
+
+def _min_holder_sheet(num_pieces, outer_d=HOLDER_OUTER_R * 2, spacing=5.0):
+    """Smallest near-square sheet (mm) that fits num_pieces uniform circles."""
+    cols = max(1, math.ceil(math.sqrt(num_pieces)))
+    rows = (num_pieces + cols - 1) // cols
+    return (cols * outer_d + (cols + 1) * spacing,
+            rows * outer_d + (rows + 1) * spacing)
+
+
+def generate_holder_svg(variant, filename, settings, *,
+                        layer_count=6,
+                        sheet_width_mm=None, sheet_height_mm=None):
     """
     Generate SVG for die holder pieces.
 
     Args:
-        variant: "large", "small", or "both"
+        variant: "large", "small", or "both" (both = two complete holders)
         filename: Output file path
         settings: App settings dict
+        layer_count: 5 (2x pin) or 6 (3x pin). Default 6.
+        sheet_width_mm, sheet_height_mm: User sheet size. If None, auto-size
+            into a near-square grid (legacy behavior). If supplied and pieces
+            don't fit, raises ValueError.
     """
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
     cut_color = layer_colors.get('die_holder_cut', '#FF0000')
@@ -996,38 +1062,28 @@ def generate_holder_svg(variant, filename, settings):
     spacing = 5.0
     outer_d = HOLDER_OUTER_R * 2
 
-    # Determine pieces to generate
-    # 6-layer holder: solid, magnet (6.5mm hole), 3x pin (3.5mm hole), retaining ring
-    pieces = []
-    if variant in ('large', 'both'):
-        pieces.append(('solid', None))
-        pieces.append(('magnet', None))
-        pieces.append(('pin', None))
-        pieces.append(('pin', None))
-        pieces.append(('pin', None))
-        pieces.append(('ring', HOLDER_LARGE_INNER_R))
-    if variant in ('small', 'both'):
-        if variant == 'both':
-            # Shared layers already added, just add the small retaining ring
-            pieces.append(('ring', HOLDER_SMALL_INNER_R))
-        else:
-            pieces.append(('solid', None))
-            pieces.append(('magnet', None))
-            pieces.append(('pin', None))
-            pieces.append(('pin', None))
-            pieces.append(('pin', None))
-            pieces.append(('ring', HOLDER_SMALL_INNER_R))
-
-    # Layout: grid arrangement to fit on 300x300mm sheets
+    pieces = _holder_pieces_for(variant, layer_count)
     num_pieces = len(pieces)
-    if num_pieces <= 4:
-        cols = 2
-    else:
-        cols = 3
-    rows = (num_pieces + cols - 1) // cols
 
-    width_mm = cols * outer_d + (cols + 1) * spacing
-    height_mm = rows * outer_d + (rows + 1) * spacing
+    if sheet_width_mm is not None and sheet_height_mm is not None:
+        layout = _pack_holder_grid(num_pieces, sheet_width_mm, sheet_height_mm,
+                                   outer_d, spacing)
+        if layout is None:
+            min_w, min_h = _min_holder_sheet(num_pieces, outer_d, spacing)
+            raise ValueError(
+                f"{num_pieces} holder pieces don't fit on a "
+                f"{sheet_width_mm:.0f} × {sheet_height_mm:.0f} mm sheet. "
+                f"Need at least {min_w:.0f} × {min_h:.0f} mm."
+            )
+        cols, rows = layout
+        width_mm = sheet_width_mm
+        height_mm = sheet_height_mm
+    else:
+        # Legacy auto-size: near-square grid sized exactly to the pieces.
+        cols = max(1, math.ceil(math.sqrt(num_pieces)))
+        rows = (num_pieces + cols - 1) // cols
+        width_mm = cols * outer_d + (cols + 1) * spacing
+        height_mm = rows * outer_d + (rows + 1) * spacing
 
     dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
 

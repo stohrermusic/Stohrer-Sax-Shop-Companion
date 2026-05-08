@@ -177,13 +177,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.15"
+APP_VERSION = "2.20"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-04-27"
+    manual = "2026-05-08"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -601,6 +601,9 @@ DEFAULT_SETTINGS = {
         "cutout_font_size": 3.5,
         "ring_engraving_location": "centered",   # "centered" or "from_outside"
         "ring_engraving_offset": 0.0,             # mm offset (used with from_outside)
+        "holder_layer_count": 6,                  # 5 (2x pin) or 6 (3x pin)
+        "holder_sheet_width": "12",
+        "holder_sheet_height": "12",
     },
 
     # FILLED ENGRAVING OPTIONS

@@ -82,7 +82,7 @@ Both `tuner_engine.py` and `toner_engine.py` import `AudioRingBuffer` from `audi
 
 ## Tooling Tab
 
-Accordion-style UI with die insert and die holder SVG/G-code generation. Small dies ≤39.5mm (50mm OD), large ≥40mm (70mm OD). Die holders 85mm OD, 6-layer stack (solid base, magnet disc with 6.5mm hole, 3x pin discs with 3.5mm holes, retaining ring). Canvas widgets need explicit handling in the resonance theme walker.
+Accordion-style UI with die insert and die holder SVG/G-code generation. Small dies ≤39.5mm (50mm OD), large ≥40mm (70mm OD). Die holders 85mm OD; user picks 5-layer (solid + magnet + 2× pin + ring) or 6-layer (solid + magnet + 3× pin + ring), with magnet hole 6.5mm, pin holes 3.5mm. Variant is Small / Large / Both, where Both = two complete independent holders (one of each size) nested onto the same sheet — the layers are cemented together permanently, so there's no convertible-holder concept. User defines sheet size (W × H + in/mm) like Die Inserts; engine raises `ValueError` if pieces don't fit. Helpers `_holder_pieces_for(variant, layer_count)`, `_pack_holder_grid(...)`, and `_min_holder_sheet(...)` live in `svg_engine.py` and are imported by `gcode_engine.py` so SVG and G-code stay aligned. Canvas widgets need explicit handling in the resonance theme walker.
 
 ## Phil Noy Credit (non-negotiable)
 

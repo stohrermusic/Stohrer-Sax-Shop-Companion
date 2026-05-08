@@ -183,3 +183,12 @@ The app stores settings and presets in platform-appropriate locations:
 **Backward compatibility**: On first run, existing config files in the old location (current working directory) are automatically migrated to the new location.
 
 **Manual import**: Users can also manually import settings from a previous installation via File > "Import Settings from Folder..." which copies config files from a selected directory.
+
+## Detailed Documentation
+
+Architecture and domain-specific guidance is split across companion files (auto-loaded by Claude Code):
+
+- **CLAUDE-architecture.md** — Module structure, design patterns, settings/presets, error logging, feature set
+- **CLAUDE-engines.md** — Pad generation, G-code, SVG rendering, nesting, strobe tuner, tooling, Phil Noy credit
+- **CLAUDE-toner.md** — Tone analyzer engine, data model, capture modes, analyze tool, WAV recording, calibration
+- **CLAUDE-web.md** — Web data sync, screw specs submission form, related repository

@@ -4119,22 +4119,17 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("SVG vs G-code Output")
-        self._body("The app can generate two output formats:")
-        self._bullet("SVG: for use with LightBurn or other laser software. Each operation "
-                      "(engraving, holes, cuts) is on a separate color layer that maps to "
-                      "LightBurn's layer system. Choose this if your laser software imports SVG files.")
-        self._bullet("G-code: standalone Grbl-compatible G-code with speeds and power levels "
-                      "baked in. Choose this if your laser reads G-code directly from an SD card "
-                      "or USB connection (e.g. Creality Falcon).")
-        self._body("Output files are named using your filename base plus the material "
-                    "(e.g. \"my_pad_job_felt.svg\", \"my_pad_job_leather.gcode\"). "
-                    "One file is created per selected material.")
+        self._bullet("SVG: each operation (engraving, holes, cuts) on its own color layer for "
+                      "LightBurn or similar. Use this if your software imports SVG.")
+        self._bullet("G-code: standalone Grbl with speeds and power baked in. Use this if your "
+                      "laser reads G-code directly (e.g. Creality Falcon).")
+        self._body("Files are named with your base name plus the material "
+                    "(\"my_pad_job_felt.svg\"). One file per selected material.")
         self._blank()
 
         self._h2("Units")
         self._body("Pad sizes and sheet dimensions use the unit set in Options > Sizing Rules "
-                    "(inches, mm, or cm). The unit applies to all size entries throughout the app. "
-                    "Internal calculations and output files always use millimeters.")
+                    "(inches, mm, or cm). Output files are always in mm.")
         self._blank()
 
         self._h2("Center Hole")
@@ -4158,11 +4153,10 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Font size is set per material")
         self._bullet("Both engraving settings (on/off, font sizes) and placement (position modes) "
                       "support Universal or Per Size Range mode, just like sizing rules")
-        self._bullet("On small pads, the text automatically shifts toward the center to stay "
-                      "within the disc. If the text is too large to fit even when centered, "
-                      "it scales down as a last resort.")
-        self._bullet("If the font size exceeds 80% of the disc radius, engraving is skipped "
-                      "for that pad (a warning is shown before generating)")
+        self._bullet("On small pads, text shifts toward the center to fit; only scales down as "
+                      "a last resort.")
+        self._bullet("If the font exceeds 80% of the disc radius, engraving is skipped for that "
+                      "pad (warning shown before generating).")
         self._blank()
 
         self._h2("Pad Presets")
@@ -4213,10 +4207,9 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Engraving Mode: \"Line\" (single-stroke outline) or \"Filled\" (scan-line raster fill)")
         self._bullet("Fill Density: controls scan line spacing for filled engraving")
         self._bullet("Overscan: extends filled scan lines so the laser is at full speed at character edges")
-        self._bullet("Kerf Width: enter the full kerf width of your laser beam. "
-                      "The app compensates correctly on each cut (expanding outer cuts, "
-                      "shrinking hole cuts). Note: LightBurn asks for half-kerf; here you "
-                      "enter the full measured width.")
+        self._bullet("Kerf Width: full beam width. The app compensates each cut (expands outer "
+                      "cuts, shrinks holes). Note: LightBurn asks for half-kerf; here, enter the "
+                      "full measured width.")
         self._bullet("Air Assist: per-layer toggle for air assist (M8 on / M9 off)")
         self._bullet("Return Speed: how fast the head returns home after the job (slower avoids endstop issues)")
         self._bullet("Cut Grouping: \"By layer\" does all engravings, then all holes, then all cuts; "
@@ -4331,26 +4324,25 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("Tooling \u2014 Cutout Discs as Pad Cup Tools")
-        self._body("When a die ring is laser-cut, the inner circle falls out as a solid disc "
-                    "matching the pad cup diameter (minus the laser kerf). These cutout discs "
-                    "are useful as pad cup tools: stiffeners during key geometry operations, "
-                    "rim rounders, leveling helpers, bending braces, and so on.")
-        self._body("For precise pad cup tools where you need exact control over the diameter, "
-                    "use the \"Exact Size\" material option in the Pad Maker tab instead. "
-                    "If outputting G-code for acrylic, adjust the G-code settings for the "
-                    "exact_size material to match acrylic speeds and powers.")
+        self._body("When a die ring is laser-cut, the inner cutout falls out as a solid disc "
+                    "(pad cup diameter minus kerf). These work as pad cup stiffeners, rim "
+                    "rounders, leveling helpers, bending braces. For precise diameter control, "
+                    "use the Pad Maker tab's \"Exact Size\" material instead \u2014 and adjust the "
+                    "exact_size G-code settings to match acrylic if cutting in acrylic.")
         self._blank()
 
         self._h2("Tooling \u2014 Die Holders")
         self._body("Generate laser-cutting files for the acrylic die holder assembly. "
-                    "Each holder is a stack of six 85mm discs:")
+                    "Each holder is a stack of 85mm discs cemented together permanently:")
         self._bullet("Solid bottom disc")
-        self._bullet("Magnet disc (6.5mm center hole for a magnet)")
-        self._bullet("Three pin discs (3.5mm holes for alignment pins)")
+        self._bullet("Magnet disc (6.5mm hole)")
+        self._bullet("Pin discs (3.5mm alignment holes) \u2014 2 for 5-layer, 3 for 6-layer")
         self._bullet("Retaining ring (inner diameter matches the die size class)")
-        self._body("Choose Large (70mm inner) or Small (50mm inner). To make a "
-                    "complete set of both sizes, generate each variant separately. "
-                    "Required sheet: 275 \u00d7 185 mm (10.8 \u00d7 7.3 in) per holder.")
+        self._body("Pick the layer count, then the variant: Large (70mm inner), Small "
+                    "(50mm inner), or Both \u2014 two complete independent holders, one of "
+                    "each size, nested onto the same sheet. Set your sheet width and "
+                    "height (in or mm); if the pieces don't fit, generation stops with "
+                    "a clear minimum size message.")
         self._blank()
 
         self._h2("Tooling \u2014 Scrap Mode")
@@ -4364,21 +4356,14 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("Tooling \u2014 Kerf Test")
-        self._body("Generate a quick test pattern to measure your laser's kerf width for any material. "
-                    "The pattern cuts three circles at known diameters (10, 20, 30mm) with engraved "
-                    "labels and measurement instructions.")
-        self._bullet("Select the material you want to calibrate")
-        self._bullet("Cut the pattern, pop out the three discs")
-        self._bullet("Measure the hole ID (inner diameter of the hole in the sheet) "
-                      "and the disc OD (outer diameter of the cutout disc) with calipers")
-        self._bullet("Kerf = hole ID \u2212 disc OD (this is the full width of material "
-                      "vaporized by the laser beam)")
-        self._bullet("Enter the full kerf value in G-code Settings for that material \u2014 "
-                      "the app automatically splits it in half and applies the correct "
-                      "compensation (outer cuts expand, hole cuts shrink)")
-        self._body("By default, the test uses your existing G-code settings (speed/power) for the "
-                    "selected material. Uncheck \"Use existing settings\" to enter custom values "
-                    "for a quick one-off test.")
+        self._body("A quick test pattern (three circles at 10/20/30mm) for measuring kerf on any "
+                    "material.")
+        self._bullet("Pick the material, cut the pattern, pop out the three discs.")
+        self._bullet("Measure hole ID and disc OD with calipers.")
+        self._bullet("Kerf = hole ID \u2212 disc OD (full width of material vaporized).")
+        self._bullet("Enter the full kerf in G-code Settings; the app handles compensation.")
+        self._body("Defaults to your existing speed/power for that material. Uncheck \"Use "
+                    "existing settings\" for a one-off test with custom values.")
         self._blank()
 
         self._h2("Tooling \u2014 Settings")
@@ -4455,31 +4440,20 @@ class UserGuideWindow(tk.Toplevel):
 
         # === WHAT THIS TOOL IS ===
         self._h2("What This Tool Does")
-        self._body("The Toner is a harmonic analyzer that shows you what's in "
-                    "your sound right now, and \u2014 more importantly \u2014 what "
-                    "changes when you change something. It detects your "
-                    "fundamental pitch and measures the strength of each "
-                    "harmonic overtone up to the 20th.")
-        self._blank()
-        self._body("Every reading captures the whole signal chain at once: "
-                    "you + horn + mouthpiece + reed + mic + room. A single "
-                    "reading can't separate those. But when you change one "
-                    "variable and keep everything else the same, the "
-                    "difference in readings tells you exactly what that "
-                    "variable did.")
+        self._body("The Toner is a harmonic analyzer. It detects your fundamental pitch and "
+                    "measures the strength of each harmonic up to the 20th. Every reading "
+                    "captures the whole chain at once \u2014 you + horn + mouthpiece + reed + "
+                    "mic + room \u2014 so a single reading can't isolate any one part. The "
+                    "value comes from changing one variable at a time and watching the delta.")
         self._blank()
 
-        self._body("Important: this is a tool for relative measurements, "
-                    "not for discovering absolute truths about gear. In "
-                    "our test data, mouthpiece + player + mic effects "
-                    "routinely dwarf horn-to-horn differences \u2014 the "
-                    "same Conn 6M played by two different players with two "
-                    "different mouthpieces produced 12 dB of spread on "
-                    "upper-harmonic energy, which is bigger than the spread "
-                    "across many different horns combined. Use the Toner "
-                    "to compare YOUR setups to YOUR other setups, and "
-                    "expect that any reading you take is mostly about your "
-                    "current signal chain rather than the horn alone.")
+        self._body("This is a tool for relative measurements, not absolute truth about gear. "
+                    "In our data, mouthpiece + player + mic routinely dwarf horn-to-horn "
+                    "differences \u2014 the same Conn 6M played by two different players on "
+                    "two different mouthpieces produced 12 dB of upper-harmonic spread, more "
+                    "than the spread across many different horns combined. Compare YOUR setups "
+                    "to YOUR other setups, and expect any single reading to be mostly about "
+                    "your current chain rather than the horn alone.")
         self._blank()
 
         # === TWO WAYS TO USE IT ===
@@ -4493,27 +4467,16 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._body("2. Tracking changes over time")
-        self._bullet("Record a session, change one thing, record another. "
-                      "The comparison tool shows you exactly what moved "
-                      "and by how much. This works for any variable in "
-                      "the chain:")
-        self._bullet("\"What happens when I switch mouthpieces?\" "
-                      "\u2014 Same horn, same reed, same mic. "
-                      "The delta is the mouthpiece.")
-        self._bullet("\"How does my sound change day to day?\" "
-                      "\u2014 Same everything. The delta is you.")
-        self._bullet("\"How does my ribbon mic color the sound "
-                      "vs my condenser?\" \u2014 Same horn, same "
-                      "room. The delta is the recording chain.")
-        self._bullet("\"Is this horn different from that one?\" "
-                      "\u2014 Same player, same mouthpiece, same "
-                      "mic, same room. The delta is the horn.")
+        self._bullet("Record a session, change one thing, record another. The comparison tool "
+                      "shows what moved and by how much. Works for any variable:")
+        self._bullet("Switching mouthpieces \u2014 same horn, reed, mic. Delta is the mouthpiece.")
+        self._bullet("Day-to-day variation \u2014 same everything. Delta is you.")
+        self._bullet("Ribbon vs condenser \u2014 same horn, same room. Delta is the recording chain.")
+        self._bullet("Two horns \u2014 same player, mouthpiece, mic, room. Delta is the horn.")
         self._blank()
-        self._body("Over many sessions, the things that stay the "
-                    "same start to emerge from the things that drift. "
-                    "But that takes time and discipline about controlling "
-                    "what you change. Be skeptical of strong conclusions "
-                    "from small samples.")
+        self._body("Over many sessions, what stays the same emerges from what drifts. That takes "
+                    "time and discipline about what you control. Be skeptical of strong "
+                    "conclusions from small samples.")
         self._blank()
 
         # === GETTING STARTED ===
@@ -4543,28 +4506,16 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._body("Mic placement")
-        self._bullet("Place the mic 2\u20133 feet (60\u201390 cm) from "
-                      "the bell, slightly off-axis")
-        self._bullet("Avoid very close placement (<1 foot) \u2014 "
-                      "proximity effect exaggerates low harmonics")
-        self._bullet("A quieter room is better \u2014 background noise "
-                      "masks upper harmonics")
-        self._bullet("Mic position matters more than almost anything "
-                      "else. In testing, moving a few inches between "
-                      "takes \u2014 same horn, same player, same room, "
-                      "minutes apart \u2014 changed the rolloff rate by "
-                      "over 1 dB/harmonic. That's enough to shift "
-                      "complexity readings by 10\u201320%.")
-        self._bullet("For controlled comparisons, use a mic stand at "
-                      "a fixed position. If you hold the mic or move "
-                      "between sessions, the position change will show "
-                      "up in your data and may be larger than the "
-                      "difference you're trying to measure. But you "
-                      "can also deliberately change your position to "
-                      "see how much it influences what gets captured.")
-        self._bullet("Keep placement consistent between sessions. If "
-                      "you're comparing two horns, don't move the mic "
-                      "or yourself between recordings.")
+        self._bullet("2\u20133 feet (60\u201390 cm) from the bell, slightly off-axis.")
+        self._bullet("Closer than 1 foot \u2014 proximity effect exaggerates low harmonics.")
+        self._bullet("Quieter room is better \u2014 background noise masks upper harmonics.")
+        self._bullet("Mic position matters more than almost anything else. Moving a few inches "
+                      "between takes \u2014 same horn, same player, minutes apart \u2014 changed rolloff "
+                      "by over 1 dB/harmonic in our tests, enough to shift complexity by 10\u201320%.")
+        self._bullet("For controlled comparisons, use a mic stand at a fixed position; the "
+                      "position change otherwise shows up in your data and can be larger than "
+                      "what you're trying to measure. (Or change position deliberately to study "
+                      "how much it influences capture.)")
         self._blank()
 
         self._body("Preset")
@@ -4748,13 +4699,10 @@ class UserGuideWindow(tk.Toplevel):
                     "axis.")
         self._blank()
 
-        self._body("The Character Map is most reliable when comparing "
-                    "presets within a single sax type. Lower-pitched horns "
-                    "intrinsically read warmer and brighter than higher-"
-                    "pitched horns regardless of mouthpiece, so mixing "
-                    "types in the same comparison mostly shows you that "
-                    "physics rather than tonal character. The Analyze tool "
-                    "warns you before opening a cross-type comparison.")
+        self._body("Character Map is most reliable within a single sax type. Lower-pitched horns "
+                    "read warmer and brighter regardless of mouthpiece, so cross-type comparisons "
+                    "mostly show you that physics rather than character. The tool warns before "
+                    "opening one.")
         self._blank()
 
         self._body("The descriptors in detail")
@@ -4766,17 +4714,12 @@ class UserGuideWindow(tk.Toplevel):
                       "darkness. A mouthpiece can be dark in its upper "
                       "harmonics while still having a weak H2 (reads \"not "
                       "warm\") or a strong H2 (reads \"warm\").")
-        self._bullet("A few setups in our test data \u2014 metal mouthpieces "
-                      "driven hard, in particular \u2014 produce H2 LOUDER than "
-                      "the fundamental itself. That's a \"horn-like\" or "
-                      "\"trumpet-like\" spectrum where the octave dominates "
-                      "the root, and it's a real, recognized phenomenon. The "
-                      "Warmth descriptor reads these as moderately warm "
-                      "rather than maxed-out warm, because beyond H2 \u2248 H1 "
-                      "the perceptual difference saturates. We're tracking "
-                      "this case but haven't yet figured out the right way "
-                      "to characterize it \u2014 expect this part of the formula "
-                      "to evolve as we gather more data.")
+        self._bullet("Some setups \u2014 metal mouthpieces driven hard especially \u2014 produce H2 LOUDER "
+                      "than the fundamental, a \"horn-like\" spectrum where the octave dominates. "
+                      "Real and recognized. Warmth reads these as moderately warm rather than "
+                      "maxed out (perceptually, the H2 \u2248 H1 saturation point); we're still "
+                      "working out the best characterization, so this part of the formula may "
+                      "evolve.")
         self._blank()
 
         self._bullet("Harmonic Complexity (Pure \u2194 Complex) \u2014 spectral "
@@ -4819,57 +4762,29 @@ class UserGuideWindow(tk.Toplevel):
 
         # === WHERE DIFFERENCES COME FROM ===
         self._h2("Where Differences Come From")
-        self._body("When comparing two presets, the analysis text "
-                    "tells you which harmonic range has the biggest "
-                    "shifts. Acoustic research and our own data suggest "
-                    "that different parts of the saxophone tend to "
-                    "affect different harmonics, though this is not "
+        self._body("The analysis text flags which harmonic range moved most. Different parts of "
+                    "the saxophone tend to affect different harmonics, though the mapping isn't "
                     "perfectly understood:")
         self._blank()
-        self._bullet("H1\u2013H4 (low harmonics): Research suggests "
-                      "these are influenced more by the bore than by "
-                      "the mouthpiece. In our data, this range shows "
-                      "the least variation when the player or "
-                      "mouthpiece changes.")
-        self._bullet("H7\u2013H13 (upper harmonics): In our neck-swap "
-                      "data, this is where different necks show the "
-                      "biggest effect. Mouthpiece changes also show "
-                      "up here. When both presets used the same "
-                      "mouthpiece, neck differences may be a factor.")
-        self._bullet("H3\u2013H12 broadband (everything shifts): In "
-                      "our data, mouthpiece and player changes tend "
-                      "to lift or suppress the entire upper harmonic "
-                      "series rather than a narrow range.")
+        self._bullet("H1\u2013H4 (low): research suggests bore-driven more than mouthpiece-driven; "
+                      "this range shows the least variation in our player/mouthpiece swaps.")
+        self._bullet("H7\u2013H13 (upper): where neck swaps show their biggest effect in our data, "
+                      "and where mouthpiece changes also show up.")
+        self._bullet("H3\u2013H12 broadband: mouthpiece and player changes tend to lift or suppress "
+                      "the whole upper series rather than a narrow band.")
         self._blank()
-        self._body("These are patterns we've observed, not laws of "
-                    "physics. Saxophone acoustics are complex and "
-                    "every horn is different. The analysis is meant "
-                    "to point you in a useful direction, not to "
-                    "make definitive claims about what caused a "
-                    "difference.")
-        self._blank()
-        self._body("When two presets share the same player, "
-                    "differences are more likely to reflect the "
-                    "equipment. When players differ, it's harder to "
-                    "separate the horn signal from the player signal.")
+        self._body("These are observed patterns, not laws of physics. Same-player comparisons "
+                    "isolate equipment; cross-player comparisons can't cleanly separate horn from "
+                    "player.")
         self._blank()
 
-        self._body("Measurement noise: how big does a delta have to be "
-                    "to be real?")
-        self._bullet("In our early test data, two takes of the same "
-                      "horn + mouthpiece + mic + player ten minutes apart "
-                      "produced descriptor variation of about 1\u20133% "
-                      "and rolloff variation of about 0.3 dB/H. Treat "
-                      "those numbers as a rough \"measurement noise\" "
-                      "floor: deltas smaller than that, even between "
-                      "different setups, are likely just session-to-"
-                      "session variation rather than real signal. "
-                      "Deltas larger than that are potentially real but "
-                      "still need the other context (same player? same "
-                      "mic? same room?) to interpret.")
-        self._bullet("This is an early estimate from a single two-take "
-                      "data point and will be refined as more same-"
-                      "setup repeat data comes in.")
+        self._body("Measurement noise: how big does a delta need to be?")
+        self._bullet("In our early data, two takes of the same setup ten minutes apart varied by "
+                      "1\u20133% on descriptors and ~0.3 dB/H on rolloff. Deltas under that floor are "
+                      "likely session-to-session noise; bigger ones are potentially real but "
+                      "still need context (same player? same mic? same room?) to interpret. Early "
+                      "estimate from one two-take data point \u2014 will tighten as more repeat data "
+                      "arrives.")
         self._blank()
 
         # === REPORTS ===
@@ -4916,83 +4831,51 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2("WAV Recording")
-        self._body("WAV recording is on by default. Each capture session writes "
-                    "a WAV file alongside the harmonic data. The first time you "
-                    "start a capture, you'll be asked to choose a folder.")
+        self._body("WAV recording is on by default. Each session writes a WAV alongside the "
+                    "harmonic data; first capture asks you to choose a folder.")
         self._blank()
-        self._body("Why it matters: when WAV recording is enabled, the toner "
-                    "automatically re-analyzes the recording offline at the end "
-                    "of the session, with stricter segment detection than the live "
-                    "pipeline can manage. Offline analysis typically extracts "
-                    "around 2\u00d7 the harmonic resolution of live capture, so "
-                    "your stored fingerprints come from the better measurement. "
-                    "This takes about 5 seconds for a 4-minute recording.")
-        self._blank()
-        self._body("You can disable WAV recording in Options \u2192 Settings \u2192 "
-                    "General if you really need to (a warning explains the accuracy "
-                    "tradeoff). You can also tell the toner to delete each WAV "
-                    "after it's been analyzed if you only want the harmonic data.")
+        self._body("Why it matters: at the end of each session, the toner re-analyzes the "
+                    "recording offline with stricter segment detection than the live pipeline "
+                    "manages. Offline extracts about 2\u00d7 the harmonic resolution, so your stored "
+                    "fingerprints come from the better measurement (~5 seconds for a 4-minute "
+                    "recording). Disable in Options \u2192 Settings \u2192 General if you must (warning "
+                    "explains the tradeoff); you can also auto-delete the WAV after analysis.")
         self._blank()
         self._body("Other reasons to keep the WAVs:")
-        self._bullet("Backup of the original audio in case a future version of the "
-                      "tool has improved analysis")
-        self._bullet("Share recordings for others' analysis or import (see the "
-                      "first-run dialog for the contribution folder)")
-        self._bullet("Listen back and correlate what you hear with what the data shows")
-        self._bullet("Keep a record of how a horn sounds on a given day")
+        self._bullet("Re-analyze with future, better tools.")
+        self._bullet("Share recordings for others to analyze or import.")
+        self._bullet("Listen back and correlate what you hear with what the data shows.")
+        self._bullet("Keep a record of how a horn sounded on a given day.")
         self._blank()
-        self._body("Each file is named with the preset name and session "
-                    "date so you can find it later.")
-        self._blank()
-        self._body("The toner activates automatically when you switch "
-                    "to the Toner tab and stops when you leave it.")
+        self._body("Files are named with preset name + session date. The toner activates "
+                    "automatically on tab switch and stops when you leave.")
         self._blank()
 
         # === NERD INFO ===
         self._h2("Nerd Info \u2014 How It Works Under the Hood")
-        self._body("For the technically curious, here's what's actually "
-                    "happening when you see those bars and gauges moving.")
-        self._blank()
 
         self._body("FFT Pipeline")
-        self._bullet("The audio stream is analyzed using a 16,384-sample "
-                      "Fast Fourier Transform (FFT) at 44,100 Hz sample "
-                      "rate, giving 2.69 Hz frequency resolution \u2014 "
-                      "fine enough to resolve individual harmonics even "
-                      "on the lowest baritone notes.")
-        self._bullet("A Hann window is applied before the FFT to control "
-                      "spectral leakage. This is the standard window for "
-                      "harmonic analysis, providing good frequency "
-                      "resolution with \u221231.6 dB sidelobe suppression.")
+        self._bullet("16,384-sample FFT at 44.1 kHz \u2192 2.69 Hz resolution, fine enough for "
+                      "individual harmonics on the lowest baritone notes.")
+        self._bullet("Hann window before the FFT (\u221231.6 dB sidelobes), standard for harmonic "
+                      "analysis.")
         self._blank()
 
         self._body("Pitch Detection")
-        self._bullet("The fundamental is found by peak-picking with "
-                      "sub-harmonic verification. On saxophone, the 2nd "
-                      "or 3rd harmonic is often louder than the "
-                      "fundamental (especially in the low register), so "
-                      "the detector checks whether a strong peak might "
-                      "actually be H2, H3, H4, or H5 of a lower note "
-                      "by looking for that candidate's own harmonic "
-                      "series. This prevents octave errors.")
-        self._bullet("Temporal hysteresis prevents the detector from "
-                      "jumping between octaves frame-to-frame.")
+        self._bullet("Peak-picking with sub-harmonic verification: on sax the 2nd or 3rd "
+                      "harmonic is often louder than the fundamental, so the detector checks "
+                      "whether a strong peak might be H2/H3/H4/H5 of a lower note by looking "
+                      "for that candidate's own series. Prevents octave errors.")
+        self._bullet("Temporal hysteresis prevents frame-to-frame octave jumps.")
         self._blank()
 
         self._body("Harmonic Measurement")
-        self._bullet("For each harmonic (up to the 20th), the algorithm "
-                      "finds the actual spectral peak within \u00b13 bins "
-                      "of the expected position, then refines both "
-                      "frequency and amplitude using parabolic "
-                      "interpolation (the standard CCRMA method). This "
-                      "corrects for up to 1.42 dB of scalloping loss "
-                      "that occurs when a harmonic falls between FFT bins.")
-        self._bullet("Harmonics are measured in dB relative to the "
-                      "fundamental. This normalizes out differences in "
-                      "volume and mic gain, so the harmonic shape is "
-                      "what you played, not how loud you were.")
-        self._bullet("Harmonics weaker than \u221260 dB relative to the "
-                      "fundamental are discarded as noise.")
+        self._bullet("For each harmonic up to the 20th: peak-pick within \u00b13 bins, then parabolic "
+                      "interpolation (CCRMA method) refines frequency and amplitude. Corrects up "
+                      "to 1.42 dB of inter-bin scalloping loss.")
+        self._bullet("Measured in dB relative to the fundamental \u2014 normalizes out volume and "
+                      "mic gain.")
+        self._bullet("Harmonics under \u221260 dB are discarded as noise.")
         self._blank()
 
         self._body("Descriptors \u2014 Formulas")
@@ -5025,56 +4908,29 @@ class UserGuideWindow(tk.Toplevel):
                       "tenor 1.1\u20132.0, alto 1.9\u20132.3, soprano 2.8\u20134.0.")
         self._blank()
 
-        self._body("Why Warmth and Brightness are Independent")
-        self._bullet("Warmth (H2 strength) and brightness (upper-harmonic "
-                      "energy) come from physically decoupled mechanisms. "
-                      "H2 strength is set by how the chamber and reed couple "
-                      "to the fundamental \u2014 bigger chamber and rounder "
-                      "design produce more H2. Upper-harmonic energy is set "
-                      "by the buzz of the reed against the tip rail \u2014 "
-                      "brighter facing and harder reed produce more H4\u2013H10. "
-                      "You can engineer either axis independently of the other, "
-                      "which is why the Analyze tool's character map treats "
-                      "Warmth and brightness as orthogonal axes.")
-        self._blank()
-
-        self._body("Descriptors are never stored \u2014 they are always "
-                    "recomputed from raw harmonic data using the current "
-                    "formulas. This means improvements to the formulas apply "
-                    "retroactively to all historical captures.")
+        self._body("Descriptors are never stored \u2014 they are recomputed from raw harmonic data "
+                    "using the current formulas, so improvements apply retroactively to every "
+                    "historical capture.")
         self._blank()
 
         self._body("What Gets Saved")
-        self._bullet("Each capture stores the raw harmonic amplitudes "
-                      "(dB relative to fundamental), harmonic cents "
-                      "deviations, fundamental frequency, spectral "
-                      "centroid, and signal level. This is the raw "
-                      "measurement data \u2014 everything else is "
-                      "derived from it.")
-        self._bullet("Captures are averaged per-note first, then across "
-                      "notes with equal weight. This prevents register "
-                      "skew \u2014 a preset with 20 high-note captures "
-                      "and 3 low-note captures still represents the "
-                      "whole horn evenly.")
-        self._bullet("The first ~100 ms of each note is automatically "
-                      "skipped. The attack transient contains broadband "
-                      "non-harmonic energy that doesn't represent the "
-                      "sustained tone character (Saldanha & Corso 1964).")
+        self._bullet("Per capture: raw harmonic amplitudes (dB rel. fundamental), harmonic cents "
+                      "deviations, fundamental frequency, spectral centroid, signal level. "
+                      "Everything else is derived.")
+        self._bullet("Captures are averaged per-note first, then across notes with equal weight. "
+                      "Prevents register skew \u2014 20 high-note captures and 3 low-note captures "
+                      "still represent the whole horn evenly.")
+        self._bullet("The first ~100 ms of each note is skipped \u2014 attack transients contain "
+                      "broadband non-harmonic energy that doesn't represent sustained tone "
+                      "(Saldanha & Corso 1964).")
         self._blank()
 
         self._body("Why Raw Data Matters")
-        self._bullet("The spectral centroid (amplitude-weighted center "
-                      "frequency of the harmonic series) is stored per "
-                      "capture as future-proofing. It is the single "
-                      "most validated acoustic correlate of perceived "
-                      "brightness in the research literature.")
-        self._bullet("Harmonics are stored up to the 20th, even though "
-                      "the current gauges only use the first few. Low "
-                      "register saxophone can produce 20+ audible "
-                      "harmonics, and future analysis tools may use "
-                      "the full picture.")
-        self._bullet("All of this means your captures today will be "
-                      "fully usable by better analysis tools tomorrow.")
+        self._bullet("Spectral centroid is stored as future-proofing \u2014 the most validated "
+                      "acoustic correlate of perceived brightness in the literature.")
+        self._bullet("Harmonics are stored up to H20 even though current gauges use only the "
+                      "first few; low-register sax can produce 20+ audible harmonics.")
+        self._bullet("Today's captures will be fully usable by better analysis tools tomorrow.")
         self._blank()
 
     def _section_import_export(self):

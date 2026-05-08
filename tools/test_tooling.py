@@ -179,32 +179,81 @@ print("\n=== Die Holder SVG Generation ===")
 # ============================================================
 
 with tempfile.TemporaryDirectory() as tmpdir:
-    # Large holder
+    # 6-layer Large holder (default): solid + magnet + 3x pin + ring = 6 pieces
     svg_path = os.path.join(tmpdir, "holder_large.svg")
     generate_holder_svg("large", svg_path, settings)
-    check("Holder SVG (large) created", os.path.exists(svg_path))
+    check("Holder SVG (large, 6-layer) created", os.path.exists(svg_path))
     with open(svg_path, 'r') as f:
         content = f.read()
-    # 4 pieces: solid, magnet, pin, ring. Each has outer circle = 4 outer circles.
-    # magnet has 1 hole, pin has 2 holes, ring has 1 inner circle = 4 additional circles
+    # 6 outer + 1 magnet hole + 3 pin holes + 1 ring inner = 11 circles
     circle_count = content.count('<circle')
-    check(f"Holder large: >= 8 circles (found {circle_count})", circle_count >= 8)
+    check(f"Holder large 6-layer: 11 circles (found {circle_count})", circle_count == 11)
+
+    # 5-layer Large: solid + magnet + 2x pin + ring = 5 pieces
+    svg_path = os.path.join(tmpdir, "holder_large5.svg")
+    generate_holder_svg("large", svg_path, settings, layer_count=5)
+    check("Holder SVG (large, 5-layer) created", os.path.exists(svg_path))
+    with open(svg_path, 'r') as f:
+        content = f.read()
+    # 5 outer + 1 magnet hole + 2 pin holes + 1 ring inner = 9 circles
+    circle_count = content.count('<circle')
+    check(f"Holder large 5-layer: 9 circles (found {circle_count})", circle_count == 9)
 
     # Small holder
     svg_path = os.path.join(tmpdir, "holder_small.svg")
     generate_holder_svg("small", svg_path, settings)
     check("Holder SVG (small) created", os.path.exists(svg_path))
 
-    # Both holders
-    svg_path = os.path.join(tmpdir, "holder_both.svg")
-    generate_holder_svg("both", svg_path, settings)
-    check("Holder SVG (both) created", os.path.exists(svg_path))
+    # Both holders, 6-layer = 12 pieces (two complete independent holders)
+    svg_path = os.path.join(tmpdir, "holder_both6.svg")
+    generate_holder_svg("both", svg_path, settings, layer_count=6,
+                       sheet_width_mm=400, sheet_height_mm=400)
+    check("Holder SVG (both, 6-layer) created", os.path.exists(svg_path))
     with open(svg_path, 'r') as f:
         content = f.read()
-    # "Both" = 3 shared pieces + 2 retaining rings = 5 pieces
-    # 5 outer circles + magnet hole + 2 pin holes + 2 inner rings = 10 circles
+    # 12 outer + 2 magnet holes + 6 pin holes + 2 ring inners = 22 circles
     circle_count = content.count('<circle')
-    check(f"Holder both: >= 10 circles (found {circle_count})", circle_count >= 10)
+    check(f"Holder both 6-layer: 22 circles (found {circle_count})", circle_count == 22)
+    # Sheet dims show up in the SVG header
+    check("Holder both 6-layer SVG width = 400mm",
+          'width="400mm"' in content)
+
+    # Both holders, 5-layer = 10 pieces
+    svg_path = os.path.join(tmpdir, "holder_both5.svg")
+    generate_holder_svg("both", svg_path, settings, layer_count=5,
+                       sheet_width_mm=400, sheet_height_mm=400)
+    with open(svg_path, 'r') as f:
+        content = f.read()
+    # 10 outer + 2 magnet holes + 4 pin holes + 2 ring inners = 18 circles
+    circle_count = content.count('<circle')
+    check(f"Holder both 5-layer: 18 circles (found {circle_count})", circle_count == 18)
+
+    # Sheet too small -> ValueError
+    err_raised = False
+    try:
+        generate_holder_svg("both", os.path.join(tmpdir, "fail.svg"), settings,
+                           layer_count=6, sheet_width_mm=200, sheet_height_mm=200)
+    except ValueError:
+        err_raised = True
+    check("Both 6-layer on 200x200 sheet raises ValueError", err_raised)
+
+    # Sheet just barely too small for a single 6-layer = 6 pieces (need ~3 cols)
+    err_raised = False
+    try:
+        generate_holder_svg("large", os.path.join(tmpdir, "fail2.svg"), settings,
+                           layer_count=6, sheet_width_mm=100, sheet_height_mm=100)
+    except ValueError:
+        err_raised = True
+    check("Large 6-layer on 100x100 sheet raises ValueError", err_raised)
+
+    # bad layer_count rejected
+    err_raised = False
+    try:
+        generate_holder_svg("large", os.path.join(tmpdir, "fail3.svg"), settings,
+                           layer_count=4)
+    except ValueError:
+        err_raised = True
+    check("layer_count=4 raises ValueError", err_raised)
 
 # ============================================================
 print("\n=== Die Holder G-code Generation ===")
@@ -213,15 +262,29 @@ print("\n=== Die Holder G-code Generation ===")
 with tempfile.TemporaryDirectory() as tmpdir:
     gcode_path = os.path.join(tmpdir, "holder_large.gcode")
     generate_holder_gcode("large", gcode_path, settings)
-    check("Holder G-code (large) created", os.path.exists(gcode_path))
+    check("Holder G-code (large, 6-layer default) created", os.path.exists(gcode_path))
 
     gcode_path = os.path.join(tmpdir, "holder_both.gcode")
-    generate_holder_gcode("both", gcode_path, settings)
-    check("Holder G-code (both) created", os.path.exists(gcode_path))
+    generate_holder_gcode("both", gcode_path, settings, layer_count=6,
+                         sheet_width_mm=400, sheet_height_mm=400)
+    check("Holder G-code (both, 6-layer, 400x400) created", os.path.exists(gcode_path))
     with open(gcode_path, 'r') as f:
         content = f.read()
     check("Holder G-code has header", "G90" in content)
     check("Holder G-code has moves", "G1" in content)
+
+    gcode_path = os.path.join(tmpdir, "holder_small5.gcode")
+    generate_holder_gcode("small", gcode_path, settings, layer_count=5)
+    check("Holder G-code (small, 5-layer) created", os.path.exists(gcode_path))
+
+    # Sheet too small -> ValueError
+    err_raised = False
+    try:
+        generate_holder_gcode("both", os.path.join(tmpdir, "g_fail.gcode"), settings,
+                             layer_count=6, sheet_width_mm=200, sheet_height_mm=200)
+    except ValueError:
+        err_raised = True
+    check("G-code Both 6-layer on 200x200 raises ValueError", err_raised)
 
 # ============================================================
 print("\n=== Holder Constants ===")
@@ -232,6 +295,109 @@ check("Holder magnet hole radius is 3.25mm (6.5mm dia)", HOLDER_MAGNET_HOLE_R ==
 check("Holder pin hole radius is 1.75mm (3.5mm dia)", HOLDER_PIN_HOLE_R == 1.75)
 check("Large holder inner radius is 35.0mm", HOLDER_LARGE_INNER_R == 35.0)
 check("Small holder inner radius is 25.0mm", HOLDER_SMALL_INNER_R == 25.0)
+
+# ============================================================
+print("\n=== _holder_pieces_for ===")
+# ============================================================
+
+from svg_engine import _holder_pieces_for, _pack_holder_grid
+
+check("Large 6-layer = 6 pieces", len(_holder_pieces_for("large", 6)) == 6)
+check("Large 5-layer = 5 pieces", len(_holder_pieces_for("large", 5)) == 5)
+check("Small 6-layer = 6 pieces", len(_holder_pieces_for("small", 6)) == 6)
+check("Small 5-layer = 5 pieces", len(_holder_pieces_for("small", 5)) == 5)
+check("Both 6-layer = 12 pieces", len(_holder_pieces_for("both", 6)) == 12)
+check("Both 5-layer = 10 pieces", len(_holder_pieces_for("both", 5)) == 10)
+
+# Composition: 1 solid + 1 magnet + (N-3) pin + 1 ring per holder
+types_l6 = [p[0] for p in _holder_pieces_for("large", 6)]
+check("Large 6-layer has 1 solid", types_l6.count('solid') == 1)
+check("Large 6-layer has 1 magnet", types_l6.count('magnet') == 1)
+check("Large 6-layer has 3 pin", types_l6.count('pin') == 3)
+check("Large 6-layer has 1 ring", types_l6.count('ring') == 1)
+
+types_l5 = [p[0] for p in _holder_pieces_for("large", 5)]
+check("Large 5-layer has 2 pin (one fewer)", types_l5.count('pin') == 2)
+
+# Both: two complete independent holders, both ring sizes present
+both6 = _holder_pieces_for("both", 6)
+both_types = [p[0] for p in both6]
+check("Both 6-layer has 2 solid", both_types.count('solid') == 2)
+check("Both 6-layer has 2 magnet", both_types.count('magnet') == 2)
+check("Both 6-layer has 6 pin", both_types.count('pin') == 6)
+check("Both 6-layer has 2 ring", both_types.count('ring') == 2)
+ring_radii = sorted(p[1] for p in both6 if p[0] == 'ring')
+check("Both 6-layer rings = small + large",
+      ring_radii == sorted([HOLDER_SMALL_INNER_R, HOLDER_LARGE_INNER_R]))
+
+# Validation
+err = False
+try: _holder_pieces_for("large", 7)
+except ValueError: err = True
+check("layer_count=7 rejected", err)
+
+err = False
+try: _holder_pieces_for("nonsense", 6)
+except ValueError: err = True
+check("invalid variant rejected", err)
+
+# ============================================================
+print("\n=== _pack_holder_grid ===")
+# ============================================================
+
+# 6 pieces (single 6-layer holder) on a roomy sheet
+result = _pack_holder_grid(6, 400, 400)
+check("6 pieces on 400x400 fits", result is not None)
+cols, rows = result
+check("6 pieces on 400x400: layout >= 6 slots", cols * rows >= 6)
+check("6 pieces on 400x400: near-square", abs(cols - rows) <= 1)
+
+# 12 pieces (Both 6-layer) on 400x400 — fits as 4x3 or similar
+result = _pack_holder_grid(12, 400, 400)
+check("12 pieces on 400x400 fits", result is not None)
+
+# 12 pieces on 200x200 — too small
+check("12 pieces on 200x200 doesn't fit",
+      _pack_holder_grid(12, 200, 200) is None)
+
+# Boundary: 1 piece needs 85 + 2*5 = 95mm in each dim
+check("1 piece on 95x95 fits exactly",
+      _pack_holder_grid(1, 95, 95) is not None)
+check("1 piece on 94x94 doesn't fit",
+      _pack_holder_grid(1, 94, 94) is None)
+
+# 6 pieces on huge sheet should still pick a near-square layout, not 6x1
+result = _pack_holder_grid(6, 2000, 2000)
+cols, rows = result
+check("6 pieces on huge sheet picks near-square (not 6x1)",
+      abs(cols - rows) <= 1 and max(cols, rows) <= 3)
+
+# ============================================================
+print("\n=== Phil Noy Ring Engraving (regression check) ===")
+# ============================================================
+# Phil Noy gave away the pad-making method for free. The "DESIGNED BY
+# PHIL NOY" engraving on every retaining ring was dropped once before
+# and Phil was upset. This test guards against regressions.
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    eng_color = settings["layer_colors"].get('die_engraving', '#00E000')
+
+    svg_path = os.path.join(tmpdir, "credit_large.svg")
+    generate_holder_svg("large", svg_path, settings)
+    with open(svg_path, 'r') as f:
+        large_count = f.read().count(eng_color)
+    check(f"Large holder SVG has ring engraving polylines (found {large_count})",
+          large_count > 0)
+
+    svg_path = os.path.join(tmpdir, "credit_both.svg")
+    generate_holder_svg("both", svg_path, settings,
+                       sheet_width_mm=400, sheet_height_mm=400)
+    with open(svg_path, 'r') as f:
+        both_count = f.read().count(eng_color)
+    # Both has 2 rings; engraving polyline count should be roughly 2x
+    check(f"Both holder engraves on every ring "
+          f"(large={large_count}, both={both_count}, expect both ~2x large)",
+          both_count >= 1.5 * large_count)
 
 # ============================================================
 print("\n=== Engraving Toggle ===")
