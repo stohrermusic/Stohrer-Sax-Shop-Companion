@@ -200,22 +200,55 @@ class ToolingTabMixin:
         # ========================================
         holder_frame = tk.Frame(self._tooling_content, bg=bg)
 
-        # Sheet size info
+        # Layer description (live-updated from layer count radio)
+        self.holder_info_var = tk.StringVar()
         holder_info = tk.Label(holder_frame, bg=bg, font=("Helvetica", 9), fg="gray",
-                               text="6-layer holder: base, magnet (6.5mm), 3\u00d7 pin (3.5mm), ring.\n"
-                                    "Required sheet: 275 \u00d7 185 mm (10.8 \u00d7 7.3 in).",
+                               textvariable=self.holder_info_var,
                                justify="left")
         holder_info.pack(anchor='w', pady=(0, 8))
 
+        # Layer count
+        layer_frame = tk.Frame(holder_frame, bg=bg)
+        layer_frame.pack(fill='x', pady=(0, 5))
+        tk.Label(layer_frame, text="Layers:", bg=bg).pack(side='left')
+        self.holder_layer_count_var = tk.IntVar(value=int(tooling.get("holder_layer_count", 6)))
+        tk.Radiobutton(layer_frame, text="5-layer (2\u00d7 pin)", variable=self.holder_layer_count_var,
+                       value=5, bg=bg, command=self._update_holder_info).pack(side='left', padx=(5, 10))
+        tk.Radiobutton(layer_frame, text="6-layer (3\u00d7 pin)", variable=self.holder_layer_count_var,
+                       value=6, bg=bg, command=self._update_holder_info).pack(side='left')
+
+        # Variant
         variant_frame = tk.Frame(holder_frame, bg=bg)
         variant_frame.pack(fill='x', pady=(0, 5))
-
         tk.Label(variant_frame, text="Generate:", bg=bg).pack(side='left')
         self.holder_variant_var = tk.StringVar(value="large")
         tk.Radiobutton(variant_frame, text="Large (40\u201360mm pads)", variable=self.holder_variant_var,
                        value="large", bg=bg).pack(side='left', padx=(5, 10))
         tk.Radiobutton(variant_frame, text="Small (7\u201339.5mm pads)", variable=self.holder_variant_var,
-                       value="small", bg=bg).pack(side='left')
+                       value="small", bg=bg).pack(side='left', padx=(0, 10))
+        tk.Radiobutton(variant_frame, text="Both", variable=self.holder_variant_var,
+                       value="both", bg=bg).pack(side='left')
+
+        # Sheet size (mirrors the Die Inserts pattern)
+        holder_sheet_frame = tk.LabelFrame(holder_frame, text="Sheet Size", bg=bg, padx=5, pady=5)
+        holder_sheet_frame.pack(fill='x', pady=(5, 5))
+
+        holder_size_row = tk.Frame(holder_sheet_frame, bg=bg)
+        holder_size_row.pack(fill='x')
+
+        tk.Label(holder_size_row, text="Width:", bg=bg).pack(side='left')
+        self.holder_width_var = tk.StringVar(value=tooling.get("holder_sheet_width", "12"))
+        tk.Entry(holder_size_row, textvariable=self.holder_width_var, width=8).pack(side='left', padx=(2, 10))
+
+        tk.Label(holder_size_row, text="Height:", bg=bg).pack(side='left')
+        self.holder_height_var = tk.StringVar(value=tooling.get("holder_sheet_height", "12"))
+        tk.Entry(holder_size_row, textvariable=self.holder_height_var, width=8).pack(side='left', padx=(2, 10))
+
+        self.holder_units_var = tk.StringVar(value=self.settings.get("units", "in"))
+        tk.Radiobutton(holder_size_row, text="in", variable=self.holder_units_var,
+                       value="in", bg=bg).pack(side='left')
+        tk.Radiobutton(holder_size_row, text="mm", variable=self.holder_units_var,
+                       value="mm", bg=bg).pack(side='left', padx=(5, 0))
 
         holder_name_frame = tk.Frame(holder_frame, bg=bg)
         holder_name_frame.pack(fill='x', pady=(0, 5))
@@ -233,6 +266,7 @@ class ToolingTabMixin:
                   command=self._on_generate_holder_gcode).pack(side='left')
 
         self._tooling_sections['die_holders'] = holder_frame
+        self._update_holder_info()
 
         # ========================================
         # KERF TEST SECTION
@@ -415,7 +449,38 @@ class ToolingTabMixin:
         tooling["engrave_ring"] = self.die_engrave_ring_var.get()
         tooling["engrave_cutout"] = self.die_engrave_cutout_var.get()
         tooling["step_size"] = self.die_step_var.get()
+        if hasattr(self, 'holder_layer_count_var'):
+            tooling["holder_layer_count"] = int(self.holder_layer_count_var.get())
+            tooling["holder_sheet_width"] = self.holder_width_var.get()
+            tooling["holder_sheet_height"] = self.holder_height_var.get()
         self.settings["tooling_settings"] = tooling
+
+    def _update_holder_info(self):
+        """Refresh the holder description label when layer count changes."""
+        n = int(self.holder_layer_count_var.get())
+        pin = n - 3
+        self.holder_info_var.set(
+            f"{n}-layer holder: base, magnet (6.5mm), {pin}× pin (3.5mm), retaining ring."
+        )
+
+    def _get_holder_sheet_mm(self):
+        """Parse holder sheet width/height and convert to mm."""
+        try:
+            w = float(self.holder_width_var.get())
+            h = float(self.holder_height_var.get())
+        except (ValueError, TypeError):
+            messagebox.showerror("Invalid Input", "Sheet width and height must be valid numbers.")
+            return None, None
+
+        if w <= 0 or h <= 0:
+            messagebox.showerror("Invalid Input", "Sheet dimensions must be positive.")
+            return None, None
+
+        if self.holder_units_var.get() == "in":
+            w *= 25.4
+            h *= 25.4
+
+        return w, h
 
     def _get_die_settings(self):
         """Return settings dict with current tooling UI state applied."""
@@ -1009,7 +1074,12 @@ class ToolingTabMixin:
         """Generate SVG for die holder pieces."""
         try:
             variant = self.holder_variant_var.get()
+            layer_count = int(self.holder_layer_count_var.get())
             base = self.holder_filename_var.get().strip() or "die_holder"
+
+            sheet_w, sheet_h = self._get_holder_sheet_mm()
+            if sheet_w is None:
+                return
 
             save_path = filedialog.asksaveasfilename(
                 title="Save Die Holder SVG",
@@ -1022,11 +1092,19 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             settings = self._get_die_settings()
-            generate_holder_svg(variant, save_path, settings)
+            try:
+                generate_holder_svg(variant, save_path, settings,
+                                    layer_count=layer_count,
+                                    sheet_width_mm=sheet_w, sheet_height_mm=sheet_h)
+            except ValueError as ve:
+                messagebox.showerror("Sheet too small", str(ve))
+                return
 
-            variant_label = {"large": "Large (40\u201360mm)", "small": "Small (7\u201339.5mm)"}[variant]
+            variant_label = {"large": "Large (40\u201360mm)",
+                             "small": "Small (7\u201339.5mm)",
+                             "both": "Both (Small + Large)"}[variant]
             messagebox.showinfo("Done",
-                f"Generated {variant_label} die holder.\n\nSaved to: {save_path}")
+                f"Generated {layer_count}-layer {variant_label} die holder.\n\nSaved to: {save_path}")
 
         except Exception as e:
             messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
@@ -1035,7 +1113,12 @@ class ToolingTabMixin:
         """Generate G-code for die holder pieces."""
         try:
             variant = self.holder_variant_var.get()
+            layer_count = int(self.holder_layer_count_var.get())
             base = self.holder_filename_var.get().strip() or "die_holder"
+
+            sheet_w, sheet_h = self._get_holder_sheet_mm()
+            if sheet_w is None:
+                return
 
             save_path = filedialog.asksaveasfilename(
                 title="Save Die Holder G-code",
@@ -1048,11 +1131,19 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             settings = self._get_die_settings()
-            generate_holder_gcode(variant, save_path, settings)
+            try:
+                generate_holder_gcode(variant, save_path, settings,
+                                      layer_count=layer_count,
+                                      sheet_width_mm=sheet_w, sheet_height_mm=sheet_h)
+            except ValueError as ve:
+                messagebox.showerror("Sheet too small", str(ve))
+                return
 
-            variant_label = {"large": "Large (40\u201360mm)", "small": "Small (7\u201339.5mm)"}[variant]
+            variant_label = {"large": "Large (40\u201360mm)",
+                             "small": "Small (7\u201339.5mm)",
+                             "both": "Both (Small + Large)"}[variant]
             messagebox.showinfo("Done",
-                f"Generated {variant_label} die holder G-code.\n\nSaved to: {save_path}")
+                f"Generated {layer_count}-layer {variant_label} die holder G-code.\n\nSaved to: {save_path}")
 
         except Exception as e:
             messagebox.showerror("Error", f"Something went wrong:\n\n{e}")

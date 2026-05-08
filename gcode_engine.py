@@ -1399,17 +1399,22 @@ def generate_die_gcode_from_placed(placed, sheet_width_mm, sheet_height_mm, file
 # DIE HOLDER G-CODE GENERATION
 # ==========================================
 
-def generate_holder_gcode(variant, filename, settings):
+def generate_holder_gcode(variant, filename, settings, *,
+                          layer_count=6,
+                          sheet_width_mm=None, sheet_height_mm=None):
     """
     Generate G-code for die holder pieces.
 
     Args:
-        variant: "large", "small", or "both"
+        variant: "large", "small", or "both" (both = two complete holders)
         filename: Output file path
         settings: App settings dict
+        layer_count: 5 (2x pin) or 6 (3x pin). Default 6.
+        sheet_width_mm, sheet_height_mm: User sheet size; raises ValueError
+            if pieces don't fit. None = legacy auto-size.
     """
     from svg_engine import (HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
-                            HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R)
+                            _holder_pieces_for, _pack_holder_grid, _min_holder_sheet)
 
     gcode_settings = settings.get("gcode_settings", {})
     mat_settings = gcode_settings.get("acrylic", {})
@@ -1429,35 +1434,27 @@ def generate_holder_gcode(variant, filename, settings):
     spacing = 5.0
     outer_d = HOLDER_OUTER_R * 2
 
-    # Build piece list (same logic as SVG) — 6-layer holder
-    pieces = []
-    if variant in ('large', 'both'):
-        pieces.append(('solid', None))
-        pieces.append(('magnet', None))
-        pieces.append(('pin', None))
-        pieces.append(('pin', None))
-        pieces.append(('pin', None))
-        pieces.append(('ring', HOLDER_LARGE_INNER_R))
-    if variant in ('small', 'both'):
-        if variant == 'both':
-            pieces.append(('ring', HOLDER_SMALL_INNER_R))
-        else:
-            pieces.append(('solid', None))
-            pieces.append(('magnet', None))
-            pieces.append(('pin', None))
-            pieces.append(('pin', None))
-            pieces.append(('pin', None))
-            pieces.append(('ring', HOLDER_SMALL_INNER_R))
-
+    pieces = _holder_pieces_for(variant, layer_count)
     num_pieces = len(pieces)
-    if num_pieces <= 4:
-        cols = 2
-    else:
-        cols = 3
-    rows = (num_pieces + cols - 1) // cols
 
-    width_mm = cols * outer_d + (cols + 1) * spacing
-    height_mm = rows * outer_d + (rows + 1) * spacing
+    if sheet_width_mm is not None and sheet_height_mm is not None:
+        layout = _pack_holder_grid(num_pieces, sheet_width_mm, sheet_height_mm,
+                                   outer_d, spacing)
+        if layout is None:
+            min_w, min_h = _min_holder_sheet(num_pieces, outer_d, spacing)
+            raise ValueError(
+                f"{num_pieces} holder pieces don't fit on a "
+                f"{sheet_width_mm:.0f} × {sheet_height_mm:.0f} mm sheet. "
+                f"Need at least {min_w:.0f} × {min_h:.0f} mm."
+            )
+        cols, rows = layout
+        width_mm = sheet_width_mm
+        height_mm = sheet_height_mm
+    else:
+        cols = max(1, math.ceil(math.sqrt(num_pieces)))
+        rows = (num_pieces + cols - 1) // cols
+        width_mm = cols * outer_d + (cols + 1) * spacing
+        height_mm = rows * outer_d + (rows + 1) * spacing
 
     hole_strokes = []
     outer_cut_strokes = []
