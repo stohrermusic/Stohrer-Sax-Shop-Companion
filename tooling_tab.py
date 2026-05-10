@@ -13,7 +13,8 @@ import webbrowser
 from svg_engine import (
     _nest_discs, try_nest_partial, can_all_pads_fit,
     generate_die_svg, generate_die_svg_from_placed,
-    generate_holder_svg, generate_kerf_test_svg
+    generate_holder_svg, generate_kerf_test_svg,
+    generate_die_organizer_svg,
 )
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode
@@ -82,6 +83,7 @@ class ToolingTabMixin:
         tool_names = [
             ("die_inserts", "Die Inserts"),
             ("die_holders", "Die Holders"),
+            ("die_organizer", "Die Organizer"),
             ("kerf_test", "Kerf Test"),
         ]
         for key, label in tool_names:
@@ -267,6 +269,57 @@ class ToolingTabMixin:
 
         self._tooling_sections['die_holders'] = holder_frame
         self._update_holder_info()
+
+        # ========================================
+        # DIE ORGANIZER SECTION
+        # ========================================
+        organizer_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        # Description + Matt's instructions
+        organizer_info = tk.Label(organizer_frame, bg=bg, font=("Helvetica", 9), fg="gray",
+                                  text="Plate: 230 × 330 mm. Open the SVG in LightBurn or your "
+                                       "laser software to cut.",
+                                  justify="left")
+        organizer_info.pack(anchor='w', pady=(0, 4))
+
+        instructions_text = (
+            "Cut three of the upper and one of the lower. Use the locating "
+            "holes in the corners to align the layers and glue them together "
+            "(a book press lightly clamps it nicely while the glue sets). "
+            "Locating holes are 1/8\" — resize for whatever pin you have. "
+            "Wood works great; acrylic will too."
+        )
+        instructions_label = tk.Label(organizer_frame, bg=bg, font=("Helvetica", 9),
+                                      text=instructions_text, justify="left",
+                                      wraplength=520)
+        instructions_label.pack(anchor='w', pady=(0, 8))
+
+        # Variant
+        organizer_variant_frame = tk.Frame(organizer_frame, bg=bg)
+        organizer_variant_frame.pack(fill='x', pady=(0, 5))
+        tk.Label(organizer_variant_frame, text="Generate:", bg=bg).pack(side='left')
+        self.organizer_variant_var = tk.StringVar(value="upper")
+        tk.Radiobutton(organizer_variant_frame, text="Upper (slotted)",
+                       variable=self.organizer_variant_var,
+                       value="upper", bg=bg).pack(side='left', padx=(5, 10))
+        tk.Radiobutton(organizer_variant_frame, text="Lower (base)",
+                       variable=self.organizer_variant_var,
+                       value="lower", bg=bg).pack(side='left')
+
+        # Output filename
+        organizer_name_frame = tk.Frame(organizer_frame, bg=bg)
+        organizer_name_frame.pack(fill='x', pady=(0, 5))
+        tk.Label(organizer_name_frame, text="Output filename:", bg=bg).pack(side='left')
+        self.organizer_filename_var = tk.StringVar(value="die_organizer")
+        tk.Entry(organizer_name_frame, textvariable=self.organizer_filename_var,
+                 width=25).pack(side='left', padx=(5, 0))
+
+        organizer_gen_frame = tk.Frame(organizer_frame, bg=bg)
+        organizer_gen_frame.pack(fill='x', pady=(5, 0))
+        tk.Button(organizer_gen_frame, text="Generate SVG", width=15,
+                  command=self._on_generate_organizer_svg).pack(side='left')
+
+        self._tooling_sections['die_organizer'] = organizer_frame
 
         # ========================================
         # KERF TEST SECTION
@@ -1144,6 +1197,31 @@ class ToolingTabMixin:
                              "both": "Both (Small + Large)"}[variant]
             messagebox.showinfo("Done",
                 f"Generated {layer_count}-layer {variant_label} die holder G-code.\n\nSaved to: {save_path}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Something went wrong:\n\n{e}")
+
+    def _on_generate_organizer_svg(self):
+        """Generate SVG for the die organizer (upper or lower plate)."""
+        try:
+            variant = self.organizer_variant_var.get()
+            base = self.organizer_filename_var.get().strip() or "die_organizer"
+
+            save_path = filedialog.asksaveasfilename(
+                title="Save Die Organizer SVG",
+                defaultextension=".svg",
+                filetypes=[("SVG files", "*.svg")],
+                initialfile=f"{base}_{variant}.svg",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+            generate_die_organizer_svg(variant, save_path, self.settings)
+
+            variant_label = {"upper": "Upper (slotted)", "lower": "Lower (base)"}[variant]
+            messagebox.showinfo("Done",
+                f"Generated {variant_label} die organizer.\n\nSaved to: {save_path}")
 
         except Exception as e:
             messagebox.showerror("Error", f"Something went wrong:\n\n{e}")

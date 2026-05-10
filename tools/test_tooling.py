@@ -14,6 +14,7 @@ from svg_engine import (
     get_disc_diameter, _nest_discs, can_all_pads_fit,
     try_nest_partial, generate_die_svg, generate_die_svg_from_placed,
     generate_holder_svg, generate_kerf_test_svg,
+    generate_die_organizer_svg,
     HOLDER_OUTER_R, HOLDER_MAGNET_HOLE_R, HOLDER_PIN_HOLE_R,
     HOLDER_LARGE_INNER_R, HOLDER_SMALL_INNER_R,
 )
@@ -528,6 +529,51 @@ with tempfile.TemporaryDirectory() as tmpdir:
         # Verify cut speed is correct (S180 for speed 180)
         check(f"Kerf test G-code ({material}) uses correct cut speed",
               "F180" in content)
+
+# ============================================================
+print("\n=== Die Organizer SVG Generation ===")
+# ============================================================
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    upper_path = os.path.join(tmpdir, "organizer_upper.svg")
+    generate_die_organizer_svg("upper", upper_path, settings)
+    check("Organizer SVG (upper) created", os.path.exists(upper_path))
+    with open(upper_path, 'r') as f:
+        upper_content = f.read()
+    # Asset is byte-for-byte from Matt's CAD — should still parse as SVG and
+    # contain the lots-of-slot rects plus the corner mounting holes.
+    check("Organizer upper has SVG header", "<svg" in upper_content)
+    check("Organizer upper has corner mounting holes (4 circles)",
+          upper_content.count("<circle") == 4)
+    check("Organizer upper has many slot rects (>100)",
+          upper_content.count("<rect") > 100)
+
+    lower_path = os.path.join(tmpdir, "organizer_lower.svg")
+    generate_die_organizer_svg("lower", lower_path, settings)
+    check("Organizer SVG (lower) created", os.path.exists(lower_path))
+    with open(lower_path, 'r') as f:
+        lower_content = f.read()
+    check("Organizer lower has SVG header", "<svg" in lower_content)
+    check("Organizer lower has corner mounting holes",
+          lower_content.count("<circle") == 4)
+    # Lower is just plate + 4 holes, so far fewer rects
+    check("Organizer lower has just the plate rect (1 <rect>)",
+          lower_content.count("<rect") == 1)
+
+    # Output is byte-identical to the bundled asset (Option A: copy as-is).
+    import filecmp
+    upper_asset = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               'tooling_assets', 'die_organizer_upper.svg')
+    check("Organizer upper output matches bundled asset byte-for-byte",
+          filecmp.cmp(upper_path, upper_asset, shallow=False))
+
+    # Variant validation
+    err_raised = False
+    try:
+        generate_die_organizer_svg("middle", os.path.join(tmpdir, "fail.svg"), settings)
+    except ValueError:
+        err_raised = True
+    check("Invalid variant rejected", err_raised)
 
 # ============================================================
 print(f"\n{'='*50}")

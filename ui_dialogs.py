@@ -4355,6 +4355,16 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet("Files are named with _scrap1, _scrap2, etc. suffixes")
         self._blank()
 
+        self._h2("Tooling \u2014 Die Organizer")
+        self._body("Generate SVGs for a stackable die organizer (230 \u00d7 330 mm). Two parts: "
+                    "Upper plate with slots for the dies, Lower base plate.")
+        self._bullet("Cut three Uppers and one Lower (wood works great; acrylic does too).")
+        self._bullet("Align the four 1/8\" corner holes and glue the stack together \u2014 a book "
+                      "press lightly clamps it nicely while the glue sets.")
+        self._bullet("Resize the alignment holes to whatever pin you have.")
+        self._bullet("SVG only \u2014 open in LightBurn or your laser software to cut.")
+        self._blank()
+
         self._h2("Tooling \u2014 Kerf Test")
         self._body("A quick test pattern (three circles at 10/20/30mm) for measuring kerf on any "
                     "material.")

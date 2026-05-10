@@ -155,6 +155,10 @@ def build():
     if os.path.exists('icon.ico'):
         cmd.extend(['--add-data', f'icon.ico{os.pathsep}.'])
 
+    # Bundle tooling asset SVGs (die organizer templates) so they're available at runtime
+    if os.path.isdir('tooling_assets'):
+        cmd.extend(['--add-data', f'tooling_assets{os.pathsep}tooling_assets'])
+
     # Hidden imports for optional audio dependencies (tuner/toner)
     # Only include if numpy/sounddevice are installed (not present in legacy Mac build)
     try:
