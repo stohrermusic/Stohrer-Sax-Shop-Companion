@@ -1,4 +1,6 @@
 import math
+import os
+import sys
 import svgwrite
 from config import (DEFAULT_SETTINGS, get_dart_settings_for_size, get_sizing_for_size,
                     get_engraving_settings_for_size, get_engraving_placement_for_size)
@@ -1165,6 +1167,27 @@ def generate_holder_svg(variant, filename, settings, *,
 # ==========================================
 
 KERF_TEST_DIAMETERS = [10.0, 20.0, 30.0]
+
+def generate_die_organizer_svg(variant, filename, settings=None):
+    """Copy the bundled die-organizer template SVG to ``filename``.
+
+    Static design (Matt's CAD output): three Upper plates plus one Lower
+    glue together with the four corner alignment holes. The asset ships
+    as-is — users open the file in LightBurn (or similar) to cut.
+    ``settings`` is accepted for API symmetry but unused.
+    """
+    if variant not in ('upper', 'lower'):
+        raise ValueError(f"variant must be 'upper' or 'lower', got {variant!r}")
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(__file__)
+    asset = os.path.join(base, 'tooling_assets', f'die_organizer_{variant}.svg')
+    if not os.path.exists(asset):
+        raise FileNotFoundError(f"Die organizer template missing: {asset}")
+    import shutil
+    shutil.copyfile(asset, filename)
+
 
 def generate_kerf_test_svg(material_name, filename, settings):
     """
