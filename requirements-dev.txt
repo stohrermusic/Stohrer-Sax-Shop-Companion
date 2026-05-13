@@ -1,0 +1,9 @@
+# Development-only dependencies. Not bundled into PyInstaller builds.
+# Install with:  pip install -r requirements-dev.txt
+
+# Lint
+ruff>=0.6
+
+# i18n workflow (extract / merge / compile translation catalogs).
+# Run via:  python tools/extract_strings.py / update_translations.py / compile_translations.py
+babel>=2.16

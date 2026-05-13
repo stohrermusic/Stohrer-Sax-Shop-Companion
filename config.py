@@ -392,20 +392,29 @@ ALL_KEY_HEIGHT_FIELDS = [
     "G", "D", "Low C", "Low B", "Low Bb"
 ]
 
-RESONANCE_MESSAGES = [
-    "Resonance added!", "Pad resonance increased!", "More resonance now!",
-    "Timbral focus enhanced!", "Harmonic alignment optimized!", "Acoustic reflection matrix calibrated!",
-    "Core vibrations synchronized!", "Nodal points stabilized!", "Overtone series enriched!",
-    "Sonic clarity has been improved!", "Relacquer devaluation reversed!", "Heavy mass screws ain't SHIT!",
-    "Now you don't even have to fit the neck!", "Let's call this the ULTRAhaul!", "Now safe to use hot glue!",
-    "Look at me! I am the resonator now!"
-]
+def get_resonance_messages():
+    """Return the list of motivational easter-egg strings.
+
+    Returned by a function (not a module-level list) so each call resolves
+    against the *current* translation catalog. This matters if/when the
+    catalog ever gets reloaded after import — module-level constants would
+    bake the source-language strings on first import.
+    """
+    return [
+        _("Resonance added!"), _("Pad resonance increased!"), _("More resonance now!"),
+        _("Timbral focus enhanced!"), _("Harmonic alignment optimized!"), _("Acoustic reflection matrix calibrated!"),
+        _("Core vibrations synchronized!"), _("Nodal points stabilized!"), _("Overtone series enriched!"),
+        _("Sonic clarity has been improved!"), _("Relacquer devaluation reversed!"), _("Heavy mass screws ain't SHIT!"),
+        _("Now you don't even have to fit the neck!"), _("Let's call this the ULTRAhaul!"), _("Now safe to use hot glue!"),
+        _("Look at me! I am the resonator now!")
+    ]
 
 # ==========================================
 # DEFAULT SETTINGS
 # ==========================================
 
 DEFAULT_SETTINGS = {
+    "language": "en",  # UI language code: en, es, de, fr, it (see i18n.LANGUAGE_NAMES)
     "units": "in",
     "felt_offset": 0.75,
     "card_to_felt_offset": 2.0,
@@ -785,7 +794,7 @@ def save_settings(settings):
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(settings, f, indent=2)
     except Exception as e:
-        messagebox.showerror("Error Saving Settings", f"Could not save settings:\n{e}")
+        messagebox.showerror(_("Error Saving Settings"), _("Could not save settings:\n{e}").format(e=e))
 
 def load_presets(file_path, preset_type_name="Preset"):
     data = {}
@@ -803,7 +812,10 @@ def load_presets(file_path, preset_type_name="Preset"):
         print(f"Migrating old {preset_type_name} file...")
         new_data = {"My Presets": data}
         if save_presets(new_data, file_path):
-            messagebox.showinfo("Library Updated", f"Your existing {preset_type_name} sets have been moved into a new library called 'My Presets'.")
+            messagebox.showinfo(
+                _("Library Updated"),
+                _("Your existing {preset_type_name} sets have been moved into a new library called 'My Presets'.").format(preset_type_name=preset_type_name),
+            )
             return new_data
         else:
             return {}
@@ -816,5 +828,5 @@ def save_presets(presets, file_path):
             json.dump(presets, f, indent=2)
         return True
     except Exception as e:
-        messagebox.showerror("Error Saving Preset", str(e))
+        messagebox.showerror(_("Error Saving Preset"), str(e))
         return False

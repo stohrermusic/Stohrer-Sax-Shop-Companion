@@ -30,7 +30,7 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (32 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_goodson_import`, `test_gpu_tuner`, `test_pad_notes`, `test_pad_preview`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (33 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_pad_notes`, `test_pad_preview`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
@@ -138,6 +138,52 @@ iscc /DAppVersion=2.1 installer.iss     # requires Inno Setup 6
 ```
 
 **Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
+
+## Bundled Runtime Assets
+
+Files that need to be reachable at runtime in both source and frozen builds (icons, SVG templates, etc.) follow this pattern:
+
+1. Place the asset at the repo root (single files) or in a subfolder (collections).
+2. Extend `build.py`'s PyInstaller `cmd` via `--add-data`. Single files use `'<file>{os.pathsep}.'`; folders use `'<folder>{os.pathsep}<folder>'`.
+3. Resolve at runtime with `base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(__file__)`, then `os.path.join(base, ...)`.
+
+Current examples: `icon.ico` (loaded by `main.py` for the title bar / taskbar icon), `tooling_assets/die_organizer_{upper,lower}.svg` (copied by `generate_die_organizer_svg` in `svg_engine.py`), and `locale/` (compiled translation catalogs resolved by `i18n._locale_dir()`).
+
+## Internationalization (i18n)
+
+User-facing strings are wrapped with `_("...")` and translated via GNU gettext. The catalog is initialized in `main.py` **before** any UI module is imported (so module-level `_()` calls resolve against the active language).
+
+**Pattern in source**:
+```python
+# `_` and `ngettext` are installed into builtins by i18n.init_translation().
+# No explicit import needed. ruff.toml whitelists them in `builtins`.
+label = _("Cancel")
+msg = _("Imported {n} captures").format(n=n)
+plural = ngettext("{n} pad", "{n} pads", n).format(n=n)
+```
+
+**Files**:
+- `i18n.py` — `init_translation(lang)`, `available_languages()`, module-level `_` and `ngettext` handles for tests
+- `babel.cfg` — extraction config for pybabel
+- `locale/saxshop.pot` — generated template (commit it; regenerate after adding strings)
+- `locale/<lang>/LC_MESSAGES/saxshop.po` + `saxshop.mo` — per-language catalogs (commit both)
+
+**Workflow when adding or changing strings**:
+```bash
+python tools/extract_strings.py        # regenerate saxshop.pot
+python tools/update_translations.py    # merge .pot into existing .po files (marks new entries fuzzy)
+# Edit each locale/<lang>/LC_MESSAGES/saxshop.po — translate the fuzzy entries
+python tools/compile_translations.py   # rebuild all .mo files
+python tools/test_i18n.py              # verify
+```
+
+**Languages**: v1 ships English (source) + Spanish / German / French / Italian. Native-name display in `i18n.LANGUAGE_NAMES`. Language switching is restart-required, picked via File > Feature Set > Language.
+
+**Gotchas**:
+- Module-level `_` shadowing: Python's idiomatic throwaway variable name is `_`. We use `gettext.install()` instead of `from i18n import _` so local `_` shadows the builtin within the for-loop scope only — no rename needed for existing `for _, x in items` patterns.
+- Module-level constants with translatable strings: define as a function (e.g. `get_resonance_messages()`) so each call resolves against the *current* catalog. Lists evaluated at module import time bake the source-language values.
+- Don't translate data — pad sizes, material keys (`"felt"`, `"card"`), settings keys are code. Only translate at the display layer.
+- f-strings with embedded variables: `_("Imported {n} captures").format(n=n)`. Don't put the f-prefix on the gettext string itself or the placeholder gets baked.
 
 ## Branching Strategy
 

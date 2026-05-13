@@ -2,6 +2,10 @@
 target-version = "py311"
 line-length = 120
 
+# `_` and `ngettext` are installed into builtins by i18n.init_translation()
+# (standard gettext pattern). Tell ruff so it doesn't flag them as undefined.
+builtins = ["_", "ngettext"]
+
 [lint]
 # Default ruleset (E = pycodestyle errors, F = pyflakes) catches real bugs
 # like unused imports, undefined names, and redefinitions. We relax a few
