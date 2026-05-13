@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-05-13 15:21-0400\n"
+"POT-Creation-Date: 2026-05-13 16:52-0400\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -146,8 +146,8 @@ msgstr "Notes :"
 msgid "Units:"
 msgstr "Unités :"
 
-#: library_features.py:155 tooling_tab.py:131 tooling_tab.py:163
-#: tooling_tab.py:252 ui_dialogs.py:925 ui_dialogs.py:979 ui_dialogs.py:1210
+#: library_features.py:155 tooling_tab.py:132 tooling_tab.py:164
+#: tooling_tab.py:253 ui_dialogs.py:925 ui_dialogs.py:979 ui_dialogs.py:1210
 #: ui_dialogs.py:1968 ui_dialogs.py:3705 ui_dialogs.py:3751 ui_dialogs.py:3764
 #: ui_dialogs.py:3789
 msgid "mm"
@@ -715,7 +715,7 @@ msgstr "Aucun"
 msgid "Custom:"
 msgstr "Personnalisé :"
 
-#: main.py:559 tooling_tab.py:146 tooling_tab.py:235
+#: main.py:559 tooling_tab.py:147 tooling_tab.py:236
 msgid "Sheet Size"
 msgstr "Taille de feuille"
 
@@ -729,11 +729,11 @@ msgstr "Largeur ({units}) :"
 msgid "Height ({units}):"
 msgstr "Hauteur ({units}) :"
 
-#: main.py:580 main.py:902 tooling_tab.py:171 ui_dialogs.py:4226
+#: main.py:580 main.py:902 tooling_tab.py:172 ui_dialogs.py:4226
 msgid "Scrap Mode"
 msgstr "Mode chutes"
 
-#: main.py:591 tooling_tab.py:174 ui_dialogs.py:3142
+#: main.py:591 tooling_tab.py:175 ui_dialogs.py:3142
 msgid "Clear"
 msgstr "Effacer"
 
@@ -761,12 +761,12 @@ msgstr "Décharger"
 msgid "Output filename base (no extension):"
 msgstr "Nom de fichier de sortie (sans extension) :"
 
-#: main.py:676 tooling_tab.py:193 tooling_tab.py:265 tooling_tab.py:319
-#: tooling_tab.py:375
+#: main.py:676 tooling_tab.py:194 tooling_tab.py:266 tooling_tab.py:320
+#: tooling_tab.py:376
 msgid "Generate SVG"
 msgstr "Générer le SVG"
 
-#: main.py:677 tooling_tab.py:195 tooling_tab.py:267 tooling_tab.py:377
+#: main.py:677 tooling_tab.py:196 tooling_tab.py:268 tooling_tab.py:378
 msgid "Generate G-code"
 msgstr "Générer le G-code"
 
@@ -862,7 +862,7 @@ msgstr "off"
 msgid "Please select exactly one material to use Scrap Mode."
 msgstr "Veuillez sélectionner un seul matériau pour utiliser le mode chutes."
 
-#: main.py:911 main.py:964 tooling_tab.py:654 tooling_tab.py:679
+#: main.py:911 main.py:964 tooling_tab.py:701 tooling_tab.py:726
 msgid "Clear Session?"
 msgstr "Effacer la session ?"
 
@@ -903,22 +903,23 @@ msgstr ""
 msgid "Scrap Mode Progress"
 msgstr "Progression du mode chutes"
 
-#: main.py:1028 tooling_tab.py:902
+#: main.py:1028 tooling_tab.py:949
 msgid "Remaining"
 msgstr "Restants"
 
 #: main.py:1036 main.py:1295 main.py:1492 main.py:1494 main.py:1496
-#: toner_tab.py:2771 tooling_tab.py:592 tooling_tab.py:638 tooling_tab.py:909
-#: tooling_tab.py:1159 tooling_tab.py:1198 tooling_tab.py:1223
+#: toner_tab.py:2771 tooling_tab.py:639 tooling_tab.py:685 tooling_tab.py:956
+#: tooling_tab.py:1206 tooling_tab.py:1245 tooling_tab.py:1270
+#: tooling_tab.py:1304
 msgid "Done"
 msgstr "Terminé"
 
 #: main.py:1047 toner_tab.py:1625 toner_tab.py:4778 toner_tab.py:5086
-#: tooling_tab.py:918 tuner_tab.py:1249 ui_dialogs.py:4025
+#: tooling_tab.py:965 tuner_tab.py:1249 ui_dialogs.py:4025
 msgid "Close"
 msgstr "Fermer"
 
-#: main.py:1085 tooling_tab.py:950
+#: main.py:1085 tooling_tab.py:997
 msgid "All done!"
 msgstr "Tout est terminé !"
 
@@ -936,8 +937,8 @@ msgstr " (aucun)"
 msgid "{material} | {scraps} scrap(s) used"
 msgstr "{material} | {scraps} chute(s) utilisée(s)"
 
-#: main.py:1153 main.py:1156 main.py:1194 main.py:1198 tooling_tab.py:471
-#: tooling_tab.py:475 tooling_tab.py:525 tooling_tab.py:529 tooling_tab.py:1096
+#: main.py:1153 main.py:1156 main.py:1194 main.py:1198 tooling_tab.py:518
+#: tooling_tab.py:522 tooling_tab.py:572 tooling_tab.py:576 tooling_tab.py:1143
 #: ui_dialogs.py:3827 ui_dialogs.py:3838 ui_dialogs.py:3858 ui_dialogs.py:3867
 #: ui_dialogs.py:3890 ui_dialogs.py:3899
 msgid "Invalid Input"
@@ -952,10 +953,11 @@ msgid "Custom hole size must be greater than zero."
 msgstr "La taille de trou personnalisée doit être supérieure à zéro."
 
 #: main.py:1169 main.py:1174 main.py:1208 main.py:1213 toner_tab.py:5234
-#: tooling_tab.py:563 tooling_tab.py:596 tooling_tab.py:607 tooling_tab.py:642
-#: tooling_tab.py:735 tooling_tab.py:793 tooling_tab.py:807 tooling_tab.py:865
-#: tooling_tab.py:1069 tooling_tab.py:1120 tooling_tab.py:1163
-#: tooling_tab.py:1202 tooling_tab.py:1227
+#: tooling_tab.py:610 tooling_tab.py:643 tooling_tab.py:654 tooling_tab.py:689
+#: tooling_tab.py:782 tooling_tab.py:840 tooling_tab.py:854 tooling_tab.py:912
+#: tooling_tab.py:1116 tooling_tab.py:1167 tooling_tab.py:1210
+#: tooling_tab.py:1249 tooling_tab.py:1274 tooling_tab.py:1288
+#: tooling_tab.py:1308
 msgid "Error"
 msgstr "Erreur"
 
@@ -989,7 +991,7 @@ msgstr ""
 msgid "Engraving Size Warning"
 msgstr "Avertissement de taille de gravure"
 
-#: main.py:1194 tooling_tab.py:471 tooling_tab.py:525
+#: main.py:1194 tooling_tab.py:518 tooling_tab.py:572
 msgid "Sheet width and height must be valid numbers."
 msgstr "La largeur et la hauteur de la feuille doivent être des nombres valides."
 
@@ -1035,7 +1037,7 @@ msgstr "papier"
 msgid "sheet"
 msgstr "feuille"
 
-#: main.py:1273 main.py:1445 tooling_tab.py:574 tooling_tab.py:618
+#: main.py:1273 main.py:1445 tooling_tab.py:621 tooling_tab.py:665
 msgid "Nesting Error"
 msgstr "Erreur d'imbrication"
 
@@ -1046,7 +1048,7 @@ msgstr ""
 "Impossible de placer toutes les pièces « {material} » sur le format "
 "{size_desc} spécifié."
 
-#: main.py:1286 main.py:1330 tooling_tab.py:740
+#: main.py:1286 main.py:1330 tooling_tab.py:787
 msgid "Select Folder to Save SVGs"
 msgstr "Sélectionner le dossier d'enregistrement des SVG"
 
@@ -1090,7 +1092,7 @@ msgstr ""
 "La session en cours est pour {material}.\n"
 "Effacez la session pour changer de matériau."
 
-#: main.py:1349 main.py:1551 tooling_tab.py:750 tooling_tab.py:822
+#: main.py:1349 main.py:1551 tooling_tab.py:797 tooling_tab.py:869
 msgid "Session Complete"
 msgstr "Session terminée"
 
@@ -1115,7 +1117,7 @@ msgstr ""
 "Plus petit tampon restant : {min_pad_size} mm\n"
 "Essayez une chute plus grande."
 
-#: main.py:1393 main.py:1595 tooling_tab.py:782 tooling_tab.py:854
+#: main.py:1393 main.py:1595 tooling_tab.py:829 tooling_tab.py:901
 msgid "Session Complete!"
 msgstr "Session terminée !"
 
@@ -1149,7 +1151,7 @@ msgstr ""
 "Veuillez sélectionner au moins un matériau (le G-code n'est pas pris en "
 "charge pour Taille exacte)."
 
-#: main.py:1458 main.py:1532 tooling_tab.py:812
+#: main.py:1458 main.py:1532 tooling_tab.py:859
 msgid "Select Folder to Save G-code"
 msgstr "Sélectionner le dossier d'enregistrement du G-code"
 
@@ -1384,15 +1386,15 @@ msgstr ""
 "Impossible d'importer les paramètres :\n"
 "{error}"
 
-#: main.py:1945 tooling_tab.py:341
+#: main.py:1945 tooling_tab.py:342
 msgid "Felt"
 msgstr "Feutre"
 
-#: main.py:1945 tooling_tab.py:341
+#: main.py:1945 tooling_tab.py:342
 msgid "Card"
 msgstr "Carton"
 
-#: main.py:1945 tooling_tab.py:341
+#: main.py:1945 tooling_tab.py:342
 msgid "Leather"
 msgstr "Cuir"
 
@@ -1936,7 +1938,7 @@ msgstr ""
 "Utile pour des expériences, des instruments autres que le saxophone,\n"
 "ou des configurations atypiques comme les micros de contact."
 
-#: toner_tab.py:1466 toner_tab.py:3109 tooling_tab.py:1049 ui_dialogs.py:5038
+#: toner_tab.py:1466 toner_tab.py:3109 tooling_tab.py:1096 ui_dialogs.py:5038
 msgid "OK"
 msgstr "OK"
 
@@ -2998,84 +3000,88 @@ msgstr "Rangement de matrices"
 msgid "Kerf Test"
 msgstr "Test de saignée"
 
-#: tooling_tab.py:108
+#: tooling_tab.py:88
+msgid "Pad Press Spacers"
+msgstr "Cales de presse Ã  tampons"
+
+#: tooling_tab.py:109
 msgid "Enter sizes (mm):"
 msgstr "Saisissez les tailles (mm) :"
 
-#: tooling_tab.py:112
+#: tooling_tab.py:113
 msgid "e.g. \"7, 8.5, 15-30\" or \"7-39.5\""
 msgstr "ex. « 7, 8.5, 15-30 » ou « 7-39.5 »"
 
-#: tooling_tab.py:120
+#: tooling_tab.py:121
 msgid "Full Set (S)"
 msgstr "Jeu complet (S)"
 
-#: tooling_tab.py:122
+#: tooling_tab.py:123
 msgid "Full Set (L)"
 msgstr "Jeu complet (L)"
 
-#: tooling_tab.py:124
+#: tooling_tab.py:125
 msgid "Full Set (All)"
 msgstr "Jeu complet (Tous)"
 
-#: tooling_tab.py:127
+#: tooling_tab.py:128
 msgid "Step:"
 msgstr "Pas :"
 
-#: tooling_tab.py:138
+#: tooling_tab.py:139
 msgid "Engrave size on ring"
 msgstr "Graver la taille sur la bague"
 
-#: tooling_tab.py:142
+#: tooling_tab.py:143
 msgid "Engrave size on cutout"
 msgstr "Graver la taille sur la découpe"
 
-#: tooling_tab.py:152 tooling_tab.py:241
+#: tooling_tab.py:153 tooling_tab.py:242
 msgid "Width:"
 msgstr "Largeur :"
 
-#: tooling_tab.py:156 tooling_tab.py:245
+#: tooling_tab.py:157 tooling_tab.py:246
 msgid "Height:"
 msgstr "Hauteur :"
 
-#: tooling_tab.py:161 tooling_tab.py:250 ui_dialogs.py:919 ui_dialogs.py:973
+#: tooling_tab.py:162 tooling_tab.py:251 ui_dialogs.py:919 ui_dialogs.py:973
 #: ui_dialogs.py:1208
 msgid "in"
 msgstr "po"
 
-#: tooling_tab.py:185 tooling_tab.py:258 tooling_tab.py:312
+#: tooling_tab.py:186 tooling_tab.py:259 tooling_tab.py:313
 msgid "Output filename:"
 msgstr "Nom du fichier de sortie :"
 
-#: tooling_tab.py:215
+#: tooling_tab.py:216
 msgid "Layers:"
 msgstr "Couches :"
 
-#: tooling_tab.py:217
+#: tooling_tab.py:218
 msgid "5-layer (2× pin)"
 msgstr "5 couches (2× tige)"
 
-#: tooling_tab.py:219
+#: tooling_tab.py:220
 msgid "6-layer (3× pin)"
 msgstr "6 couches (3× tige)"
 
-#: tooling_tab.py:225 tooling_tab.py:300
+#: tooling_tab.py:226 tooling_tab.py:301
 msgid "Generate:"
 msgstr "Générer :"
 
-#: tooling_tab.py:227
+#: tooling_tab.py:228
 msgid "Large (40–60mm pads)"
 msgstr "Grand (tampons 40–60 mm)"
 
-#: tooling_tab.py:229
+#: tooling_tab.py:230
 msgid "Small (7–39.5mm pads)"
 msgstr "Petit (tampons 7–39,5 mm)"
 
-#: tooling_tab.py:231
+#: tooling_tab.py:232
 msgid "Both"
 msgstr "Les deux"
 
-#: tooling_tab.py:280
+#: tooling_tab.py:281
 msgid ""
 "Plate: 230 × 330 mm. Open the SVG in LightBurn or your laser software to "
 "cut."
@@ -3083,7 +3089,7 @@ msgstr ""
 "Plaque : 230 × 330 mm. Ouvrez le SVG dans LightBurn ou votre logiciel "
 "laser pour découper."
 
-#: tooling_tab.py:286
+#: tooling_tab.py:287
 msgid ""
 "Cut three of the upper and one of the lower. Use the locating holes in "
 "the corners to align the layers and glue them together (a book press "
@@ -3097,47 +3103,74 @@ msgstr ""
 "dont vous disposez. Le bois convient parfaitement ; l'acrylique "
 "également."
 
-#: tooling_tab.py:302 tooling_tab.py:1222
+#: tooling_tab.py:303 tooling_tab.py:1269
 msgid "Upper (slotted)"
 msgstr "Supérieure (à fentes)"
 
-#: tooling_tab.py:305 tooling_tab.py:1222
+#: tooling_tab.py:306 tooling_tab.py:1269
 msgid "Lower (base)"
 msgstr "Inférieure (base)"
 
-#: tooling_tab.py:331
+#: tooling_tab.py:332
 msgid "Pattern size: 110 × 54 mm (4.3 × 2.1 in)"
 msgstr "Taille du motif : 110 × 54 mm (4,3 × 2,1 po)"
 
-#: tooling_tab.py:339 ui_dialogs.py:5158
+#: tooling_tab.py:340 ui_dialogs.py:5158
 msgid "Material:"
 msgstr "Matériau :"
 
-#: tooling_tab.py:341 tooling_tab.py:491
+#: tooling_tab.py:342 tooling_tab.py:538
 msgid "Acrylic"
 msgstr "Acrylique"
 
-#: tooling_tab.py:351
+#: tooling_tab.py:352
 msgid "Use existing G-code settings for this material"
 msgstr "Utiliser les paramètres G-code existants pour ce matériau"
 
-#: tooling_tab.py:361
+#: tooling_tab.py:362
 msgid "Cut speed:"
 msgstr "Vitesse de découpe :"
 
-#: tooling_tab.py:364 ui_dialogs.py:3441
+#: tooling_tab.py:365 ui_dialogs.py:3441
 msgid "mm/min"
 msgstr "mm/min"
 
-#: tooling_tab.py:366
+#: tooling_tab.py:367
 msgid "Cut power:"
 msgstr "Puissance de découpe :"
 
-#: tooling_tab.py:475 tooling_tab.py:529
+#: tooling_tab.py:390
+msgid ""
+"3D-printable spacer biscuits for pad pressing. 1.75″ (44.45 mm) square. "
+"Each biscuit has its thickness engraved on top. PLA or PETG works well; "
+"the spacers stack to set pad press depth."
+msgstr ""
+"Cales d'espacement imprimables en 3D pour le pressage des tampons. "
+"Carrés de 1,75″ (44,45 mm). Chaque cale porte son épaisseur gravée sur "
+"le dessus. PLA ou PETG conviennent ; les cales s'empilent pour régler "
+"la profondeur de pressage."
+
+#: tooling_tab.py:401
+msgid "Half-step set — 3.0 / 3.5 / 4.0 / 4.5 mm (4 of each, 16 total)"
+msgstr "Jeu demi-pas — 3,0 / 3,5 / 4,0 / 4,5 mm (4 de chaque, 16 au total)"
+
+#: tooling_tab.py:403 tooling_tab.py:413 tooling_tab.py:423
+msgid "Save STL…"
+msgstr "Enregistrer STL…"
+
+#: tooling_tab.py:411
+msgid "Quarter-step set — 3.25 / 3.75 / 4.25 mm (4 of each, 12 total)"
+msgstr "Jeu quart-de-pas — 3,25 / 3,75 / 4,25 mm (4 de chaque, 12 au total)"
+
+#: tooling_tab.py:421
+msgid "Organizer rack — 7 compartments for all 28 spacers (3.0 – 4.5 mm)"
+msgstr "Support organiseur — 7 compartiments pour les 28 cales (3,0 – 4,5 mm)"
+
+#: tooling_tab.py:522 tooling_tab.py:576
 msgid "Sheet dimensions must be positive."
 msgstr "Les dimensions de la feuille doivent être positives."
 
-#: tooling_tab.py:516
+#: tooling_tab.py:563
 #, python-brace-format
 msgid ""
 "{n}-layer holder: base, magnet (6.5mm), {pin}× pin (3.5mm), retaining "
@@ -3146,11 +3179,11 @@ msgstr ""
 "Porte-matrice {n} couches : base, aimant (6,5 mm), {pin}× tige (3,5 mm), "
 "bague de maintien."
 
-#: tooling_tab.py:563 tooling_tab.py:607 tooling_tab.py:735 tooling_tab.py:807
+#: tooling_tab.py:610 tooling_tab.py:654 tooling_tab.py:782 tooling_tab.py:854
 msgid "No valid die sizes entered."
 msgstr "Aucune taille de matrice valide saisie."
 
-#: tooling_tab.py:575 tooling_tab.py:619
+#: tooling_tab.py:622 tooling_tab.py:666
 #, python-brace-format
 msgid ""
 "Could not fit all {n} dies on the specified sheet.\n"
@@ -3160,16 +3193,16 @@ msgstr ""
 "Essayez une feuille plus grande, moins de tailles, ou utilisez le mode "
 "chutes."
 
-#: tooling_tab.py:581
+#: tooling_tab.py:628
 msgid "Save Die Insert SVG"
 msgstr "Enregistrer le SVG des matrices"
 
-#: tooling_tab.py:583 tooling_tab.py:1058 tooling_tab.py:1140
-#: tooling_tab.py:1213
+#: tooling_tab.py:630 tooling_tab.py:1105 tooling_tab.py:1187
+#: tooling_tab.py:1260
 msgid "SVG files"
 msgstr "Fichiers SVG"
 
-#: tooling_tab.py:593
+#: tooling_tab.py:640
 #, python-brace-format
 msgid ""
 "Generated {n} die rings.\n"
@@ -3180,9 +3213,9 @@ msgstr ""
 "\n"
 "Enregistrées dans : {path}"
 
-#: tooling_tab.py:596 tooling_tab.py:642 tooling_tab.py:793 tooling_tab.py:865
-#: tooling_tab.py:1069 tooling_tab.py:1120 tooling_tab.py:1163
-#: tooling_tab.py:1202 tooling_tab.py:1227
+#: tooling_tab.py:643 tooling_tab.py:689 tooling_tab.py:840 tooling_tab.py:912
+#: tooling_tab.py:1116 tooling_tab.py:1167 tooling_tab.py:1210
+#: tooling_tab.py:1249 tooling_tab.py:1274 tooling_tab.py:1308
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -3193,15 +3226,15 @@ msgstr ""
 "\n"
 "{e}"
 
-#: tooling_tab.py:625
+#: tooling_tab.py:672
 msgid "Save Die Insert G-code"
 msgstr "Enregistrer le G-code des matrices"
 
-#: tooling_tab.py:627 tooling_tab.py:1106 tooling_tab.py:1179
+#: tooling_tab.py:674 tooling_tab.py:1153 tooling_tab.py:1226
 msgid "G-code files"
 msgstr "Fichiers G-code"
 
-#: tooling_tab.py:639
+#: tooling_tab.py:686
 #, python-brace-format
 msgid ""
 "Generated G-code for {n} die rings.\n"
@@ -3212,7 +3245,7 @@ msgstr ""
 "\n"
 "Enregistré dans : {path}"
 
-#: tooling_tab.py:655
+#: tooling_tab.py:702
 #, python-brace-format
 msgid ""
 "You have {remaining} dies remaining.\n"
@@ -3225,7 +3258,7 @@ msgstr ""
 "\n"
 "Continuer ?"
 
-#: tooling_tab.py:680
+#: tooling_tab.py:727
 #, python-brace-format
 msgid ""
 "You have {remaining} dies remaining.\n"
@@ -3236,15 +3269,15 @@ msgstr ""
 "\n"
 "Effacer la session ?"
 
-#: tooling_tab.py:750 tooling_tab.py:822
+#: tooling_tab.py:797 tooling_tab.py:869
 msgid "All dies have been placed!"
 msgstr "Toutes les matrices ont été placées !"
 
-#: tooling_tab.py:758 tooling_tab.py:830
+#: tooling_tab.py:805 tooling_tab.py:877
 msgid "No Dies Fit"
 msgstr "Aucune matrice ne tient"
 
-#: tooling_tab.py:759 tooling_tab.py:831
+#: tooling_tab.py:806 tooling_tab.py:878
 #, python-brace-format
 msgid ""
 "No dies could be placed on this sheet.\n"
@@ -3257,7 +3290,7 @@ msgstr ""
 "Plus petite matrice restante : {min_size} mm\n"
 "Essayez une feuille plus grande."
 
-#: tooling_tab.py:783
+#: tooling_tab.py:830
 #, python-brace-format
 msgid ""
 "Placed {placed_count} dies on sheet #{scrap_num}.\n"
@@ -3270,11 +3303,11 @@ msgstr ""
 "Toutes les matrices placées ! Session terminée.\n"
 "Fichiers enregistrés dans : {save_dir}"
 
-#: tooling_tab.py:787 tooling_tab.py:859
+#: tooling_tab.py:834 tooling_tab.py:906
 msgid "Sheet Generated"
 msgstr "Feuille générée"
 
-#: tooling_tab.py:788
+#: tooling_tab.py:835
 #, python-brace-format
 msgid ""
 "Placed {placed_count} dies on sheet #{scrap_num}.\n"
@@ -3287,7 +3320,7 @@ msgstr ""
 "Il reste {remaining_count} matrices.\n"
 "Ajustez la taille de la feuille si besoin et générez à nouveau."
 
-#: tooling_tab.py:855
+#: tooling_tab.py:902
 #, python-brace-format
 msgid ""
 "Generated G-code for {placed_count} dies on sheet #{scrap_num}.\n"
@@ -3300,7 +3333,7 @@ msgstr ""
 "Toutes les matrices placées ! Session terminée.\n"
 "Fichiers enregistrés dans : {save_dir}"
 
-#: tooling_tab.py:860
+#: tooling_tab.py:907
 #, python-brace-format
 msgid ""
 "Generated G-code for {placed_count} dies on sheet #{scrap_num}.\n"
@@ -3313,45 +3346,45 @@ msgstr ""
 "Il reste {remaining_count} matrices.\n"
 "Ajustez la taille de la feuille si besoin et générez à nouveau."
 
-#: tooling_tab.py:880
+#: tooling_tab.py:927
 msgid "Die Scrap Mode Progress"
 msgstr "Progression du mode chutes (matrices)"
 
-#: tooling_tab.py:953
+#: tooling_tab.py:1000
 #, python-brace-format
 msgid "{done} / {total} dies complete"
 msgstr "{done} / {total} matrices réalisées"
 
-#: tooling_tab.py:971
+#: tooling_tab.py:1018
 #, python-brace-format
 msgid "die_ring | {scraps} sheet(s) used"
 msgstr "bague_matrice | {scraps} feuille(s) utilisée(s)"
 
-#: tooling_tab.py:1010
+#: tooling_tab.py:1057
 msgid "Tooling > Options > Settings > Acrylic > Kerf Width"
 msgstr "Outillage > Options > Paramètres > Acrylique > Largeur de saignée"
 
-#: tooling_tab.py:1012
+#: tooling_tab.py:1059
 #, python-brace-format
 msgid "Pad Generator > Options > G-code Settings > {material_name} > Kerf Width"
 msgstr ""
 "Fabrication de tampons > Options > Paramètres G-code > {material_name} > "
 "Largeur de saignée"
 
-#: tooling_tab.py:1015 tooling_tab.py:1023
+#: tooling_tab.py:1062 tooling_tab.py:1070
 #, python-brace-format
 msgid "Kerf Test — {material_name}"
 msgstr "Test de saignée — {material_name}"
 
-#: tooling_tab.py:1027
+#: tooling_tab.py:1074
 msgid "1.  Cut the pattern on your material"
 msgstr "1.  Découpez le motif sur votre matériau"
 
-#: tooling_tab.py:1028
+#: tooling_tab.py:1075
 msgid "2.  Pop out the 3 discs (10mm, 20mm, 30mm)"
 msgstr "2.  Extrayez les 3 disques (10 mm, 20 mm, 30 mm)"
 
-#: tooling_tab.py:1029
+#: tooling_tab.py:1076
 msgid ""
 "3.  For each circle, measure the hole ID\n"
 "     and disc OD with calipers"
@@ -3359,15 +3392,15 @@ msgstr ""
 "3.  Pour chaque cercle, mesurez le diamètre intérieur\n"
 "     du trou et le diamètre extérieur du disque au pied à coulisse"
 
-#: tooling_tab.py:1031
+#: tooling_tab.py:1078
 msgid "4.  Kerf = hole ID − disc OD"
 msgstr "4.  Saignée = diam. int. trou − diam. ext. disque"
 
-#: tooling_tab.py:1032
+#: tooling_tab.py:1079
 msgid "5.  Average the 3 results for best accuracy"
 msgstr "5.  Faites la moyenne des 3 résultats pour plus de précision"
 
-#: tooling_tab.py:1033
+#: tooling_tab.py:1080
 #, python-brace-format
 msgid ""
 "6.  Enter the full kerf value in:\n"
@@ -3376,43 +3409,43 @@ msgstr ""
 "6.  Saisissez la valeur totale de saignée dans :\n"
 "     {settings_path}"
 
-#: tooling_tab.py:1040
+#: tooling_tab.py:1087
 msgid "Don't show this again"
 msgstr "Ne plus afficher"
 
-#: tooling_tab.py:1056
+#: tooling_tab.py:1103
 msgid "Save Kerf Test SVG"
 msgstr "Enregistrer le SVG du test de saignée"
 
-#: tooling_tab.py:1096
+#: tooling_tab.py:1143
 msgid "Speed and power must be valid numbers."
 msgstr "La vitesse et la puissance doivent être des nombres valides."
 
-#: tooling_tab.py:1104
+#: tooling_tab.py:1151
 msgid "Save Kerf Test G-code"
 msgstr "Enregistrer le G-code du test de saignée"
 
-#: tooling_tab.py:1138
+#: tooling_tab.py:1185
 msgid "Save Die Holder SVG"
 msgstr "Enregistrer le SVG du porte-matrice"
 
-#: tooling_tab.py:1153 tooling_tab.py:1192
+#: tooling_tab.py:1200 tooling_tab.py:1239
 msgid "Sheet too small"
 msgstr "Feuille trop petite"
 
-#: tooling_tab.py:1156 tooling_tab.py:1195
+#: tooling_tab.py:1203 tooling_tab.py:1242
 msgid "Large (40–60mm)"
 msgstr "Grand (40–60 mm)"
 
-#: tooling_tab.py:1157 tooling_tab.py:1196
+#: tooling_tab.py:1204 tooling_tab.py:1243
 msgid "Small (7–39.5mm)"
 msgstr "Petit (7–39,5 mm)"
 
-#: tooling_tab.py:1158 tooling_tab.py:1197
+#: tooling_tab.py:1205 tooling_tab.py:1244
 msgid "Both (Small + Large)"
 msgstr "Les deux (Petit + Grand)"
 
-#: tooling_tab.py:1160
+#: tooling_tab.py:1207
 #, python-brace-format
 msgid ""
 "Generated {layer_count}-layer {variant_label} die holder.\n"
@@ -3423,11 +3456,11 @@ msgstr ""
 "\n"
 "Enregistré dans : {path}"
 
-#: tooling_tab.py:1177
+#: tooling_tab.py:1224
 msgid "Save Die Holder G-code"
 msgstr "Enregistrer le G-code du porte-matrice"
 
-#: tooling_tab.py:1199
+#: tooling_tab.py:1246
 #, python-brace-format
 msgid ""
 "Generated {layer_count}-layer {variant_label} die holder G-code.\n"
@@ -3438,11 +3471,11 @@ msgstr ""
 "\n"
 "Enregistré dans : {path}"
 
-#: tooling_tab.py:1211
+#: tooling_tab.py:1258
 msgid "Save Die Organizer SVG"
 msgstr "Enregistrer le SVG du rangement de matrices"
 
-#: tooling_tab.py:1224
+#: tooling_tab.py:1271
 #, python-brace-format
 msgid ""
 "Generated {variant_label} die organizer.\n"
@@ -3452,6 +3485,30 @@ msgstr ""
 "Rangement de matrices {variant_label} généré.\n"
 "\n"
 "Enregistré dans : {path}"
+
+#: tooling_tab.py:1289
+#, python-brace-format
+msgid "Could not find bundled STL: {path}"
+msgstr "Impossible de trouver le STL fourni : {path}"
+
+#: tooling_tab.py:1293
+msgid "Save Pad Press Spacer STL"
+msgstr "Enregistrer le STL de cale"
+
+#: tooling_tab.py:1295
+msgid "STL files"
+msgstr "Fichiers STL"
+
+#: tooling_tab.py:1305
+#, python-brace-format
+msgid ""
+"Saved {filename} to:\n"
+"\n"
+"{path}"
+msgstr ""
+"{filename} enregistrÃ© dans :\n"
+"\n"
+"{path}"
 
 #: tuner_tab.py:459
 msgid "CPU mode (low FPS) — install tuner_render for GPU acceleration"
@@ -5329,8 +5386,8 @@ msgid ""
 "If the font exceeds 80 percent of the disc radius, engraving is skipped "
 "for that pad (warning shown before generating)."
 msgstr ""
-"Si la police dépasse 80 % du rayon du disque, la gravure est ignorée pour"
-" ce tampon (un avertissement s'affiche avant la génération)."
+"Si la police dÃ©passe 80 pour cent du rayon du disque, la gravure est "
+"ignorÃ©e pour ce tampon (avertissement affichÃ© avant la gÃ©nÃ©ration)."
 
 #: ui_dialogs.py:4153
 msgid "Pad Presets"
@@ -7096,10 +7153,10 @@ msgid ""
 " data arrives."
 msgstr ""
 "Dans nos premières données, deux prises de la même configuration à dix "
-"minutes d'intervalle ont varié de 1 à 3 % observé sur les descripteurs et "
-"de ~0,3 dB/H sur l'atténuation. Les deltas en dessous de ce plancher sont "
-"probablement du bruit d'une session à l'autre ; les plus grands sont "
-"potentiellement réels mais demandent encore du contexte (même joueur ? "
+"minutes d'intervalle ont varié de 1 à 3 % observé sur les descripteurs et"
+" de ~0,3 dB/H sur l'atténuation. Les deltas en dessous de ce plancher "
+"sont probablement du bruit d'une session à l'autre ; les plus grands sont"
+" potentiellement réels mais demandent encore du contexte (même joueur ? "
 "même microphone ? même pièce ?) pour être interprétés. Estimation "
 "préliminaire à partir d'un seul point de données à deux prises — elle se "
 "précisera quand davantage de données répétées arriveront."

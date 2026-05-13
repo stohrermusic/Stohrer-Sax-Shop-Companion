@@ -85,6 +85,7 @@ class ToolingTabMixin:
             ("die_holders", _("Die Holders")),
             ("die_organizer", _("Die Organizer")),
             ("kerf_test", _("Kerf Test")),
+            ("pad_press_spacers", _("Pad Press Spacers")),
         ]
         for key, label in tool_names:
             btn = tk.Button(selector_frame, text=label, width=15,
@@ -378,6 +379,52 @@ class ToolingTabMixin:
                   command=self._on_generate_kerf_gcode).pack(side='left')
 
         self._tooling_sections['kerf_test'] = kerf_frame
+
+        # ========================================
+        # PAD PRESS SPACERS SECTION
+        # ========================================
+        spacers_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        spacers_info = tk.Label(
+            spacers_frame, bg=bg, font=("Helvetica", 9), fg="gray",
+            text=_("3D-printable spacer biscuits for pad pressing. "
+                   "1.75″ (44.45 mm) square. Each biscuit has its thickness "
+                   "engraved on top. PLA or PETG works well; the spacers "
+                   "stack to set pad press depth."),
+            justify="left", wraplength=520)
+        spacers_info.pack(anchor='w', pady=(0, 8))
+
+        # Half-step plate
+        half_row = tk.Frame(spacers_frame, bg=bg)
+        half_row.pack(fill='x', pady=(0, 4))
+        tk.Label(half_row, bg=bg, font=("Helvetica", 10),
+                 text=_("Half-step set — 3.0 / 3.5 / 4.0 / 4.5 mm (4 of each, 16 total)"),
+                 justify="left", anchor='w').pack(side='left')
+        tk.Button(half_row, text=_("Save STL…"), width=12,
+                  command=lambda: self._save_pad_spacer_stl("pad_spacers_all.stl")
+                  ).pack(side='right', padx=(8, 0))
+
+        # Quarter-step plate
+        qtr_row = tk.Frame(spacers_frame, bg=bg)
+        qtr_row.pack(fill='x', pady=(0, 4))
+        tk.Label(qtr_row, bg=bg, font=("Helvetica", 10),
+                 text=_("Quarter-step set — 3.25 / 3.75 / 4.25 mm (4 of each, 12 total)"),
+                 justify="left", anchor='w').pack(side='left')
+        tk.Button(qtr_row, text=_("Save STL…"), width=12,
+                  command=lambda: self._save_pad_spacer_stl("pad_spacers_qtr_all.stl")
+                  ).pack(side='right', padx=(8, 0))
+
+        # Organizer
+        org_row = tk.Frame(spacers_frame, bg=bg)
+        org_row.pack(fill='x', pady=(0, 4))
+        tk.Label(org_row, bg=bg, font=("Helvetica", 10),
+                 text=_("Organizer rack — 7 compartments for all 28 spacers (3.0 – 4.5 mm)"),
+                 justify="left", anchor='w').pack(side='left')
+        tk.Button(org_row, text=_("Save STL…"), width=12,
+                  command=lambda: self._save_pad_spacer_stl("pad_spacer_organizer.stl")
+                  ).pack(side='right', padx=(8, 0))
+
+        self._tooling_sections['pad_press_spacers'] = spacers_frame
 
         # Nothing shown initially — user clicks a button
         self._active_tooling_section = None
@@ -1222,6 +1269,40 @@ class ToolingTabMixin:
             variant_label = {"upper": _("Upper (slotted)"), "lower": _("Lower (base)")}[variant]
             messagebox.showinfo(_("Done"),
                 _("Generated {variant_label} die organizer.\n\nSaved to: {path}").format(variant_label=variant_label, path=save_path))
+
+        except Exception as e:
+            messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    def _save_pad_spacer_stl(self, stl_filename):
+        """Copy a bundled pad-press-spacer STL to a user-chosen location."""
+        import shutil
+        import sys
+        try:
+            if getattr(sys, 'frozen', False):
+                base = sys._MEIPASS
+            else:
+                base = os.path.dirname(os.path.abspath(__file__))
+            src = os.path.join(base, 'pad_press_spacers', stl_filename)
+
+            if not os.path.isfile(src):
+                messagebox.showerror(_("Error"),
+                    _("Could not find bundled STL: {path}").format(path=src))
+                return
+
+            save_path = filedialog.asksaveasfilename(
+                title=_("Save Pad Press Spacer STL"),
+                defaultextension=".stl",
+                filetypes=[(_("STL files"), "*.stl")],
+                initialfile=stl_filename,
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            shutil.copyfile(src, save_path)
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+
+            messagebox.showinfo(_("Done"),
+                _("Saved {filename} to:\n\n{path}").format(filename=stl_filename, path=save_path))
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))

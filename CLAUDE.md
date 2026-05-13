@@ -147,7 +147,7 @@ Files that need to be reachable at runtime in both source and frozen builds (ico
 2. Extend `build.py`'s PyInstaller `cmd` via `--add-data`. Single files use `'<file>{os.pathsep}.'`; folders use `'<folder>{os.pathsep}<folder>'`.
 3. Resolve at runtime with `base = sys._MEIPASS if getattr(sys, 'frozen', False) else os.path.dirname(__file__)`, then `os.path.join(base, ...)`.
 
-Current examples: `icon.ico` (loaded by `main.py` for the title bar / taskbar icon), `tooling_assets/die_organizer_{upper,lower}.svg` (copied by `generate_die_organizer_svg` in `svg_engine.py`), and `locale/` (compiled translation catalogs resolved by `i18n._locale_dir()`).
+Current examples: `icon.ico` (loaded by `main.py` for the title bar / taskbar icon), `tooling_assets/die_organizer_{upper,lower}.svg` (copied by `generate_die_organizer_svg` in `svg_engine.py`), `pad_press_spacers/*.stl` (copied by `ToolingTabMixin._save_pad_spacer_stl` in `tooling_tab.py`), and `locale/` (compiled translation catalogs resolved by `i18n._locale_dir()`).
 
 ## Internationalization (i18n)
 
