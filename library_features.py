@@ -84,9 +84,9 @@ class LibraryFeaturesMixin:
         preset_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         preset_frame.pack(pady=10)
         
-        tk.Button(preset_frame, text="Save as Set", command=self.on_save_key_preset).pack(side="left", padx=5)
+        tk.Button(preset_frame, text=_("Save as Set"), command=self.on_save_key_preset).pack(side="left", padx=5)
         
-        tk.Label(preset_frame, text="Library:", bg=self.root.cget('bg')).pack(side="left", padx=(10, 2))
+        tk.Label(preset_frame, text=_("Library:"), bg=self.root.cget('bg')).pack(side="left", padx=(10, 2))
         self.key_library_var = tk.StringVar()
         self.key_library_dropdown = ttk.Combobox(preset_frame, textvariable=self.key_library_var, state="readonly", width=15)
         self.key_library_dropdown.pack(side="left")
@@ -98,7 +98,7 @@ class LibraryFeaturesMixin:
         self.key_preset_menu.pack(side="left", padx=5)
         self.key_preset_menu.bind("<<ComboboxSelected>>", lambda e: self.on_load_key_preset(self.key_preset_var.get()))
         
-        self.key_delete_btn = tk.Button(preset_frame, text="Delete Set", command=self.on_delete_key_preset)
+        self.key_delete_btn = tk.Button(preset_frame, text=_("Delete Set"), command=self.on_delete_key_preset)
         self.key_delete_btn.pack(side="left", padx=5)
         
         self.update_key_library_dropdown() 
@@ -106,11 +106,11 @@ class LibraryFeaturesMixin:
         data_frame = tk.Frame(parent, bg=self.root.cget('bg'), padx=10)
         data_frame.pack(fill="both", expand=True)
 
-        self.horn_info_frame = tk.LabelFrame(data_frame, text="Horn Info", bg=self.root.cget('bg'), padx=5, pady=5)
+        self.horn_info_frame = tk.LabelFrame(data_frame, text=_("Horn Info"), bg=self.root.cget('bg'), padx=5, pady=5)
         self.horn_info_frame.pack(fill="x", pady=5)
         self.horn_info_frame.columnconfigure(1, weight=1)
         
-        self.key_height_frame = tk.LabelFrame(data_frame, text="Key Heights", bg=self.root.cget('bg'), padx=5, pady=5)
+        self.key_height_frame = tk.LabelFrame(data_frame, text=_("Key Heights"), bg=self.root.cget('bg'), padx=5, pady=5)
         self.key_height_frame.pack(fill="x", pady=5)
         self.key_height_frame.columnconfigure(1, weight=1)
         self.key_height_frame.columnconfigure(3, weight=1)
@@ -132,13 +132,13 @@ class LibraryFeaturesMixin:
             self.key_field_vars[field.lower()] = var
             self.key_info_widgets[field.lower()] = (label, entry)
 
-        label = tk.Label(frame, text="Serial:", bg=self.root.cget('bg'))
+        label = tk.Label(frame, text=_("Serial:"), bg=self.root.cget('bg'))
         var = tk.StringVar()
         entry = tk.Entry(frame, textvariable=var)
         self.key_field_vars["serial"] = var
         self.key_info_widgets["serial"] = (label, entry)
 
-        label = tk.Label(frame, text="Notes:", bg=self.root.cget('bg'))
+        label = tk.Label(frame, text=_("Notes:"), bg=self.root.cget('bg'))
         entry = tk.Text(frame, height=3)
         self.key_field_vars['notes'] = entry
         self.key_info_widgets['notes'] = (label, entry)
@@ -151,9 +151,9 @@ class LibraryFeaturesMixin:
         self.key_unit_var = tk.StringVar(value="mm")
         self.previous_key_unit = "mm"
         unit_frame = tk.Frame(frame, bg=self.root.cget('bg'))
-        tk.Label(unit_frame, text="Units:", bg=self.root.cget('bg')).pack(side="left")
-        tk.Radiobutton(unit_frame, text="mm", variable=self.key_unit_var, value="mm", bg=self.root.cget('bg'), command=self.on_unit_convert).pack(side="left")
-        tk.Radiobutton(unit_frame, text="inches", variable=self.key_unit_var, value="in", bg=self.root.cget('bg'), command=self.on_unit_convert).pack(side="left")
+        tk.Label(unit_frame, text=_("Units:"), bg=self.root.cget('bg')).pack(side="left")
+        tk.Radiobutton(unit_frame, text=_("mm"), variable=self.key_unit_var, value="mm", bg=self.root.cget('bg'), command=self.on_unit_convert).pack(side="left")
+        tk.Radiobutton(unit_frame, text=_("inches"), variable=self.key_unit_var, value="in", bg=self.root.cget('bg'), command=self.on_unit_convert).pack(side="left")
         self.key_height_widgets['units'] = unit_frame 
 
         for key in ALL_KEY_HEIGHT_FIELDS:
@@ -230,13 +230,13 @@ class LibraryFeaturesMixin:
         self.previous_key_unit = new_unit
 
     def on_save_key_preset(self):
-        name = simpledialog.askstring("Save Key Height Set", "Enter a name for this set:")
+        name = simpledialog.askstring(_("Save Key Height Set"), _("Enter a name for this set:"))
         if not name:
             return
             
         active_library = self.key_library_var.get()
         if not active_library or active_library == "All Libraries":
-            messagebox.showwarning("Save Error", "Please select a specific library to save to.")
+            messagebox.showwarning(_("Save Error"), _("Please select a specific library to save to."))
             return
 
         make = self.key_field_vars['make'].get()
@@ -244,7 +244,7 @@ class LibraryFeaturesMixin:
         size = self.key_field_vars['size'].get()
         
         if not all([make, model, size]):
-            messagebox.showwarning("Missing Info", "Please fill in at least Make, Model, and Size before saving.")
+            messagebox.showwarning(_("Missing Info"), _("Please fill in at least Make, Model, and Size before saving."))
             return
 
         if active_library not in self.key_presets:
@@ -261,13 +261,13 @@ class LibraryFeaturesMixin:
         }
         
         if name in self.key_presets[active_library]:
-            if not messagebox.askyesno("Overwrite", f"A set named '{name}' already exists in this library. Overwrite it?"):
+            if not messagebox.askyesno(_("Overwrite"), _("A set named '{name}' already exists in this library. Overwrite it?").format(name=name)):
                 return
         
         self.key_presets[active_library][name] = data
         if save_presets(self.key_presets, KEY_PRESET_FILE):
             self.on_key_library_selected() 
-            messagebox.showinfo("Preset Saved", f"Preset '{name}' saved successfully to '{active_library}'.")
+            messagebox.showinfo(_("Preset Saved"), _("Preset '{name}' saved successfully to '{active_library}'.").format(name=name, active_library=active_library))
 
     def on_load_key_preset(self, selected_name):
         if not selected_name or selected_name == "Load Key Set":
@@ -313,19 +313,19 @@ class LibraryFeaturesMixin:
         if (selected_lib != "All Libraries"
                 and selected_lib in self.key_presets
                 and not self.key_presets[selected_lib]):
-            if messagebox.askyesno("Delete Library",
-                    f"Are you sure you want to delete the empty library '{selected_lib}'?"):
+            if messagebox.askyesno(_("Delete Library"),
+                    _("Are you sure you want to delete the empty library '{selected_lib}'?").format(selected_lib=selected_lib)):
                 del self.key_presets[selected_lib]
                 save_presets(self.key_presets, KEY_PRESET_FILE)
                 self.update_key_library_dropdown()
-                messagebox.showinfo("Library Deleted", f"Library '{selected_lib}' deleted.")
+                messagebox.showinfo(_("Library Deleted"), _("Library '{selected_lib}' deleted.").format(selected_lib=selected_lib))
             return
 
         # Delete individual preset
         selected_preset = self.key_preset_var.get()
 
         if not selected_preset or selected_preset == "Load Key Set":
-            messagebox.showwarning("Delete Error", "Please load a set to delete.")
+            messagebox.showwarning(_("Delete Error"), _("Please load a set to delete."))
             return
 
         if selected_lib == "All Libraries":
@@ -333,10 +333,10 @@ class LibraryFeaturesMixin:
                 selected_lib, selected_preset = selected_preset.split("] ", 1)
                 selected_lib = selected_lib[1:]
             except ValueError:
-                messagebox.showerror("Delete Error", "Cannot delete from 'All Libraries' view. Please select the specific library first.")
+                messagebox.showerror(_("Delete Error"), _("Cannot delete from 'All Libraries' view. Please select the specific library first."))
                 return
 
-        if messagebox.askyesno("Delete Key Height Set", f"Are you sure you want to delete the set '{selected_preset}' from the '{selected_lib}' library?"):
+        if messagebox.askyesno(_("Delete Key Height Set"), _("Are you sure you want to delete the set '{selected_preset}' from the '{selected_lib}' library?").format(selected_preset=selected_preset, selected_lib=selected_lib)):
             del self.key_presets[selected_lib][selected_preset]
             if save_presets(self.key_presets, KEY_PRESET_FILE):
                 self.on_key_library_selected()
@@ -347,7 +347,7 @@ class LibraryFeaturesMixin:
                 self.key_field_vars['notes'].delete("1.0", tk.END)
                 for var in self.key_height_vars.values():
                     var.set("")
-                messagebox.showinfo("Preset Deleted", f"Preset '{selected_preset}' deleted.")
+                messagebox.showinfo(_("Preset Deleted"), _("Preset '{selected_preset}' deleted.").format(selected_preset=selected_preset))
 
     def on_key_library_selected(self, event=None):
         lib_name = self.key_library_var.get()
@@ -366,9 +366,9 @@ class LibraryFeaturesMixin:
         if (lib_name != "All Libraries"
                 and lib_name in self.key_presets
                 and not self.key_presets[lib_name]):
-            self.key_delete_btn.config(text="Delete Library")
+            self.key_delete_btn.config(text=_("Delete Library"))
         else:
-            self.key_delete_btn.config(text="Delete Set")
+            self.key_delete_btn.config(text=_("Delete Set"))
 
         # Remember last used library
         self.settings["last_key_library"] = lib_name
@@ -384,8 +384,8 @@ class LibraryFeaturesMixin:
     
     def on_import_key_sets(self):
         filepath = filedialog.askopenfilename(
-            title="Import Key Height Sets",
-            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+            title=_("Import Key Height Sets"),
+            filetypes=((_("JSON files"), "*.json"), (_("All files"), "*.*")),
             initialdir=self.settings.get("last_output_dir", "")
         )
         if not filepath:
@@ -406,7 +406,7 @@ class LibraryFeaturesMixin:
             ImportPresetsWindow(self.root, self.key_presets[target_lib], imported_presets, KEY_PRESET_FILE, self.key_preset_menu, self, "Key Height Set", save_data=self.key_presets)
 
         except Exception as e:
-            messagebox.showerror("Import Error", f"Could not import key sets:\n{e}")
+            messagebox.showerror(_("Import Error"), _("Could not import key sets:\n{e}").format(e=e))
 
     def on_import_matts_key_heights(self):
         """Fetch key height presets from stohrermusic.com and import with (Matt's) suffix."""
@@ -421,16 +421,16 @@ class LibraryFeaturesMixin:
             with urllib.request.urlopen(req, timeout=10, context=get_ssl_context()) as resp:
                 web_data = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
-            messagebox.showerror("Connection Error",
-                f"Could not fetch key heights from stohrermusic.com:\n\n{e}")
+            messagebox.showerror(_("Connection Error"),
+                _("Could not fetch key heights from stohrermusic.com:\n\n{e}").format(e=e))
             return
         except (json.JSONDecodeError, ValueError) as e:
-            messagebox.showerror("Data Error",
-                f"Invalid data received from server:\n\n{e}")
+            messagebox.showerror(_("Data Error"),
+                _("Invalid data received from server:\n\n{e}").format(e=e))
             return
 
         if not isinstance(web_data, dict) or not web_data:
-            messagebox.showinfo("No Data", "No key height data found on the server.")
+            messagebox.showinfo(_("No Data"), _("No key height data found on the server."))
             return
 
         # Flatten all libraries from web into a single list of presets
@@ -443,7 +443,7 @@ class LibraryFeaturesMixin:
                     all_presets[preset_name] = preset_data
 
         if not all_presets:
-            messagebox.showinfo("No Data", "No key height presets found on the server.")
+            messagebox.showinfo(_("No Data"), _("No key height presets found on the server."))
             return
 
         # Check if Matt's Library already exists with any entries
@@ -452,9 +452,9 @@ class LibraryFeaturesMixin:
             existing_matts = list(self.key_presets[LIBRARY_NAME].keys())
 
         if existing_matts:
-            overwrite = messagebox.askyesno("Overwrite Existing?",
-                f"Matt's Library already has {len(existing_matts)} preset(s).\n\n"
-                "Overwrite with latest from web?")
+            overwrite = messagebox.askyesno(_("Overwrite Existing?"),
+                _("Matt's Library already has {n} preset(s).\n\n"
+                  "Overwrite with latest from web?").format(n=len(existing_matts)))
             if not overwrite:
                 return
 
@@ -465,10 +465,10 @@ class LibraryFeaturesMixin:
         if count > 0:
             save_presets(self.key_presets, KEY_PRESET_FILE)
             self.update_key_library_dropdown()
-            messagebox.showinfo("Import Complete",
-                f"Imported {count} key height preset(s) into \"{LIBRARY_NAME}\".")
+            messagebox.showinfo(_("Import Complete"),
+                _("Imported {count} key height preset(s) into \"{lib}\".").format(count=count, lib=LIBRARY_NAME))
         else:
-            messagebox.showinfo("No Data", "No presets found to import.")
+            messagebox.showinfo(_("No Data"), _("No presets found to import."))
 
     def on_export_key_sets(self):
         ExportPresetsWindow(self.root, self.key_presets, "Key Height Sets", "key_height_export.json", True)
@@ -484,14 +484,14 @@ class LibraryFeaturesMixin:
         frame.pack(expand=True, fill='both')
         
         # Title
-        tk.Label(frame, text="Saxophone Serial Number Lookup", font=("Helvetica", 16, "bold"), bg=self.root.cget('bg')).pack(pady=(0, 20))
+        tk.Label(frame, text=_("Saxophone Serial Number Lookup"), font=("Helvetica", 16, "bold"), bg=self.root.cget('bg')).pack(pady=(0, 20))
         
         # Controls Frame
         controls_frame = tk.Frame(frame, bg=self.root.cget('bg'))
         controls_frame.pack(fill='x', pady=10)
         
         # Maker Dropdown
-        tk.Label(controls_frame, text="Manufacturer:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(controls_frame, text=_("Manufacturer:"), font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=10)
         
         self.serial_maker_var = tk.StringVar()
         makers = sorted(list(SERIAL_DATA.keys())) if SERIAL_DATA else ["No Data Found"]
@@ -501,7 +501,7 @@ class LibraryFeaturesMixin:
         self.serial_maker_dropdown.grid(row=0, column=1, sticky='w', padx=10, pady=10)
         
         # Serial Entry
-        tk.Label(controls_frame, text="Serial Number:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(controls_frame, text=_("Serial Number:"), font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=10)
         
         self.serial_entry_var = tk.StringVar()
         self.serial_entry_var.trace("w", self.on_serial_change) # Auto-update on type
@@ -509,7 +509,7 @@ class LibraryFeaturesMixin:
         entry.grid(row=1, column=1, sticky='w', padx=10, pady=10)
         
         # Result Display
-        self.serial_result_label = tk.Label(frame, text="Enter a serial number...", font=("Helvetica", 24, "bold"), bg=self.root.cget('bg'), fg="#0000A0")
+        self.serial_result_label = tk.Label(frame, text=_("Enter a serial number..."), font=("Helvetica", 24, "bold"), bg=self.root.cget('bg'), fg="#0000A0")
         self.serial_result_label.pack(pady=40)
         
         # Disclaimer
@@ -539,7 +539,7 @@ class LibraryFeaturesMixin:
         main_frame = tk.Frame(parent, bg=self.root.cget('bg'), padx=20, pady=20)
         main_frame.pack(expand=True, fill='both')
 
-        title_label = tk.Label(main_frame, text="Screw & Rod Specifications", font=("Helvetica", 16, "bold"), bg=self.root.cget('bg'))
+        title_label = tk.Label(main_frame, text=_("Screw & Rod Specifications"), font=("Helvetica", 16, "bold"), bg=self.root.cget('bg'))
         title_label.pack(pady=(0, 15))
 
         # --- Controls Frame ---
@@ -548,7 +548,7 @@ class LibraryFeaturesMixin:
         controls_frame.columnconfigure(1, weight=1)
 
         # Maker Dropdown
-        tk.Label(controls_frame, text="Manufacturer:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=5)
+        tk.Label(controls_frame, text=_("Manufacturer:"), font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=5)
         
         self.screw_maker_var = tk.StringVar()
         self.screw_maker_dropdown = ttk.Combobox(controls_frame, textvariable=self.screw_maker_var, state="normal", width=25, font=("Helvetica", 12))
@@ -556,7 +556,7 @@ class LibraryFeaturesMixin:
         self.screw_maker_dropdown.bind("<<ComboboxSelected>>", self.on_screw_maker_change)
 
         # Model Dropdown
-        tk.Label(controls_frame, text="Model:", font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=5)
+        tk.Label(controls_frame, text=_("Model:"), font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=1, column=0, sticky='e', padx=10, pady=5)
         
         self.screw_model_var = tk.StringVar()
         self.screw_model_dropdown = ttk.Combobox(controls_frame, textvariable=self.screw_model_var, state="normal", width=25, font=("Helvetica", 12))
@@ -564,12 +564,12 @@ class LibraryFeaturesMixin:
         self.screw_model_dropdown.bind("<<ComboboxSelected>>", self.on_screw_model_change)
 
         # --- Specs Frame (New Grid Layout) ---
-        specs_frame = tk.LabelFrame(main_frame, text="OEM Specifications", bg=self.root.cget('bg'), font=("Helvetica", 10, "bold"), padx=10, pady=10)
+        specs_frame = tk.LabelFrame(main_frame, text=_("OEM Specifications"), bg=self.root.cget('bg'), font=("Helvetica", 10, "bold"), padx=10, pady=10)
         specs_frame.pack(fill='both', expand=True, pady=10)
         
         # Headers
-        tk.Label(specs_frame, text="Threads / Pitch", font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=1, padx=5, pady=(0,5))
-        tk.Label(specs_frame, text="Dia / Desc", font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=2, padx=5, pady=(0,5))
+        tk.Label(specs_frame, text=_("Threads / Pitch"), font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=1, padx=5, pady=(0,5))
+        tk.Label(specs_frame, text=_("Dia / Desc"), font=("Helvetica", 9, "bold"), bg=self.root.cget('bg')).grid(row=0, column=2, padx=5, pady=(0,5))
 
         # We will store all the Entry variables in a dictionary for easy saving/loading
         self.screw_vars = {}
@@ -612,7 +612,7 @@ class LibraryFeaturesMixin:
             row_idx += 1
 
         # Notes (Text Area)
-        tk.Label(specs_frame, text="Notes:", font=("Helvetica", 10), bg=self.root.cget('bg')).grid(row=row_idx, column=0, sticky='ne', padx=5, pady=5)
+        tk.Label(specs_frame, text=_("Notes:"), font=("Helvetica", 10), bg=self.root.cget('bg')).grid(row=row_idx, column=0, sticky='ne', padx=5, pady=5)
         self.screw_notes_text = tk.Text(specs_frame, height=4, font=("Helvetica", 10), width=40)
         self.screw_notes_text.grid(row=row_idx, column=1, columnspan=2, sticky='ew', padx=5, pady=5)
         
@@ -623,8 +623,8 @@ class LibraryFeaturesMixin:
         btn_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
         btn_frame.pack(pady=10)
         
-        tk.Button(btn_frame, text="Save / Update Spec", command=self.save_screw_spec, font=("Helvetica", 11, "bold")).pack(side="left", padx=10)
-        tk.Button(btn_frame, text="Delete Spec", command=self.delete_screw_spec, font=("Helvetica", 11), fg="red").pack(side="right", padx=10)
+        tk.Button(btn_frame, text=_("Save / Update Spec"), command=self.save_screw_spec, font=("Helvetica", 11, "bold")).pack(side="left", padx=10)
+        tk.Button(btn_frame, text=_("Delete Spec"), command=self.delete_screw_spec, font=("Helvetica", 11), fg="red").pack(side="right", padx=10)
 
         # Initialize Dropdowns
         self.update_screw_maker_list()
@@ -686,11 +686,11 @@ class LibraryFeaturesMixin:
         model = self.screw_model_var.get().strip()
         
         if maker == "(add new)" or model == "(add new)":
-            messagebox.showwarning("Invalid Name", "Please type a real name for the Manufacturer and Model.")
+            messagebox.showwarning(_("Invalid Name"), _("Please type a real name for the Manufacturer and Model."))
             return
         
         if not maker or not model:
-            messagebox.showwarning("Missing Info", "Please enter both a Manufacturer and a Model.")
+            messagebox.showwarning(_("Missing Info"), _("Please enter both a Manufacturer and a Model."))
             return
             
         if maker not in self.screw_data:
@@ -706,7 +706,7 @@ class LibraryFeaturesMixin:
         self.screw_data[maker][model] = spec_data
         
         if save_presets(self.screw_data, SCREW_SPECS_FILE):
-            messagebox.showinfo("Saved", f"Specs for {maker} {model} saved.")
+            messagebox.showinfo(_("Saved"), _("Specs for {maker} {model} saved.").format(maker=maker, model=model))
             self.update_screw_maker_list()
             self.screw_maker_var.set(maker)
             self.on_screw_maker_change()
@@ -718,7 +718,7 @@ class LibraryFeaturesMixin:
         model = self.screw_model_var.get()
         
         if maker in self.screw_data and model in self.screw_data[maker]:
-            if messagebox.askyesno("Confirm Delete", f"Delete specs for {maker} {model}?"):
+            if messagebox.askyesno(_("Confirm Delete"), _("Delete specs for {maker} {model}?").format(maker=maker, model=model)):
                 del self.screw_data[maker][model]
                 if not self.screw_data[maker]:
                     del self.screw_data[maker]
@@ -744,16 +744,16 @@ class LibraryFeaturesMixin:
             with urllib.request.urlopen(req, timeout=10, context=get_ssl_context()) as resp:
                 web_data = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
-            messagebox.showerror("Connection Error",
-                f"Could not fetch specs from stohrermusic.com:\n\n{e}")
+            messagebox.showerror(_("Connection Error"),
+                _("Could not fetch specs from stohrermusic.com:\n\n{e}").format(e=e))
             return
         except (json.JSONDecodeError, ValueError) as e:
-            messagebox.showerror("Data Error",
-                f"Invalid data received from server:\n\n{e}")
+            messagebox.showerror(_("Data Error"),
+                _("Invalid data received from server:\n\n{e}").format(e=e))
             return
 
         if not isinstance(web_data, dict) or not web_data:
-            messagebox.showinfo("No Data", "No specs found on the server.")
+            messagebox.showinfo(_("No Data"), _("No specs found on the server."))
             return
 
         # Check if any Matt's specs already exist locally
@@ -767,11 +767,11 @@ class LibraryFeaturesMixin:
                     existing_matts.append(f"{maker} - {matts_name}")
 
         if existing_matts:
-            overwrite = messagebox.askyesno("Overwrite Existing?",
-                f"{len(existing_matts)} Matt's spec(s) already exist locally:\n\n"
+            overwrite = messagebox.askyesno(_("Overwrite Existing?"),
+                _("{n} Matt's spec(s) already exist locally:\n\n").format(n=len(existing_matts))
                 + "\n".join(existing_matts[:10])
                 + ("\n..." if len(existing_matts) > 10 else "")
-                + "\n\nOverwrite with latest from web?")
+                + _("\n\nOverwrite with latest from web?"))
             if not overwrite:
                 return
 
@@ -792,18 +792,18 @@ class LibraryFeaturesMixin:
         if count > 0:
             save_presets(self.screw_data, SCREW_SPECS_FILE)
             self.update_screw_maker_list()
-            messagebox.showinfo("Import Complete",
-                f"Imported {count} spec(s) from Matt's library.")
+            messagebox.showinfo(_("Import Complete"),
+                _("Imported {count} spec(s) from Matt's library.").format(count=count))
         else:
-            messagebox.showinfo("No Data", "No specs found to import.")
+            messagebox.showinfo(_("No Data"), _("No specs found to import."))
 
     def on_export_screw_specs(self):
         ExportPresetsWindow(self.root, self.screw_data, "Screw Specs", "screw_specs_export.json", False)
 
     def on_import_screw_specs(self):
         filepath = filedialog.askopenfilename(
-            title="Import Screw Specs",
-            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+            title=_("Import Screw Specs"),
+            filetypes=((_("JSON files"), "*.json"), (_("All files"), "*.*")),
             initialdir=self.settings.get("last_output_dir", "")
         )
         if not filepath:
@@ -839,11 +839,11 @@ class LibraryFeaturesMixin:
                         flat_options[f"{maker}::{model}"] = data
             
             if not flat_options:
-                messagebox.showinfo("Import", "No specs found in file.")
+                messagebox.showinfo(_("Import"), _("No specs found in file."))
                 return
 
             top = tk.Toplevel(self.root)
-            top.title("Import Screw Specs")
+            top.title(_("Import Screw Specs"))
             top.geometry("400x500")
             top.transient(self.root)
             top.grab_set()
@@ -861,7 +861,7 @@ class LibraryFeaturesMixin:
             canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
             canvas.configure(yscrollcommand=scrollbar.set)
             
-            tk.Label(top, text="Select specs to import:", pady=10).pack(side="top")
+            tk.Label(top, text=_("Select specs to import:"), pady=10).pack(side="top")
             
             canvas.pack(side="left", fill="both", expand=True, padx=10)
             scrollbar.pack(side="right", fill="y")
@@ -903,11 +903,11 @@ class LibraryFeaturesMixin:
                 
                 save_presets(self.screw_data, SCREW_SPECS_FILE)
                 self.update_screw_maker_list() 
-                messagebox.showinfo("Success", f"Imported {count} specs.")
+                messagebox.showinfo(_("Success"), _("Imported {count} specs.").format(count=count))
                 top.destroy()
             
             # Pack button into the bottom frame
-            tk.Button(btn_frame, text="Import Selected", command=do_import, font=("Helvetica", 10, "bold")).pack()
+            tk.Button(btn_frame, text=_("Import Selected"), command=do_import, font=("Helvetica", 10, "bold")).pack()
             
         except Exception as e:
-            messagebox.showerror("Import Error", f"Failed to import:\n{e}")
+            messagebox.showerror(_("Import Error"), _("Failed to import:\n{e}").format(e=e))

@@ -15,19 +15,26 @@ from config import (
     setup_logging, get_log_file,
     settings_to_sizing_preset,
 )
-from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads
-from gcode_engine import generate_gcode_from_placed
-from ui_dialogs import (
+
+# Initialize translations BEFORE importing UI modules. Any module-level
+# strings in ui_dialogs/main.py/toner_tab/etc. that use _() need the
+# translation catalog already loaded when their module body runs.
+from i18n import init_translation
+init_translation(load_settings().get("language", "en"))
+
+from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads  # noqa: E402
+from gcode_engine import generate_gcode_from_placed  # noqa: E402
+from ui_dialogs import (  # noqa: E402
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, WebImportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
     UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow
 )
-from library_features import LibraryFeaturesMixin
-from tooling_tab import ToolingTabMixin
-from tuner_tab import TunerTabMixin
-from toner_tab import TonerTabMixin
+from library_features import LibraryFeaturesMixin  # noqa: E402
+from tooling_tab import ToolingTabMixin  # noqa: E402
+from tuner_tab import TunerTabMixin  # noqa: E402
+from toner_tab import TonerTabMixin  # noqa: E402
 
 # ==========================================
 # MAIN APP CLASS
@@ -130,9 +137,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if self.scrap_session.get('active', False):
             remaining = self._count_remaining_pads()
             if remaining > 0:
-                if not messagebox.askyesno("Scrap Session Active",
-                    f"You have {remaining} pads remaining in your scrap session.\n\n"
-                    "Exit anyway? (Session will be lost)"):
+                if not messagebox.askyesno(_("Scrap Session Active"),
+                    _("You have {remaining} pads remaining in your scrap session.\n\n"
+                    "Exit anyway? (Session will be lost)").format(remaining=remaining)):
                     return
 
         # Save settings from pad generator tab
@@ -222,50 +229,50 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.pad_menu = tk.Menu(self.root)
         
         pad_file_menu = tk.Menu(self.pad_menu, tearoff=0)
-        self.pad_menu.add_cascade(label="File", menu=pad_file_menu)
-        pad_file_menu.add_command(label="Import Pad Presets...", command=self.on_import_pad_presets)
-        pad_file_menu.add_command(label="Export Pad Presets...", command=self.on_export_pad_presets)
+        self.pad_menu.add_cascade(label=_("File"), menu=pad_file_menu)
+        pad_file_menu.add_command(label=_("Import Pad Presets..."), command=self.on_import_pad_presets)
+        pad_file_menu.add_command(label=_("Export Pad Presets..."), command=self.on_export_pad_presets)
         pad_file_menu.add_separator()
-        pad_file_menu.add_command(label="Import Matt's Pad Sets", command=self.on_import_matts_pad_sets)
+        pad_file_menu.add_command(label=_("Import Matt's Pad Sets"), command=self.on_import_matts_pad_sets)
         pad_file_menu.add_separator()
-        pad_file_menu.add_command(label="Import Settings from Folder...", command=self.on_import_settings_folder)
+        pad_file_menu.add_command(label=_("Import Settings from Folder..."), command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
-        pad_file_menu.add_command(label="Feature Set...", command=self._open_feature_set)
+        pad_file_menu.add_command(label=_("Feature Set..."), command=self._open_feature_set)
         pad_file_menu.add_separator()
-        pad_file_menu.add_command(label="Exit", command=self.on_exit)
+        pad_file_menu.add_command(label=_("Exit"), command=self.on_exit)
 
         pad_options_menu = tk.Menu(self.pad_menu, tearoff=0)
-        self.pad_menu.add_cascade(label="Options", menu=pad_options_menu)
-        pad_options_menu.add_command(label="Sizing Rules...", command=self.open_options_window)
-        pad_options_menu.add_command(label="Layer Colors...", command=self.open_color_window)
+        self.pad_menu.add_cascade(label=_("Options"), menu=pad_options_menu)
+        pad_options_menu.add_command(label=_("Sizing Rules..."), command=self.open_options_window)
+        pad_options_menu.add_command(label=_("Layer Colors..."), command=self.open_color_window)
         pad_options_menu.add_separator()
-        pad_options_menu.add_command(label="G-code Settings...", command=self.open_gcode_settings_window)
+        pad_options_menu.add_command(label=_("G-code Settings..."), command=self.open_gcode_settings_window)
 
         # --- Key Height Library Menu ---
         self.key_menu = tk.Menu(self.root)
-        
+
         key_file_menu = tk.Menu(self.key_menu, tearoff=0)
-        self.key_menu.add_cascade(label="File", menu=key_file_menu)
-        key_file_menu.add_command(label="Import Key Sets...", command=self.on_import_key_sets)
-        key_file_menu.add_command(label="Import Matt's Key Heights", command=self.on_import_matts_key_heights)
-        key_file_menu.add_command(label="Export Key Sets...", command=self.on_export_key_sets)
+        self.key_menu.add_cascade(label=_("File"), menu=key_file_menu)
+        key_file_menu.add_command(label=_("Import Key Sets..."), command=self.on_import_key_sets)
+        key_file_menu.add_command(label=_("Import Matt's Key Heights"), command=self.on_import_matts_key_heights)
+        key_file_menu.add_command(label=_("Export Key Sets..."), command=self.on_export_key_sets)
         key_file_menu.add_separator()
-        key_file_menu.add_command(label="Exit", command=self.on_exit)
+        key_file_menu.add_command(label=_("Exit"), command=self.on_exit)
 
         key_options_menu = tk.Menu(self.key_menu, tearoff=0)
-        self.key_menu.add_cascade(label="Options", menu=key_options_menu)
-        key_options_menu.add_command(label="Layout Options...", command=self.open_key_layout_window)
+        self.key_menu.add_cascade(label=_("Options"), menu=key_options_menu)
+        key_options_menu.add_command(label=_("Layout Options..."), command=self.open_key_layout_window)
 
         # --- Screw Specs Menu ---
         self.screw_menu = tk.Menu(self.root)
 
         screw_file_menu = tk.Menu(self.screw_menu, tearoff=0)
-        self.screw_menu.add_cascade(label="File", menu=screw_file_menu)
-        screw_file_menu.add_command(label="Import Screw Specs...", command=self.on_import_screw_specs)
-        screw_file_menu.add_command(label="Import Matt's Specs", command=self.on_import_matts_specs)
-        screw_file_menu.add_command(label="Export Screw Specs...", command=self.on_export_screw_specs)
+        self.screw_menu.add_cascade(label=_("File"), menu=screw_file_menu)
+        screw_file_menu.add_command(label=_("Import Screw Specs..."), command=self.on_import_screw_specs)
+        screw_file_menu.add_command(label=_("Import Matt's Specs"), command=self.on_import_matts_specs)
+        screw_file_menu.add_command(label=_("Export Screw Specs..."), command=self.on_export_screw_specs)
         screw_file_menu.add_separator()
-        screw_file_menu.add_command(label="Exit", command=self.on_exit)
+        screw_file_menu.add_command(label=_("Exit"), command=self.on_exit)
 
         # --- Serial Lookup Menu (was empty) ---
         self.serial_menu = tk.Menu(self.root)
@@ -274,48 +281,48 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.tooling_menu = tk.Menu(self.root)
 
         tooling_file_menu = tk.Menu(self.tooling_menu, tearoff=0)
-        self.tooling_menu.add_cascade(label="File", menu=tooling_file_menu)
-        tooling_file_menu.add_command(label="Exit", command=self.on_exit)
+        self.tooling_menu.add_cascade(label=_("File"), menu=tooling_file_menu)
+        tooling_file_menu.add_command(label=_("Exit"), command=self.on_exit)
 
         tooling_options_menu = tk.Menu(self.tooling_menu, tearoff=0)
-        self.tooling_menu.add_cascade(label="Options", menu=tooling_options_menu)
-        tooling_options_menu.add_command(label="Settings...", command=self._open_tooling_gcode_settings)
+        self.tooling_menu.add_cascade(label=_("Options"), menu=tooling_options_menu)
+        tooling_options_menu.add_command(label=_("Settings..."), command=self._open_tooling_gcode_settings)
 
         # --- Tuner Menu ---
         self.tuner_menu = tk.Menu(self.root)
 
         tuner_options_menu = tk.Menu(self.tuner_menu, tearoff=0)
-        self.tuner_menu.add_cascade(label="Options", menu=tuner_options_menu)
-        tuner_options_menu.add_command(label="Settings...", command=self._tuner_open_settings)
-        tuner_options_menu.add_command(label="Input Device...", command=self._open_input_device_dialog)
+        self.tuner_menu.add_cascade(label=_("Options"), menu=tuner_options_menu)
+        tuner_options_menu.add_command(label=_("Settings..."), command=self._tuner_open_settings)
+        tuner_options_menu.add_command(label=_("Input Device..."), command=self._open_input_device_dialog)
 
         # --- Toner Menu ---
         self.toner_menu = tk.Menu(self.root)
 
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
-        self.toner_menu.add_cascade(label="File", menu=toner_file_menu)
-        toner_file_menu.add_command(label="Presets...", command=self._toner_open_preset_dialog)
-        toner_file_menu.add_command(label="Analyze...", command=self._toner_open_analyze_dialog)
+        self.toner_menu.add_cascade(label=_("File"), menu=toner_file_menu)
+        toner_file_menu.add_command(label=_("Presets..."), command=self._toner_open_preset_dialog)
+        toner_file_menu.add_command(label=_("Analyze..."), command=self._toner_open_analyze_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
-        toner_file_menu.add_cascade(label="Transfer Data", menu=toner_transfer_menu)
-        toner_transfer_menu.add_command(label="Export Preset Library...", command=self._toner_export_presets)
-        toner_transfer_menu.add_command(label="Import Preset Library...", command=self._toner_import_presets)
+        toner_file_menu.add_cascade(label=_("Transfer Data"), menu=toner_transfer_menu)
+        toner_transfer_menu.add_command(label=_("Export Preset Library..."), command=self._toner_export_presets)
+        toner_transfer_menu.add_command(label=_("Import Preset Library..."), command=self._toner_import_presets)
 
         toner_options_menu = tk.Menu(self.toner_menu, tearoff=0)
-        self.toner_menu.add_cascade(label="Options", menu=toner_options_menu)
-        toner_options_menu.add_command(label="Settings...", command=self._toner_open_settings)
-        toner_options_menu.add_command(label="Capture Threshold...", command=self._open_capture_threshold)
+        self.toner_menu.add_cascade(label=_("Options"), menu=toner_options_menu)
+        toner_options_menu.add_command(label=_("Settings..."), command=self._toner_open_settings)
+        toner_options_menu.add_command(label=_("Capture Threshold..."), command=self._open_capture_threshold)
 
         # --- Add Help menu to all tab menus ---
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
             help_menu = tk.Menu(menu, tearoff=0)
-            menu.add_cascade(label="Help", menu=help_menu)
-            help_menu.add_command(label="User Guide...", command=self.open_user_guide)
+            menu.add_cascade(label=_("Help"), menu=help_menu)
+            help_menu.add_command(label=_("User Guide..."), command=self.open_user_guide)
             help_menu.add_separator()
-            help_menu.add_command(label="Open Log File", command=self._open_log_file)
+            help_menu.add_command(label=_("Open Log File"), command=self._open_log_file)
             help_menu.add_separator()
-            help_menu.add_command(label="About", command=self.open_about)
+            help_menu.add_command(label=_("About"), command=self.open_about)
 
     def on_tab_changed(self, event):
         selected = self.notebook.select()
@@ -348,36 +355,36 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         
         # --- Create Tab 1: Pad Maker ---
         self.pad_tab = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.pad_tab, text='Pad Maker')
+        self.notebook.add(self.pad_tab, text=_('Pad Maker'))
         self.create_pad_generator_tab(self.pad_tab)
 
         # --- Create Tab 2: Key Height Library ---
         self.key_tab = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.key_tab, text='Key Height Library')
+        self.notebook.add(self.key_tab, text=_('Key Height Library'))
         self.create_key_library_tab(self.key_tab)
-        
+
         # --- Create Tab 3: Serial Lookup ---
         self.serial_tab = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.serial_tab, text='Serial Lookup')
+        self.notebook.add(self.serial_tab, text=_('Serial Lookup'))
         self.create_serial_lookup_tab(self.serial_tab)
 
         # --- Create Tab 4: Screw Specs ---
         self.screw_tab = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.screw_tab, text='Screw Specs')
+        self.notebook.add(self.screw_tab, text=_('Screw Specs'))
         self.create_screw_specs_tab(self.screw_tab)
 
         self.tooling_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.tooling_tab_frame, text='Tooling')
+        self.notebook.add(self.tooling_tab_frame, text=_('Tooling'))
         self.create_tooling_tab(self.tooling_tab_frame)
 
         # --- Create Tab 6: Tuner ---
         self.tuner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.tuner_tab_frame, text='Tuner')
+        self.notebook.add(self.tuner_tab_frame, text=_('Tuner'))
         self.create_tuner_tab(self.tuner_tab_frame)
 
         # --- Create Tab 7: Toner ---
         self.toner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.toner_tab_frame, text='Toner (beta)')
+        self.notebook.add(self.toner_tab_frame, text=_('Toner (beta)'))
         self.create_toner_tab(self.toner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
@@ -461,7 +468,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # All content goes into _pad_tab_inner instead of parent
         parent = self._pad_tab_inner
 
-        tk.Label(parent, text="Enter pad sizes (e.g. 42.0x3):", bg=self.root.cget('bg')).pack(pady=5)
+        tk.Label(parent, text=_("Enter pad sizes (e.g. 42.0x3):"), bg=self.root.cget('bg')).pack(pady=5)
         self.pad_entry = tk.Text(parent, height=10, undo=True, maxundo=-1)
         self.pad_entry.pack(fill="x", padx=10)
 
@@ -478,7 +485,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         preset_select_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         preset_select_frame.pack(pady=(10, 2), fill='x', padx=10)
 
-        tk.Label(preset_select_frame, text="Library:", bg=self.root.cget('bg')).pack(side="left", padx=(0, 2))
+        tk.Label(preset_select_frame, text=_("Library:"), bg=self.root.cget('bg')).pack(side="left", padx=(0, 2))
         self.pad_library_var = tk.StringVar()
         self.pad_library_dropdown = ttk.Combobox(preset_select_frame, textvariable=self.pad_library_var, state="readonly", width=15)
         self.pad_library_dropdown.pack(side="left")
@@ -487,7 +494,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         preset_names = []
         self.pad_preset_var = tk.StringVar()
         self.pad_preset_menu = ttk.Combobox(preset_select_frame, textvariable=self.pad_preset_var, values=preset_names, state="readonly", width=40)
-        self.pad_preset_menu.set("Load Pad Preset")
+        self.pad_preset_menu.set(_("Load Pad Preset"))
         self.pad_preset_menu.pack(side="left", padx=5)
         self.pad_preset_menu.bind("<<ComboboxSelected>>", lambda e: self.on_load_pad_preset(self.pad_preset_var.get()))
 
@@ -497,11 +504,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         left_btns = tk.Frame(preset_btn_frame, bg=self.root.cget('bg'))
         left_btns.pack(side="left")
-        tk.Button(left_btns, text="Save as Preset", command=self.on_save_pad_preset).pack(side="left", padx=(0, 5))
-        self.pad_notes_btn = tk.Button(left_btns, text="View Notes", command=self.on_pad_notes, state="disabled")
+        tk.Button(left_btns, text=_("Save as Preset"), command=self.on_save_pad_preset).pack(side="left", padx=(0, 5))
+        self.pad_notes_btn = tk.Button(left_btns, text=_("View Notes"), command=self.on_pad_notes, state="disabled")
         self.pad_notes_btn.pack(side="left", padx=5)
 
-        self.pad_delete_btn = tk.Button(preset_btn_frame, text="Delete Preset", command=self.on_delete_pad_preset)
+        self.pad_delete_btn = tk.Button(preset_btn_frame, text=_("Delete Preset"), command=self.on_delete_pad_preset)
         self.pad_delete_btn.pack(side="right")
 
         self.pad_preset_loaded_library = None
@@ -524,42 +531,42 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         mat_hole_row = tk.Frame(options_frame, bg=self.root.cget('bg'))
         mat_hole_row.pack(fill="x")
 
-        mat_frame = tk.LabelFrame(mat_hole_row, text="Materials", bg=self.root.cget('bg'), padx=5, pady=5)
+        mat_frame = tk.LabelFrame(mat_hole_row, text=_("Materials"), bg=self.root.cget('bg'), padx=5, pady=5)
         mat_frame.pack(side="left", fill="y")
         material_list = list(self.material_vars.items())
         for i, (m, var) in enumerate(material_list):
             row, col = i // 2, i % 2
-            cb = tk.Checkbutton(mat_frame, text=m.replace('_', ' ').capitalize(),
+            cb = tk.Checkbutton(mat_frame, text=_(m.replace('_', ' ').capitalize()),
                                variable=var, bg=self.root.cget('bg'))
             cb.grid(row=row, column=col, sticky='w', padx=(0, 10))
             self.material_checkboxes[m] = cb
 
-        hole_frame = tk.LabelFrame(mat_hole_row, text="Center Hole", bg=self.root.cget('bg'), padx=5, pady=5)
+        hole_frame = tk.LabelFrame(mat_hole_row, text=_("Center Hole"), bg=self.root.cget('bg'), padx=5, pady=5)
         hole_frame.pack(side="left", fill="both", expand=True, padx=(10, 0))
         self.hole_var = tk.StringVar(value=self.settings["hole_option"])
-        
-        tk.Radiobutton(hole_frame, text="None", variable=self.hole_var, value="No center holes", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
+
+        tk.Radiobutton(hole_frame, text=_("None"), variable=self.hole_var, value="No center holes", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
         tk.Radiobutton(hole_frame, text="3.0mm", variable=self.hole_var, value="3.0mm", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
         tk.Radiobutton(hole_frame, text="3.5mm", variable=self.hole_var, value="3.5mm", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
-        tk.Radiobutton(hole_frame, text="Custom:", variable=self.hole_var, value="Custom", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
-        
+        tk.Radiobutton(hole_frame, text=_("Custom:"), variable=self.hole_var, value="Custom", bg=self.root.cget('bg'), command=self.toggle_custom_hole_entry).pack(side="left")
+
         self.custom_hole_entry = tk.Entry(hole_frame, width=6)
         self.custom_hole_entry.insert(0, self.settings.get("custom_hole_size", "4.0"))
         self.custom_hole_entry.pack(side="left", padx=2)
         tk.Label(hole_frame, text="mm", bg=self.root.cget('bg')).pack(side="left")
         self.toggle_custom_hole_entry()
 
-        sheet_frame = tk.LabelFrame(options_frame, text="Sheet Size", bg=self.root.cget('bg'), padx=5, pady=5)
+        sheet_frame = tk.LabelFrame(options_frame, text=_("Sheet Size"), bg=self.root.cget('bg'), padx=5, pady=5)
         sheet_frame.pack(fill="x", pady=(10,0))
         sheet_frame.columnconfigure(2, weight=1)  # Scrap Mode column absorbs extra space
 
-        self.unit_label = tk.Label(sheet_frame, text=f"Width ({self.settings['units']}):", bg=self.root.cget('bg'))
+        self.unit_label = tk.Label(sheet_frame, text=_("Width ({units}):").format(units=self.settings['units']), bg=self.root.cget('bg'))
         self.unit_label.grid(row=0, column=0, sticky='w', padx=5)
         self.width_entry = tk.Entry(sheet_frame)
         self.width_entry.insert(0, self.settings["sheet_width"])
         self.width_entry.grid(row=0, column=1, sticky='w')
 
-        self.height_label = tk.Label(sheet_frame, text=f"Height ({self.settings['units']}):", bg=self.root.cget('bg'))
+        self.height_label = tk.Label(sheet_frame, text=_("Height ({units}):").format(units=self.settings['units']), bg=self.root.cget('bg'))
         self.height_label.grid(row=1, column=0, sticky='w', padx=5)
         self.height_entry = tk.Entry(sheet_frame)
         self.height_entry.insert(0, self.settings["sheet_height"])
@@ -570,7 +577,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         scrap_inner_frame.grid(row=0, column=2, rowspan=4, sticky='n', padx=(20, 5))
 
         self.scrap_mode_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(scrap_inner_frame, text="Scrap Mode",
+        tk.Checkbutton(scrap_inner_frame, text=_("Scrap Mode"),
                        variable=self.scrap_mode_var, bg=self.root.cget('bg'),
                        command=self._toggle_scrap_mode).pack()
 
@@ -581,14 +588,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                                            bg=self.root.cget('bg'), font=("Helvetica", 8), fg="blue")
 
         # Clear button (shown when scrap mode checked)
-        self.clear_scrap_btn = tk.Button(scrap_inner_frame, text="Clear", font=("Helvetica", 8),
+        self.clear_scrap_btn = tk.Button(scrap_inner_frame, text=_("Clear"), font=("Helvetica", 8),
                                          command=self._on_clear_scrap_clicked)
 
         # Edge Bias d-pad (right side of sheet frame)
         bias_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
         bias_frame.grid(row=0, column=3, rowspan=4, sticky='n', padx=(15, 20))
 
-        tk.Label(bias_frame, text="Edge Bias", font=("Helvetica", 8),
+        tk.Label(bias_frame, text=_("Edge Bias"), font=("Helvetica", 8),
                  bg=self.root.cget('bg')).grid(row=0, column=0, columnspan=3)
 
         self.edge_bias_var = tk.StringVar(value=self.settings.get("edge_bias", "center"))
@@ -609,7 +616,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         for direction, (row, col) in dpad_positions.items():
             if direction == "center":
                 # Center button toggles between "center" and "off"
-                btn = tk.Button(bias_frame, text="ctr", width=2, height=1,
+                btn = tk.Button(bias_frame, text=_("ctr"), width=2, height=1,
                                font=("Helvetica", 8), relief="raised",
                                command=self._toggle_center_bias)
             else:
@@ -626,7 +633,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.card_paper_var = tk.BooleanVar(value=self.settings.get("card_use_paper_size", False))
         self.card_paper_checkbox = tk.Checkbutton(
-            card_paper_frame, text="Fit card to paper:", variable=self.card_paper_var,
+            card_paper_frame, text=_("Fit card to paper:"), variable=self.card_paper_var,
             bg=self.root.cget('bg'), command=self._toggle_card_paper_dropdown
         )
         self.card_paper_checkbox.pack(side="left")
@@ -648,17 +655,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         shape_btn_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
         shape_btn_frame.grid(row=3, column=0, columnspan=2, pady=(8, 0))
 
-        tk.Button(shape_btn_frame, text="Draw Custom Shape...", command=self.on_draw_custom_shape).pack(side="left")
+        tk.Button(shape_btn_frame, text=_("Draw Custom Shape..."), command=self.on_draw_custom_shape).pack(side="left")
         self.shape_status_var = tk.StringVar(value="")
         self.shape_status_label = tk.Label(shape_btn_frame, textvariable=self.shape_status_var,
                                            bg=self.root.cget('bg'), fg="gray", font=("Helvetica", 9))
         self.shape_status_label.pack(side="left", padx=5)
 
-        self.unload_shape_btn = tk.Button(shape_btn_frame, text="Unload", command=self.on_unload_custom_shape)
+        self.unload_shape_btn = tk.Button(shape_btn_frame, text=_("Unload"), command=self.on_unload_custom_shape)
         # Initially hidden, shown when shape is loaded
         self._update_shape_status()
 
-        tk.Label(parent, text="Output filename base (no extension):", bg=self.root.cget('bg')).pack(pady=5)
+        tk.Label(parent, text=_("Output filename base (no extension):"), bg=self.root.cget('bg')).pack(pady=5)
         self.filename_entry = tk.Entry(parent)
         self.filename_entry.insert(0, "my_pad_job")
         self.filename_entry.pack(padx=10)
@@ -666,22 +673,22 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Two generate buttons side by side
         generate_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         generate_frame.pack(pady=(15, 5))
-        tk.Button(generate_frame, text="Generate SVG", command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
-        tk.Button(generate_frame, text="Generate G-code", command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
+        tk.Button(generate_frame, text=_("Generate SVG"), command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
+        tk.Button(generate_frame, text=_("Generate G-code"), command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
 
         # Options below generate buttons
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         options_frame.pack(pady=(0, 10))
 
         self.preview_var = tk.BooleanVar(value=self.settings.get("show_preview", False))
-        tk.Checkbutton(options_frame, text="Preview before saving",
+        tk.Checkbutton(options_frame, text=_("Preview before saving"),
                        variable=self.preview_var, bg=self.root.cget('bg'),
                        command=lambda: self._save_checkbox("show_preview", self.preview_var)
                        ).pack(side="left", padx=(0, 15))
 
         self.eject_sd_var = tk.BooleanVar(value=self.settings.get("eject_sd_after_gcode", False))
         if sys.platform == 'win32':
-            tk.Checkbutton(options_frame, text="Eject SD card after G-code export",
+            tk.Checkbutton(options_frame, text=_("Eject SD card after G-code export"),
                            variable=self.eject_sd_var, bg=self.root.cget('bg'),
                            command=self._on_eject_sd_changed).pack(side="left")
 
@@ -715,11 +722,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _update_shape_status(self):
         """Update the custom shape status indicator."""
         if self.custom_polygon:
-            self.shape_status_var.set(f"Drawn shape loaded ({len(self.custom_polygon)} pts)")
+            self.shape_status_var.set(_("Drawn shape loaded ({n} pts)").format(n=len(self.custom_polygon)))
             self.shape_status_label.config(fg="green")
             self.unload_shape_btn.pack(side="left", padx=2)
         else:
-            self.shape_status_var.set("Using rectangle dimensions")
+            self.shape_status_var.set(_("Using rectangle dimensions"))
             self.shape_status_label.config(fg="gray")
             self.unload_shape_btn.pack_forget()
 
@@ -728,11 +735,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         unit = self.settings.get("units", "in")
         if unit == "mm":
             unit = "cm"
-        unit_label = "inches" if unit == "in" else "centimeters"
+        unit_label = _("inches") if unit == "in" else _("centimeters")
 
-        msg = (
+        msg = _(
             "Draw Custom Shape - How to Use\n\n"
-            f"• The grid is 15×15 {unit_label} (1 square = 1 {unit})\n"
+            "• The grid is 15×15 {unit_label} (1 square = 1 {unit})\n"
             "• Click on grid intersections to add points (max 8)\n"
             "• Click near the first (green) point to close the shape\n"
             "• Click on any point to remove it\n"
@@ -740,8 +747,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             "• Click 'Submit' when your shape is complete\n\n"
             "This is useful for irregular leather skins and scrap pieces.\n\n"
             "Note: Generation can take 5-10x longer for complex shapes."
-        )
-        messagebox.showinfo("Draw Custom Shape", msg)
+        ).format(unit_label=unit_label, unit=unit)
+        messagebox.showinfo(_("Draw Custom Shape"), msg)
 
     def on_draw_custom_shape(self):
         """Open the polygon drawing window."""
@@ -784,17 +791,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
         """Show scrap continue dialog. If a polygon is loaded, offer to unload it."""
-        msg = (f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
-               f"{remaining_count} pads remaining.\n"
-               f"Adjust dimensions and click Generate again.")
+        msg = _("Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                "{remaining_count} pads remaining.\n"
+                "Adjust dimensions and click Generate again.").format(
+                    placed_count=placed_count, scrap_num=scrap_num,
+                    remaining_count=remaining_count)
 
         if not self.custom_polygon:
-            messagebox.showinfo("Scrap Generated", msg)
+            messagebox.showinfo(_("Scrap Generated"), msg)
             return
 
         # Custom dialog with shape options
         dlg = tk.Toplevel(self.root)
-        dlg.title("Scrap Generated")
+        dlg.title(_("Scrap Generated"))
         dlg.configure(bg=self._get_theme_color())
         dlg.transient(self.root)
         dlg.grab_set()
@@ -803,15 +812,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         bg = self._get_theme_color()
         tk.Label(dlg, text=msg, wraplength=380, bg=bg, justify="left",
                  font=("Helvetica", 10)).pack(padx=15, pady=(15, 10))
-        tk.Label(dlg, text="A custom shape is loaded for the next scrap:",
+        tk.Label(dlg, text=_("A custom shape is loaded for the next scrap:"),
                  bg=bg, font=("Helvetica", 9, "italic")).pack(padx=15)
 
         btn_frame = tk.Frame(dlg, bg=bg)
         btn_frame.pack(pady=15)
-        tk.Button(btn_frame, text="Unload Shape", width=16,
+        tk.Button(btn_frame, text=_("Unload Shape"), width=16,
                   command=lambda: self._scrap_dialog_close(dlg, unload=True)
                   ).pack(side="left", padx=8)
-        tk.Button(btn_frame, text="Keep Shape", width=16,
+        tk.Button(btn_frame, text=_("Keep Shape"), width=16,
                   command=lambda: self._scrap_dialog_close(dlg, unload=False)
                   ).pack(side="left", padx=8)
 
@@ -866,7 +875,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         center_btn = self._edge_bias_buttons.get("center")
         if center_btn:
             last_center = getattr(self, '_last_center_mode', 'off')
-            center_btn.configure(text="off" if last_center == "off" else "ctr")
+            center_btn.configure(text=_("off") if last_center == "off" else _("ctr"))
 
         for direction, btn in self._edge_bias_buttons.items():
             # "off" highlights the center button
@@ -890,8 +899,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Turning on - validate only one material is selected
             selected = [m for m, v in self.material_vars.items() if v.get()]
             if len(selected) != 1:
-                messagebox.showwarning("Scrap Mode",
-                    "Please select exactly one material to use Scrap Mode.")
+                messagebox.showwarning(_("Scrap Mode"),
+                    _("Please select exactly one material to use Scrap Mode."))
                 self.scrap_mode_var.set(False)
                 return
         else:
@@ -899,9 +908,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if self.scrap_session['active']:
                 remaining = self._count_remaining_pads()
                 if remaining > 0:
-                    if not messagebox.askyesno("Clear Session?",
-                        f"You have {remaining} pads remaining.\n"
-                        "Disabling scrap mode will clear the session.\n\nContinue?"):
+                    if not messagebox.askyesno(_("Clear Session?"),
+                        _("You have {remaining} pads remaining.\n"
+                        "Disabling scrap mode will clear the session.\n\nContinue?").format(remaining=remaining)):
                         self.scrap_mode_var.set(True)
                         return
                 self._clear_scrap_session()
@@ -932,11 +941,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # Show status when session is active
                 remaining = self._count_remaining_pads()
                 if remaining == 0:
-                    self.scrap_status_var.set("Done!")
+                    self.scrap_status_var.set(_("Done!"))
                     self.scrap_status_label.config(fg="green")
                 else:
                     count = self.scrap_session['scrap_count']
-                    self.scrap_status_var.set(f"{remaining} left ({count} scraps)")
+                    self.scrap_status_var.set(_("{remaining} left ({count} scraps)").format(remaining=remaining, count=count))
                     self.scrap_status_label.config(fg="blue")
                 self.scrap_status_label.pack()
             else:
@@ -952,8 +961,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if self.scrap_session['active']:
             remaining = self._count_remaining_pads()
             if remaining > 0:
-                if not messagebox.askyesno("Clear Session?",
-                    f"You have {remaining} pads remaining.\n\nClear session?"):
+                if not messagebox.askyesno(_("Clear Session?"),
+                    _("You have {remaining} pads remaining.\n\nClear session?").format(remaining=remaining)):
                     return
         self._clear_scrap_session()
         self.scrap_mode_var.set(False)
@@ -990,7 +999,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 pass
 
         self.scrap_remaining_window = tk.Toplevel(self.root)
-        self.scrap_remaining_window.title("Scrap Mode Progress")
+        self.scrap_remaining_window.title(_("Scrap Mode Progress"))
         self.scrap_remaining_window.geometry("320x300")
         theme_bg = self._get_theme_color()
         self.scrap_remaining_window.configure(bg=theme_bg)
@@ -1016,7 +1025,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Remaining column
         remaining_frame = tk.Frame(columns_frame, bg=theme_bg)
         remaining_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
-        tk.Label(remaining_frame, text="Remaining", bg=theme_bg,
+        tk.Label(remaining_frame, text=_("Remaining"), bg=theme_bg,
                  font=("Helvetica", 9, "bold"), fg="blue").pack(anchor="w")
         self.scrap_remaining_listbox = tk.Listbox(remaining_frame, font=("Courier", 10), height=10, width=12)
         self.scrap_remaining_listbox.pack(fill="both", expand=True)
@@ -1024,7 +1033,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Done column
         done_frame = tk.Frame(columns_frame, bg=theme_bg)
         done_frame.pack(side="left", fill="both", expand=True, padx=(5, 0))
-        tk.Label(done_frame, text="Done", bg=theme_bg,
+        tk.Label(done_frame, text=_("Done"), bg=theme_bg,
                  font=("Helvetica", 9, "bold"), fg="green").pack(anchor="w")
         self.scrap_done_listbox = tk.Listbox(done_frame, font=("Courier", 10), height=10, width=12)
         self.scrap_done_listbox.pack(fill="both", expand=True)
@@ -1035,7 +1044,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.scrap_window_footer.pack(pady=(0, 5))
 
         # Close button
-        tk.Button(self.scrap_remaining_window, text="Close",
+        tk.Button(self.scrap_remaining_window, text=_("Close"),
                   command=self._close_remaining_pads_window).pack(pady=(0, 10))
 
         # Handle window close
@@ -1073,10 +1082,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             # Update header
             if total_remaining == 0:
-                self.scrap_window_header.config(text="All done!", fg="green")
+                self.scrap_window_header.config(text=_("All done!"), fg="green")
             else:
                 self.scrap_window_header.config(
-                    text=f"{total_done} / {total_original} pads complete", fg="blue")
+                    text=_("{done} / {total} pads complete").format(done=total_done, total=total_original), fg="blue")
 
             # Update Remaining listbox
             self.scrap_remaining_listbox.delete(0, tk.END)
@@ -1086,7 +1095,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     size_str = f"{pad['size']:.1f}".rstrip('0').rstrip('.')
                     self.scrap_remaining_listbox.insert(tk.END, f" {pad['qty']} x {size_str}")
             else:
-                self.scrap_remaining_listbox.insert(tk.END, " (none)")
+                self.scrap_remaining_listbox.insert(tk.END, _(" (none)"))
 
             # Update Done listbox
             self.scrap_done_listbox.delete(0, tk.END)
@@ -1096,11 +1105,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     size_str = f"{pad['size']:.1f}".rstrip('0').rstrip('.')
                     self.scrap_done_listbox.insert(tk.END, f" {pad['qty']} x {size_str}")
             else:
-                self.scrap_done_listbox.insert(tk.END, " (none)")
+                self.scrap_done_listbox.insert(tk.END, _(" (none)"))
 
             # Update footer
             self.scrap_window_footer.config(
-                text=f"{material} | {scraps} scrap(s) used")
+                text=_("{material} | {scraps} scrap(s) used").format(material=material, scraps=scraps))
 
         except tk.TclError:
             # Window was closed
@@ -1141,10 +1150,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             try:
                 val = float(self.custom_hole_entry.get())
             except (ValueError, TypeError):
-                messagebox.showerror("Invalid Input", "Custom hole size must be a valid number.")
+                messagebox.showerror(_("Invalid Input"), _("Custom hole size must be a valid number."))
                 return None
             if val <= 0:
-                messagebox.showerror("Invalid Input", "Custom hole size must be greater than zero.")
+                messagebox.showerror(_("Invalid Input"), _("Custom hole size must be greater than zero."))
                 return None
             return val
         return 0
@@ -1157,22 +1166,22 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         pads = self.parse_pad_list(self.pad_entry.get("1.0", tk.END))
         if not pads:
-            messagebox.showerror("Error", "No valid pad sizes entered.")
+            messagebox.showerror(_("Error"), _("No valid pad sizes entered."))
             return None
 
         max_pads = [p for p in pads if p['qty'] == 'max']
         if len(max_pads) > 1:
-            messagebox.showerror("Error", "Only one pad size can use 'max' quantity at a time.")
+            messagebox.showerror(_("Error"), _("Only one pad size can use 'max' quantity at a time."))
             return None
 
         if self.settings.get("engraving_on", True):
             oversized_engravings = check_for_oversized_engravings(pads, self.material_vars, self.settings)
             if oversized_engravings and self.settings.get("show_engraving_warning", True):
-                message = "Warning: The current font size is too large for some pads and the engraving will be skipped:\n\n"
+                message = _("Warning: The current font size is too large for some pads and the engraving will be skipped:\n\n")
                 for mat, sizes in oversized_engravings.items():
-                    message += f"- {mat.replace('_', ' ').capitalize()}: {', '.join(map(str, sorted(sizes)))}\n"
-                message += "\nDo you want to proceed?"
-                dialog = ConfirmationDialog(self.root, "Engraving Size Warning", message)
+                    message += f"- {_(mat.replace('_', ' ').capitalize())}: {', '.join(map(str, sorted(sizes)))}\n"
+                message += _("\nDo you want to proceed?")
+                dialog = ConfirmationDialog(self.root, _("Engraving Size Warning"), message)
                 if not dialog.result:
                     return None
                 if dialog.dont_show_again.get():
@@ -1182,11 +1191,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             width_val = float(self.width_entry.get())
             height_val = float(self.height_entry.get())
         except ValueError:
-            messagebox.showerror("Invalid Input", "Sheet width and height must be valid numbers.")
+            messagebox.showerror(_("Invalid Input"), _("Sheet width and height must be valid numbers."))
             return None
 
         if width_val <= 0 or height_val <= 0:
-            messagebox.showerror("Invalid Input", "Sheet width and height must be greater than zero.")
+            messagebox.showerror(_("Invalid Input"), _("Sheet width and height must be greater than zero."))
             return None
 
         if self.settings['units'] == 'in':
@@ -1196,12 +1205,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         elif self.settings['units'] == 'mm':
             width_mm, height_mm = width_val, height_val
         else:
-            messagebox.showerror("Error", f"Unknown unit '{self.settings['units']}' in settings.")
+            messagebox.showerror(_("Error"), _("Unknown unit '{units}' in settings.").format(units=self.settings['units']))
             return None
 
         base = self.filename_entry.get().strip()
         if not base:
-            messagebox.showerror("Error", "Please enter a base filename.")
+            messagebox.showerror(_("Error"), _("Please enter a base filename."))
             return None
 
         card_paper_dims = self._get_card_paper_dimensions_mm()
@@ -1237,16 +1246,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             selected_materials = [m for m, var in self.material_vars.items() if var.get()]
             if not selected_materials:
-                messagebox.showwarning("No Materials Selected", "Please select at least one material.")
+                messagebox.showwarning(_("No Materials Selected"), _("Please select at least one material."))
                 return
 
             use_preview = self.preview_var.get()
 
             # Preview requires single material
             if use_preview and len(selected_materials) > 1:
-                messagebox.showinfo("Preview",
-                    "Preview works with one material at a time.\n"
-                    "Please select a single material to preview its layout.")
+                messagebox.showinfo(_("Preview"),
+                    _("Preview works with one material at a time.\n"
+                    "Please select a single material to preview its layout."))
                 return
 
             save_dir = None
@@ -1260,8 +1269,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 # Validate fit
                 if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
-                    size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
-                    messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
+                    size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
+                    messagebox.showerror(_("Nesting Error"), _("Could not fit all '{material}' pieces on the specified {size_desc} size.").format(material=material.replace('_', ' '), size_desc=size_desc))
                     return
 
                 # Preview this material
@@ -1274,7 +1283,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 # Ask for save directory once (on first material)
                 if save_dir is None:
-                    save_dir = filedialog.askdirectory(title="Select Folder to Save SVGs", initialdir=self.settings.get("last_output_dir", ""))
+                    save_dir = filedialog.askdirectory(title=_("Select Folder to Save SVGs"), initialdir=self.settings.get("last_output_dir", ""))
                     if not save_dir:
                         return
                     self.settings["last_output_dir"] = save_dir
@@ -1283,11 +1292,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
 
             save_settings(self.settings)
-            messagebox.showinfo("Done", "SVG files generated successfully.")
+            messagebox.showinfo(_("Done"), _("SVG files generated successfully."))
 
         except Exception as e:
             print(f"An error occurred during SVG generation: {e}")
-            messagebox.showerror("An Error Occurred", f"Something went wrong during generation:\n\n{e}")
+            messagebox.showerror(_("An Error Occurred"), _("Something went wrong during generation:\n\n{error}").format(error=e))
 
     def _generate_svg_scrap_mode(self):
         """Handle SVG generation in scrap mode."""
@@ -1305,8 +1314,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Check material selection - must be exactly one
             selected_materials = [m for m, v in self.material_vars.items() if v.get()]
             if len(selected_materials) != 1:
-                messagebox.showerror("Scrap Mode Error",
-                    "Please select exactly one material for scrap mode.")
+                messagebox.showerror(_("Scrap Mode Error"),
+                    _("Please select exactly one material for scrap mode."))
                 return
             material = selected_materials[0]
 
@@ -1318,7 +1327,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if not self.scrap_session['active']:
                 # Starting new session - ask for save directory
                 save_dir = filedialog.askdirectory(
-                    title="Select Folder to Save SVGs",
+                    title=_("Select Folder to Save SVGs"),
                     initialdir=self.settings.get("last_output_dir", ""))
                 if not save_dir:
                     return
@@ -1328,16 +1337,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             else:
                 # Continuing existing session - validate material matches
                 if self.scrap_session['material'] != material:
-                    messagebox.showerror("Material Mismatch",
-                        f"Current session is for {self.scrap_session['material']}.\n"
-                        f"Clear session to switch materials.")
+                    messagebox.showerror(_("Material Mismatch"),
+                        _("Current session is for {material}.\n"
+                        "Clear session to switch materials.").format(material=self.scrap_session['material']))
                     return
                 # Use remaining pads from session
                 pads = self.scrap_session['remaining_pads']
                 hole_dia = self.scrap_session['hole_dia']
 
             if not pads:
-                messagebox.showinfo("Session Complete", "All pads have been placed!")
+                messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
                 return
 
             # Attempt partial placement
@@ -1346,10 +1355,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             if not any_placed:
                 min_pad_size = min(p['size'] for p in pads)
-                messagebox.showwarning("No Pads Fit",
-                    f"No pads could be placed on this scrap.\n\n"
-                    f"Smallest remaining pad: {min_pad_size}mm\n"
-                    f"Try a larger scrap piece.")
+                messagebox.showwarning(_("No Pads Fit"),
+                    _("No pads could be placed on this scrap.\n\n"
+                    "Smallest remaining pad: {min_pad_size}mm\n"
+                    "Try a larger scrap piece.").format(min_pad_size=min_pad_size))
                 return
 
             # Preview before saving
@@ -1381,16 +1390,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             if remaining_count == 0:
                 save_settings(self.settings)
-                messagebox.showinfo("Session Complete!",
-                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
-                    f"All pads placed! Session complete.\n"
-                    f"Files saved to: {save_dir}")
+                messagebox.showinfo(_("Session Complete!"),
+                    _("Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                    "All pads placed! Session complete.\n"
+                    "Files saved to: {save_dir}").format(placed_count=placed_count, scrap_num=scrap_num, save_dir=save_dir))
             else:
                 self._show_scrap_continue_dialog(placed_count, scrap_num, remaining_count)
 
         except Exception as e:
             print(f"An error occurred during scrap mode SVG generation: {e}")
-            messagebox.showerror("An Error Occurred", f"Something went wrong:\n\n{e}")
+            messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
 
     def on_generate_gcode(self):
         """Generate G-code files."""
@@ -1412,15 +1421,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Check if any supported materials selected (not exact_size)
             supported_materials = [m for m, var in self.material_vars.items() if var.get() and m != "exact_size"]
             if not supported_materials:
-                messagebox.showwarning("No Materials Selected", "Please select at least one material (G-code not supported for Exact Size).")
+                messagebox.showwarning(_("No Materials Selected"), _("Please select at least one material (G-code not supported for Exact Size)."))
                 return
 
             use_preview = self.preview_var.get()
 
             if use_preview and len(supported_materials) > 1:
-                messagebox.showinfo("Preview",
-                    "Preview works with one material at a time.\n"
-                    "Please select a single material to preview its layout.")
+                messagebox.showinfo(_("Preview"),
+                    _("Preview works with one material at a time.\n"
+                    "Please select a single material to preview its layout."))
                 return
             save_dir = None
 
@@ -1432,8 +1441,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
-                    size_desc = "paper" if (material == "card" and card_paper_dims) else "sheet"
-                    messagebox.showerror("Nesting Error", f"Could not fit all '{material.replace('_',' ')}' pieces on the specified {size_desc} size.")
+                    size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
+                    messagebox.showerror(_("Nesting Error"), _("Could not fit all '{material}' pieces on the specified {size_desc} size.").format(material=material.replace('_', ' '), size_desc=size_desc))
                     return
 
                 if use_preview:
@@ -1446,14 +1455,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 all_placed[material] = (placed, mat_w, mat_h, mat_polygon)
 
             if save_dir is None:
-                save_dir = filedialog.askdirectory(title="Select Folder to Save G-code", initialdir=self.settings.get("last_output_dir", ""))
+                save_dir = filedialog.askdirectory(title=_("Select Folder to Save G-code"), initialdir=self.settings.get("last_output_dir", ""))
                 if not save_dir:
                     return
                 self.settings["last_output_dir"] = save_dir
 
             # Show working indicator
             working_popup = tk.Toplevel(self.root)
-            working_popup.title("Working")
+            working_popup.title(_("Working"))
             working_popup.geometry("250x80")
             popup_bg = self._get_theme_color()
             working_popup.configure(bg=popup_bg)
@@ -1463,7 +1472,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 125
             y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 40
             working_popup.geometry(f"+{x}+{y}")
-            tk.Label(working_popup, text="Generating G-code...", bg=popup_bg, font=("Helvetica", 12)).pack(expand=True)
+            tk.Label(working_popup, text=_("Generating G-code..."), bg=popup_bg, font=("Helvetica", 12)).pack(expand=True)
             working_popup.update()
 
             try:
@@ -1480,15 +1489,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 drive_letter = os.path.splitdrive(os.path.abspath(save_dir))[0]
                 eject_success = self._eject_drive(drive_letter) if drive_letter else False
                 if eject_success:
-                    messagebox.showinfo("Done", "G-code files generated successfully.\n\nSD card safely ejected — you can remove it now!")
+                    messagebox.showinfo(_("Done"), _("G-code files generated successfully.\n\nSD card safely ejected — you can remove it now!"))
                 else:
-                    messagebox.showinfo("Done", "G-code files generated successfully.\n\nPlease safely eject the SD card before removing.")
+                    messagebox.showinfo(_("Done"), _("G-code files generated successfully.\n\nPlease safely eject the SD card before removing."))
             else:
-                messagebox.showinfo("Done", "G-code files generated successfully.")
+                messagebox.showinfo(_("Done"), _("G-code files generated successfully."))
 
         except Exception as e:
             print(f"An error occurred during G-code generation: {e}")
-            messagebox.showerror("An Error Occurred", f"Something went wrong during G-code generation:\n\n{e}")
+            messagebox.showerror(_("An Error Occurred"), _("Something went wrong during G-code generation:\n\n{error}").format(error=e))
 
     def _generate_gcode_scrap_mode(self):
         """Handle G-code generation in scrap mode."""
@@ -1506,9 +1515,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Check material selection - must be exactly one, and not exact_size
             selected_materials = [m for m, v in self.material_vars.items() if v.get() and m != "exact_size"]
             if len(selected_materials) != 1:
-                messagebox.showerror("Scrap Mode Error",
-                    "Please select exactly one material for scrap mode.\n"
-                    "(G-code not supported for Exact Size)")
+                messagebox.showerror(_("Scrap Mode Error"),
+                    _("Please select exactly one material for scrap mode.\n"
+                    "(G-code not supported for Exact Size)"))
                 return
             material = selected_materials[0]
 
@@ -1520,7 +1529,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if not self.scrap_session['active']:
                 # Starting new session - ask for save directory
                 save_dir = filedialog.askdirectory(
-                    title="Select Folder to Save G-code",
+                    title=_("Select Folder to Save G-code"),
                     initialdir=self.settings.get("last_output_dir", ""))
                 if not save_dir:
                     return
@@ -1530,16 +1539,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             else:
                 # Continuing existing session - validate material matches
                 if self.scrap_session['material'] != material:
-                    messagebox.showerror("Material Mismatch",
-                        f"Current session is for {self.scrap_session['material']}.\n"
-                        f"Clear session to switch materials.")
+                    messagebox.showerror(_("Material Mismatch"),
+                        _("Current session is for {material}.\n"
+                        "Clear session to switch materials.").format(material=self.scrap_session['material']))
                     return
                 # Use remaining pads from session
                 pads = self.scrap_session['remaining_pads']
                 hole_dia = self.scrap_session['hole_dia']
 
             if not pads:
-                messagebox.showinfo("Session Complete", "All pads have been placed!")
+                messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
                 return
 
             # Attempt partial placement
@@ -1548,10 +1557,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             if not any_placed:
                 min_pad_size = min(p['size'] for p in pads)
-                messagebox.showwarning("No Pads Fit",
-                    f"No pads could be placed on this scrap.\n\n"
-                    f"Smallest remaining pad: {min_pad_size}mm\n"
-                    f"Try a larger scrap piece.")
+                messagebox.showwarning(_("No Pads Fit"),
+                    _("No pads could be placed on this scrap.\n\n"
+                    "Smallest remaining pad: {min_pad_size}mm\n"
+                    "Try a larger scrap piece.").format(min_pad_size=min_pad_size))
                 return
 
             # Preview before saving
@@ -1583,16 +1592,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             if remaining_count == 0:
                 save_settings(self.settings)
-                messagebox.showinfo("Session Complete!",
-                    f"Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
-                    f"All pads placed! Session complete.\n"
-                    f"Files saved to: {save_dir}")
+                messagebox.showinfo(_("Session Complete!"),
+                    _("Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
+                    "All pads placed! Session complete.\n"
+                    "Files saved to: {save_dir}").format(placed_count=placed_count, scrap_num=scrap_num, save_dir=save_dir))
             else:
                 self._show_scrap_continue_dialog(placed_count, scrap_num, remaining_count)
 
         except Exception as e:
             print(f"An error occurred during scrap mode G-code generation: {e}")
-            messagebox.showerror("An Error Occurred", f"Something went wrong:\n\n{e}")
+            messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
 
     def parse_pad_list(self, pad_input):
         """
@@ -1637,15 +1646,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             preset_list = sorted(self.pad_presets.get(lib_name, {}).keys())
 
         self.pad_preset_menu['values'] = preset_list
-        self.pad_preset_menu.set("Load Pad Preset")
+        self.pad_preset_menu.set(_("Load Pad Preset"))
 
         # Toggle delete button: "Delete Library" when library is empty
         if (lib_name != "All Libraries"
                 and lib_name in self.pad_presets
                 and not self.pad_presets[lib_name]):
-            self.pad_delete_btn.config(text="Delete Library")
+            self.pad_delete_btn.config(text=_("Delete Library"))
         else:
-            self.pad_delete_btn.config(text="Delete Preset")
+            self.pad_delete_btn.config(text=_("Delete Preset"))
 
         # Remember last used library
         self.settings["last_pad_library"] = lib_name
@@ -1670,8 +1679,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         active_library = self.pad_library_var.get()
         if not active_library or active_library == "All Libraries":
             # No library selected — ask for one or create "My Presets"
-            lib_name = simpledialog.askstring("Library Name",
-                "Enter a library name to save to:",
+            lib_name = simpledialog.askstring(_("Library Name"),
+                _("Enter a library name to save to:"),
                 initialvalue="My Presets")
             if not lib_name:
                 return
@@ -1684,11 +1693,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.pad_library_var.set(active_library)
             self.on_pad_library_selected()
 
-        name = simpledialog.askstring("Save Pad Preset", "Enter a name for this preset:")
+        name = simpledialog.askstring(_("Save Pad Preset"), _("Enter a name for this preset:"))
         if name:
             text_data = self.pad_entry.get("1.0", tk.END)
             if not text_data.strip():
-                messagebox.showwarning("Save Pad Preset", "Cannot save an empty list.")
+                messagebox.showwarning(_("Save Pad Preset"), _("Cannot save an empty list."))
                 return
 
             if active_library not in self.pad_presets:
@@ -1697,9 +1706,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Preserve existing notes if overwriting
             existing_notes = ""
             if name in self.pad_presets[active_library]:
-                if not messagebox.askyesno("Overwrite", f"A set named '{name}' already exists in this library. Overwrite it?"):
+                if not messagebox.askyesno(_("Overwrite"), _("A set named '{name}' already exists in this library. Overwrite it?").format(name=name)):
                     return
-                _, existing_notes = self._get_pad_preset_data(self.pad_presets[active_library][name])
+                _unused, existing_notes = self._get_pad_preset_data(self.pad_presets[active_library][name])
 
             # Check for duplicate pad lists across all libraries
             new_lines = sorted(line.strip() for line in text_data.strip().splitlines() if line.strip())
@@ -1707,12 +1716,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 for pname, pdata in presets.items():
                     if lib == active_library and pname == name:
                         continue  # Skip self when overwriting
-                    existing_pads, _ = self._get_pad_preset_data(pdata)
+                    existing_pads, _unused = self._get_pad_preset_data(pdata)
                     existing_lines = sorted(line.strip() for line in existing_pads.strip().splitlines() if line.strip())
                     if new_lines == existing_lines:
-                        if not messagebox.askyesno("Duplicate Detected",
-                                f"This pad list is identical to '{pname}' "
-                                f"in '{lib}'.\n\nSave anyway?"):
+                        if not messagebox.askyesno(_("Duplicate Detected"),
+                                _("This pad list is identical to '{pname}' "
+                                "in '{lib}'.\n\nSave anyway?").format(pname=pname, lib=lib)):
                             return
 
             self.pad_presets[active_library][name] = {"pads": text_data, "notes": existing_notes}
@@ -1722,10 +1731,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 self.pad_preset_loaded_name = name
                 self.pad_notes_btn.config(state="normal")
                 self.on_pad_library_selected()
-                messagebox.showinfo("Preset Saved", f"Preset '{name}' saved successfully.")
+                messagebox.showinfo(_("Preset Saved"), _("Preset '{name}' saved successfully.").format(name=name))
 
     def on_load_pad_preset(self, selected_name):
-        if not selected_name or selected_name == "Load Pad Preset":
+        if not selected_name or selected_name == _("Load Pad Preset"):
             return
 
         lib_name = self.pad_library_var.get()
@@ -1745,7 +1754,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 raw = self.pad_presets[lib_name][preset_name]
 
         if raw is not None:
-            pads_text, _ = self._get_pad_preset_data(raw)
+            pads_text, _unused = self._get_pad_preset_data(raw)
             self.pad_entry.delete("1.0", tk.END)
             self.pad_entry.insert(tk.END, pads_text)
             self._auto_resize_pad_entry()
@@ -1760,19 +1769,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if (selected_lib != "All Libraries"
                 and selected_lib in self.pad_presets
                 and not self.pad_presets[selected_lib]):
-            if messagebox.askyesno("Delete Library",
-                    f"Are you sure you want to delete the empty library '{selected_lib}'?"):
+            if messagebox.askyesno(_("Delete Library"),
+                    _("Are you sure you want to delete the empty library '{lib}'?").format(lib=selected_lib)):
                 del self.pad_presets[selected_lib]
                 save_presets(self.pad_presets, PAD_PRESET_FILE)
                 self.update_pad_library_dropdown()
-                messagebox.showinfo("Library Deleted", f"Library '{selected_lib}' deleted.")
+                messagebox.showinfo(_("Library Deleted"), _("Library '{lib}' deleted.").format(lib=selected_lib))
             return
 
         # Delete individual preset
         selected_preset = self.pad_preset_var.get()
 
         if not selected_preset or selected_preset.startswith("Load"):
-            messagebox.showwarning("Delete Error", "Please load a set to delete.")
+            messagebox.showwarning(_("Delete Error"), _("Please load a set to delete."))
             return
 
         if selected_lib == "All Libraries":
@@ -1780,10 +1789,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 selected_lib, selected_preset = selected_preset.split("] ", 1)
                 selected_lib = selected_lib[1:]
             except ValueError:
-                messagebox.showerror("Delete Error", "Cannot delete from 'All Libraries' view. Please select the specific library first.")
+                messagebox.showerror(_("Delete Error"), _("Cannot delete from 'All Libraries' view. Please select the specific library first."))
                 return
 
-        if messagebox.askyesno("Delete Pad Preset", f"Are you sure you want to delete the preset '{selected_preset}' from the '{selected_lib}' library?"):
+        if messagebox.askyesno(_("Delete Pad Preset"), _("Are you sure you want to delete the preset '{preset}' from the '{lib}' library?").format(preset=selected_preset, lib=selected_lib)):
             if selected_lib in self.pad_presets and selected_preset in self.pad_presets[selected_lib]:
                 del self.pad_presets[selected_lib][selected_preset]
                 if save_presets(self.pad_presets, PAD_PRESET_FILE):
@@ -1793,29 +1802,29 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.pad_preset_loaded_library = None
                     self.pad_preset_loaded_name = None
                     self.pad_notes_btn.config(state="disabled")
-                    messagebox.showinfo("Preset Deleted", f"Preset '{selected_preset}' deleted.")
+                    messagebox.showinfo(_("Preset Deleted"), _("Preset '{preset}' deleted.").format(preset=selected_preset))
             else:
-                messagebox.showerror("Delete Error", "Could not find the preset to delete.")
+                messagebox.showerror(_("Delete Error"), _("Could not find the preset to delete."))
 
     def on_pad_notes(self):
         lib = self.pad_preset_loaded_library
         name = self.pad_preset_loaded_name
         if not lib or not name or lib not in self.pad_presets or name not in self.pad_presets[lib]:
-            messagebox.showwarning("Notes", "No preset loaded.")
+            messagebox.showwarning(_("Notes"), _("No preset loaded."))
             return
 
-        _, current_notes = self._get_pad_preset_data(self.pad_presets[lib][name])
+        _unused, current_notes = self._get_pad_preset_data(self.pad_presets[lib][name])
         dlg = PadNotesWindow(self.root, name, current_notes)
         if dlg.result is not None:
             # Update notes in the preset data
-            pads_text, _ = self._get_pad_preset_data(self.pad_presets[lib][name])
+            pads_text, _unused = self._get_pad_preset_data(self.pad_presets[lib][name])
             self.pad_presets[lib][name] = {"pads": pads_text, "notes": dlg.result}
             save_presets(self.pad_presets, PAD_PRESET_FILE)
 
     def on_import_pad_presets(self):
         filepath = filedialog.askopenfilename(
-            title="Import Pad Presets",
-            filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
+            title=_("Import Pad Presets"),
+            filetypes=((_("JSON files"), "*.json"), (_("All files"), "*.*")),
             initialdir=self.settings.get("last_output_dir", "")
         )
         if not filepath:
@@ -1828,14 +1837,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             target_lib = ImportTargetWindow(self.root, list(self.pad_presets.keys())).get_target_library()
             if not target_lib:
-                return 
+                return
 
             if target_lib not in self.pad_presets:
                 self.pad_presets[target_lib] = {}
 
             ImportPresetsWindow(self.root, self.pad_presets[target_lib], imported_presets, PAD_PRESET_FILE, self.pad_preset_menu, self, "Pad Preset", save_data=self.pad_presets)
         except Exception as e:
-            messagebox.showerror("Import Error", f"Could not import pad presets:\n{e}")
+            messagebox.showerror(_("Import Error"), _("Could not import pad presets:\n{error}").format(error=e))
 
     def on_export_pad_presets(self):
         ExportPresetsWindow(self.root, self.pad_presets, "Pad Presets", "pad_preset_export.json", False)
@@ -1852,16 +1861,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             with urllib.request.urlopen(req, timeout=10, context=get_ssl_context()) as resp:
                 web_data = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
-            messagebox.showerror("Connection Error",
-                f"Could not fetch pad sets from stohrermusic.com:\n\n{e}")
+            messagebox.showerror(_("Connection Error"),
+                _("Could not fetch pad sets from stohrermusic.com:\n\n{error}").format(error=e))
             return
         except (json.JSONDecodeError, ValueError) as e:
-            messagebox.showerror("Data Error",
-                f"Invalid data received from server:\n\n{e}")
+            messagebox.showerror(_("Data Error"),
+                _("Invalid data received from server:\n\n{error}").format(error=e))
             return
 
         if not isinstance(web_data, dict) or not web_data:
-            messagebox.showinfo("No Data", "No pad set data found on the server.")
+            messagebox.showinfo(_("No Data"), _("No pad set data found on the server."))
             return
 
         WebImportPresetsWindow(self.root, web_data, self.pad_presets, PAD_PRESET_FILE, self)
@@ -1869,7 +1878,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def on_import_settings_folder(self):
         """Import all config files from a user-selected folder."""
         folder = filedialog.askdirectory(
-            title="Select Folder with Settings",
+            title=_("Select Folder with Settings"),
             initialdir=self.settings.get("last_output_dir", "")
         )
         if not folder:
@@ -1877,17 +1886,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         found_files = find_config_files_in_directory(folder)
         if not found_files:
-            messagebox.showinfo("No Settings Found",
-                "No config files found in the selected folder.\n\n"
-                "Looking for: app_settings.json, pad_presets.json, key_height_library.json, screw_specs.json")
+            messagebox.showinfo(_("No Settings Found"),
+                _("No config files found in the selected folder.\n\n"
+                "Looking for: app_settings.json, pad_presets.json, key_height_library.json, screw_specs.json"))
             return
 
         file_list = "\n".join(f"  • {f}" for f in found_files)
-        msg = (f"The following files will be imported and will REPLACE your current settings:\n\n"
-               f"{file_list}\n\n"
-               f"Are you sure you want to continue?")
+        msg = _("The following files will be imported and will REPLACE your current settings:\n\n"
+                "{file_list}\n\n"
+                "Are you sure you want to continue?").format(file_list=file_list)
 
-        if not messagebox.askyesno("Confirm Import", msg):
+        if not messagebox.askyesno(_("Confirm Import"), msg):
             return
 
         try:
@@ -1908,11 +1917,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.update_ui_from_settings()
             self.apply_resonance_theme()
 
-            messagebox.showinfo("Import Complete",
-                f"Successfully imported {len(found_files)} file(s).\n\n"
-                f"Imported: {', '.join(found_files)}")
+            messagebox.showinfo(_("Import Complete"),
+                _("Successfully imported {count} file(s).\n\n"
+                "Imported: {files}").format(count=len(found_files), files=', '.join(found_files)))
         except Exception as e:
-            messagebox.showerror("Import Error", f"Could not import settings:\n{e}")
+            messagebox.showerror(_("Import Error"), _("Could not import settings:\n{error}").format(error=e))
 
     # --- Misc Windows ---
     def open_options_window(self):
@@ -1933,7 +1942,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def open_gcode_settings_window(self):
         # Show only pad materials (felt/card/leather) from the pad generator tab
-        pad_materials = [("felt", "Felt"), ("card", "Card"), ("leather", "Leather")]
+        pad_materials = [("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
                             materials=pad_materials)
 
@@ -1943,19 +1952,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _open_input_device_dialog(self):
         """Open a dialog to select the audio input device."""
         if sys.platform == 'linux':
-            messagebox.showinfo("Input Device",
-                "On Linux, audio input is locked to the system default.\n\n"
+            messagebox.showinfo(_("Input Device"),
+                _("On Linux, audio input is locked to the system default.\n\n"
                 "Set your preferred device in your system audio settings\n"
-                "(PulseAudio or PipeWire).")
+                "(PulseAudio or PipeWire)."))
             return
 
         devices = get_input_devices()
         if not devices:
-            messagebox.showinfo("No Devices", "No audio input devices found.")
+            messagebox.showinfo(_("No Devices"), _("No audio input devices found."))
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Input Device")
+        dlg.title(_("Input Device"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1964,17 +1973,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select audio input device:", bg=bg,
+        tk.Label(frame, text=_("Select audio input device:"), bg=bg,
                  font=("Helvetica", 10)).pack(pady=(0, 4))
-        tk.Label(frame, text="Showing devices with 44.1 kHz+ sample rate.\n"
-                 "Bluetooth headsets are excluded (sample rate too low).",
+        tk.Label(frame, text=_("Showing devices with 44.1 kHz+ sample rate.\n"
+                 "Bluetooth headsets are excluded (sample rate too low)."),
                  bg=bg, fg="#666666", font=("Helvetica", 8)).pack(pady=(0, 8))
 
         current_dev = self.settings.get("audio_input_device")
-        dev_names = ["System Default"] + [name for _, name in devices]
-        dev_indices = [None] + [idx for idx, _ in devices]
+        dev_names = [_("System Default")] + [name for _idx, name in devices]
+        dev_indices = [None] + [idx for idx, _name in devices]
 
-        mic_var = tk.StringVar(value="System Default")
+        mic_var = tk.StringVar(value=_("System Default"))
         if current_dev is not None:
             for idx, name in devices:
                 if idx == current_dev:
@@ -1990,7 +1999,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Select current device
         current_idx = 0
         if current_dev is not None:
-            for i, (idx, _) in enumerate(devices):
+            for i, (idx, _name) in enumerate(devices):
                 if idx == current_dev:
                     current_idx = i + 1
                     break
@@ -2015,20 +2024,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             dlg.destroy()
             dev_name = dev_names[sel[0]]
-            messagebox.showinfo("Input Device",
-                f"Audio input set to: {dev_name}")
+            messagebox.showinfo(_("Input Device"),
+                _("Audio input set to: {dev_name}").format(dev_name=dev_name))
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
-        tk.Button(btn_frame, text="Apply", command=apply).pack(
+        tk.Button(btn_frame, text=_("Apply"), command=apply).pack(
             side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(
             side="left")
 
     def _open_capture_threshold(self):
         """Open capture threshold dialog with live level meter."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("Capture Threshold")
+        dlg.title(_("Capture Threshold"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -2037,16 +2046,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Set the minimum signal level to trigger capture.\n"
+        tk.Label(frame, text=_("Set the minimum signal level to trigger capture.\n"
                  "Raise the threshold if chair noises or breathing\n"
-                 "trigger false captures.",
+                 "trigger false captures."),
                  bg=bg, font=("Helvetica", 9), justify="left").pack(pady=(0, 10))
 
         # Live level meter
         meter_frame = tk.Frame(frame, bg=bg)
         meter_frame.pack(fill="x", pady=(0, 10))
 
-        tk.Label(meter_frame, text="Current level:", bg=bg,
+        tk.Label(meter_frame, text=_("Current level:"), bg=bg,
                  font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
 
         level_cv = tk.Canvas(meter_frame, bg="#333333", highlightthickness=1,
@@ -2061,7 +2070,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         slider_frame = tk.Frame(frame, bg=bg)
         slider_frame.pack(fill="x", pady=(0, 10))
 
-        tk.Label(slider_frame, text="Threshold:", bg=bg,
+        tk.Label(slider_frame, text=_("Threshold:"), bg=bg,
                  font=("Helvetica", 9)).pack(side="left", padx=(0, 5))
 
         threshold_var = tk.IntVar(value=self.settings.get("capture_threshold", 50))
@@ -2115,16 +2124,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
-        tk.Button(btn_frame, text="Apply", command=apply).pack(
+        tk.Button(btn_frame, text=_("Apply"), command=apply).pack(
             side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=on_close).pack(side="left")
+        tk.Button(btn_frame, text=_("Cancel"), command=on_close).pack(side="left")
 
         dlg.protocol("WM_DELETE_WINDOW", on_close)
 
     def _open_feature_set(self):
         """Open the Feature Set dialog to show/hide tabs."""
+        from i18n import available_languages, current_language
         dlg = tk.Toplevel(self.root)
-        dlg.title("Feature Set")
+        dlg.title(_("Feature Set"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -2133,55 +2143,79 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Feature Set", bg=bg,
+        tk.Label(frame, text=_("Feature Set"), bg=bg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 5))
-        tk.Label(frame, text="Choose which tabs to show.\n"
-                 "The Pad Maker is always on.",
+        tk.Label(frame, text=_("Choose which tabs to show.\n"
+                 "The Pad Maker is always on."),
                  bg=bg, font=("Helvetica", 9)).pack(pady=(0, 10))
 
+        # --- Language picker (requires restart) ---
+        tk.Label(frame, text=_("Language"), bg=bg,
+                 font=("Helvetica", 11, "bold")).pack(anchor="w")
+        lang_row = tk.Frame(frame, bg=bg)
+        lang_row.pack(anchor="w", pady=(2, 8))
+        langs = available_languages()
+        lang_codes = [code for code, _name in langs]
+        lang_displays = [name for _code, name in langs]
+        current = current_language()
+        try:
+            current_idx = lang_codes.index(current)
+        except ValueError:
+            current_idx = 0
+        lang_var = tk.StringVar(value=lang_displays[current_idx])
+        lang_combo = ttk.Combobox(lang_row, textvariable=lang_var,
+                                  values=lang_displays, state="readonly",
+                                  width=18)
+        lang_combo.pack(side="left")
+        tk.Label(lang_row, text=_(" (restart to apply)"), bg=bg,
+                 font=("Helvetica", 9, "italic")).pack(side="left")
+
         # --- Tooltips toggle (applies immediately, no restart) ---
-        tk.Label(frame, text="Tool Tips", bg=bg,
+        tk.Label(frame, text=_("Tool Tips"), bg=bg,
                  font=("Helvetica", 11, "bold")).pack(anchor="w")
         tooltips_var = tk.BooleanVar(value=self.settings.get("tooltips_enabled", True))
         tk.Checkbutton(frame,
-                       text="Show tool tips when hovering over settings",
+                       text=_("Show tool tips when hovering over settings"),
                        variable=tooltips_var, bg=bg,
                        font=("Helvetica", 10)).pack(anchor="w")
-        tk.Label(frame, text="\nTabs", bg=bg,
+        tk.Label(frame, text=_("\nTabs"), bg=bg,
                  font=("Helvetica", 11, "bold")).pack(anchor="w")
 
         visible = self.settings.get("visible_tabs", {})
 
+        # (key, display) — key is the storage identifier in visible_tabs and
+        # MUST stay English. The display string is wrapped here as a literal
+        # so pybabel can extract it; falls through to the live translator.
         main_tabs = [
-            "Key Height Library",
-            "Serial Lookup",
-            "Screw Specs",
-            "Tooling",
-            "Tuner",
+            ("Key Height Library", _("Key Height Library")),
+            ("Serial Lookup", _("Serial Lookup")),
+            ("Screw Specs", _("Screw Specs")),
+            ("Tooling", _("Tooling")),
+            ("Tuner", _("Tuner")),
         ]
         experimental_tabs = [
-            "Toner",
+            ("Toner", _("Toner")),
         ]
 
         check_vars = {}
-        for name in main_tabs:
-            var = tk.BooleanVar(value=visible.get(name, True))
-            tk.Checkbutton(frame, text=name, variable=var, bg=bg,
+        for key, display in main_tabs:
+            var = tk.BooleanVar(value=visible.get(key, True))
+            tk.Checkbutton(frame, text=display, variable=var, bg=bg,
                            font=("Helvetica", 10)).pack(anchor="w")
-            check_vars[name] = var
+            check_vars[key] = var
 
-        tk.Label(frame, text="\nExperimental / In Progress", bg=bg,
+        tk.Label(frame, text=_("\nExperimental / In Progress"), bg=bg,
                  font=("Helvetica", 11, "bold")).pack(anchor="w")
-        for name in experimental_tabs:
-            var = tk.BooleanVar(value=visible.get(name, True))
-            tk.Checkbutton(frame, text=name, variable=var, bg=bg,
+        for key, display in experimental_tabs:
+            var = tk.BooleanVar(value=visible.get(key, True))
+            tk.Checkbutton(frame, text=display, variable=var, bg=bg,
                            font=("Helvetica", 10)).pack(anchor="w")
-            check_vars[name] = var
+            check_vars[key] = var
 
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
             terms = tk.Toplevel(parent_dlg)
-            terms.title("Toner — Beta Notice")
+            terms.title(_("Toner — Beta Notice"))
             terms.resizable(True, True)
             terms.transient(parent_dlg)
             terms.grab_set()
@@ -2191,7 +2225,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             frm = tk.Frame(terms, bg=tbg, padx=20, pady=15)
             frm.pack(fill="both", expand=True)
 
-            tk.Label(frm, text="Harmonic Tone Analyzer", bg=tbg,
+            tk.Label(frm, text=_("Harmonic Tone Analyzer"), bg=tbg,
                      font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
 
             txt_frame = tk.Frame(frm, bg=tbg)
@@ -2210,7 +2244,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                               foreground="#0066CC")
 
             txt.insert("end",
-                "This feature is in beta. Run it in full screen.\n\n"
+                _("This feature is in beta. Run it in full screen.\n\n"
 
                 "The Toner is a real-time harmonic analyzer that captures the "
                 "frequency content of your recorded sound, extracting and "
@@ -2272,7 +2306,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "like to contribute, export your preset library via File > "
                 "Transfer Data > Export Preset Library... and make yourself "
                 "a folder and drop the resulting JSON file (and any WAV "
-                "recordings you'd like to share) in the shared folder below:\n\n"
+                "recordings you'd like to share) in the shared folder below:\n\n")
             )
 
             # Clickable Google Drive link
@@ -2288,9 +2322,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                          lambda e: txt.config(cursor=""))
 
             txt.insert("end",
-                "\nThis feature is in active development. Please contact me "
+                _("\nThis feature is in active development. Please contact me "
                 "with suggestions, questions, problems. If you experience a "
-                "bug or problem, screenshots are super helpful.\n"
+                "bug or problem, screenshots are super helpful.\n")
             )
 
             txt.configure(state="disabled")
@@ -2303,9 +2337,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             btn_frame = tk.Frame(frm, bg=tbg)
             btn_frame.pack(fill="x", pady=(10, 0))
-            tk.Button(btn_frame, text="I Understand — Enable Toner",
+            tk.Button(btn_frame, text=_("I Understand — Enable Toner"),
                       command=accept).pack(side="left", padx=(0, 5))
-            tk.Button(btn_frame, text="Cancel",
+            tk.Button(btn_frame, text=_("Cancel"),
                       command=terms.destroy).pack(side="left")
 
             terms.wait_window()
@@ -2324,6 +2358,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             tabs_changed = (new_visible != self.settings.get("visible_tabs", {}))
 
+            # Language change requires restart to take effect.
+            selected_display = lang_var.get()
+            try:
+                selected_code = lang_codes[lang_displays.index(selected_display)]
+            except ValueError:
+                selected_code = self.settings.get("language", "en")
+            lang_changed = selected_code != self.settings.get("language", "en")
+            self.settings["language"] = selected_code
+
             # Tooltip toggle takes effect immediately — no restart needed.
             from ui_dialogs import set_tooltips_enabled
             self.settings["tooltips_enabled"] = tooltips_var.get()
@@ -2332,15 +2375,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.settings["visible_tabs"] = new_visible
             save_settings(self.settings)
             dlg.destroy()
-            if tabs_changed:
-                messagebox.showinfo("Feature Set",
-                    "Tab changes will take effect next time you open the app.")
+            if lang_changed:
+                messagebox.showinfo(_("Feature Set"),
+                    _("Restart the app for the language change to take effect."))
+            elif tabs_changed:
+                messagebox.showinfo(_("Feature Set"),
+                    _("Tab changes will take effect next time you open the app."))
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_frame, text="Apply", command=apply).pack(
+        tk.Button(btn_frame, text=_("Apply"), command=apply).pack(
             side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(
             side="left")
 
     def open_user_guide(self):
@@ -2371,7 +2417,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             else:
                 subprocess.Popen(['xdg-open', log_path])
         else:
-            messagebox.showinfo("Log File", f"No log file found.\nExpected at: {log_path}")
+            messagebox.showinfo(_("Log File"), _("No log file found.\nExpected at: {log_path}").format(log_path=log_path))
 
     def _save_checkbox(self, key, var):
         """Save a checkbox setting."""
@@ -2422,8 +2468,8 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
             return False
 
     def update_ui_from_settings(self):
-        self.unit_label.config(text=f"Width ({self.settings['units']}):")
-        self.height_label.config(text=f"Height ({self.settings['units']}):")
+        self.unit_label.config(text=_("Width ({units}):").format(units=self.settings['units']))
+        self.height_label.config(text=_("Height ({units}):").format(units=self.settings['units']))
 
 if __name__ == '__main__':
     setup_logging()
@@ -2436,9 +2482,10 @@ if __name__ == '__main__':
         logging.error("Unhandled exception:\n%s", tb_text)
         try:
             messagebox.showerror(
-                "Unexpected Error",
-                f"{exc_type.__name__}: {exc_value}\n\n"
-                "Details saved to log file (Help > Open Log File).")
+                _("Unexpected Error"),
+                _("{exc_type}: {exc_value}\n\n"
+                "Details saved to log file (Help > Open Log File).").format(
+                    exc_type=exc_type.__name__, exc_value=exc_value))
         except Exception:
             pass  # GUI may not be available
 

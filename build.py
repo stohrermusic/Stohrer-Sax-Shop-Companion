@@ -159,6 +159,15 @@ def build():
     if os.path.isdir('tooling_assets'):
         cmd.extend(['--add-data', f'tooling_assets{os.pathsep}tooling_assets'])
 
+    # Bundle pad-press-spacer STL files so they can be saved to disk at runtime.
+    if os.path.isdir('pad_press_spacers'):
+        cmd.extend(['--add-data', f'pad_press_spacers{os.pathsep}pad_press_spacers'])
+
+    # Bundle compiled translation catalogs (.mo files) so i18n works in frozen builds.
+    # i18n._locale_dir() resolves to sys._MEIPASS/locale when frozen.
+    if os.path.isdir('locale'):
+        cmd.extend(['--add-data', f'locale{os.pathsep}locale'])
+
     # Hidden imports for optional audio dependencies (tuner/toner)
     # Only include if numpy/sounddevice are installed (not present in legacy Mac build)
     try:

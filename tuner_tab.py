@@ -456,7 +456,7 @@ class TunerTabMixin:
             # Persistent CPU mode notice
             self._cpu_mode_lbl = tk.Label(
                 self._tuner_main_frame,
-                text="CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration",
+                text=_("CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration"),
                 bg=bg, fg="#555555", font=("Helvetica", 8))
             self._cpu_mode_lbl.place(relx=0.5, y=6, anchor="n")
 
@@ -517,15 +517,15 @@ class TunerTabMixin:
             return sliders
 
         # ---- DISP group: SENS, BRIGHT, FPS ----
-        disp_sliders = _make_slider_group(ctrl_frame, 0, "DISP", padx=(0, 14))
+        disp_sliders = _make_slider_group(ctrl_frame, 0, _("DISP"), padx=(0, 14))
 
         self._tuner_sens_var = tk.IntVar(
             value=tuner_settings.get("sensitivity", 50))
-        _make_vslider(disp_sliders, "SENS", self._tuner_sens_var, 0, 100, 0,
+        _make_vslider(disp_sliders, _("SENS"), self._tuner_sens_var, 0, 100, 0,
                       cmd=self._tuner_on_sensitivity_changed)
 
         self._tuner_bright_var = tk.IntVar(value=self._tuner_overall_brightness)
-        _make_vslider(disp_sliders, "BRIGHT", self._tuner_bright_var, 10, 150, 1,
+        _make_vslider(disp_sliders, _("BRIGHT"), self._tuner_bright_var, 10, 150, 1,
                       cmd=lambda v: setattr(self, '_tuner_overall_brightness', int(v)))
 
         # FPS 3-position switch (60/90/120)
@@ -536,7 +536,7 @@ class TunerTabMixin:
         fps_ch = tk.Frame(disp_sliders, bg=ctrl_bg)
         fps_ch._skip_theme = True
         fps_ch.grid(row=0, column=2, padx=3, sticky="n")
-        tk.Label(fps_ch, text="FPS", bg=ctrl_bg, fg="#888888",
+        tk.Label(fps_ch, text=_("FPS"), bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack(pady=(0, 2))
         tk.Scale(fps_ch, variable=fps_idx_var, from_=0, to=2,
                  orient="vertical", length=90, width=12,
@@ -556,11 +556,11 @@ class TunerTabMixin:
         fps_idx_var.trace_add("write", _on_fps_slider)
 
         # ---- PITCH group: A=, KEY ----
-        pitch_sliders = _make_slider_group(ctrl_frame, 1, "PITCH", padx=(0, 14))
+        pitch_sliders = _make_slider_group(ctrl_frame, 1, _("PITCH"), padx=(0, 14))
 
         self._tuner_pitch_var = tk.DoubleVar(
             value=tuner_settings.get("reference_pitch", 440.0))
-        _make_vslider(pitch_sliders, "A =", self._tuner_pitch_var, 420, 460, 0,
+        _make_vslider(pitch_sliders, _("A ="), self._tuner_pitch_var, 420, 460, 0,
                       cmd=lambda v: self._tuner_on_pitch_changed(),
                       resolution=1, value_fmt=lambda v: f"{v:.0f} Hz")
 
@@ -577,19 +577,19 @@ class TunerTabMixin:
             self._tuner_transpose_var.set(key)
             self._tuner_update_labels()
 
-        _make_vslider(pitch_sliders, "KEY", self._tuner_key_idx_var, 0, 3, 1,
+        _make_vslider(pitch_sliders, _("KEY"), self._tuner_key_idx_var, 0, 3, 1,
                       cmd=_on_key_slider,
                       value_fmt=lambda v: TRANSPOSITION_KEYS[int(v)])
 
         # ---- BIAS group: NOTE, OCT. ----
-        bias_sliders = _make_slider_group(ctrl_frame, 2, "BIAS")
+        bias_sliders = _make_slider_group(ctrl_frame, 2, _("BIAS"))
 
         self._tuner_bias_var = tk.IntVar(value=self._tuner_ring_brightness)
-        _make_vslider(bias_sliders, "NOTE", self._tuner_bias_var, 0, 100, 0,
+        _make_vslider(bias_sliders, _("NOTE"), self._tuner_bias_var, 0, 100, 0,
                       cmd=lambda v: setattr(self, '_tuner_ring_brightness', int(v)))
 
         self._tuner_boost_var = tk.IntVar(value=self._tuner_octave_boost)
-        _make_vslider(bias_sliders, "OCT.", self._tuner_boost_var, 0, 100, 1,
+        _make_vslider(bias_sliders, _("OCT."), self._tuner_boost_var, 0, 100, 1,
                       cmd=lambda v: setattr(self, '_tuner_octave_boost', int(v)))
 
         # ---- CENTER: flat-pilot-sharp / ref button ----
@@ -613,7 +613,7 @@ class TunerTabMixin:
         indicator_frame.grid(row=row, column=0)
         row += 1
 
-        tk.Label(indicator_frame, text=" \u2190 flat", bg=ctrl_bg, fg="#888888",
+        tk.Label(indicator_frame, text=_(" \u2190 flat"), bg=ctrl_bg, fg="#888888",
                  font=("Helvetica", 10)).pack(side="left", padx=(0, 6))
 
         pilot_cv = tk.Canvas(indicator_frame, width=30, height=30,
@@ -629,10 +629,10 @@ class TunerTabMixin:
             pcx - pr, pcy - pr, pcx + pr, pcy + pr,
             fill="#331100", outline="#444444", width=1)
 
-        tk.Label(indicator_frame, text="sharp \u2192", bg=ctrl_bg, fg="#888888",
+        tk.Label(indicator_frame, text=_("sharp \u2192"), bg=ctrl_bg, fg="#888888",
                  font=("Helvetica", 10)).pack(side="left", padx=(6, 0))
 
-        tk.Label(center_frame, text="MOTOR PILOT", bg=ctrl_bg, fg="#555555",
+        tk.Label(center_frame, text=_("MOTOR PILOT"), bg=ctrl_bg, fg="#555555",
                  font=("Helvetica", 7)).grid(row=row, column=0)
         row += 1
 
@@ -690,18 +690,18 @@ class TunerTabMixin:
 
         import sys
         if sys.platform == 'linux':
-            msg = ("The Strobe Tuner requires PortAudio.\n\n"
-                   "Install it with:\n"
-                   "  sudo apt install libportaudio2\n\n"
-                   "Then restart the application.")
+            msg = _("The Strobe Tuner requires PortAudio.\n\n"
+                    "Install it with:\n"
+                    "  sudo apt install libportaudio2\n\n"
+                    "Then restart the application.")
         elif sys.platform == 'darwin':
-            msg = ("The Strobe Tuner is not available on this Mac.\n\n"
-                   "This feature requires Apple Silicon (M1 or newer).\n\n"
-                   "All other features work normally.")
+            msg = _("The Strobe Tuner is not available on this Mac.\n\n"
+                    "This feature requires Apple Silicon (M1 or newer).\n\n"
+                    "All other features work normally.")
         else:
-            msg = ("The Strobe Tuner is not available on this system.\n\n"
-                   "If you see this on Windows, try reinstalling the app.\n\n"
-                   "All other features work normally.")
+            msg = _("The Strobe Tuner is not available on this system.\n\n"
+                    "If you see this on Windows, try reinstalling the app.\n\n"
+                    "All other features work normally.")
         tk.Label(frame, text=msg, bg=bg, fg="#AAAAAA",
                  font=("Helvetica", 12), justify="center").pack(expand=True)
 
@@ -1029,7 +1029,7 @@ class TunerTabMixin:
             self._vu_note_label.configure(text=f"{note_name}{best_oct}")
 
             if abs(target_cents) < VU_IN_TUNE_CENTS:
-                self._vu_cents_label.configure(text="IN TUNE", fg="#00CC00")
+                self._vu_cents_label.configure(text=_("IN TUNE"), fg="#00CC00")
             elif target_cents > 0:
                 self._vu_cents_label.configure(
                     text=f"+{target_cents:.0f}\u00a2", fg="#AAAAAA")
@@ -1095,7 +1095,7 @@ class TunerTabMixin:
         from ui_dialogs import add_tooltip
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Tuner Settings")
+        dlg.title(_("Tuner Settings"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1111,26 +1111,26 @@ class TunerTabMixin:
         if devices:
             mic_row = tk.Frame(frame, bg=bg)
             mic_row.pack(fill="x", pady=(0, 10))
-            mic_lbl = tk.Label(mic_row, text="Input Device:", bg=bg, fg=fg,
+            mic_lbl = tk.Label(mic_row, text=_("Input Device:"), bg=bg, fg=fg,
                                font=("Helvetica", 10))
             mic_lbl.pack(side="left", padx=(0, 8))
             add_tooltip(mic_lbl,
-                        "Microphone the tuner listens to. A condenser mic "
-                        "with a flat low-frequency response works best, "
-                        "especially for baritone fundamentals around 100 Hz.")
+                        _("Microphone the tuner listens to. A condenser mic "
+                          "with a flat low-frequency response works best, "
+                          "especially for baritone fundamentals around 100 Hz."))
 
             if sys.platform == 'linux':
                 # Linux/PulseAudio: device selection via PortAudio is unreliable.
                 # Use system default and let the user set their preferred device
                 # in PulseAudio/PipeWire settings.
-                tk.Label(mic_row, text="System Default (set in system audio settings)",
+                tk.Label(mic_row, text=_("System Default (set in system audio settings)"),
                          bg=bg, fg="#888888", font=("Helvetica", 10)).pack(side="left")
             else:
                 current_dev = self.settings.get("audio_input_device")
-                dev_names = ["System Default"] + [name for _, name in devices]
+                dev_names = [_("System Default")] + [name for _, name in devices]
                 dev_indices = [None] + [idx for idx, _ in devices]
 
-                mic_var = tk.StringVar(value="System Default")
+                mic_var = tk.StringVar(value=_("System Default"))
                 if current_dev is not None:
                     for idx, name in devices:
                         if idx == current_dev:
@@ -1141,10 +1141,10 @@ class TunerTabMixin:
                                          values=dev_names, state="readonly", width=35)
                 mic_combo.pack(side="left")
                 add_tooltip(mic_combo,
-                            "Pick a specific input device, or System "
-                            "Default to use whatever your OS has selected. "
-                            "Changing this restarts the tuner audio "
-                            "stream immediately.")
+                            _("Pick a specific input device, or System "
+                              "Default to use whatever your OS has selected. "
+                              "Changing this restarts the tuner audio "
+                              "stream immediately."))
 
                 def on_mic_changed(event=None):
                     sel = mic_combo.current()
@@ -1163,7 +1163,7 @@ class TunerTabMixin:
         # --- Stripe/Backlight color ---
         color_row = tk.Frame(frame, bg=bg)
         color_row.pack(fill="x", pady=(0, 10))
-        bl_lbl = tk.Label(color_row, text="Backlight Color:", bg=bg, fg=fg,
+        bl_lbl = tk.Label(color_row, text=_("Backlight Color:"), bg=bg, fg=fg,
                           font=("Helvetica", 10))
         bl_lbl.pack(side="left", padx=(0, 8))
         color_swatch = tk.Button(
@@ -1171,15 +1171,15 @@ class TunerTabMixin:
             relief="raised", bd=1
         )
         color_swatch.pack(side="left")
-        bl_tip = ("Color of the strobe-disc segments — the lit stripes "
-                  "you see rotating on each wheel. Click the swatch to pick.")
+        bl_tip = _("Color of the strobe-disc segments — the lit stripes "
+                   "you see rotating on each wheel. Click the swatch to pick.")
         add_tooltip(bl_lbl, bl_tip)
         add_tooltip(color_swatch, bl_tip)
 
         def pick_stripe_color():
             c = colorchooser.askcolor(
                 initialcolor=self._tuner_color,
-                title="Choose Backlight Color", parent=dlg
+                title=_("Choose Backlight Color"), parent=dlg
             )
             if c[1]:
                 self._tuner_color = c[1]
@@ -1195,7 +1195,7 @@ class TunerTabMixin:
         # --- Faceplate color ---
         fp_row = tk.Frame(frame, bg=bg)
         fp_row.pack(fill="x", pady=(0, 10))
-        fp_lbl = tk.Label(fp_row, text="Faceplate Color:", bg=bg, fg=fg,
+        fp_lbl = tk.Label(fp_row, text=_("Faceplate Color:"), bg=bg, fg=fg,
                           font=("Helvetica", 10))
         fp_lbl.pack(side="left", padx=(0, 8))
         fp_swatch = tk.Button(
@@ -1203,15 +1203,15 @@ class TunerTabMixin:
             relief="raised", bd=1
         )
         fp_swatch.pack(side="left")
-        fp_tip = ("Background color behind the strobe wheels. Click the "
-                  "swatch to pick.")
+        fp_tip = _("Background color behind the strobe wheels. Click the "
+                   "swatch to pick.")
         add_tooltip(fp_lbl, fp_tip)
         add_tooltip(fp_swatch, fp_tip)
 
         def pick_faceplate_color():
             c = colorchooser.askcolor(
                 initialcolor=self._tuner_faceplate_color,
-                title="Choose Faceplate Color", parent=dlg
+                title=_("Choose Faceplate Color"), parent=dlg
             )
             if c[1]:
                 self._tuner_faceplate_color = c[1]
@@ -1234,21 +1234,21 @@ class TunerTabMixin:
 
         # --- Show FPS ---
         fps_cb = tk.Checkbutton(
-            frame, text="Show frame rate on screen",
+            frame, text=_("Show frame rate on screen"),
             variable=self._tuner_show_fps,
             bg=bg, fg=fg, selectcolor=bg, activebackground=bg,
             font=("Helvetica", 10),
         )
         fps_cb.pack(fill="x", pady=(0, 10))
         add_tooltip(fps_cb,
-                    "Overlay a small live FPS counter on the tuner — "
-                    "useful for diagnosing stutters or confirming the GPU "
-                    "renderer is active.")
+                    _("Overlay a small live FPS counter on the tuner — "
+                      "useful for diagnosing stutters or confirming the GPU "
+                      "renderer is active."))
 
         # Close button
-        close_btn = tk.Button(frame, text="Close", command=dlg.destroy, width=10)
+        close_btn = tk.Button(frame, text=_("Close"), command=dlg.destroy, width=10)
         close_btn.pack(pady=(5, 0))
-        add_tooltip(close_btn, "Close this dialog. Color and FPS choices apply immediately.")
+        add_tooltip(close_btn, _("Close this dialog. Color and FPS choices apply immediately."))
 
     # ------------------------------------------------------------------
     # ANIMATION LOOP
@@ -1272,14 +1272,14 @@ class TunerTabMixin:
         success, err = self._tuner_engine.start(device=device)
         if not success:
             if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
-                self._tuner_error_lbl.configure(text=f"Audio error: {err}")
+                self._tuner_error_lbl.configure(text=_("Audio error: {err}").format(err=err))
                 self._tuner_error_lbl.place(relx=0.5, rely=0.5, anchor="center")
                 self._tuner_error_lbl.lift()
             elif self._tuner_canvas:
                 self._tuner_canvas.create_text(
                     self._tuner_canvas.winfo_width() / 2,
                     self._tuner_canvas.winfo_height() / 2,
-                    text=f"Audio error: {err}",
+                    text=_("Audio error: {err}").format(err=err),
                     fill="#FF4444", font=("Helvetica", 12),
                     tags="error"
                 )
@@ -1584,7 +1584,7 @@ class TunerTabMixin:
         self._tuner_set_pilot(False)
         if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
             self._tuner_error_lbl.configure(
-                text=f"{error_msg}\n\nClick here to retry",
+                text=_("{error_msg}\n\nClick here to retry").format(error_msg=error_msg),
                 cursor="hand2")
             self._tuner_error_lbl.place(relx=0.5, rely=0.5, anchor="center")
             self._tuner_error_lbl.lift()
@@ -1598,7 +1598,7 @@ class TunerTabMixin:
             c.create_text(cx, cy - 15, text=error_msg,
                           fill="#FF4444", font=("Helvetica", 12),
                           tags="error")
-            c.create_text(cx, cy + 15, text="Click here to retry",
+            c.create_text(cx, cy + 15, text=_("Click here to retry"),
                           fill="#4488FF", font=("Helvetica", 11, "underline"),
                           tags=("error", "error_retry"))
             c.tag_bind("error_retry", "<Button-1>",

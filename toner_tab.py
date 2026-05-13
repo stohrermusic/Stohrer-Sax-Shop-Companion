@@ -332,7 +332,7 @@ class TonerTabMixin:
         self._toner_intune_lamp = self._toner_intune_canvas.create_oval(
             4, 4, 16, 16, fill="#113311", outline="#444444", width=1)
 
-        tk.Label(intune_frame, text="IN TUNE", bg=bg, fg=LABEL_DIM,
+        tk.Label(intune_frame, text=_("IN TUNE"), bg=bg, fg=LABEL_DIM,
                  font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 0))
 
         gauge_row += 1
@@ -359,7 +359,7 @@ class TonerTabMixin:
         self._toner_capture_progress.pack(side="left", padx=5, pady=4)
 
         self._toner_pause_btn = tk.Button(
-            self._toner_capture_frame, text="Pause", font=("Helvetica", 9),
+            self._toner_capture_frame, text=_("Pause"), font=("Helvetica", 9),
             command=self._toner_toggle_pause)
         self._toner_pause_btn.pack(side="right", padx=(0, 5), pady=4)
 
@@ -438,7 +438,7 @@ class TonerTabMixin:
         sax_inner._skip_theme = True
         sax_inner.pack()  # centered within the expanding column
 
-        tk.Label(sax_inner, text="SAX SELECTOR", bg=ctrl_bg, fg="#888888",
+        tk.Label(sax_inner, text=_("SAX SELECTOR"), bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack()
 
         # Determine visible sax types from settings
@@ -493,7 +493,7 @@ class TonerTabMixin:
                 self._toner_update_pitch_mode_label()
 
         self._toner_sandbox_cb = tk.Checkbutton(
-            sax_inner, text="sandbox (concert pitch)",
+            sax_inner, text=_("sandbox (concert pitch)"),
             variable=self._toner_sandbox_var,
             command=_on_sandbox_toggled,
             bg=ctrl_bg, fg="#CC8800", activebackground=ctrl_bg,
@@ -528,24 +528,24 @@ class TonerTabMixin:
         self._toner_session_lamp = self._toner_session_canvas.create_oval(
             4, 4, 20, 20, fill="#332200", outline="#444444", width=1)
 
-        tk.Label(right_col, text="SESSION", bg=ctrl_bg, fg=LABEL_DIM,
+        tk.Label(right_col, text=_("SESSION"), bg=ctrl_bg, fg=LABEL_DIM,
                  font=("Helvetica", 7, "bold")).pack(side="left", padx=(3, 6))
 
         # Mic status indicator (shows loaded preset's mic)
         self._toner_mic_label = tk.Label(
-            right_col, text="no preset", bg=ctrl_bg, fg="#666666",
+            right_col, text=_("no preset"), bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 7))
         self._toner_mic_label._skip_theme = True
         self._toner_mic_label.pack(side="left", padx=(0, 10))
 
         # Profile indicator + Load/Unload toggle
         self._toner_preset_label = tk.Label(
-            right_col, text="no preset", bg=ctrl_bg, fg="#666666",
+            right_col, text=_("no preset"), bg=ctrl_bg, fg="#666666",
             font=("Helvetica", 8))
         self._toner_preset_label.pack(side="left", padx=(0, 4))
 
         self._toner_load_unload_btn = tk.Button(
-            right_col, text="Load...",
+            right_col, text=_("Load..."),
             font=("Helvetica", 9),
             command=self._toner_load_unload_toggle)
         self._toner_load_unload_btn.pack(side="left", padx=(0, 10))
@@ -555,9 +555,9 @@ class TonerTabMixin:
         mode_ch = tk.Frame(right_col, bg=ctrl_bg)
         mode_ch._skip_theme = True
         mode_ch.pack(side="left", padx=(0, 8))
-        tk.Label(mode_ch, text="MODE", bg=ctrl_bg, fg="#888888",
+        tk.Label(mode_ch, text=_("MODE"), bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack(pady=(0, 1))
-        tk.Label(mode_ch, text="free", bg=ctrl_bg, fg="#AAAAAA",
+        tk.Label(mode_ch, text=_("free"), bg=ctrl_bg, fg="#AAAAAA",
                  font=("Helvetica", 8), width=4).pack()
         mode_int = tk.IntVar(value=0)
         tk.Scale(mode_ch, variable=mode_int, from_=0, to=1,
@@ -568,7 +568,7 @@ class TonerTabMixin:
                  troughcolor="#444444", highlightthickness=0,
                  sliderrelief="raised", sliderlength=20,
                  borderwidth=2).pack()
-        tk.Label(mode_ch, text="cal", bg=ctrl_bg, fg="#AAAAAA",
+        tk.Label(mode_ch, text=_("cal"), bg=ctrl_bg, fg="#AAAAAA",
                  font=("Helvetica", 8), width=4).pack()
 
         def _on_mode_change(*args):
@@ -578,7 +578,7 @@ class TonerTabMixin:
 
         # Capture button
         self._toner_capture_btn = tk.Button(
-            right_col, text="Capture",
+            right_col, text=_("Capture"),
             font=("Helvetica", 10, "bold"),
             command=self._toner_toggle_capture)
         self._toner_capture_btn.pack(side="left", ipady=4)
@@ -769,7 +769,7 @@ class TonerTabMixin:
             detail = f"{note_count} notes" if note_count else f"{captures} captures"
             self._toner_spectrum_canvas.itemconfigure(
                 self._toner_compare_label,
-                text=f"Overlay: {name} ({detail})")
+                text=_("Overlay: {name} ({detail})").format(name=name, detail=detail))
 
     def _toner_clear_overlay(self):
         """Remove the live spectrum ghost overlay."""
@@ -1038,7 +1038,7 @@ class TonerTabMixin:
         from ui_dialogs import add_tooltip
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Tone Analyzer Settings")
+        dlg.title(_("Tone Analyzer Settings"))
         dlg.transient(self.root)
         dlg.grab_set()
 
@@ -1052,10 +1052,10 @@ class TonerTabMixin:
         # GENERAL TAB
         # ==================================================================
         gen_frame = tk.Frame(notebook, bg=bg, padx=15, pady=10)
-        notebook.add(gen_frame, text="General")
+        notebook.add(gen_frame, text=_("General"))
 
         # --- Input Device ---
-        input_frame = tk.LabelFrame(gen_frame, text="Input Device", bg=bg,
+        input_frame = tk.LabelFrame(gen_frame, text=_("Input Device"), bg=bg,
                                      fg=fg, padx=10, pady=8)
         input_frame.pack(fill="x", pady=(0, 8))
 
@@ -1065,11 +1065,11 @@ class TonerTabMixin:
         mic_var = tk.StringVar(value="System Default")
 
         if sys.platform == 'linux':
-            tk.Label(input_frame, text="System Default (set in system audio settings)",
+            tk.Label(input_frame, text=_("System Default (set in system audio settings)"),
                      bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
         elif devices:
-            dev_names += [name for _, name in devices]
-            dev_indices += [idx for idx, _ in devices]
+            dev_names += [name for _idx, name in devices]
+            dev_indices += [idx for idx, _name in devices]
 
             current_dev = self.settings.get("audio_input_device")
             if current_dev is not None:
@@ -1085,34 +1085,34 @@ class TonerTabMixin:
                 listbox.insert(tk.END, name)
             current_idx = 0
             if current_dev is not None:
-                for i, (idx, _) in enumerate(devices):
+                for i, (idx, _name) in enumerate(devices):
                     if idx == current_dev:
                         current_idx = i + 1
                         break
             listbox.selection_set(current_idx)
             listbox.see(current_idx)
             add_tooltip(listbox,
-                        "Microphone the toner uses for capture and "
+                        _("Microphone the toner uses for capture and "
                         "live analysis. The mic type and model that get "
                         "saved with each capture are configured per "
-                        "preset (File → Presets), not here.")
+                        "preset (File → Presets), not here."))
         else:
-            tk.Label(input_frame, text="No audio input devices found.",
+            tk.Label(input_frame, text=_("No audio input devices found."),
                      bg=bg, fg="#888888", font=("Helvetica", 9)).pack(anchor="w")
 
-        tk.Label(input_frame, text="Mic type and model are set per preset\n"
-                 "in File \u2192 Presets.",
+        tk.Label(input_frame, text=_("Mic type and model are set per preset\n"
+                 "in File \u2192 Presets."),
                  bg=bg, fg="#888888", font=("Helvetica", 8)).pack(anchor="w", pady=(4, 0))
 
         # --- Recording ---
-        rec_frame = tk.LabelFrame(gen_frame, text="Recording", bg=bg,
+        rec_frame = tk.LabelFrame(gen_frame, text=_("Recording"), bg=bg,
                                    fg=fg, padx=10, pady=8)
         rec_frame.pack(fill="x", pady=(0, 8))
 
         record_var = tk.BooleanVar(value=self.settings.get("toner_record_wav", True))
         wav_warning = tk.Label(rec_frame,
-            text="\u26a0 Without WAV recording, post-capture analysis "
-                 "will be roughly half as accurate.",
+            text=_("\u26a0 Without WAV recording, post-capture analysis "
+                 "will be roughly half as accurate."),
             bg=bg, fg="#CC6600", font=("Helvetica", 8),
             wraplength=380, justify="left")
 
@@ -1122,29 +1122,29 @@ class TonerTabMixin:
             else:
                 wav_warning.pack(anchor="w", padx=(16, 0), pady=(0, 2))
 
-        rec_cb = tk.Checkbutton(rec_frame, text="Record WAV during capture",
+        rec_cb = tk.Checkbutton(rec_frame, text=_("Record WAV during capture"),
                                 variable=record_var, bg=bg, fg=fg,
                                 command=_on_record_toggled,
                                 font=("Helvetica", 9))
         rec_cb.pack(anchor="w")
         add_tooltip(rec_cb,
-                    "Save the raw audio for each capture as a WAV file. "
+                    _("Save the raw audio for each capture as a WAV file. "
                     "WAV recording lets the post-capture re-analysis "
                     "average over the full take (much more accurate than "
-                    "the live readings). Strongly recommended.")
+                    "the live readings). Strongly recommended."))
         if not record_var.get():
             wav_warning.pack(anchor="w", padx=(16, 0), pady=(0, 2))
 
         auto_delete_var = tk.BooleanVar(value=self.settings.get("toner_wav_auto_delete", False))
-        del_cb = tk.Checkbutton(rec_frame, text="Delete WAV after analysis",
+        del_cb = tk.Checkbutton(rec_frame, text=_("Delete WAV after analysis"),
                                 variable=auto_delete_var, bg=bg, fg=fg,
                                 font=("Helvetica", 9))
         del_cb.pack(anchor="w", padx=(16, 0))
         add_tooltip(del_cb,
-                    "Automatically delete each WAV after the post-capture "
+                    _("Automatically delete each WAV after the post-capture "
                     "analysis runs. Saves disk space, but you lose the "
                     "ability to re-analyze a session if descriptors or "
-                    "algorithms change later.")
+                    "algorithms change later."))
 
         folder_frame = tk.Frame(rec_frame, bg=bg)
         folder_frame.pack(fill="x", pady=(2, 0))
@@ -1153,12 +1153,12 @@ class TonerTabMixin:
                                 font=("Helvetica", 8), anchor="w")
         def choose_folder():
             chosen = filedialog.askdirectory(
-                title="Choose Recording Folder",
+                title=_("Choose Recording Folder"),
                 initialdir=current_dir if os.path.isdir(current_dir) else os.path.expanduser("~"),
                 parent=dlg)
             if chosen:
                 folder_label.configure(text=chosen)
-        folder_btn = tk.Button(folder_frame, text="Folder...", font=("Helvetica", 8),
+        folder_btn = tk.Button(folder_frame, text=_("Folder..."), font=("Helvetica", 8),
                                command=choose_folder)
         folder_btn.pack(side="left", padx=(0, 5))
         folder_label.pack(side="left", fill="x")
@@ -1169,20 +1169,20 @@ class TonerTabMixin:
         add_tooltip(folder_label, folder_tip)
 
         # --- Pitch ---
-        pitch_frame = tk.LabelFrame(gen_frame, text="Pitch", bg=bg,
+        pitch_frame = tk.LabelFrame(gen_frame, text=_("Pitch"), bg=bg,
                                      fg=fg, padx=10, pady=8)
         pitch_frame.pack(fill="x", pady=(0, 8))
 
         pitch_row = tk.Frame(pitch_frame, bg=bg)
         pitch_row.pack(fill="x", pady=(0, 4))
-        ref_lbl = tk.Label(pitch_row, text="Reference pitch  A =", bg=bg, fg=fg,
+        ref_lbl = tk.Label(pitch_row, text=_("Reference pitch  A ="), bg=bg, fg=fg,
                            font=("Helvetica", 9))
         ref_lbl.pack(side="left", padx=(0, 5))
         ref_pitch_var = tk.DoubleVar(value=self._toner_pitch_var.get())
         ref_ent = tk.Entry(pitch_row, textvariable=ref_pitch_var, width=6,
                            font=("Helvetica", 9))
         ref_ent.pack(side="left")
-        ref_unit = tk.Label(pitch_row, text="Hz", bg=bg, fg=fg,
+        ref_unit = tk.Label(pitch_row, text=_("Hz"), bg=bg, fg=fg,
                             font=("Helvetica", 9))
         ref_unit.pack(side="left", padx=(3, 0))
         ref_tip = ("Reference frequency for A4. Standard is 440 Hz; many "
@@ -1193,34 +1193,34 @@ class TonerTabMixin:
 
         display_pitch_var = tk.StringVar(
             value="concert" if self._toner_concert_pitch.get() else "written")
-        written_rb = tk.Radiobutton(pitch_frame, text="Written pitch (what the player fingers)",
+        written_rb = tk.Radiobutton(pitch_frame, text=_("Written pitch (what the player fingers)"),
                                     variable=display_pitch_var, value="written", bg=bg, fg=fg,
                                     font=("Helvetica", 9))
         written_rb.pack(anchor="w")
-        concert_rb = tk.Radiobutton(pitch_frame, text="Concert pitch (actual sounding frequency)",
+        concert_rb = tk.Radiobutton(pitch_frame, text=_("Concert pitch (actual sounding frequency)"),
                                     variable=display_pitch_var, value="concert", bg=bg, fg=fg,
                                     font=("Helvetica", 9))
         concert_rb.pack(anchor="w")
         add_tooltip(written_rb,
-                    "Show note names as the player reads them on the page. "
+                    _("Show note names as the player reads them on the page. "
                     "An alto sax fingering A sounds C — written pitch "
-                    "still shows it as A.")
+                    "still shows it as A."))
         add_tooltip(concert_rb,
-                    "Show note names at actual sounding frequency. An alto "
-                    "fingering A is shown as C in concert pitch.")
+                    _("Show note names at actual sounding frequency. An alto "
+                    "fingering A is shown as C in concert pitch."))
 
         # ==================================================================
         # ANALYSIS TAB
         # ==================================================================
         ana_frame = tk.Frame(notebook, bg=bg, padx=15, pady=10)
-        notebook.add(ana_frame, text="Analysis")
+        notebook.add(ana_frame, text=_("Analysis"))
 
         # --- Preset Fields ---
-        pf_frame = tk.LabelFrame(ana_frame, text="Preset Fields", bg=bg,
+        pf_frame = tk.LabelFrame(ana_frame, text=_("Preset Fields"), bg=bg,
                                   fg=fg, padx=10, pady=8)
         pf_frame.pack(fill="x", pady=(0, 8))
 
-        tk.Label(pf_frame, text="Show these optional fields when creating presets.",
+        tk.Label(pf_frame, text=_("Show these optional fields when creating presets."),
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 4))
 
         field_labels = [
@@ -1261,7 +1261,7 @@ class TonerTabMixin:
 
         # Easter egg
         _ns_var = tk.BooleanVar(value=False)
-        _ns_cb = tk.Checkbutton(pf_frame, text="Heavy Mass Neck Screw",
+        _ns_cb = tk.Checkbutton(pf_frame, text=_("Heavy Mass Neck Screw"),
                                 variable=_ns_var, bg=bg, fg=fg,
                                 font=("Helvetica", 9))
         _ns_cb.pack(anchor="w")
@@ -1271,13 +1271,13 @@ class TonerTabMixin:
 
         def _ns_remove():
             pw = tk.Toplevel(dlg)
-            pw.title("Processing...")
+            pw.title(_("Processing..."))
             pw.resizable(False, False)
             pw.transient(dlg)
             pw.grab_set()
             pf = tk.Frame(pw, bg=bg, padx=20, pady=15)
             pf.pack(fill="both", expand=True)
-            tk.Label(pf, text="Removing option...", bg=bg,
+            tk.Label(pf, text=_("Removing option..."), bg=bg,
                      font=("Helvetica", 10)).pack(pady=(0, 8))
             pbar = ttk.Progressbar(pf, orient="horizontal",
                                    length=250, mode="determinate")
@@ -1309,11 +1309,11 @@ class TonerTabMixin:
         _ns_cb.configure(command=_ns_click)
 
         # --- Analysis Descriptors ---
-        desc_frame = tk.LabelFrame(ana_frame, text="Analysis Descriptors", bg=bg,
+        desc_frame = tk.LabelFrame(ana_frame, text=_("Analysis Descriptors"), bg=bg,
                                     fg=fg, padx=10, pady=8)
         desc_frame.pack(fill="x", pady=(0, 8))
 
-        tk.Label(desc_frame, text="Choose which descriptors appear in the Analyze tool.",
+        tk.Label(desc_frame, text=_("Choose which descriptors appear in the Analyze tool."),
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 4))
 
         toner_settings = self.settings.get("toner_settings", {})
@@ -1378,23 +1378,23 @@ class TonerTabMixin:
                       "details on what this descriptor measures.")
             add_tooltip(cb, cb_tip)
             add_tooltip(row_lbl, cb_tip)
-            add_tooltip(info_btn, f"Detailed description of {label}.")
+            add_tooltip(info_btn, _("Detailed description of {label}.").format(label=label))
 
         # --- Sandbox Mode ---
-        sandbox_frame = tk.LabelFrame(ana_frame, text="Sandbox Mode", bg=bg,
+        sandbox_frame = tk.LabelFrame(ana_frame, text=_("Sandbox Mode"), bg=bg,
                                        fg=fg, padx=10, pady=8)
         sandbox_frame.pack(fill="x", pady=(0, 8))
 
         sandbox_var = tk.BooleanVar(value=self.settings.get("toner_sandbox_enabled", False))
-        sandbox_cb = tk.Checkbutton(sandbox_frame, text="Allow sandbox mode",
+        sandbox_cb = tk.Checkbutton(sandbox_frame, text=_("Allow sandbox mode"),
                                     variable=sandbox_var, bg=bg, fg=fg,
                                     font=("Helvetica", 9))
         sandbox_cb.pack(anchor="w")
         sandbox_caption = tk.Label(sandbox_frame,
-                                   text="Sandbox presets can capture any pitched sound\n"
+                                   text=_("Sandbox presets can capture any pitched sound\n"
                                         "without requiring mic type or instrument fields.\n"
                                         "Good for experiments, non-sax instruments, or\n"
-                                        "unconventional setups like contact mics.",
+                                        "unconventional setups like contact mics."),
                                    bg=bg, fg="#888888", font=("Helvetica", 8),
                                    justify="left")
         sandbox_caption.pack(anchor="w", pady=(2, 0))
@@ -1463,12 +1463,12 @@ class TonerTabMixin:
 
             dlg.destroy()
 
-        ok_btn = tk.Button(btn_frame, text="OK", width=10, command=save)
+        ok_btn = tk.Button(btn_frame, text=_("OK"), width=10, command=save)
         ok_btn.pack(side="right", padx=(5, 0))
-        cancel_btn = tk.Button(btn_frame, text="Cancel", width=10, command=dlg.destroy)
+        cancel_btn = tk.Button(btn_frame, text=_("Cancel"), width=10, command=dlg.destroy)
         cancel_btn.pack(side="right")
-        add_tooltip(ok_btn, "Apply all changes and close.")
-        add_tooltip(cancel_btn, "Close without applying any changes.")
+        add_tooltip(ok_btn, _("Apply all changes and close."))
+        add_tooltip(cancel_btn, _("Close without applying any changes."))
 
     def _toner_transpose_note(self, concert_note):
         """Transpose a concert pitch note name to written pitch for display.
@@ -1500,11 +1500,11 @@ class TonerTabMixin:
             return
         cv = self._toner_spectrum_canvas
         if self._toner_concert_pitch.get():
-            cv.itemconfigure(self._toner_pitch_mode_label, text="Concert")
+            cv.itemconfigure(self._toner_pitch_mode_label, text=_("Concert"))
         else:
             sax = self._toner_sax_var.get()
             cv.itemconfigure(self._toner_pitch_mode_label,
-                             text=f"Written ({sax})")
+                             text=_("Written ({sax})").format(sax=sax))
 
     def _toner_update_session_lamp(self):
         """Update the session indicator lamp (amber when session is active)."""
@@ -1547,7 +1547,7 @@ class TonerTabMixin:
     def _toner_open_preset_dialog(self):
         """Open the preset management dialog — central hub for all preset operations."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("Tone Presets")
+        dlg.title(_("Tone Presets"))
         dlg.geometry("550x580")
         dlg.minsize(400, 450)
         dlg.transient(self.root)
@@ -1557,7 +1557,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Tone Presets", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Tone Presets"), bg=bg, fg=fg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
 
         # Profile list
@@ -1594,14 +1594,14 @@ class TonerTabMixin:
         row1 = tk.Frame(frame, bg=bg)
         row1.pack(fill="x", pady=(0, 5))
 
-        btn_load = tk.Button(row1, text="Load for Capture", state="disabled",
+        btn_load = tk.Button(row1, text=_("Load for Capture"), state="disabled",
                   command=lambda: self._toner_load_from_dialog(dlg))
         btn_load.pack(side="left", padx=(0, 5))
-        btn_analyze = tk.Button(row1, text="Analyze...", state="disabled",
+        btn_analyze = tk.Button(row1, text=_("Analyze..."), state="disabled",
                   command=lambda: [dlg.destroy(),
                                    self._toner_open_analyze_dialog()])
         btn_analyze.pack(side="left", padx=(0, 5))
-        btn_notes = tk.Button(row1, text="Edit Notes...", state="disabled",
+        btn_notes = tk.Button(row1, text=_("Edit Notes..."), state="disabled",
                   command=self._toner_edit_preset_notes)
         btn_notes.pack(side="left", padx=(0, 5))
 
@@ -1609,20 +1609,20 @@ class TonerTabMixin:
         row2 = tk.Frame(frame, bg=bg)
         row2.pack(fill="x")
 
-        tk.Button(row2, text="New Preset...",
+        tk.Button(row2, text=_("New Preset..."),
                   command=lambda: self._toner_new_preset(dlg)).pack(
                       side="left", padx=(0, 5))
-        btn_mutate = tk.Button(row2, text="Mutate...", state="disabled",
+        btn_mutate = tk.Button(row2, text=_("Mutate..."), state="disabled",
                   command=self._toner_mutate_preset)
         btn_mutate.pack(side="left", padx=(0, 5))
-        tk.Button(row2, text="Import Audio File...",
+        tk.Button(row2, text=_("Import Audio File..."),
                   command=lambda: [dlg.destroy(),
                                    self._toner_import_audio_file()]).pack(
                       side="left", padx=(0, 5))
-        btn_delete = tk.Button(row2, text="Delete", state="disabled",
+        btn_delete = tk.Button(row2, text=_("Delete"), state="disabled",
                   command=self._toner_delete_preset)
         btn_delete.pack(side="left", padx=(0, 5))
-        tk.Button(row2, text="Close",
+        tk.Button(row2, text=_("Close"),
                   command=dlg.destroy).pack(side="right")
 
         self._preset_selection_btns = [btn_load, btn_analyze, btn_notes,
@@ -1693,7 +1693,7 @@ class TonerTabMixin:
     def _toner_notes_dialog(self, preset_name, preset, prompt_text=None):
         """Open a multi-line notes editor for a preset."""
         dlg = tk.Toplevel(self.root)
-        dlg.title(f"Notes \u2014 {preset_name}")
+        dlg.title(_("Notes — {name}").format(name=preset_name))
         dlg.resizable(True, True)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -1707,7 +1707,7 @@ class TonerTabMixin:
                      font=("Helvetica", 10), wraplength=400,
                      justify="left").pack(pady=(0, 8))
 
-        tk.Label(frame, text=f"Notes for \"{preset_name}\":", bg=bg,
+        tk.Label(frame, text=_('Notes for "{name}":').format(name=preset_name), bg=bg,
                  font=("Helvetica", 10)).pack(anchor="w", pady=(0, 4))
 
         text_frame = tk.Frame(frame)
@@ -1740,9 +1740,9 @@ class TonerTabMixin:
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x", pady=(8, 0))
-        tk.Button(btn_frame, text="Save", command=save, width=10).pack(
+        tk.Button(btn_frame, text=_("Save"), command=save, width=10).pack(
             side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy,
+        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy,
                   width=10).pack(side="left")
 
         dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
@@ -1798,7 +1798,7 @@ class TonerTabMixin:
         # Library selector
         lib_row = tk.Frame(frame, bg=bg)
         lib_row.pack(fill="x", pady=2)
-        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
+        tk.Label(lib_row, text=_("Library:"), bg=bg, fg=fg, width=14,
                  anchor="e", font=("Helvetica", 10)).pack(
             side="left", padx=(0, 8))
         existing_libs = [k for k in self._toner_presets.keys()
@@ -1835,11 +1835,11 @@ class TonerTabMixin:
             sb_row = tk.Frame(frame, bg=bg)
             sb_row.pack(fill="x", pady=(6, 2))
             sandbox_var = tk.BooleanVar(value=d.get('sandbox', False))
-            sb_cb = tk.Checkbutton(sb_row, text="Sandbox",
+            sb_cb = tk.Checkbutton(sb_row, text=_("Sandbox"),
                                    variable=sandbox_var, bg=bg, fg=fg,
                                    font=("Helvetica", 10, "bold"))
             sb_cb.pack(side="left", padx=(0, 8))
-            tk.Label(sb_row, text="(any sound, no required fields)",
+            tk.Label(sb_row, text=_("(any sound, no required fields)"),
                      bg=bg, fg="#888888", font=("Helvetica", 8)).pack(
                 side="left")
             # Disable checkbox if editing an existing preset (sandbox is immutable)
@@ -1851,7 +1851,7 @@ class TonerTabMixin:
         if vis.get("notes", True):
             notes_row = tk.Frame(frame, bg=bg)
             notes_row.pack(fill="x", pady=2)
-            tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
+            tk.Label(notes_row, text=_("Notes:"), bg=bg, fg=fg, width=14,
                      anchor="e", font=("Helvetica", 10)).pack(
                 side="left", padx=(0, 8), anchor="n")
             notes_text = tk.Text(notes_row, height=3, width=25,
@@ -1881,8 +1881,8 @@ class TonerTabMixin:
             ]
         for key, label in required:
             if key in fields and not fields[key].get().strip():
-                messagebox.showwarning("Required Field",
-                    f"Please enter {label}.", parent=dlg)
+                messagebox.showwarning(_("Required Field"),
+                    _("Please enter {label}.").format(label=label), parent=dlg)
                 return False
         return True
 
@@ -1911,7 +1911,7 @@ class TonerTabMixin:
     def _toner_new_preset(self, parent_dlg):
         """Create a new horn preset via guided dialog."""
         dlg = tk.Toplevel(parent_dlg)
-        dlg.title("New Tone Preset")
+        dlg.title(_("New Tone Preset"))
         dlg.resizable(False, False)
         dlg.transient(parent_dlg)
         dlg.grab_set()
@@ -1921,7 +1921,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Create Tone Preset", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Create Tone Preset"), bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
 
         fields, lib_var, notes_text, sandbox_var = self._toner_build_preset_fields(
@@ -1937,8 +1937,8 @@ class TonerTabMixin:
             if lib not in self._toner_presets:
                 self._toner_presets[lib] = {}
             if name in self._toner_presets[lib]:
-                messagebox.showwarning("Duplicate Name",
-                    f"'{name}' already exists in '{lib}'.", parent=dlg)
+                messagebox.showwarning(_("Duplicate Name"),
+                    _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
                 return
 
             data = self._toner_collect_preset_data(fields, notes_text)
@@ -1955,8 +1955,8 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_row, text="Create", command=save).pack(side="left", padx=(0, 5))
-        tk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
+        tk.Button(btn_row, text=_("Create"), command=save).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy).pack(side="left")
 
     def _toner_mutate_preset(self):
         """Duplicate selected preset with editable fields, save as new."""
@@ -1971,7 +1971,7 @@ class TonerTabMixin:
 
         parent = self._preset_listbox.winfo_toplevel()
         dlg = tk.Toplevel(parent)
-        dlg.title("Mutate Preset")
+        dlg.title(_("Mutate Preset"))
         dlg.resizable(False, False)
         dlg.transient(parent)
         dlg.grab_set()
@@ -1981,9 +1981,9 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Mutate Preset", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Mutate Preset"), bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 2))
-        tk.Label(frame, text="Change what you need, save as a new preset.",
+        tk.Label(frame, text=_("Change what you need, save as a new preset."),
                  bg=bg, fg="#666666", font=("Helvetica", 9)).pack(pady=(0, 10))
 
         # Pre-fill from source, clear the name so they must enter a new one
@@ -2003,8 +2003,8 @@ class TonerTabMixin:
             if lib not in self._toner_presets:
                 self._toner_presets[lib] = {}
             if name in self._toner_presets[lib]:
-                messagebox.showwarning("Duplicate Name",
-                    f"'{name}' already exists in '{lib}'.", parent=dlg)
+                messagebox.showwarning(_("Duplicate Name"),
+                    _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
                 return
 
             data = self._toner_collect_preset_data(fields, notes_text)
@@ -2021,8 +2021,8 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_row, text="Save as New", command=save).pack(side="left", padx=(0, 5))
-        tk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side="left")
+        tk.Button(btn_row, text=_("Save as New"), command=save).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy).pack(side="left")
 
     def _toner_delete_preset(self):
         """Delete the selected preset."""
@@ -2033,8 +2033,8 @@ class TonerTabMixin:
         if key is None:
             return  # Library header
         lib_name, preset_name = key
-        if messagebox.askyesno("Delete Preset",
-                f"Delete preset '{preset_name}' from '{lib_name}'?"):
+        if messagebox.askyesno(_("Delete Preset"),
+                _("Delete preset '{name}' from '{lib}'?").format(name=preset_name, lib=lib_name)):
             del self._toner_presets[lib_name][preset_name]
             # Remove empty libraries
             if not self._toner_presets[lib_name]:
@@ -2063,10 +2063,10 @@ class TonerTabMixin:
 
         # Need a preset loaded
         if not self._toner_active_preset:
-            messagebox.showinfo("No Preset Loaded",
-                "Load a preset first to capture data.\n\n"
+            messagebox.showinfo(_("No Preset Loaded"),
+                _("Load a preset first to capture data.\n\n"
                 "Use Load... on the control strip, or\n"
-                "File > Presets to create and manage presets.")
+                "File > Presets to create and manage presets."))
             self._toner_open_preset_dialog()
             return
 
@@ -2085,8 +2085,8 @@ class TonerTabMixin:
             if not self.settings.get("seen_calibration_tutorial"):
                 self.settings["seen_calibration_tutorial"] = True
                 save_settings(self.settings)
-                messagebox.showinfo("Calibration Capture",
-                    "Calibration walks through every note in the saxophone's "
+                messagebox.showinfo(_("Calibration Capture"),
+                    _("Calibration walks through every note in the saxophone's "
                     "range, one at a time.\n\n"
                     "How it works:\n"
                     "  \u2022 A 10-second countdown gives you time to get ready\n"
@@ -2099,7 +2099,7 @@ class TonerTabMixin:
                     "  \u2022 Use Pause if you need to adjust or take a break\n"
                     "  \u2022 Play at a comfortable mezzo-forte dynamic\n"
                     "  \u2022 If the app triggers on chair noise, raise the\n"
-                    "    capture threshold in Options > Capture Threshold")
+                    "    capture threshold in Options > Capture Threshold"))
 
             # Build calibration note list, filtering out notes whose
             # concert frequency is below the engine's detection floor
@@ -2109,10 +2109,8 @@ class TonerTabMixin:
             ]
             skipped = len(CALIBRATION_NOTES) - len(self._toner_cal_notes)
             if skipped > 0:
-                messagebox.showinfo("Note Range",
-                    f"{skipped} low notes skipped — below detection range "
-                    f"for {self._toner_sax_var.get()}.\n"
-                    f"Calibration will cover {len(self._toner_cal_notes)} notes.")
+                messagebox.showinfo(_("Note Range"),
+                    _("{skipped} low notes skipped — below detection range for {sax}.\nCalibration will cover {total} notes.").format(skipped=skipped, sax=self._toner_sax_var.get(), total=len(self._toner_cal_notes)))
 
             self._toner_cal_index = 0
             self._toner_cal_recording = False
@@ -2130,7 +2128,7 @@ class TonerTabMixin:
 
         self._toner_stable_note = ""
         self._toner_stable_count = 0
-        self._toner_capture_btn.configure(text="Stop")
+        self._toner_capture_btn.configure(text=_("Stop"))
 
         self._toner_capture_frame.pack(fill="x", padx=5,
             before=self._toner_main_frame.winfo_children()[-1])
@@ -2141,7 +2139,7 @@ class TonerTabMixin:
     def _toner_new_preset_flow(self):
         """Create a new preset (complete setup identity), then start capturing."""
         dlg = tk.Toplevel(self.root)
-        dlg.title("New Tone Preset")
+        dlg.title(_("New Tone Preset"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -2151,10 +2149,10 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Create Tone Preset", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Create Tone Preset"), bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        tk.Label(frame, text="A preset saves your setup details: horn + player + "
-                 "mouthpiece.\nIt pre-fills session metadata for quick capture start.",
+        tk.Label(frame, text=_("A preset saves your setup details: horn + player + "
+                 "mouthpiece.\nIt pre-fills session metadata for quick capture start."),
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
@@ -2171,8 +2169,8 @@ class TonerTabMixin:
             if lib not in self._toner_presets:
                 self._toner_presets[lib] = {}
             if name in self._toner_presets[lib]:
-                messagebox.showwarning("Duplicate Name",
-                    f"'{name}' already exists in '{lib}'.", parent=dlg)
+                messagebox.showwarning(_("Duplicate Name"),
+                    _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
                 return
 
             data = self._toner_collect_preset_data(fields, notes_text)
@@ -2187,16 +2185,16 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_row, text="Create && Start Capturing",
+        tk.Button(btn_row, text=_("Create && Start Capturing"),
                   command=save_and_start).pack(side="left", padx=(0, 5))
-        tk.Button(btn_row, text="Cancel",
+        tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
 
     def _toner_load_from_dialog(self, dlg):
         """Load the selected preset from the preset dialog."""
         sel = self._preset_listbox.curselection()
         if not sel:
-            messagebox.showinfo("Select Preset", "Select a preset first.")
+            messagebox.showinfo(_("Select Preset"), _("Select a preset first."))
             return
         key = self._preset_list_keys[sel[0]]
         if key is None:
@@ -2231,9 +2229,9 @@ class TonerTabMixin:
         """Update the Load/Unload button text based on preset state."""
         if hasattr(self, '_toner_load_unload_btn'):
             if self._toner_active_preset:
-                self._toner_load_unload_btn.configure(text="Unload")
+                self._toner_load_unload_btn.configure(text=_("Unload"))
             else:
-                self._toner_load_unload_btn.configure(text="Load...")
+                self._toner_load_unload_btn.configure(text=_("Load..."))
 
     def _toner_load_preset_quick(self):
         """Quick preset loader — shows list, loads selected."""
@@ -2245,12 +2243,12 @@ class TonerTabMixin:
                 all_presets.append((lib_name, preset_name, preset_data))
 
         if not all_presets:
-            messagebox.showinfo("No Presets",
-                "No presets yet. Create one in File > Presets.")
+            messagebox.showinfo(_("No Presets"),
+                _("No presets yet. Create one in File > Presets."))
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Load Preset")
+        dlg.title(_("Load Preset"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -2263,14 +2261,14 @@ class TonerTabMixin:
                               font=("Helvetica", 10))
         listbox.pack(fill="both", expand=True, pady=(0, 8))
 
-        for lib_name, preset_name, _ in all_presets:
+        for lib_name, preset_name, _data in all_presets:
             listbox.insert(tk.END, f"[{lib_name}] {preset_name}")
 
         def load():
             sel = listbox.curselection()
             if not sel:
                 return
-            lib_name, preset_name, _ = all_presets[sel[0]]
+            lib_name, preset_name, _data = all_presets[sel[0]]
             self._toner_active_library = lib_name
             self._toner_active_preset = preset_name
             self._toner_active_session = None
@@ -2291,8 +2289,8 @@ class TonerTabMixin:
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
-        tk.Button(btn_frame, text="Load", command=load).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(side="left")
+        tk.Button(btn_frame, text=_("Load"), command=load).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(side="left")
 
     def _toner_unload_preset(self):
         """Unload the active preset."""
@@ -2331,7 +2329,7 @@ class TonerTabMixin:
                 display = name[:PRESET_NAME_MAX_DISPLAY] + "..." if len(name) > PRESET_NAME_MAX_DISPLAY else name
                 self._toner_preset_label.configure(text=display, fg="#AAAAAA")
             else:
-                self._toner_preset_label.configure(text="no preset", fg="#666666")
+                self._toner_preset_label.configure(text=_("no preset"), fg="#666666")
         if hasattr(self, '_toner_mic_label'):
             preset = {}
             if self._toner_active_library and self._toner_active_preset:
@@ -2343,11 +2341,11 @@ class TonerTabMixin:
                 mic_text = mm if mm else mt.capitalize()
                 self._toner_mic_label.configure(text=mic_text, fg="#AAAAAA")
             elif preset.get('sandbox'):
-                self._toner_mic_label.configure(text="sandbox", fg="#CC8800")
+                self._toner_mic_label.configure(text=_("sandbox"), fg="#CC8800")
             elif self._toner_active_preset:
-                self._toner_mic_label.configure(text="mic not set", fg="#FF8800")
+                self._toner_mic_label.configure(text=_("mic not set"), fg="#FF8800")
             else:
-                self._toner_mic_label.configure(text="no preset", fg="#666666")
+                self._toner_mic_label.configure(text=_("no preset"), fg="#666666")
         # Sync sandbox checkbox with loaded preset
         if hasattr(self, '_toner_sandbox_var'):
             is_sb = bool(preset.get('sandbox')) if preset else False
@@ -2365,10 +2363,10 @@ class TonerTabMixin:
             lib = self._toner_presets.get(self._toner_active_library, {})
             preset_check = lib.get(self._toner_active_preset, {})
         if not preset_check.get('sandbox') and not preset_check.get('mic_type'):
-            messagebox.showinfo("Mic Type Required",
-                "This preset has no mic type set.\n\n"
+            messagebox.showinfo(_("Mic Type Required"),
+                _("This preset has no mic type set.\n\n"
                 "Use Mutate in File \u2192 Presets to add mic info,\n"
-                "or create a new preset with mic type specified.",
+                "or create a new preset with mic type specified."),
                 parent=self.root)
             return
 
@@ -2416,12 +2414,12 @@ class TonerTabMixin:
             # First time: require user to pick a folder
             if not self.settings.get('toner_recording_dir'):
                 from tkinter import filedialog
-                messagebox.showinfo("Choose Recording Folder",
-                    "WAV recording is enabled but no folder has been chosen.\n\n"
-                    "Please select a folder where recordings will be saved.",
+                messagebox.showinfo(_("Choose Recording Folder"),
+                    _("WAV recording is enabled but no folder has been chosen.\n\n"
+                    "Please select a folder where recordings will be saved."),
                     parent=self.root)
                 folder = filedialog.askdirectory(
-                    title="Choose Recording Folder",
+                    title=_("Choose Recording Folder"),
                     initialdir=os.path.expanduser("~"),
                     parent=self.root)
                 if folder:
@@ -2478,9 +2476,9 @@ class TonerTabMixin:
         self._toner_capture_frame.pack_forget()
         self._toner_update_cal_prompt("")
         if hasattr(self, '_toner_capture_btn'):
-            self._toner_capture_btn.configure(text="Capture")
+            self._toner_capture_btn.configure(text=_("Capture"))
         if hasattr(self, '_toner_pause_btn'):
-            self._toner_pause_btn.configure(text="Pause")
+            self._toner_pause_btn.configure(text=_("Pause"))
 
         # Show coverage summary if we have captures
         if (self._toner_active_session and
@@ -2519,8 +2517,8 @@ class TonerTabMixin:
 
             # Verify file was created
             if not os.path.isfile(filepath) or os.path.getsize(filepath) == 0:
-                messagebox.showwarning("Recording",
-                    "WAV recording failed — file was not created.")
+                messagebox.showwarning(_("Recording"),
+                    _("WAV recording failed — file was not created."))
                 return None
 
             # Store reference in session
@@ -2528,12 +2526,12 @@ class TonerTabMixin:
             self._toner_save_active_session()
 
             if not self.settings.get('toner_wav_reanalyze'):
-                messagebox.showinfo("Recording Saved",
-                    f"WAV saved to:\n{filepath}")
+                messagebox.showinfo(_("Recording Saved"),
+                    _("WAV saved to:\n{path}").format(path=filepath))
             return filepath
         except Exception as e:
-            messagebox.showwarning("Recording",
-                f"Could not save WAV recording:\n{e}")
+            messagebox.showwarning(_("Recording"),
+                _("Could not save WAV recording:\n{e}").format(e=e))
             return None
 
     def _toner_reanalyze_from_wav(self, wav_filepath):
@@ -2543,7 +2541,7 @@ class TonerTabMixin:
         live_count = len(self._toner_active_session.get('captures', []))
 
         # Show progress in the capture frame
-        self._toner_capture_label.configure(text="Performing WAV analysis...")
+        self._toner_capture_label.configure(text=_("Performing WAV analysis..."))
         self._toner_capture_progress.configure(text="")
         self.root.update_idletasks()
 
@@ -2556,14 +2554,14 @@ class TonerTabMixin:
             captures = analyze_audio_file(wav_filepath, self._toner_engine,
                                           progress_cb=on_progress)
         except Exception as e:
-            messagebox.showwarning("WAV Analysis",
-                f"WAV analysis failed, keeping live captures:\n{e}")
+            messagebox.showwarning(_("WAV Analysis"),
+                _("WAV analysis failed, keeping live captures:\n{e}").format(e=e))
             return
 
         if not captures:
-            messagebox.showinfo("WAV Analysis",
-                "WAV analysis found no stable segments.\n"
-                "Keeping live captures.")
+            messagebox.showinfo(_("WAV Analysis"),
+                _("WAV analysis found no stable segments.\n"
+                "Keeping live captures."))
             return
 
         # Stamp captures with metadata
@@ -2589,7 +2587,7 @@ class TonerTabMixin:
             except OSError:
                 msg += "\nCould not delete WAV file."
 
-        messagebox.showinfo("WAV Analysis Complete", msg)
+        messagebox.showinfo(_("WAV Analysis Complete"), msg)
 
     def _toner_show_coverage_summary(self):
         """Show a coverage summary with note distribution and resume option."""
@@ -2608,7 +2606,7 @@ class TonerTabMixin:
             _cov_preset = lib.get(self._toner_active_preset)
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Capture Summary")
+        dlg.title(_("Capture Summary"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
 
@@ -2618,7 +2616,7 @@ class TonerTabMixin:
         frame.pack(fill="both", expand=True)
 
         preset_name = self._toner_active_preset or "?"
-        tk.Label(frame, text=f"Session: {preset_name}", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Session: {name}").format(name=preset_name), bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
 
         # Count captures per note
@@ -2627,7 +2625,7 @@ class TonerTabMixin:
         total = len(captures)
         unique = len(note_counts)
 
-        tk.Label(frame, text=f"{total} captures across {unique} unique notes",
+        tk.Label(frame, text=_("{total} captures across {unique} unique notes").format(total=total, unique=unique),
                  bg=bg, fg=fg, font=("Helvetica", 10)).pack(pady=(0, 10))
 
         # Build note distribution chart
@@ -2721,7 +2719,7 @@ class TonerTabMixin:
             tk.Label(frame, text=gaps, bg=bg, fg="#884400",
                      font=("Helvetica", 9), justify="left").pack(pady=(0, 8))
         else:
-            tk.Label(frame, text="Good coverage across registers!",
+            tk.Label(frame, text=_("Good coverage across registers!"),
                      bg=bg, fg="#006600",
                      font=("Helvetica", 9)).pack(pady=(0, 8))
 
@@ -2751,9 +2749,9 @@ class TonerTabMixin:
                         "stuffy, free-blowing, anything you noticed.")
 
         def discard():
-            if messagebox.askyesno("Discard Session",
-                    "Discard all captures from this session?\n\n"
-                    "This cannot be undone.", parent=dlg):
+            if messagebox.askyesno(_("Discard Session"),
+                    _("Discard all captures from this session?\n\n"
+                    "This cannot be undone."), parent=dlg):
                 # Remove this session's captures from the preset
                 lib = self._toner_active_library
                 preset_name = self._toner_active_preset
@@ -2768,13 +2766,13 @@ class TonerTabMixin:
                 self._toner_active_session = None
                 dlg.destroy()
 
-        tk.Button(btn_frame, text="Resume Capturing",
+        tk.Button(btn_frame, text=_("Resume Capturing"),
                   command=resume).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Done",
+        tk.Button(btn_frame, text=_("Done"),
                   command=done_with_notes).pack(side="left", padx=(0, 5))
 
         # Discard button — far right, separated
-        tk.Button(btn_frame, text="Discard Session", fg="#CC0000",
+        tk.Button(btn_frame, text=_("Discard Session"), fg="#CC0000",
                   font=("Helvetica", 8),
                   command=discard).pack(side="right")
 
@@ -2784,15 +2782,15 @@ class TonerTabMixin:
             # Resume
             self._toner_capture_state = self._toner_paused_state
             self._toner_paused = False
-            self._toner_pause_btn.configure(text="Pause")
-            self._toner_capture_label.configure(text="Resumed...")
+            self._toner_pause_btn.configure(text=_("Pause"))
+            self._toner_capture_label.configure(text=_("Resumed..."))
         else:
             # Pause
             self._toner_paused_state = self._toner_capture_state
             self._toner_capture_state = 'paused'
             self._toner_paused = True
-            self._toner_pause_btn.configure(text="Resume")
-            self._toner_capture_label.configure(text="Paused")
+            self._toner_pause_btn.configure(text=_("Resume"))
+            self._toner_capture_label.configure(text=_("Paused"))
             self._toner_update_cal_prompt("PAUSED")
 
     def _toner_process_capture_frame(self, result):
@@ -2840,13 +2838,12 @@ class TonerTabMixin:
             if self._toner_stable_note:
                 disp = self._toner_transpose_note(self._toner_stable_note)
                 self._toner_capture_label.configure(
-                    text=f"Free: {disp} "
-                         f"({self._toner_stable_count} frames)")
+                    text=_("Free: {note} ({count} frames)").format(note=disp, count=self._toner_stable_count))
             else:
                 self._toner_capture_label.configure(
-                    text="Free mode \u2014 play anything...")
+                    text=_("Free mode \u2014 play anything..."))
             self._toner_capture_progress.configure(
-                text=f"({len(notes_so_far)} notes captured)")
+                text=_("({count} notes captured)").format(count=len(notes_so_far)))
             return
 
         # --- CAL COUNTDOWN: 10-second prep before calibration starts ---
@@ -2855,7 +2852,7 @@ class TonerTabMixin:
             remaining = CAL_COUNTDOWN_S - elapsed
             if remaining > 0:
                 self._toner_capture_label.configure(
-                    text=f"Calibration starting in {remaining:.0f}s... get ready")
+                    text=_("Calibration starting in {seconds:.0f}s... get ready").format(seconds=remaining))
                 self._toner_update_cal_prompt(f"{remaining:.0f}s", "get ready...")
                 return
             # Countdown done — start calibration
@@ -2863,8 +2860,8 @@ class TonerTabMixin:
             cal_notes = self._toner_cal_notes
             first_note = cal_notes[0]
             self._toner_capture_label.configure(
-                text=f"Play {first_note} (1/{len(cal_notes)})")
-            self._toner_capture_progress.configure(text="waiting...")
+                text=_("Play {note} (1/{total})").format(note=first_note, total=len(cal_notes)))
+            self._toner_capture_progress.configure(text=_("waiting..."))
             self._toner_update_cal_prompt(first_note)
             return
 
@@ -2874,9 +2871,8 @@ class TonerTabMixin:
             if self._toner_cal_index >= len(cal_notes):
                 self._toner_update_cal_prompt("")
                 self._toner_stop_capture()
-                messagebox.showinfo("Calibration Complete",
-                    f"Calibration capture finished!\n"
-                    f"{len(cal_notes)} notes recorded.")
+                messagebox.showinfo(_("Calibration Complete"),
+                    _("Calibration capture finished!\n{count} notes recorded.").format(count=len(cal_notes)))
                 return
 
             # Notes are already in written pitch — display directly
@@ -2892,12 +2888,12 @@ class TonerTabMixin:
                     self._toner_capture_start = time.time()
                     self._toner_capture_frames = []
                     self._toner_capture_label.configure(
-                        text=f"Recording {display_note}... ({note_num}/{total})")
+                        text=_("Recording {note}... ({i}/{total})").format(note=display_note, i=note_num, total=total))
                     self._toner_update_cal_prompt(display_note, "recording...")
                 else:
                     self._toner_capture_label.configure(
-                        text=f"Play {display_note} ({note_num}/{total})")
-                    self._toner_capture_progress.configure(text="waiting...")
+                        text=_("Play {note} ({i}/{total})").format(note=display_note, i=note_num, total=total))
+                    self._toner_capture_progress.configure(text=_("waiting..."))
                     self._toner_update_cal_prompt(display_note, f"({note_num}/{total})")
                 return
 
@@ -2922,9 +2918,9 @@ class TonerTabMixin:
             remaining = CALIBRATION_DURATION_S - elapsed
             n_frames = len(self._toner_capture_frames)
             self._toner_capture_label.configure(
-                text=f"Recording {display_note}... {remaining:.1f}s ({note_num}/{total})")
+                text=_("Recording {note}... {seconds:.1f}s ({i}/{total})").format(note=display_note, seconds=remaining, i=note_num, total=total))
             self._toner_capture_progress.configure(
-                text=f"({n_frames} frames)")
+                text=_("({count} frames)").format(count=n_frames))
             self._toner_update_cal_prompt(display_note, f"recording {remaining:.0f}s")
 
             if remaining <= 0:
@@ -2971,7 +2967,7 @@ class TonerTabMixin:
                 self._toner_capture_frames = []
                 self._toner_capture_state = 'cal_pause'
                 self._toner_capture_label.configure(
-                    text=f"Captured {display_note} \u2713  stop playing...")
+                    text=_("Captured {note} ✓  stop playing...").format(note=display_note))
                 self._toner_capture_progress.configure(text="")
                 self._toner_update_cal_prompt("\u2713", "stop playing...")
             return
@@ -2990,8 +2986,8 @@ class TonerTabMixin:
                     note_num = self._toner_cal_index + 1
                     total = len(cal_notes)
                     self._toner_capture_label.configure(
-                        text=f"Play {next_note} ({note_num}/{total})")
-                    self._toner_capture_progress.configure(text="waiting...")
+                        text=_("Play {note} ({i}/{total})").format(note=next_note, i=note_num, total=total))
+                    self._toner_capture_progress.configure(text=_("waiting..."))
                     self._toner_update_cal_prompt(next_note, f"({note_num}/{total})")
             return
 
@@ -3076,7 +3072,7 @@ class TonerTabMixin:
     def _toner_show_rolloff_warning(self, avg_rate):
         """Show rolloff warning with option to suppress for this preset."""
         warn_dlg = tk.Toplevel(self.root)
-        warn_dlg.title("Recording Quality")
+        warn_dlg.title(_("Recording Quality"))
         warn_dlg.transient(self.root)
         warn_dlg.grab_set()
         warn_dlg.resizable(False, False)
@@ -3086,24 +3082,17 @@ class TonerTabMixin:
         frame = tk.Frame(warn_dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="\u26a0 Recording Quality", bg=bg, fg=fg,
+        tk.Label(frame, text=_("\u26a0 Recording Quality"), bg=bg, fg=fg,
                  font=("Helvetica", 11, "bold")).pack(anchor="w", pady=(0, 8))
 
         tk.Label(frame,
-                 text=f"Upper harmonics are dropping off steeply "
-                      f"({avg_rate:.1f} dB/harmonic).\n\n"
-                      f"This can be caused by:\n"
-                      f"  \u2022  Microphone too far from the bell\n"
-                      f"  \u2022  Built-in laptop mic\n"
-                      f"  \u2022  Playing technique (subtone, soft dynamics)\n\n"
-                      f"For best results, use an external condenser mic\n"
-                      f"2\u20133 feet from the bell.",
+                 text=_("Upper harmonics are dropping off steeply ({rate:.1f} dB/harmonic).\n\nThis can be caused by:\n  •  Microphone too far from the bell\n  •  Built-in laptop mic\n  •  Playing technique (subtone, soft dynamics)\n\nFor best results, use an external condenser mic\n2–3 feet from the bell.").format(rate=avg_rate),
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(anchor="w", pady=(0, 10))
 
         suppress_var = tk.BooleanVar(value=False)
         tk.Checkbutton(frame,
-                       text="Don't show this again for this preset",
+                       text=_("Don't show this again for this preset"),
                        variable=suppress_var, bg=bg, fg=fg,
                        font=("Helvetica", 9)).pack(anchor="w", pady=(0, 10))
 
@@ -3117,7 +3106,7 @@ class TonerTabMixin:
                     save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             warn_dlg.destroy()
 
-        tk.Button(frame, text="OK", command=_dismiss,
+        tk.Button(frame, text=_("OK"), command=_dismiss,
                   width=10).pack(anchor="e")
 
     def _toner_schedule_save(self):
@@ -3188,12 +3177,12 @@ class TonerTabMixin:
                     all_presets.append((lib_name, preset_name, preset_data))
 
         if not all_presets:
-            messagebox.showinfo("No Presets",
-                "No presets with captures to analyze.")
+            messagebox.showinfo(_("No Presets"),
+                _("No presets with captures to analyze."))
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Analyze Tone Data")
+        dlg.title(_("Analyze Tone Data"))
         dlg.geometry("600x520")
         dlg.resizable(True, True)
         dlg.minsize(500, 400)
@@ -3205,7 +3194,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select one or more presets or sessions to analyze, compare, or overlay.",
+        tk.Label(frame, text=_("Select one or more presets or sessions to analyze, compare, or overlay."),
                  bg=bg, fg=fg, font=("Helvetica", 10),
                  justify="left").pack(pady=(0, 5))
 
@@ -3267,7 +3256,7 @@ class TonerTabMixin:
         ])
 
         # Text search
-        tk.Label(filter_row2, text="Search:", bg=bg, fg=fg,
+        tk.Label(filter_row2, text=_("Search:"), bg=bg, fg=fg,
                  font=("Helvetica", 8)).pack(side="left", padx=(0, 2))
         search_var = tk.StringVar()
         search_entry = tk.Entry(filter_row2, textvariable=search_var, width=16)
@@ -3417,8 +3406,7 @@ class TonerTabMixin:
                             'session': sess, 'date': date})
                         tk.Checkbutton(
                             list_inner,
-                            text=f"{date}  ({n_caps} caps, "
-                                 f"{len(s_notes)} notes)",
+                            text=_("{date}  ({caps} caps, {notes} notes)").format(date=date, caps=n_caps, notes=len(s_notes)),
                             variable=svar, bg=bg, fg="#555555",
                             selectcolor=bg, activebackground=bg,
                             anchor="w", font=("Helvetica", 9),
@@ -3434,9 +3422,9 @@ class TonerTabMixin:
         def _deselect_all():
             for v in check_vars:
                 v.set(False)
-        tk.Button(sel_frame, text="Select All", font=("Helvetica", 8),
+        tk.Button(sel_frame, text=_("Select All"), font=("Helvetica", 8),
                   command=_select_all).pack(side="left", padx=(0, 4))
-        tk.Button(sel_frame, text="Deselect All", font=("Helvetica", 8),
+        tk.Button(sel_frame, text=_("Deselect All"), font=("Helvetica", 8),
                   command=_deselect_all).pack(side="left")
 
         btn_frame = tk.Frame(frame, bg=bg)
@@ -3469,8 +3457,8 @@ class TonerTabMixin:
             """Open analysis window for selected profiles/sessions."""
             selected = get_selected()
             if not selected:
-                messagebox.showinfo("Select",
-                    "Select at least one preset or session.", parent=dlg)
+                messagebox.showinfo(_("Select"),
+                    _("Select at least one preset or session."), parent=dlg)
                 return
             # Cross-sax-type warning. Mixing alto + tenor + bari + soprano
             # in the same comparison is allowed but the readings get
@@ -3483,17 +3471,8 @@ class TonerTabMixin:
                 for fp in selected))
             if len(sax_types_in_selection) > 1:
                 proceed = messagebox.askyesno(
-                    "Mixed Sax Types",
-                    "You're comparing presets across different sax types "
-                    f"({', '.join(sax_types_in_selection)}).\n\n"
-                    "Lower-pitched horns intrinsically read warmer and "
-                    "brighter on most descriptors, regardless of "
-                    "mouthpiece or player. Cross-type comparisons mostly "
-                    "reflect that physics, not the tonal character of "
-                    "the instruments.\n\n"
-                    "The Character Map and descriptor table are most "
-                    "reliable when comparing within a single sax type.\n\n"
-                    "Continue anyway?",
+                    _("Mixed Sax Types"),
+                    _("You're comparing presets across different sax types ({types}).\n\nLower-pitched horns intrinsically read warmer and brighter on most descriptors, regardless of mouthpiece or player. Cross-type comparisons mostly reflect that physics, not the tonal character of the instruments.\n\nThe Character Map and descriptor table are most reliable when comparing within a single sax type.\n\nContinue anyway?").format(types=', '.join(sax_types_in_selection)),
                     parent=dlg, icon='warning', default='no')
                 if not proceed:
                     return
@@ -3516,9 +3495,9 @@ class TonerTabMixin:
                     item = check_items[i]
                     preset_list.append((item['name'], item['preset']))
             if len(preset_list) < 2:
-                messagebox.showinfo("Select More",
-                    "Select at least 2 presets to average.\n"
-                    "(Individual sessions are not included in group averages.)",
+                messagebox.showinfo(_("Select More"),
+                    _("Select at least 2 presets to average.\n"
+                    "(Individual sessions are not included in group averages.)"),
                     parent=dlg)
                 return
             # Cross-sax-type warning — averaging across sax types is even
@@ -3528,29 +3507,21 @@ class TonerTabMixin:
                 p.get('horn_type', '') or '?' for _, p in preset_list))
             if len(sax_types_in_selection) > 1:
                 proceed = messagebox.askyesno(
-                    "Mixed Sax Types",
-                    "You're averaging presets across different sax types "
-                    f"({', '.join(sax_types_in_selection)}).\n\n"
-                    "Lower-pitched horns intrinsically read warmer and "
-                    "brighter than higher-pitched horns. Averaging across "
-                    "sax types mixes that physics into a single number "
-                    "with no clear physical interpretation.\n\n"
-                    "Group averages are most meaningful within a single "
-                    "sax type.\n\n"
-                    "Continue anyway?",
+                    _("Mixed Sax Types"),
+                    _("You're averaging presets across different sax types ({types}).\n\nLower-pitched horns intrinsically read warmer and brighter than higher-pitched horns. Averaging across sax types mixes that physics into a single number with no clear physical interpretation.\n\nGroup averages are most meaningful within a single sax type.\n\nContinue anyway?").format(types=', '.join(sax_types_in_selection)),
                     parent=dlg, icon='warning', default='no')
                 if not proceed:
                     return
             dlg.destroy()
             self._toner_show_group_report(preset_list)
 
-        tk.Button(btn_frame, text="Analyze Selected",
+        tk.Button(btn_frame, text=_("Analyze Selected"),
                   command=analyze_selected).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Average Selected",
+        tk.Button(btn_frame, text=_("Average Selected"),
                   command=average_selected).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Clear Overlay",
+        tk.Button(btn_frame, text=_("Clear Overlay"),
                   command=clear_comparison).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel",
+        tk.Button(btn_frame, text=_("Cancel"),
                   command=dlg.destroy).pack(side="right")
 
     def _toner_show_analysis(self, fingerprints, population_stats=None):
@@ -3563,9 +3534,9 @@ class TonerTabMixin:
 
         dlg = tk.Toplevel(self.root)
         if is_single:
-            dlg.title(f"Analyze \u2014 {fingerprints[0].get('_name', '?')}")
+            dlg.title(_("Analyze — {name}").format(name=fingerprints[0].get('_name', '?')))
         else:
-            dlg.title("Analyze \u2014 Comparison")
+            dlg.title(_("Analyze \u2014 Comparison"))
         # Single-preset stays compact; comparison view needs room for the
         # extra Character Map chart between the harmonic chart and table.
         dlg.geometry("720x950" if len(fingerprints) >= 2 else "720x750")
@@ -3643,8 +3614,8 @@ class TonerTabMixin:
                           for fp in fingerprints)
         if any_sandbox:
             sb_banner = tk.Label(main,
-                text="\u26a0 Sandbox preset \u2014 non-standard setup, "
-                     "compare with caution",
+                text=_("\u26a0 Sandbox preset \u2014 non-standard setup, "
+                     "compare with caution"),
                 bg="#443300", fg="#FFCC00", font=("Helvetica", 9, "bold"),
                 padx=8, pady=4)
             sb_banner.pack(fill="x", pady=(0, 5))
@@ -3654,11 +3625,11 @@ class TonerTabMixin:
         toggle_frame.pack(fill="x", pady=(0, 5))
 
         view_mode = tk.StringVar(value="average")
-        tk.Radiobutton(toggle_frame, text="Horn Average", variable=view_mode,
+        tk.Radiobutton(toggle_frame, text=_("Horn Average"), variable=view_mode,
                         value="average", bg=bg, fg=fg, selectcolor=bg,
                         font=("Helvetica", 10),
                         command=lambda: refresh_all()).pack(side="left", padx=(0, 10))
-        tk.Radiobutton(toggle_frame, text="Per-Note", variable=view_mode,
+        tk.Radiobutton(toggle_frame, text=_("Per-Note"), variable=view_mode,
                         value="per_note", bg=bg, fg=fg, selectcolor=bg,
                         font=("Helvetica", 10),
                         command=lambda: refresh_all()).pack(side="left", padx=(0, 10))
@@ -3675,18 +3646,18 @@ class TonerTabMixin:
         diff_frame = tk.Frame(toggle_frame, bg=bg)
         if len(fingerprints) >= 2:
             diff_frame.pack(side="right", padx=(10, 0))
-            tk.Label(diff_frame, text="Chart:", bg=bg, fg=fg,
+            tk.Label(diff_frame, text=_("Chart:"), bg=bg, fg=fg,
                      font=("Helvetica", 9)).pack(side="left", padx=(0, 4))
-            tk.Radiobutton(diff_frame, text="Overlay", variable=chart_mode,
+            tk.Radiobutton(diff_frame, text=_("Overlay"), variable=chart_mode,
                             value="overlay", bg=bg, fg=fg, selectcolor=bg,
                             font=("Helvetica", 9),
                             command=lambda: refresh_all()).pack(side="left")
-            tk.Radiobutton(diff_frame, text="Bars", variable=chart_mode,
+            tk.Radiobutton(diff_frame, text=_("Bars"), variable=chart_mode,
                             value="bars", bg=bg, fg=fg, selectcolor=bg,
                             font=("Helvetica", 9),
                             command=lambda: refresh_all()).pack(side="left")
             if len(fingerprints) == 2:
-                tk.Radiobutton(diff_frame, text="Difference",
+                tk.Radiobutton(diff_frame, text=_("Difference"),
                                 variable=chart_mode, value="difference",
                                 bg=bg, fg=fg, selectcolor=bg,
                                 font=("Helvetica", 9),
@@ -3695,13 +3666,13 @@ class TonerTabMixin:
         # Scale toggle — visible for single AND multi-preset views.
         scale_frame = tk.Frame(toggle_frame, bg=bg)
         scale_frame.pack(side="right", padx=(10, 0))
-        tk.Label(scale_frame, text="Scale:", bg=bg, fg=fg,
+        tk.Label(scale_frame, text=_("Scale:"), bg=bg, fg=fg,
                  font=("Helvetica", 9)).pack(side="left", padx=(0, 4))
-        tk.Radiobutton(scale_frame, text="dB", variable=scale_mode,
+        tk.Radiobutton(scale_frame, text=_("dB"), variable=scale_mode,
                         value="dB", bg=bg, fg=fg, selectcolor=bg,
                         font=("Helvetica", 9),
                         command=lambda: refresh_all()).pack(side="left")
-        tk.Radiobutton(scale_frame, text="Linear", variable=scale_mode,
+        tk.Radiobutton(scale_frame, text=_("Linear"), variable=scale_mode,
                         value="linear", bg=bg, fg=fg, selectcolor=bg,
                         font=("Helvetica", 9),
                         command=lambda: refresh_all()).pack(side="left")
@@ -3709,7 +3680,7 @@ class TonerTabMixin:
         # Note selector (shown only in per-note mode)
         note_frame = tk.Frame(toggle_frame, bg=bg)
         note_frame.pack(side="left", padx=(10, 0))
-        tk.Label(note_frame, text="Note:", bg=bg, fg=fg,
+        tk.Label(note_frame, text=_("Note:"), bg=bg, fg=fg,
                  font=("Helvetica", 9)).pack(side="left", padx=(0, 4))
 
         # Collect all notes across all profiles
@@ -3731,7 +3702,7 @@ class TonerTabMixin:
         note_combo.bind("<<ComboboxSelected>>", lambda e: refresh_all())
 
         # --- Harmonic chart ---
-        chart_frame = tk.LabelFrame(main, text="Harmonic Data", bg=bg, fg=fg,
+        chart_frame = tk.LabelFrame(main, text=_("Harmonic Data"), bg=bg, fg=fg,
                                      font=("Helvetica", 10, "bold"))
         chart_frame.pack(fill="both", expand=True, pady=(0, 6))
 
@@ -3907,7 +3878,7 @@ class TonerTabMixin:
                                           anchor="e")
 
                 # Axis label
-                chart_cv.create_text(8, h // 2, text="\u0394 dB",
+                chart_cv.create_text(8, h // 2, text=_("\u0394 dB"),
                                       fill="#888888", font=("Helvetica", 7),
                                       angle=90)
             elif is_linear:
@@ -3922,7 +3893,7 @@ class TonerTabMixin:
                                           fill="#888888",
                                           font=("Helvetica", 7), anchor="e")
                 # Axis label so users know what's plotted
-                chart_cv.create_text(8, h // 2, text="amp",
+                chart_cv.create_text(8, h // 2, text=_("amp"),
                                       fill="#888888",
                                       font=("Helvetica", 7), angle=90)
             else:
@@ -3939,7 +3910,7 @@ class TonerTabMixin:
                 chart_cv.create_text(x, h - 5, text=f"{hi + 1}",
                                       fill="#888888", font=("Helvetica", 7))
 
-            chart_cv.create_text(w // 2, h - 2, text="Harmonic #",
+            chart_cv.create_text(w // 2, h - 2, text=_("Harmonic #"),
                                   fill="#888888", font=("Helvetica", 7))
 
             # "No data" message for per-note when a note is missing
@@ -3950,7 +3921,7 @@ class TonerTabMixin:
                           if not d.get('harmonics_db')]
                 if missing:
                     chart_cv.create_text(w // 2, margin_t + 20,
-                        text=f"No data for {note}: {', '.join(missing)}",
+                        text=_("No data for {note}: {missing}").format(note=note, missing=', '.join(missing)),
                         fill="#CC0000", font=("Helvetica", 9))
 
             if is_diff:
@@ -3984,7 +3955,7 @@ class TonerTabMixin:
                     n2 = fingerprints[1]['_name'][:20]
                     chart_cv.create_text(
                         margin_l + 5, margin_t + 8,
-                        text=f"\u2191 {n1} stronger   \u2193 {n2} stronger",
+                        text=_("↑ {n1} stronger   ↓ {n2} stronger").format(n1=n1, n2=n2),
                         fill="#666666", font=("Helvetica", 7), anchor="w")
             elif is_bars:
                 # Grouped bars at each harmonic position, one bar per preset.
@@ -4066,7 +4037,7 @@ class TonerTabMixin:
 
         if len(fingerprints) >= 2:
             quad_frame = tk.LabelFrame(
-                main, text="Character Map (Warmth \u00d7 Brightness)",
+                main, text=_("Character Map (Warmth \u00d7 Brightness)"),
                 bg=bg, fg=fg, font=("Helvetica", 10, "bold"))
             # expand=True so the chart grows when the user enlarges the
             # dialog. The canvas itself also expands.
@@ -4074,7 +4045,7 @@ class TonerTabMixin:
 
             quad_top = tk.Frame(quad_frame, bg=bg)
             quad_top.pack(fill="x", padx=5, pady=(2, 0))
-            tk.Label(quad_top, text="Y axis (brightness):",
+            tk.Label(quad_top, text=_("Y axis (brightness):"),
                       bg=bg, fg=fg, font=("Helvetica", 8)).pack(side="left")
 
             # Default to Complexity. H4-H5 mean is much more correlated
@@ -4138,7 +4109,7 @@ class TonerTabMixin:
                 if not valid_ys:
                     quad_cv.create_text(
                         w // 2, h // 2,
-                        text="No brightness data for selected measure",
+                        text=_("No brightness data for selected measure"),
                         fill="#888888", font=("Helvetica", 9))
                     return
 
@@ -4176,19 +4147,19 @@ class TonerTabMixin:
                 # Quadrant corner labels (faded)
                 quad_cv.create_text(
                     chart_right - 4, chart_top + 4,
-                    text="warm + bright", fill="#BBBBBB",
+                    text=_("warm + bright"), fill="#BBBBBB",
                     font=("Helvetica", 7, "italic"), anchor="ne")
                 quad_cv.create_text(
                     chart_left + 4, chart_top + 4,
-                    text="thin + bright", fill="#BBBBBB",
+                    text=_("thin + bright"), fill="#BBBBBB",
                     font=("Helvetica", 7, "italic"), anchor="nw")
                 quad_cv.create_text(
                     chart_right - 4, chart_bottom - 4,
-                    text="warm + dark", fill="#BBBBBB",
+                    text=_("warm + dark"), fill="#BBBBBB",
                     font=("Helvetica", 7, "italic"), anchor="se")
                 quad_cv.create_text(
                     chart_left + 4, chart_bottom - 4,
-                    text="thin + dark", fill="#BBBBBB",
+                    text=_("thin + dark"), fill="#BBBBBB",
                     font=("Helvetica", 7, "italic"), anchor="sw")
 
                 # X-axis ticks and label
@@ -4199,7 +4170,7 @@ class TonerTabMixin:
                         fill="#888888", font=("Helvetica", 7))
                 quad_cv.create_text(
                     chart_left + cw / 2, chart_bottom + 24,
-                    text="\u2190 thin    Warmth    warm \u2192",
+                    text=_("\u2190 thin    Warmth    warm \u2192"),
                     fill="#666666", font=("Helvetica", 8))
 
                 # Y-axis ticks and label
@@ -4333,7 +4304,7 @@ class TonerTabMixin:
                       for fp in fingerprints]
 
         # --- Analysis text ---
-        analysis_frame = tk.LabelFrame(main, text="Analysis", bg=bg, fg=fg,
+        analysis_frame = tk.LabelFrame(main, text=_("Analysis"), bg=bg, fg=fg,
                                         font=("Helvetica", 10, "bold"))
         analysis_frame.pack(fill="both", expand=True)
         analysis_inner = tk.Frame(analysis_frame, bg=bg)
@@ -4427,10 +4398,7 @@ class TonerTabMixin:
                 pop_note = tk.Frame(table_inner, bg=bg)
                 pop_note.pack(fill="x")
                 tk.Label(pop_note,
-                         text=f"P = percentile among "
-                              f"{population_stats['count']} "
-                              f"{population_stats['sax_type'].lower()} "
-                              f"presets",
+                         text=_("P = percentile among {count} {sax} presets").format(count=population_stats['count'], sax=population_stats['sax_type'].lower()),
                          bg=bg, fg="#999999",
                          font=("Helvetica", 7)).pack(anchor="e")
 
@@ -4438,7 +4406,7 @@ class TonerTabMixin:
             if view_mode.get() == "average":
                 row = tk.Frame(table_inner, bg=bg)
                 row.pack(fill="x")
-                tk.Label(row, text="Rec. Quality", width=label_width, bg=bg,
+                tk.Label(row, text=_("Rec. Quality"), width=label_width, bg=bg,
                          fg=fg, font=label_font, anchor="w").pack(side="left")
                 for rate, mt, st in zip(_rolloff_rates, _mic_types, _sax_types):
                     if not _is_real(rate):
@@ -4463,7 +4431,7 @@ class TonerTabMixin:
 
                 row2 = tk.Frame(table_inner, bg=bg)
                 row2.pack(fill="x")
-                tk.Label(row2, text="Mic Type", width=label_width, bg=bg,
+                tk.Label(row2, text=_("Mic Type"), width=label_width, bg=bg,
                          fg=fg, font=label_font, anchor="w").pack(side="left")
                 for mt in _mic_types:
                     text = mt.capitalize() if mt else "\u2014"
@@ -4776,13 +4744,13 @@ class TonerTabMixin:
                 fp = fingerprints[0]
                 self._toner_set_overlay(fp, fp.get('_name', 'Analysis'))
                 dlg.destroy()
-            tk.Button(btn_row, text="Overlay on Spectrum",
+            tk.Button(btn_row, text=_("Overlay on Spectrum"),
                       command=overlay_from_analysis).pack(
                           side="left", padx=(0, 5))
         def back_to_selection():
             dlg.destroy()
             self._toner_open_analyze_dialog()
-        tk.Button(btn_row, text="\u2190 Back",
+        tk.Button(btn_row, text=_("\u2190 Back"),
                   command=back_to_selection).pack(side="left", padx=(0, 5))
 
         # Maximize toggle — backup for users on Windows where the title bar's
@@ -4804,10 +4772,10 @@ class TonerTabMixin:
                     sw = dlg.winfo_screenwidth()
                     sh = dlg.winfo_screenheight()
                     dlg.geometry(f"{sw - 40}x{sh - 80}+20+20")
-        tk.Button(btn_row, text="Maximize",
+        tk.Button(btn_row, text=_("Maximize"),
                   command=toggle_maximize).pack(side="left", padx=(0, 5))
 
-        tk.Button(btn_row, text="Close",
+        tk.Button(btn_row, text=_("Close"),
                   command=dlg.destroy).pack(side="left")
 
     # ------------------------------------------------------------------
@@ -4822,12 +4790,12 @@ class TonerTabMixin:
         """
         grp = compute_group_fingerprint(preset_list)
         if grp['preset_count'] == 0:
-            messagebox.showinfo("No Data",
-                "Selected presets have no captures.")
+            messagebox.showinfo(_("No Data"),
+                _("Selected presets have no captures."))
             return
 
         dlg = tk.Toplevel(self.root)
-        dlg.title("Group Average")
+        dlg.title(_("Group Average"))
         dlg.geometry("720x650")
         # Same reasoning as the Analyze dialog: skip transient so the user
         # gets the maximize button and an independent taskbar entry, and
@@ -4876,18 +4844,18 @@ class TonerTabMixin:
         main = main_pad
 
         # --- Header ---
-        tk.Label(main, text=f"Group Average: {grp['preset_count']} presets",
+        tk.Label(main, text=_("Group Average: {count} presets").format(count=grp['preset_count']),
                  bg=bg, fg=fg,
                  font=("Helvetica", 13, "bold")).pack(anchor="w")
-        names = [n for n, _ in preset_list]
+        names = [n for n, _pd in preset_list]
         tk.Label(main, text=", ".join(names), bg=bg, fg=fg,
                  font=("Helvetica", 9), wraplength=680,
                  justify="left").pack(anchor="w")
-        tk.Label(main, text=f"{grp['total_captures']} total captures",
+        tk.Label(main, text=_("{count} total captures").format(count=grp['total_captures']),
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 8))
 
         # --- Descriptors with ± stdev ---
-        desc_frame = tk.LabelFrame(main, text="Group Descriptors",
+        desc_frame = tk.LabelFrame(main, text=_("Group Descriptors"),
                                     bg=bg, fg=fg,
                                     font=("Helvetica", 10, "bold"))
         desc_frame.pack(fill="x", pady=(0, 8))
@@ -4912,7 +4880,7 @@ class TonerTabMixin:
                      font=("Helvetica", 8)).pack()
 
         # --- Harmonic chart: group average + individual profiles ---
-        chart_frame = tk.LabelFrame(main, text="Harmonic Data",
+        chart_frame = tk.LabelFrame(main, text=_("Harmonic Data"),
                                      bg=bg, fg=fg,
                                      font=("Helvetica", 10, "bold"))
         chart_frame.pack(fill="both", expand=True, pady=(0, 8))
@@ -4945,7 +4913,7 @@ class TonerTabMixin:
                                       anchor="e")
 
             max_h = max((len(fp.get('harmonics_db', []))
-                         for _, fp in grp['per_preset']),
+                         for _n, fp in grp['per_preset']),
                         default=0)
             max_h = max(max_h, len(grp.get('harmonics_db', [])))
             if max_h < 2:
@@ -4989,10 +4957,10 @@ class TonerTabMixin:
                                        legend_x + 10, legend_y + 10,
                                        fill="#000000", outline="")
             chart_cv.create_text(legend_x + 14, legend_y + 4,
-                                  text="Average", fill="#000000",
+                                  text=_("Average"), fill="#000000",
                                   font=("Helvetica", 7), anchor="w")
             legend_y += 16
-            for idx, (name, _) in enumerate(grp['per_preset']):
+            for idx, (name, _fp) in enumerate(grp['per_preset']):
                 color = chart_colors[idx % len(chart_colors)]
                 chart_cv.create_rectangle(legend_x - 2, legend_y - 2,
                                            legend_x + 10, legend_y + 10,
@@ -5006,7 +4974,7 @@ class TonerTabMixin:
         chart_cv.bind("<Configure>", draw_group_chart)
 
         # --- Per-preset breakdown table ---
-        tbl_frame = tk.LabelFrame(main, text="Per-Preset Breakdown",
+        tbl_frame = tk.LabelFrame(main, text=_("Per-Preset Breakdown"),
                                    bg=bg, fg=fg,
                                    font=("Helvetica", 10, "bold"))
         tbl_frame.pack(fill="x", pady=(0, 8))
@@ -5070,7 +5038,7 @@ class TonerTabMixin:
             menu = tk.Menu(dlg, tearoff=0)
             # Group average option
             menu.add_command(
-                label=f"Group Average ({grp['preset_count']} presets)",
+                label=_("Group Average ({count} presets)").format(count=grp['preset_count']),
                 command=lambda: [
                     self._toner_set_overlay(
                         grp, f"Group avg ({grp['preset_count']} presets)"),
@@ -5085,12 +5053,12 @@ class TonerTabMixin:
             menu.tk_popup(btn_row.winfo_rootx(),
                           btn_row.winfo_rooty() - menu.index("end") * 20)
 
-        tk.Button(btn_row, text="Overlay on Spectrum...",
+        tk.Button(btn_row, text=_("Overlay on Spectrum..."),
                   command=overlay_pick).pack(side="left", padx=(0, 5))
         def back_to_selection():
             dlg.destroy()
             self._toner_open_analyze_dialog()
-        tk.Button(btn_row, text="\u2190 Back",
+        tk.Button(btn_row, text=_("\u2190 Back"),
                   command=back_to_selection).pack(side="left", padx=(0, 5))
 
         # Maximize toggle — backup for users on Windows where the title bar's
@@ -5112,10 +5080,10 @@ class TonerTabMixin:
                     sw = dlg.winfo_screenwidth()
                     sh = dlg.winfo_screenheight()
                     dlg.geometry(f"{sw - 40}x{sh - 80}+20+20")
-        tk.Button(btn_row, text="Maximize",
+        tk.Button(btn_row, text=_("Maximize"),
                   command=toggle_maximize).pack(side="left", padx=(0, 5))
 
-        tk.Button(btn_row, text="Close",
+        tk.Button(btn_row, text=_("Close"),
                   command=dlg.destroy).pack(side="left")
 
     # ------------------------------------------------------------------
@@ -5135,14 +5103,8 @@ class TonerTabMixin:
             self._toner_mic_checked = True
             is_builtin, dev_name = check_mic_quality()
             if is_builtin:
-                messagebox.showwarning("Microphone Notice",
-                    f"Your input device appears to be a built-in microphone "
-                    f"(\"{dev_name}\").\n\n"
-                    "Built-in mics often have poor low-frequency response, "
-                    "which can cause inaccurate readings \u2014 especially "
-                    "in the low register.\n\n"
-                    "For best results, use a condenser mic such as the "
-                    "Audio-Technica AT2020 USB.")
+                messagebox.showwarning(_("Microphone Notice"),
+                    _('Your input device appears to be a built-in microphone ("{device}").\n\nBuilt-in mics often have poor low-frequency response, which can cause inaccurate readings — especially in the low register.\n\nFor best results, use a condenser mic such as the Audio-Technica AT2020 USB.').format(device=dev_name))
 
         device = self.settings.get("audio_input_device")
         if sys.platform == 'linux':
@@ -5153,7 +5115,7 @@ class TonerTabMixin:
                 self._toner_spectrum_canvas.create_text(
                     self._toner_spectrum_canvas.winfo_width() / 2,
                     self._toner_spectrum_canvas.winfo_height() / 2,
-                    text=f"Audio error: {err}",
+                    text=_("Audio error: {err}").format(err=err),
                     fill="#FF4444", font=("Helvetica", 12),
                     tags="error"
                 )
@@ -5198,11 +5160,11 @@ class TonerTabMixin:
                     self._toner_engine._spectral_check_frames >= SPECTRAL_CHECK_FRAME_COUNT):
                 if self._toner_engine.check_spectral_quality():
                     self._toner_engine._mic_quality_warned = True
-                    messagebox.showwarning("Microphone Quality",
-                        "Your microphone appears to have poor low-frequency "
+                    messagebox.showwarning(_("Microphone Quality"),
+                        _("Your microphone appears to have poor low-frequency "
                         "response. Low register readings may be inaccurate.\n\n"
                         "For best results, use a condenser mic such as the "
-                        "Audio-Technica AT2020 USB.")
+                        "Audio-Technica AT2020 USB."))
 
             # Update session lamp
             self._toner_update_session_lamp()
@@ -5216,7 +5178,7 @@ class TonerTabMixin:
                 self._toner_note_label.configure(
                     text=display_note, fg=LABEL_BRIGHT)
                 self._toner_freq_label.configure(
-                    text=f"{result.fundamental_freq:.1f} Hz")
+                    text=_("{freq:.1f} Hz").format(freq=result.fundamental_freq))
                 self._toner_update_intonation(result.fundamental_cents)
             else:
                 self._toner_note_label.configure(text="\u2014", fg=LABEL_DIM)
@@ -5244,7 +5206,7 @@ class TonerTabMixin:
             c.create_text(cx, cy - 15, text=error_msg,
                           fill="#FF4444", font=("Helvetica", 12),
                           tags="error")
-            c.create_text(cx, cy + 15, text="Click here to retry",
+            c.create_text(cx, cy + 15, text=_("Click here to retry"),
                           fill="#4488FF", font=("Helvetica", 11, "underline"),
                           tags=("error", "error_retry"))
             c.tag_bind("error_retry", "<Button-1>",
@@ -5269,12 +5231,12 @@ class TonerTabMixin:
         from tkinter import filedialog
 
         if not self._toner_engine:
-            messagebox.showerror("Error", "Toner engine not available.")
+            messagebox.showerror(_("Error"), _("Toner engine not available."))
             return
 
         # Step 1: Select the audio file first
         filepath = filedialog.askopenfilename(
-            title="Select Audio File to Analyze",
+            title=_("Select Audio File to Analyze"),
             filetypes=(("WAV files", "*.wav"), ("All files", "*.*"))
         )
         if not filepath:
@@ -5284,7 +5246,7 @@ class TonerTabMixin:
 
         # Step 2: Profile setup dialog (create or select, with source info)
         dlg = tk.Toplevel(self.root)
-        dlg.title("Import Audio File")
+        dlg.title(_("Import Audio File"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -5294,10 +5256,10 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text=f"Import: {filename}", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Import: {filename}").format(filename=filename), bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        tk.Label(frame, text="Select a preset for this recording, or create one.\n"
-                 "Add notes about the source (who, when, where recorded).",
+        tk.Label(frame, text=_("Select a preset for this recording, or create one.\n"
+                 "Add notes about the source (who, when, where recorded)."),
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
@@ -5315,7 +5277,7 @@ class TonerTabMixin:
         use_existing = tk.BooleanVar(value=bool(all_presets))
 
         if all_presets:
-            tk.Radiobutton(preset_frame, text="Existing preset:",
+            tk.Radiobutton(preset_frame, text=_("Existing preset:"),
                            variable=use_existing, value=True,
                            bg=bg, fg=fg, font=("Helvetica", 10)).pack(
                                anchor="w")
@@ -5327,12 +5289,12 @@ class TonerTabMixin:
                                       width=40)
             preset_combo.pack(anchor="w", padx=(20, 0), pady=(0, 5))
 
-        tk.Radiobutton(preset_frame, text="Create new preset...",
+        tk.Radiobutton(preset_frame, text=_("Create new preset..."),
                        variable=use_existing, value=False,
                        bg=bg, fg=fg, font=("Helvetica", 10)).pack(anchor="w")
 
         # Source notes
-        tk.Label(frame, text="Source notes:", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Source notes:"), bg=bg, fg=fg,
                  font=("Helvetica", 10)).pack(anchor="w", pady=(5, 2))
         source_notes_var = tk.StringVar(value=f"Imported from {filename}")
         tk.Entry(frame, textvariable=source_notes_var, width=45).pack(
@@ -5350,8 +5312,8 @@ class TonerTabMixin:
                         selected = (lib, name)
                         break
                 if not selected:
-                    messagebox.showinfo("Select Preset",
-                        "Select a preset from the list.", parent=dlg)
+                    messagebox.showinfo(_("Select Preset"),
+                        _("Select a preset from the list."), parent=dlg)
                     return
 
                 self._toner_active_library = selected[0]
@@ -5386,16 +5348,16 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(5, 0))
-        tk.Button(btn_row, text="Import && Analyze",
+        tk.Button(btn_row, text=_("Import && Analyze"),
                   command=do_import).pack(side="left", padx=(0, 5))
-        tk.Button(btn_row, text="Cancel",
+        tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
 
     def _toner_new_preset_flow_then_import(self):
         """Create a new preset, then import the pending file."""
         # Reuse the existing new preset flow but override the callback
         dlg = tk.Toplevel(self.root)
-        dlg.title("New Tone Preset")
+        dlg.title(_("New Tone Preset"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -5405,9 +5367,9 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Create Tone Preset for Audio Import", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Create Tone Preset for Audio Import"), bg=bg, fg=fg,
                  font=("Helvetica", 12, "bold")).pack(pady=(0, 5))
-        tk.Label(frame, text="Describe the horn and setup heard in the recording.",
+        tk.Label(frame, text=_("Describe the horn and setup heard in the recording."),
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(pady=(0, 10))
 
         fields = {}
@@ -5432,7 +5394,7 @@ class TonerTabMixin:
         # Library selector
         lib_row = tk.Frame(frame, bg=bg)
         lib_row.pack(fill="x", pady=2)
-        tk.Label(lib_row, text="Library:", bg=bg, fg=fg, width=14,
+        tk.Label(lib_row, text=_("Library:"), bg=bg, fg=fg, width=14,
                  anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
         existing_libs = [k for k in self._toner_presets.keys()
                         if isinstance(self._toner_presets[k], dict)]
@@ -5455,7 +5417,7 @@ class TonerTabMixin:
         # Notes — multi-line
         notes_row = tk.Frame(frame, bg=bg)
         notes_row.pack(fill="x", pady=2)
-        tk.Label(notes_row, text="Notes:", bg=bg, fg=fg, width=14,
+        tk.Label(notes_row, text=_("Notes:"), bg=bg, fg=fg, width=14,
                  anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
         notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
         notes_text.pack(side="left", fill="x", expand=True)
@@ -5464,15 +5426,15 @@ class TonerTabMixin:
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
             if not name:
-                messagebox.showwarning("Name Required",
-                    "Please enter a preset name.", parent=dlg)
+                messagebox.showwarning(_("Name Required"),
+                    _("Please enter a preset name."), parent=dlg)
                 return
 
             if lib not in self._toner_presets:
                 self._toner_presets[lib] = {}
             if name in self._toner_presets[lib]:
-                messagebox.showwarning("Duplicate",
-                    f"'{name}' already exists in '{lib}'.", parent=dlg)
+                messagebox.showwarning(_("Duplicate"),
+                    _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
                 return
 
             self._toner_presets[lib][name] = {
@@ -5516,9 +5478,9 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_row, text="Create && Import",
+        tk.Button(btn_row, text=_("Create && Import"),
                   command=save_and_import).pack(side="left", padx=(0, 5))
-        tk.Button(btn_row, text="Cancel",
+        tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
 
     def _toner_do_file_import(self, filepath, source_notes=""):
@@ -5529,7 +5491,7 @@ class TonerTabMixin:
         self._toner_capture_frame.pack(fill="x", padx=5,
             before=self._toner_main_frame.winfo_children()[-1])
         self._toner_capture_label.configure(
-            text=f"Analyzing {filename}...")
+            text=_("Analyzing {filename}...").format(filename=filename))
         self._toner_capture_progress.configure(text="")
         self.root.update_idletasks()
 
@@ -5543,16 +5505,16 @@ class TonerTabMixin:
                                           progress_cb=on_progress)
         except Exception as e:
             self._toner_capture_frame.pack_forget()
-            messagebox.showerror("Import Error", f"Could not analyze file:\n{e}")
+            messagebox.showerror(_("Import Error"), _("Could not analyze file:\n{e}").format(e=e))
             return
 
         self._toner_capture_frame.pack_forget()
 
         if not captures:
-            messagebox.showinfo("No Data",
-                "No stable note segments found in the file.\n"
+            messagebox.showinfo(_("No Data"),
+                _("No stable note segments found in the file.\n"
                 "The file may be too short, too quiet, or contain no "
-                "sustained tones.")
+                "sustained tones."))
             return
 
         for cap in captures:
@@ -5580,10 +5542,8 @@ class TonerTabMixin:
         # Transpose note names for display
         display_notes = sorted(
             self._toner_transpose_note(n) for n in notes)
-        messagebox.showinfo("File Imported",
-            f"Extracted {len(captures)} note segments from '{filename}'.\n"
-            f"Notes found: {', '.join(display_notes)}\n\n"
-            f"Preset now has {len(total_notes)} unique notes total.")
+        messagebox.showinfo(_("File Imported"),
+            _("Extracted {count} note segments from '{filename}'.\nNotes found: {notes}\n\nPreset now has {total} unique notes total.").format(count=len(captures), filename=filename, notes=', '.join(display_notes), total=len(total_notes)))
 
     def _toner_export_presets(self):
         """Export selected tone profiles to a JSON file."""
@@ -5598,12 +5558,12 @@ class TonerTabMixin:
                 all_presets.append((lib_name, preset_name, preset_data))
 
         if not all_presets:
-            messagebox.showinfo("Nothing to Export", "No tone presets to export.")
+            messagebox.showinfo(_("Nothing to Export"), _("No tone presets to export."))
             return
 
         # Selection dialog
         dlg = tk.Toplevel(self.root)
-        dlg.title("Export Tone Presets")
+        dlg.title(_("Export Tone Presets"))
         dlg.resizable(False, False)
         dlg.transient(self.root)
         dlg.grab_set()
@@ -5613,7 +5573,7 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Select presets to export:", bg=bg, fg=fg,
+        tk.Label(frame, text=_("Select presets to export:"), bg=bg, fg=fg,
                  font=("Helvetica", 10)).pack(pady=(0, 5))
 
         # Checkboxes
@@ -5626,7 +5586,7 @@ class TonerTabMixin:
             caps = sum(len(s.get('captures', [])) for s in sessions)
             var = tk.BooleanVar(value=True)
             tk.Checkbutton(list_frame,
-                text=f"[{lib_name}] {preset_name} ({caps} captures)",
+                text=_("[{lib}] {name} ({caps} captures)").format(lib=lib_name, name=preset_name, caps=caps),
                 variable=var, bg=bg, font=("Helvetica", 9),
                 anchor="w").pack(fill="x")
             check_vars.append(var)
@@ -5634,10 +5594,10 @@ class TonerTabMixin:
         # Select all / none
         sel_frame = tk.Frame(frame, bg=bg)
         sel_frame.pack(fill="x", pady=(0, 10))
-        tk.Button(sel_frame, text="All", font=("Helvetica", 8),
+        tk.Button(sel_frame, text=_("All"), font=("Helvetica", 8),
                   command=lambda: [v.set(True) for v in check_vars]).pack(
                       side="left", padx=(0, 5))
-        tk.Button(sel_frame, text="None", font=("Helvetica", 8),
+        tk.Button(sel_frame, text=_("None"), font=("Helvetica", 8),
                   command=lambda: [v.set(False) for v in check_vars]).pack(
                       side="left")
 
@@ -5653,14 +5613,14 @@ class TonerTabMixin:
                     count += 1
 
             if not export:
-                messagebox.showinfo("Nothing Selected",
-                    "Select at least one preset to export.", parent=dlg)
+                messagebox.showinfo(_("Nothing Selected"),
+                    _("Select at least one preset to export."), parent=dlg)
                 return
 
             dlg.destroy()
 
             filepath = filedialog.asksaveasfilename(
-                title="Export Tone Presets",
+                title=_("Export Tone Presets"),
                 defaultextension=".json",
                 filetypes=(("JSON files", "*.json"), ("All files", "*.*")),
                 initialfile="toner_data_export.json"
@@ -5672,16 +5632,16 @@ class TonerTabMixin:
                 import json
                 with open(filepath, 'w') as f:
                     json.dump(export, f, indent=2)
-                messagebox.showinfo("Export Successful",
-                    f"Exported {count} presets to:\n{filepath}")
+                messagebox.showinfo(_("Export Successful"),
+                    _("Exported {count} presets to:\n{path}").format(count=count, path=filepath))
             except Exception as e:
-                messagebox.showerror("Export Error", f"Could not export:\n{e}")
+                messagebox.showerror(_("Export Error"), _("Could not export:\n{e}").format(e=e))
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
-        tk.Button(btn_frame, text="Export", command=do_export).pack(
+        tk.Button(btn_frame, text=_("Export"), command=do_export).pack(
             side="left", padx=(0, 5))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy).pack(
+        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(
             side="left")
 
     def _toner_import_presets(self):
@@ -5690,7 +5650,7 @@ class TonerTabMixin:
         import json
 
         filepath = filedialog.askopenfilename(
-            title="Import Tone Presets",
+            title=_("Import Tone Presets"),
             filetypes=(("JSON files", "*.json"), ("All files", "*.*"))
         )
         if not filepath:
@@ -5700,11 +5660,11 @@ class TonerTabMixin:
             with open(filepath, 'r') as f:
                 imported = json.load(f)
         except Exception as e:
-            messagebox.showerror("Import Error", f"Could not read file:\n{e}")
+            messagebox.showerror(_("Import Error"), _("Could not read file:\n{e}").format(e=e))
             return
 
         if not isinstance(imported, dict):
-            messagebox.showerror("Invalid Format", "File is not a valid tone presets export.")
+            messagebox.showerror(_("Invalid Format"), _("File is not a valid tone presets export."))
             return
 
         # Check if flat (old format) or nested (library format)
@@ -5736,8 +5696,8 @@ class TonerTabMixin:
                             count += 1
 
         save_tone_presets(self._toner_presets, TONER_DATA_FILE)
-        messagebox.showinfo("Import Complete",
-            f"Imported {count} new presets/sessions.")
+        messagebox.showinfo(_("Import Complete"),
+            _("Imported {count} new presets/sessions.").format(count=count))
 
     def _toner_save_settings(self):
         """Save toner settings to the settings dict."""
