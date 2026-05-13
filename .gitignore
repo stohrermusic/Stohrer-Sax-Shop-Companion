@@ -54,6 +54,10 @@ cover/
 # Translations
 *.mo
 *.pot
+# Keep our gettext catalog template and compiled .mo files tracked so
+# end-users and frozen builds don't need babel installed.
+!locale/saxshop.pot
+!locale/**/saxshop.mo
 
 # Django stuff:
 *.log
