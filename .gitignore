@@ -211,4 +211,8 @@ marimo/_lsp/
 __marimo__/
 
 # Claude Code workspace settings
-.claude/
+# Claude Code — most of .claude/ is local state; commands are shared.
+# Note: must exclude with .claude/* (not .claude/) so the `!` re-includes work.
+.claude/*
+!.claude/commands/
+!.claude/commands/*.md

@@ -232,9 +232,18 @@ The app stores settings and presets in platform-appropriate locations:
 
 ## Detailed Documentation
 
-Architecture and domain-specific guidance is split across companion files (auto-loaded by Claude Code):
+Architecture and domain-specific guidance is split across companion files imported via `@`-statements below. Claude Code loads them as part of CLAUDE.md's context.
 
 - **CLAUDE-architecture.md** — Module structure, design patterns, settings/presets, error logging, feature set
 - **CLAUDE-engines.md** — Pad generation, G-code, SVG rendering, nesting, strobe tuner, tooling, Phil Noy credit
 - **CLAUDE-toner.md** — Tone analyzer engine, data model, capture modes, analyze tool, WAV recording, calibration
 - **CLAUDE-web.md** — Web data sync, screw specs submission form, related repository
+
+---
+
+## Subsystem imports
+
+@CLAUDE-architecture.md
+@CLAUDE-engines.md
+@CLAUDE-toner.md
+@CLAUDE-web.md
