@@ -798,7 +798,7 @@ class OptionsWindow:
         materials = ['felt', 'card', 'leather', 'exact_size']
         for i, mat in enumerate(materials):
             mat_label = mat.replace('_', ' ').capitalize()
-            mat_lbl = tk.Label(fs_frame, text=f"{mat_label}:", bg=DIALOG_BG)
+            mat_lbl = tk.Label(fs_frame, text=_(mat_label) + ":", bg=DIALOG_BG)
             mat_lbl.grid(row=i, column=0, sticky='w', padx=5, pady=2)
             fvar = tk.DoubleVar(value=self.settings["engraving_font_size"].get(mat, 2.0))
             self.engraving_font_size_vars[mat] = fvar
@@ -890,7 +890,16 @@ class OptionsWindow:
 
         # === Engraving Placement Universal ===
         placement_materials = ['leather', 'darted_leather', 'felt', 'card', 'exact_size']
-        placement_labels = {'darted_leather': 'Darted leather', 'exact_size': 'Exact size'}
+        # Material labels — keep all five as explicit _() literals so pybabel
+        # extracts them. The single-word ones share msgids with pad-maker
+        # material checkboxes already in the catalog.
+        placement_labels = {
+            'leather': _("Leather"),
+            'darted_leather': _("Darted leather"),
+            'felt': _("Felt"),
+            'card': _("Card"),
+            'exact_size': _("Exact size"),
+        }
         placement_help = {
             'leather': "Where the size label sits on plain leather wraps.",
             'darted_leather': "Where the size label sits on darted leather pads.",
@@ -916,7 +925,9 @@ class OptionsWindow:
             self.engraving_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
             rb_out = tk.Radiobutton(frame, text=_("out"), variable=mode_var, value="from_outside", bg=DIALOG_BG)
             rb_out.pack(side="left")
-            rb_in = tk.Radiobutton(frame, text=_("in"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
+            # "int" (not "in") so the msgid doesn't collide with the
+            # inches unit "in" used in tooling/felt-thickness pickers.
+            rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
             rb_ctr = tk.Radiobutton(frame, text=_("ctr"), variable=mode_var, value="centered", bg=DIALOG_BG)
             rb_ctr.pack(side="left")
@@ -970,7 +981,7 @@ class OptionsWindow:
             self.eng_placement_range_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
             rb_out = tk.Radiobutton(frame, text=_("out"), variable=mode_var, value="from_outside", bg=DIALOG_BG)
             rb_out.pack(side="left")
-            rb_in = tk.Radiobutton(frame, text=_("in"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
+            rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
             rb_ctr = tk.Radiobutton(frame, text=_("ctr"), variable=mode_var, value="centered", bg=DIALOG_BG)
             rb_ctr.pack(side="left")
