@@ -13,8 +13,6 @@ import tkinter as tk  # noqa: E402
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
-from config import load_settings  # noqa: E402
-
 
 PASS = "  PASS"
 FAIL = "  FAIL"
