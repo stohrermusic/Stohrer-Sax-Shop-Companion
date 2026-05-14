@@ -854,7 +854,7 @@ msgstr "Mantener forma"
 
 #: main.py:878
 msgid "off"
-msgstr "apagado"
+msgstr "off"
 
 #: main.py:903
 msgid "Please select exactly one material to use Scrap Mode."

@@ -572,14 +572,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.height_entry.insert(0, self.settings["sheet_height"])
         self.height_entry.grid(row=1, column=1, sticky='w')
 
-        # Scrap Mode checkbox and status (right side of sheet frame, centered)
+        # Scrap Mode row — own row beneath the sheet inputs so the label
+        # always fits, even with longer translated labels (e.g. Spanish
+        # "Modo retales") and on narrower window widths. Previously this
+        # was crammed into column 2 between the entries and the d-pad,
+        # which caused the checkbox label to clip and sometimes disappear
+        # entirely on resize.
         scrap_inner_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
-        scrap_inner_frame.grid(row=0, column=2, rowspan=4, sticky='n', padx=(20, 5))
+        scrap_inner_frame.grid(row=4, column=0, columnspan=3, sticky='w',
+                               padx=(5, 0), pady=(8, 0))
 
         self.scrap_mode_var = tk.BooleanVar(value=False)
         tk.Checkbutton(scrap_inner_frame, text=_("Scrap Mode"),
                        variable=self.scrap_mode_var, bg=self.root.cget('bg'),
-                       command=self._toggle_scrap_mode).pack()
+                       command=self._toggle_scrap_mode).pack(side='left')
 
         # Status label (shown when session active)
         self.scrap_status_var = tk.StringVar(value="")
@@ -934,8 +940,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _update_scrap_status_display(self):
         """Update the scrap mode status UI."""
         if self.scrap_mode_var.get():
-            # Show Clear button when scrap mode is checked
-            self.clear_scrap_btn.pack(pady=(2, 0))
+            # Show Clear button when scrap mode is checked. Lay out
+            # horizontally beside the checkbox.
+            self.clear_scrap_btn.pack(side='left', padx=(8, 0))
 
             if self.scrap_session['active']:
                 # Show status when session is active
@@ -947,7 +954,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     count = self.scrap_session['scrap_count']
                     self.scrap_status_var.set(_("{remaining} left ({count} scraps)").format(remaining=remaining, count=count))
                     self.scrap_status_label.config(fg="blue")
-                self.scrap_status_label.pack()
+                self.scrap_status_label.pack(side='left', padx=(8, 0))
             else:
                 # No active session - hide status label
                 self.scrap_status_label.pack_forget()

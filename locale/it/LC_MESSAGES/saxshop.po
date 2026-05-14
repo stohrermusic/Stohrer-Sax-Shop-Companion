@@ -740,7 +740,7 @@ msgstr "Bias del bordo"
 
 #: main.py:619 main.py:878 ui_dialogs.py:921 ui_dialogs.py:975
 msgid "ctr"
-msgstr "centro"
+msgstr "ctr"
 
 #: main.py:636
 msgid "Fit card to paper:"
