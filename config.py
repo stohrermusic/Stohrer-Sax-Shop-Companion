@@ -177,7 +177,7 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.31"
+APP_VERSION = "2.40"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
@@ -613,6 +613,39 @@ DEFAULT_SETTINGS = {
         "holder_layer_count": 6,                  # 5 (2x pin) or 6 (3x pin)
         "holder_sheet_width": "12",
         "holder_sheet_height": "12",
+        # Feeds & Speeds Tester
+        "feeds_speeds_tester": {
+            "material": "Felt",
+            "disc_diameter_mm": 20.0,
+            "speed_value": 180,
+            "speed_sweep": True,
+            "speed_start": 80, "speed_end": 280, "speed_stops": 4,
+            "power_value": 60,
+            "power_sweep": True,
+            "power_start": 30, "power_end": 90, "power_stops": 4,
+            "passes_value": 1,
+            "passes_sweep": False,
+            "passes_start": 1, "passes_end": 3, "passes_stops": 3,
+            "engraving_on": True,
+            # Engraving feed/power for the disc ID labels. Pre-filled from
+            # the selected material's defaults when "Apply material defaults"
+            # is clicked; user can edit freely. The whole point of the tool
+            # is the user may not know their cut settings yet — engraving
+            # is more forgiving, but they should still see and tweak it.
+            "eng_speed_value": 1200,
+            "eng_power_value": 10,
+            "air_assist": True,
+            # When True, every disc in the matrix is duplicated — one with
+            # air on, one with air off — so the user can compare edge quality
+            # side-by-side. Doubles the disc count.
+            "also_test_no_air": False,
+            # Show the layout preview before the save-file dialog opens.
+            # Defaults on because the disc count can balloon with many
+            # sweep stops and users want to eyeball it before committing.
+            "show_preview": True,
+            "sheet_w": "4", "sheet_h": "6", "sheet_unit": "in",
+            "filename": "speed_power_test",
+        },
     },
 
     # FILLED ENGRAVING OPTIONS
