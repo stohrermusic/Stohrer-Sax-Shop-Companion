@@ -30,7 +30,7 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (34 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_pad_notes`, `test_pad_preview`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (37 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
@@ -134,7 +134,7 @@ CI wraps `dist\SaxShopCompanion.exe` into a versioned `SaxShopCompanion-Windows-
 
 ```bash
 python build.py
-iscc /DAppVersion=2.1 installer.iss     # requires Inno Setup 6
+iscc /DAppVersion=2.40 installer.iss    # requires Inno Setup 6
 ```
 
 **Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
@@ -232,9 +232,18 @@ The app stores settings and presets in platform-appropriate locations:
 
 ## Detailed Documentation
 
-Architecture and domain-specific guidance is split across companion files (auto-loaded by Claude Code):
+Architecture and domain-specific guidance is split across companion files imported via `@`-statements below. Claude Code loads them as part of CLAUDE.md's context.
 
 - **CLAUDE-architecture.md** — Module structure, design patterns, settings/presets, error logging, feature set
 - **CLAUDE-engines.md** — Pad generation, G-code, SVG rendering, nesting, strobe tuner, tooling, Phil Noy credit
 - **CLAUDE-toner.md** — Tone analyzer engine, data model, capture modes, analyze tool, WAV recording, calibration
 - **CLAUDE-web.md** — Web data sync, screw specs submission form, related repository
+
+---
+
+## Subsystem imports
+
+@CLAUDE-architecture.md
+@CLAUDE-engines.md
+@CLAUDE-toner.md
+@CLAUDE-web.md

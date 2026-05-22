@@ -1639,3 +1639,95 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
         f.write('\n'.join(gcode_lines))
 
 
+def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filename,
+                                     settings, air_assist=True,
+                                     eng_speed_override=None,
+                                     eng_power_override=None):
+    """
+    Generate G-code for a feeds & speeds test sheet.
+
+    Emits, in order:
+      1. ONE engraving layer containing all disc labels at the engraving
+         speed/power passed via overrides (or the selected material's
+         defaults if overrides are None). The whole point of the tool is
+         that the user may not have dialed in their cut settings yet, so
+         they need explicit control over the engraving feed/power too —
+         otherwise the labels might come out illegible and they'd be unable
+         to identify which disc had which parameters.
+      2. ONE cut layer per disc, named `C{id}`, with each layer's S/F/passes
+         set from that piece's own (speed, power, passes) triple. Distinct
+         layer names keep LightBurn import from collapsing them.
+
+    test_pieces: list of dicts with keys 'id' (str like "01"), 'cx', 'cy',
+                 'diameter' (mm, SVG Y-down coords), 'speed' (mm/min),
+                 'power' (%), 'passes' (int). Optional 'engraving_on'
+                 (default True), 'material' (defaults to 'felt').
+
+    eng_speed_override, eng_power_override: when not None, override the
+    material's engraving defaults for the label engraving layer.
+    """
+    return_speed = settings.get("gcode_return_speed", 1000)
+
+    material_key = test_pieces[0].get('material', 'felt') if test_pieces else 'felt'
+    mat_settings = settings.get("gcode_settings", {}).get(material_key, {})
+    engraving_mode = mat_settings.get("engraving_mode", "line")
+    filled_spacing = mat_settings.get("filled_line_spacing", 0.15)
+    if engraving_mode == "filled":
+        eng_speed = mat_settings.get("filled_engraving_speed", 1000)
+        eng_power = mat_settings.get("filled_engraving_power", 15)
+        eng_passes = mat_settings.get("filled_engraving_passes", 1)
+    else:
+        eng_speed = mat_settings.get("engraving_speed", 1000)
+        eng_power = mat_settings.get("engraving_power", 15)
+        eng_passes = mat_settings.get("engraving_passes", 1)
+    if eng_speed_override is not None:
+        eng_speed = eng_speed_override
+    if eng_power_override is not None:
+        eng_power = eng_power_override
+
+    overscan_mm = 0
+    if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
+
+    # Collect engraving strokes for ALL labels (Y-flipped to G-code coords)
+    engraving_strokes = []
+    for piece in test_pieces:
+        if not piece.get('engraving_on', True):
+            continue
+        label = piece['id']
+        font_size = max(min(piece['diameter'] * 0.3, 5.0), 2.5)
+        cy_gcode = sheet_h_mm - piece['cy']
+        if engraving_mode == "filled":
+            engraving_strokes.extend(
+                get_filled_text_strokes(label, font_size, piece['cx'], cy_gcode, filled_spacing))
+        else:
+            engraving_strokes.extend(
+                get_text_strokes(label, font_size, piece['cx'], cy_gcode))
+
+    gcode_lines = []
+    gcode_lines.extend(generate_gcode_header(0, 0, sheet_w_mm, sheet_h_mm))
+
+    if engraving_strokes:
+        gcode_lines.extend(generate_gcode_layer(
+            engraving_strokes, eng_speed, eng_power, 'C00',
+            overscan_mm=overscan_mm, air_assist=air_assist, passes=eng_passes))
+
+    # Per-piece cut layers. air_assist defaults to the global parameter
+    # but each piece can override (used when "Also test with air off" is
+    # enabled so half the matrix runs without air for comparison).
+    for piece in test_pieces:
+        cy_gcode = sheet_h_mm - piece['cy']
+        cut_strokes = [linearize_circle(piece['cx'], cy_gcode, piece['diameter'] / 2.0,
+                                        segments=72)]
+        layer_name = f"C{piece['id']}"
+        piece_air = piece.get('air_assist', air_assist)
+        gcode_lines.extend(generate_gcode_layer(
+            cut_strokes, piece['speed'], piece['power'], layer_name,
+            air_assist=piece_air, passes=piece['passes']))
+
+    gcode_lines.extend(generate_gcode_footer(return_speed=return_speed))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))
+
+

@@ -5,6 +5,16 @@ import svgwrite
 from config import (DEFAULT_SETTINGS, get_dart_settings_for_size, get_sizing_for_size,
                     get_engraving_settings_for_size, get_engraving_placement_for_size)
 
+# numpy is optional — used only to vectorize the radial-bias nesting scan.
+# The macOS Intel build ships without numpy; in that case we fall back to the
+# pure-Python implementation (slower but identical results).
+try:
+    import numpy as _np
+    _HAS_NUMPY = True
+except ImportError:  # pragma: no cover
+    _np = None
+    _HAS_NUMPY = False
+
 # ==========================================
 # CORE MATH & LOGIC
 # ==========================================
@@ -140,6 +150,124 @@ def check_for_oversized_engravings(pads, material_vars, settings):
             oversized[material] = oversized_sizes
     return oversized
 
+def _scan_radial_python(dia, r_val, placed_list, target_x, target_y,
+                         width_mm, height_mm, spacing_mm):
+    """Reference Python implementation of the radial (closest-to-target) scan.
+
+    Iterates the full sheet at 1 mm steps starting from spacing_mm, keeping
+    the closest valid (non-colliding) cell to the target point. Iteration
+    order is y-outer, x-inner so that on ties the earlier-visited cell wins.
+
+    Kept as a fallback for environments without numpy and as the parity
+    reference for tests.
+    """
+    best_pos = None
+    best_dist = float('inf')
+    y = spacing_mm
+    while y + dia + spacing_mm <= height_mm:
+        x = spacing_mm
+        while x + dia + spacing_mm <= width_mm:
+            cx, cy = x + r_val, y + r_val
+            dist = math.sqrt((cx - target_x) ** 2 + (cy - target_y) ** 2)
+            if dist < best_dist:
+                is_collision = any(
+                    (cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2
+                    for _, px, py, pr in placed_list)
+                if not is_collision:
+                    best_dist = dist
+                    best_pos = (cx, cy)
+            x += 1
+        y += 1
+    return best_pos
+
+
+def _scan_radial_numpy(dia, r_val, placed_list, target_x, target_y,
+                        width_mm, height_mm, spacing_mm):
+    """Vectorized radial scan. Identical results to _scan_radial_python.
+
+    Builds the candidate grid as a numpy array, computes squared distance
+    to the target in one bulk op, argsorts (stable so y-then-x tie-break
+    is preserved), then walks the sorted candidates and returns the first
+    non-colliding cell — which is by construction the closest valid cell.
+    """
+    # The Python loop visits x in [spacing_mm, spacing_mm+1, ...] while
+    # x + dia + spacing_mm <= width_mm. So the largest x is x_max =
+    # width_mm - dia - spacing_mm. The number of integer steps from
+    # spacing_mm to x_max inclusive is floor(x_max - spacing_mm) + 1.
+    x_max = width_mm - dia - spacing_mm
+    y_max = height_mm - dia - spacing_mm
+    eps = 1e-9
+    if x_max < spacing_mm - eps or y_max < spacing_mm - eps:
+        return None
+    n_x = int(math.floor(x_max - spacing_mm + eps)) + 1
+    n_y = int(math.floor(y_max - spacing_mm + eps)) + 1
+    if n_x <= 0 or n_y <= 0:
+        return None
+
+    xs = spacing_mm + _np.arange(n_x, dtype=_np.float64)
+    ys = spacing_mm + _np.arange(n_y, dtype=_np.float64)
+    cxs = xs + r_val  # candidate disc-center x for each column
+    cys = ys + r_val  # candidate disc-center y for each row
+    cxs0 = float(cxs[0])
+    cys0 = float(cys[0])
+
+    # Build occupancy mask: True where a candidate disc would collide with
+    # an already-placed pad. Each placed pad only affects cells inside the
+    # bounding box of its exclusion zone, so the per-pad work scales with
+    # pad area, not full-sheet area.
+    occupied = _np.zeros((n_y, n_x), dtype=bool)
+    for _, px, py, pr in placed_list:
+        rsum = r_val + pr + spacing_mm
+        xi_min = int(math.ceil((px - rsum - cxs0) - eps))
+        xi_max = int(math.floor((px + rsum - cxs0) + eps))
+        yi_min = int(math.ceil((py - rsum - cys0) - eps))
+        yi_max = int(math.floor((py + rsum - cys0) + eps))
+        if xi_min < 0:
+            xi_min = 0
+        if yi_min < 0:
+            yi_min = 0
+        if xi_max > n_x - 1:
+            xi_max = n_x - 1
+        if yi_max > n_y - 1:
+            yi_max = n_y - 1
+        if xi_max < xi_min or yi_max < yi_min:
+            continue
+        sub_cx = cxs[xi_min:xi_max + 1]
+        sub_cy = cys[yi_min:yi_max + 1]
+        sub_d2 = (sub_cx[None, :] - px) ** 2 + (sub_cy[:, None] - py) ** 2
+        occupied[yi_min:yi_max + 1, xi_min:xi_max + 1] |= sub_d2 < rsum * rsum
+
+    # Distance² from each candidate to the target. Invalid (occupied) cells
+    # become +inf so argmin skips them. argmin's first-occurrence tie-break
+    # matches the y-outer/x-inner flat order of the Python reference.
+    dx = cxs - target_x
+    dy = cys - target_y
+    dist_sq = dy[:, None] ** 2 + dx[None, :] ** 2
+    if occupied.any():
+        masked = _np.where(occupied, _np.inf, dist_sq)
+    else:
+        masked = dist_sq
+
+    flat_idx = int(_np.argmin(masked))
+    if not _np.isfinite(masked.flat[flat_idx]):
+        return None
+    yi = flat_idx // n_x
+    xi = flat_idx % n_x
+    return (float(cxs[xi]), float(cys[yi]))
+
+
+def _scan_radial(dia, r_val, placed_list, target_x, target_y,
+                  width_mm, height_mm, spacing_mm):
+    """Dispatch to the numpy-vectorized scan if available, else Python."""
+    if _HAS_NUMPY:
+        return _scan_radial_numpy(dia, r_val, placed_list,
+                                   target_x, target_y,
+                                   width_mm, height_mm, spacing_mm)
+    return _scan_radial_python(dia, r_val, placed_list,
+                                target_x, target_y,
+                                width_mm, height_mm, spacing_mm)
+
+
 def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
@@ -195,28 +323,9 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
         """Scan the sheet for a valid placement respecting edge bias direction."""
 
         if is_radial:
-            # Radial bias: find the closest valid position to the target point.
-            # Center radiates outward from the middle; corners from their corner.
             target_x, target_y = _radial_targets[edge_bias]
-            best_pos = None
-            best_dist = float('inf')
-
-            y = spacing_mm
-            while y + dia + spacing_mm <= height_mm:
-                x = spacing_mm
-                while x + dia + spacing_mm <= width_mm:
-                    cx, cy = x + r_val, y + r_val
-                    dist = math.sqrt((cx - target_x) ** 2 + (cy - target_y) ** 2)
-                    if dist < best_dist:
-                        is_collision = any(
-                            (cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2
-                            for _, px, py, pr in placed_list)
-                        if not is_collision:
-                            best_dist = dist
-                            best_pos = (cx, cy)
-                    x += 1
-                y += 1
-            return best_pos
+            return _scan_radial(dia, r_val, placed_list, target_x, target_y,
+                                width_mm, height_mm, spacing_mm)
 
         # Cardinal directions: linear scan
         if scan_y_reversed:
@@ -375,6 +484,342 @@ def _distance_to_nearest_vertex(cx, cy, polygon):
     return min_dist
 
 
+# ==========================================
+# VECTORIZED POLYGON HELPERS (numpy)
+# ==========================================
+# These mirror the scalar polygon helpers above but operate on a 2D grid of
+# candidate cells in a single bulk op. Used by the vectorized polygon scan.
+# Each returns a numpy array shape (n_y, n_x); the per-pad polygon-nesting
+# loops then mask + argmin to find the best valid cell.
+
+def _points_in_polygon_grid(cxs, cys, polygon):
+    """Vectorized ray-cast point-in-polygon for a candidate grid.
+
+    cxs: 1D numpy array of candidate x values (length n_x).
+    cys: 1D numpy array of candidate y values (length n_y).
+    Returns: bool array shape (n_y, n_x), True where (cx, cy) is inside.
+
+    Matches the per-point algorithm in _point_in_polygon exactly: for each
+    edge (j -> i), toggle inside where the edge crosses the cell's y AND
+    the cell's x is to the left of the intersection.
+    """
+    cx_grid = cxs[None, :].astype(_np.float64)
+    cy_grid = cys[:, None].astype(_np.float64)
+    inside = _np.zeros((cy_grid.shape[0], cx_grid.shape[1]), dtype=bool)
+    n = len(polygon)
+    with _np.errstate(divide='ignore', invalid='ignore'):
+        for i in range(n):
+            xi, yi = polygon[i]
+            xj, yj = polygon[(i - 1) % n]
+            cross = (yi > cy_grid) != (yj > cy_grid)
+            # For horizontal edges (yi == yj) the division is by zero; the
+            # `cross` mask is False for all cells there (both sides equal),
+            # so the NaN/inf produced in x_intersect never feeds the xor.
+            x_intersect = (xj - xi) * (cy_grid - yi) / (yj - yi) + xi
+            below = cx_grid < x_intersect
+            inside ^= cross & below
+    return inside
+
+
+def _distances_grid_to_segment(cx_grid, cy_grid, x1, y1, x2, y2):
+    """Distance from each cell in (cx_grid, cy_grid) to a single line segment.
+
+    cx_grid, cy_grid: 2D broadcasting-shaped numpy arrays (or compatible).
+    Returns: 2D array of distances, same shape as the broadcast of inputs.
+    """
+    dx = x2 - x1
+    dy = y2 - y1
+    length_sq = dx * dx + dy * dy
+    if length_sq < 1e-12:
+        # Degenerate segment — distance to the point.
+        return _np.sqrt((cx_grid - x1) ** 2 + (cy_grid - y1) ** 2)
+    t = ((cx_grid - x1) * dx + (cy_grid - y1) * dy) / length_sq
+    t = _np.clip(t, 0.0, 1.0)
+    proj_x = x1 + t * dx
+    proj_y = y1 + t * dy
+    return _np.sqrt((cx_grid - proj_x) ** 2 + (cy_grid - proj_y) ** 2)
+
+
+def _distances_grid_to_polygon_edges(cxs, cys, polygon):
+    """Min distance from each cell to any polygon edge. Returns (n_y, n_x)."""
+    cx_grid = cxs[None, :].astype(_np.float64)
+    cy_grid = cys[:, None].astype(_np.float64)
+    min_dist = _np.full((cy_grid.shape[0], cx_grid.shape[1]), _np.inf,
+                         dtype=_np.float64)
+    n = len(polygon)
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+        d = _distances_grid_to_segment(cx_grid, cy_grid, x1, y1, x2, y2)
+        _np.minimum(min_dist, d, out=min_dist)
+    return min_dist
+
+
+def _distances_grid_to_vertices(cxs, cys, polygon):
+    """Min distance from each cell to any polygon vertex. Returns (n_y, n_x)."""
+    cx_grid = cxs[None, :].astype(_np.float64)
+    cy_grid = cys[:, None].astype(_np.float64)
+    min_dist = _np.full((cy_grid.shape[0], cx_grid.shape[1]), _np.inf,
+                         dtype=_np.float64)
+    for vx, vy in polygon:
+        d = _np.sqrt((cx_grid - vx) ** 2 + (cy_grid - vy) ** 2)
+        _np.minimum(min_dist, d, out=min_dist)
+    return min_dist
+
+
+def _build_occupancy_grid(cxs, cys, r_val, placed_discs, spacing_mm):
+    """Boolean occupancy mask (n_y, n_x) — True where a disc would collide.
+
+    Per-pad work is limited to the bounding box of its exclusion zone so
+    cost scales with pad area rather than full-sheet area.
+    """
+    n_x = len(cxs)
+    n_y = len(cys)
+    occupied = _np.zeros((n_y, n_x), dtype=bool)
+    if not placed_discs:
+        return occupied
+    cxs0 = float(cxs[0])
+    cys0 = float(cys[0])
+    # The grid steps by 1 in this codebase. If that ever changes, derive
+    # the step from cxs/cys instead of hard-coding it here.
+    eps = 1e-9
+    for _, px, py, pr in placed_discs:
+        rsum = r_val + pr + spacing_mm
+        xi_min = int(math.ceil((px - rsum - cxs0) - eps))
+        xi_max = int(math.floor((px + rsum - cxs0) + eps))
+        yi_min = int(math.ceil((py - rsum - cys0) - eps))
+        yi_max = int(math.floor((py + rsum - cys0) + eps))
+        if xi_min < 0:
+            xi_min = 0
+        if yi_min < 0:
+            yi_min = 0
+        if xi_max > n_x - 1:
+            xi_max = n_x - 1
+        if yi_max > n_y - 1:
+            yi_max = n_y - 1
+        if xi_max < xi_min or yi_max < yi_min:
+            continue
+        sub_cx = cxs[xi_min:xi_max + 1]
+        sub_cy = cys[yi_min:yi_max + 1]
+        sub_d2 = (sub_cx[None, :] - px) ** 2 + (sub_cy[:, None] - py) ** 2
+        occupied[yi_min:yi_max + 1, xi_min:xi_max + 1] |= sub_d2 < rsum * rsum
+    return occupied
+
+
+# ==========================================
+# POLYGON SCAN — PYTHON REFERENCE & NUMPY
+# ==========================================
+# Both implementations match the original nested-function behavior exactly:
+# y-outer / x-inner iteration, strict `score < best_score` tie-break (the
+# first cell to reach the minimum wins), 1mm grid step starting at
+# (min_x + spacing_mm, min_y + spacing_mm).
+
+def _find_best_polygon_large_python(r, placed_discs, polygon,
+                                     min_x, max_x, min_y, max_y,
+                                     centroid_x, centroid_y,
+                                     bias_target_x, bias_target_y, bias_weight,
+                                     spacing_mm, step):
+    """Reference Python scan for large-disc polygon placement."""
+    best_pos = None
+    best_score = float('inf')
+    y = min_y + spacing_mm
+    while y + r <= max_y:
+        x = min_x + spacing_mm
+        while x + r <= max_x:
+            cx, cy = x + r, y + r
+            if bias_weight == 0.0:
+                bias = 0.0
+            else:
+                bias = bias_weight * math.sqrt(
+                    (cx - bias_target_x) ** 2 + (cy - bias_target_y) ** 2)
+            score = math.sqrt(
+                (cx - centroid_x) ** 2 + (cy - centroid_y) ** 2) + bias
+            if score < best_score:
+                if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
+                    is_collision = any(
+                        (cx - px) ** 2 + (cy - py) ** 2
+                        < (r + pr + spacing_mm) ** 2
+                        for _, px, py, pr in placed_discs)
+                    if not is_collision:
+                        best_score = score
+                        best_pos = (cx, cy)
+            x += step
+        y += step
+    return best_pos
+
+
+def _find_best_polygon_small_python(r, placed_discs, polygon,
+                                     min_x, max_x, min_y, max_y,
+                                     bias_target_x, bias_target_y, bias_weight,
+                                     spacing_mm, step):
+    """Reference Python scan for small-disc polygon placement (edge-seeking)."""
+    best_pos = None
+    best_score = float('inf')
+    y = min_y + spacing_mm
+    while y + r <= max_y:
+        x = min_x + spacing_mm
+        while x + r <= max_x:
+            cx, cy = x + r, y + r
+            if not _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
+                x += step
+                continue
+            is_collision = any(
+                (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
+                for _, px, py, pr in placed_discs)
+            if is_collision:
+                x += step
+                continue
+
+            edge_dist = _distance_to_nearest_edge(cx, cy, polygon)
+            edge_gap = edge_dist - r - spacing_mm
+            vertex_dist = _distance_to_nearest_vertex(cx, cy, polygon)
+            if not placed_discs:
+                snugness = 0
+            else:
+                min_gap = float('inf')
+                for _, px, py, pr in placed_discs:
+                    dist = math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
+                    gap = dist - (r + pr + spacing_mm)
+                    if gap < min_gap:
+                        min_gap = gap
+                snugness = min_gap
+            if bias_weight == 0.0:
+                bias = 0.0
+            else:
+                bias = bias_weight * math.sqrt(
+                    (cx - bias_target_x) ** 2 + (cy - bias_target_y) ** 2)
+            score = edge_gap * 1.0 + vertex_dist * 0.3 + snugness * 0.5 + bias
+            if score < best_score:
+                best_score = score
+                best_pos = (cx, cy)
+            x += step
+        y += step
+    return best_pos
+
+
+def _polygon_candidate_grid(r, min_x, max_x, min_y, max_y, spacing_mm, step):
+    """Build the same candidate grid as the Python polygon scan.
+
+    Returns (cxs, cys) numpy arrays, or (None, None) if no candidates fit.
+    """
+    eps = 1e-9
+    x_start = min_x + spacing_mm
+    y_start = min_y + spacing_mm
+    x_max = max_x - r
+    y_max = max_y - r
+    if x_start > x_max + eps or y_start > y_max + eps:
+        return None, None
+    n_x = int(math.floor((x_max - x_start) / step + eps)) + 1
+    n_y = int(math.floor((y_max - y_start) / step + eps)) + 1
+    if n_x <= 0 or n_y <= 0:
+        return None, None
+    xs = x_start + _np.arange(n_x, dtype=_np.float64) * step
+    ys = y_start + _np.arange(n_y, dtype=_np.float64) * step
+    cxs = xs + r
+    cys = ys + r
+    return cxs, cys
+
+
+def _find_best_polygon_large_numpy(r, placed_discs, polygon,
+                                    min_x, max_x, min_y, max_y,
+                                    centroid_x, centroid_y,
+                                    bias_target_x, bias_target_y, bias_weight,
+                                    spacing_mm, step):
+    """Vectorized large-disc polygon scan. Identical results to the Python ref."""
+    cxs, cys = _polygon_candidate_grid(r, min_x, max_x, min_y, max_y,
+                                        spacing_mm, step)
+    if cxs is None:
+        return None
+
+    inside = _points_in_polygon_grid(cxs, cys, polygon)
+    edge_dist = _distances_grid_to_polygon_edges(cxs, cys, polygon)
+    valid = inside & (edge_dist >= r + spacing_mm)
+
+    occupied = _build_occupancy_grid(cxs, cys, r, placed_discs, spacing_mm)
+    valid &= ~occupied
+
+    if not valid.any():
+        return None
+
+    score = _np.sqrt((cxs[None, :] - centroid_x) ** 2
+                     + (cys[:, None] - centroid_y) ** 2)
+    if bias_weight > 0.0:
+        score = score + bias_weight * _np.sqrt(
+            (cxs[None, :] - bias_target_x) ** 2
+            + (cys[:, None] - bias_target_y) ** 2)
+
+    masked = _np.where(valid, score, _np.inf)
+    flat_idx = int(_np.argmin(masked))
+    if not _np.isfinite(masked.flat[flat_idx]):
+        return None
+    n_x = cxs.shape[0]
+    yi = flat_idx // n_x
+    xi = flat_idx % n_x
+    return (float(cxs[xi]), float(cys[yi]))
+
+
+def _find_best_polygon_small_numpy(r, placed_discs, polygon,
+                                    min_x, max_x, min_y, max_y,
+                                    bias_target_x, bias_target_y, bias_weight,
+                                    spacing_mm, step):
+    """Vectorized small-disc polygon scan. Identical results to the Python ref."""
+    cxs, cys = _polygon_candidate_grid(r, min_x, max_x, min_y, max_y,
+                                        spacing_mm, step)
+    if cxs is None:
+        return None
+
+    inside = _points_in_polygon_grid(cxs, cys, polygon)
+    edge_dist = _distances_grid_to_polygon_edges(cxs, cys, polygon)
+    valid = inside & (edge_dist >= r + spacing_mm)
+
+    occupied = _build_occupancy_grid(cxs, cys, r, placed_discs, spacing_mm)
+    valid &= ~occupied
+
+    if not valid.any():
+        return None
+
+    vertex_dist = _distances_grid_to_vertices(cxs, cys, polygon)
+    edge_gap = edge_dist - r - spacing_mm
+
+    if placed_discs:
+        snugness = _np.full((cys.shape[0], cxs.shape[0]), _np.inf,
+                             dtype=_np.float64)
+        for _, px, py, pr in placed_discs:
+            d = _np.sqrt((cxs[None, :] - px) ** 2 + (cys[:, None] - py) ** 2)
+            gap = d - (r + pr + spacing_mm)
+            _np.minimum(snugness, gap, out=snugness)
+    else:
+        snugness = _np.zeros((cys.shape[0], cxs.shape[0]), dtype=_np.float64)
+
+    score = edge_gap * 1.0 + vertex_dist * 0.3 + snugness * 0.5
+    if bias_weight > 0.0:
+        score = score + bias_weight * _np.sqrt(
+            (cxs[None, :] - bias_target_x) ** 2
+            + (cys[:, None] - bias_target_y) ** 2)
+
+    masked = _np.where(valid, score, _np.inf)
+    flat_idx = int(_np.argmin(masked))
+    if not _np.isfinite(masked.flat[flat_idx]):
+        return None
+    n_x = cxs.shape[0]
+    yi = flat_idx // n_x
+    xi = flat_idx % n_x
+    return (float(cxs[xi]), float(cys[yi]))
+
+
+def _find_best_polygon_large(*args, **kwargs):
+    """Dispatch to vectorized scan if numpy is available."""
+    if _HAS_NUMPY:
+        return _find_best_polygon_large_numpy(*args, **kwargs)
+    return _find_best_polygon_large_python(*args, **kwargs)
+
+
+def _find_best_polygon_small(*args, **kwargs):
+    """Dispatch to vectorized scan if numpy is available."""
+    if _HAS_NUMPY:
+        return _find_best_polygon_small_numpy(*args, **kwargs)
+    return _find_best_polygon_small_python(*args, **kwargs)
+
 
 def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     """
@@ -443,116 +888,29 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
     # Use 1mm grid steps for accuracy (worth the extra time for scrap efficiency)
     step = 1
 
-    def _bias_score(cx, cy):
-        """Distance penalty pulling toward biased edge/corner."""
-        if bias_weight == 0.0:
-            return 0.0
-        return bias_weight * math.sqrt((cx - bias_target_x) ** 2 + (cy - bias_target_y) ** 2)
-
-    def calc_snugness(cx, cy, r, placed_discs):
-        """
-        Calculate how snugly a disc fits - lower = more snug (better).
-        Measures gap to nearest placed disc (0 = touching at spacing distance).
-        """
-        if not placed_discs:
-            return 0  # No penalty if no discs placed yet
-
-        min_gap = float('inf')
-        for _, px, py, pr in placed_discs:
-            dist = math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
-            gap = dist - (r + pr + spacing_mm)  # Gap beyond minimum required
-            min_gap = min(min_gap, gap)
-        return min_gap
-
-    def find_best_position_large(r, placed_discs):
-        """Find position closest to centroid, with edge bias pull (for large discs)."""
-        best_pos = None
-        best_score = float('inf')
-
-        y = min_y + spacing_mm
-        while y + r <= max_y:
-            x = min_x + spacing_mm
-            while x + r <= max_x:
-                cx, cy = x + r, y + r
-
-                # Score = distance to centroid + edge bias pull (lower = better)
-                score = math.sqrt((cx - centroid_x) ** 2 + (cy - centroid_y) ** 2) + _bias_score(cx, cy)
-
-                if score < best_score:
-                    if _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
-                        is_collision = any(
-                            (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
-                            for _, px, py, pr in placed_discs
-                        )
-                        if not is_collision:
-                            best_score = score
-                            best_pos = (cx, cy)
-                x += step
-            y += step
-
-        return best_pos
-
-    def find_best_position_small(r, placed_discs):
-        """Find position near edges/corners with snug fit (for small discs)."""
-        best_pos = None
-        best_score = float('inf')
-
-        y = min_y + spacing_mm
-        while y + r <= max_y:
-            x = min_x + spacing_mm
-            while x + r <= max_x:
-                cx, cy = x + r, y + r
-
-                # Check validity first (fast rejection)
-                if not _circle_fits_in_polygon(cx, cy, r, polygon, spacing_mm):
-                    x += step
-                    continue
-
-                is_collision = any(
-                    (cx - px) ** 2 + (cy - py) ** 2 < (r + pr + spacing_mm) ** 2
-                    for _, px, py, pr in placed_discs
-                )
-                if is_collision:
-                    x += step
-                    continue
-
-                # Calculate score for small disc (lower = better)
-                # 1. Distance to nearest edge (prefer close to edges)
-                edge_dist = _distance_to_nearest_edge(cx, cy, polygon)
-                edge_gap = edge_dist - r - spacing_mm  # Gap beyond disc radius
-
-                # 2. Distance to nearest corner/vertex (prefer corners)
-                vertex_dist = _distance_to_nearest_vertex(cx, cy, polygon)
-
-                # 3. Snugness with other discs (prefer tight packing)
-                snugness = calc_snugness(cx, cy, r, placed_discs)
-
-                # Combined score: weight edge proximity and corners heavily
-                # Lower score = better position
-                score = edge_gap * 1.0 + vertex_dist * 0.3 + snugness * 0.5 + _bias_score(cx, cy)
-
-                if score < best_score:
-                    best_score = score
-                    best_pos = (cx, cy)
-
-                x += step
-            y += step
-
-        return best_pos
-
-    # Place fixed pads
+    # Place fixed pads via dispatch helpers (numpy vectorized when available,
+    # falls back to the bit-identical Python reference otherwise).
     for pad_size, dia in discs:
         r = dia / 2
         if pad_size >= size_threshold:
-            best_pos = find_best_position_large(r, placed)
+            best_pos = _find_best_polygon_large(
+                r, placed, polygon,
+                min_x, max_x, min_y, max_y,
+                centroid_x, centroid_y,
+                bias_target_x, bias_target_y, bias_weight,
+                spacing_mm, step)
         else:
-            best_pos = find_best_position_small(r, placed)
+            best_pos = _find_best_polygon_small(
+                r, placed, polygon,
+                min_x, max_x, min_y, max_y,
+                bias_target_x, bias_target_y, bias_weight,
+                spacing_mm, step)
 
         if best_pos:
             placed.append((pad_size, best_pos[0], best_pos[1], r))
             fixed_placed += 1
 
-    # Fill remaining space with max pad (if any)
+    # Fill remaining space with max pad (if any) — uses the large-disc scan.
     if max_pads:
         max_pad = max_pads[0]
         max_size = max_pad['size']
@@ -560,7 +918,12 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0):
         max_r = max_dia / 2
 
         while True:
-            best_pos = find_best_position_large(max_r, placed)
+            best_pos = _find_best_polygon_large(
+                max_r, placed, polygon,
+                min_x, max_x, min_y, max_y,
+                centroid_x, centroid_y,
+                bias_target_x, bias_target_y, bias_weight,
+                spacing_mm, step)
             if best_pos:
                 placed.append((max_size, best_pos[0], best_pos[1], max_r))
             else:
@@ -1246,5 +1609,142 @@ def generate_kerf_test_svg(material_name, filename, settings):
                                stroke=cut_color, fill='none', stroke_width=stroke_w))
 
     dwg.save()
+
+
+# ==========================================
+# FEEDS & SPEEDS TESTER
+# ==========================================
+
+FEEDS_SPEEDS_SPACING_MM = 3.0      # edge-to-edge spacing between discs within a block
+FEEDS_SPEEDS_SHEET_MARGIN_MM = 3.0  # margin from sheet edge to outermost discs
+
+
+def _grid_pack_discs(diameter_mm, cols, rows, num_blocks, sheet_w_mm, sheet_h_mm,
+                     spacing_mm=FEEDS_SPEEDS_SPACING_MM,
+                     margin_mm=FEEDS_SPEEDS_SHEET_MARGIN_MM,
+                     block_gap_mm=None):
+    """
+    Pack equal-diameter discs into a grid of blocks on a sheet.
+
+    Layout: num_blocks side-by-side horizontally. Each block is a cols x rows
+    grid with `spacing_mm` between disc edges. Blocks are separated by
+    `block_gap_mm` (defaults to ~2.5 x spacing).
+
+    Returns (positions, total_w_mm, total_h_mm) where positions is a list of
+    (cx, cy) tuples in placement order: for block b in [0..num_blocks),
+    for row r in [0..rows), for col c in [0..cols), append the disc center.
+    The caller's matrix-expansion order must match this iteration order so
+    the i-th matrix triple lands on the i-th position.
+
+    Raises ValueError if the matrix doesn't fit, with the minimum required
+    sheet size in the message.
+    """
+    cols = max(1, int(cols))
+    rows = max(1, int(rows))
+    num_blocks = max(1, int(num_blocks))
+    if block_gap_mm is None:
+        block_gap_mm = max(spacing_mm * 2.5, diameter_mm * 0.4)
+
+    pitch = diameter_mm + spacing_mm
+    block_w = cols * diameter_mm + max(cols - 1, 0) * spacing_mm
+    total_w = (num_blocks * block_w
+               + max(num_blocks - 1, 0) * block_gap_mm
+               + 2 * margin_mm)
+    total_h = rows * diameter_mm + max(rows - 1, 0) * spacing_mm + 2 * margin_mm
+
+    if total_w > sheet_w_mm + 1e-6 or total_h > sheet_h_mm + 1e-6:
+        raise ValueError(
+            f"Test matrix doesn't fit on sheet. Need at least "
+            f"{total_w:.1f} × {total_h:.1f} mm; got "
+            f"{sheet_w_mm:.1f} × {sheet_h_mm:.1f} mm."
+        )
+
+    positions = []
+    for block_idx in range(num_blocks):
+        block_x0 = margin_mm + block_idx * (block_w + block_gap_mm)
+        for row_idx in range(rows):
+            cy = margin_mm + diameter_mm / 2 + row_idx * pitch
+            for col_idx in range(cols):
+                cx = block_x0 + diameter_mm / 2 + col_idx * pitch
+                positions.append((cx, cy))
+    return positions, total_w, total_h
+
+
+def _min_feeds_speeds_sheet(diameter_mm, cols, rows, num_blocks,
+                             spacing_mm=FEEDS_SPEEDS_SPACING_MM,
+                             margin_mm=FEEDS_SPEEDS_SHEET_MARGIN_MM,
+                             block_gap_mm=None):
+    """Return (min_w_mm, min_h_mm) needed to fit the given matrix."""
+    cols = max(1, int(cols))
+    rows = max(1, int(rows))
+    num_blocks = max(1, int(num_blocks))
+    if block_gap_mm is None:
+        block_gap_mm = max(spacing_mm * 2.5, diameter_mm * 0.4)
+    block_w = cols * diameter_mm + max(cols - 1, 0) * spacing_mm
+    min_w = (num_blocks * block_w
+             + max(num_blocks - 1, 0) * block_gap_mm
+             + 2 * margin_mm)
+    min_h = rows * diameter_mm + max(rows - 1, 0) * spacing_mm + 2 * margin_mm
+    return min_w, min_h
+
+
+def feeds_speeds_linspace(start, end, stops):
+    """Evenly-spaced integer values from start to end inclusive over `stops` points.
+
+    Stops <= 1 returns a single-element list with `start` rounded.
+    Start == end with stops > 1 returns a list of duplicates (caller is
+    expected to decide if that's meaningful).
+    """
+    stops = max(1, int(stops))
+    if stops == 1:
+        return [int(round(start))]
+    step = (end - start) / (stops - 1)
+    return [int(round(start + i * step)) for i in range(stops)]
+
+
+def build_feeds_speeds_matrix(speed_cfg, power_cfg, passes_cfg):
+    """
+    Expand three sweep configs into ordered (speed, power, passes) triples
+    and a (cols, rows, num_blocks) grid shape.
+
+    Each config is a dict with keys:
+      'sweep' (bool), 'value' (number, used when not swept),
+      'start', 'end' (numbers, used when swept), 'stops' (int).
+
+    Iteration order (outermost → innermost) is passes, power, speed,
+    matching _grid_pack_discs' (block, row, col) iteration so the i-th
+    triple lands on the i-th packed position.
+
+    Clamps: passes >= 1, power in [1, 100], speed >= 1, stops in [2, 10].
+    Raises ValueError if any required number is missing or non-numeric.
+    """
+    def values_for(name, cfg, *, kind):
+        try:
+            if cfg.get('sweep'):
+                start = float(cfg['start'])
+                end = float(cfg['end'])
+                stops = int(cfg.get('stops', 4))
+                stops = max(2, min(10, stops))
+                return feeds_speeds_linspace(start, end, stops)
+            else:
+                return [int(round(float(cfg['value'])))]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"{name}: {exc}")
+
+    speeds = values_for("Speed", speed_cfg, kind='speed')
+    powers = values_for("Power", power_cfg, kind='power')
+    passes_list = values_for("Passes", passes_cfg, kind='passes')
+
+    speeds = [max(1, s) for s in speeds]
+    powers = [max(1, min(100, p)) for p in powers]
+    passes_list = [max(1, p) for p in passes_list]
+
+    triples = []
+    for p_count in passes_list:
+        for power in powers:
+            for speed in speeds:
+                triples.append((speed, power, p_count))
+
+    return triples, len(speeds), len(powers), len(passes_list)
 
 

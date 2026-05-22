@@ -46,20 +46,25 @@ def main():
     dims = app._get_card_paper_dimensions_mm()
     check("checkbox off -> dims is None", dims is None, f"got {dims!r}")
 
-    # --- 2. Helper returns Letter dims when on + letter selected ---
+    # --- 2. Helper returns Letter dims (with 1/4" inset) when on + letter ---
+    # The helper subtracts a 1/4" (6.35 mm) safety margin from each
+    # dimension so cuts don't land at the paper edge.
+    inset = 0.25 * 25.4
     app.card_paper_var.set(True)
     app.card_paper_dropdown.set("letter (8.5×11 in)")
     dims = app._get_card_paper_dimensions_mm()
-    expected = (8.5 * 25.4, 11.0 * 25.4)
-    check("checkbox on + letter -> ~(215.9, 279.4)",
+    expected = (8.5 * 25.4 - inset, 11.0 * 25.4 - inset)
+    check("checkbox on + letter -> ~(209.55, 273.05) [1/4\" inset]",
           dims is not None and abs(dims[0] - expected[0]) < 0.01 and abs(dims[1] - expected[1]) < 0.01,
           f"got {dims!r}")
 
-    # --- 3. Helper returns A4 dims when on + a4 selected ---
+    # --- 3. Helper returns A4 dims (with 1/4" inset) when on + a4 ---
     app.card_paper_dropdown.set("a4 (210×297 mm)")
     dims = app._get_card_paper_dimensions_mm()
-    check("checkbox on + a4 -> (210.0, 297.0)",
-          dims == (210.0, 297.0),
+    expected_a4 = (210.0 - inset, 297.0 - inset)
+    check("checkbox on + a4 -> (203.65, 290.65) [1/4\" inset]",
+          dims is not None and abs(dims[0] - expected_a4[0]) < 0.01
+          and abs(dims[1] - expected_a4[1]) < 0.01,
           f"got {dims!r}")
 
     # --- 4. _get_material_dimensions overrides for card material ---

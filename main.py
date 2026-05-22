@@ -715,15 +715,23 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.card_paper_dropdown.config(state="disabled")
 
     def _get_card_paper_dimensions_mm(self):
-        """Return (width_mm, height_mm) for the selected paper size, or None if not using paper size."""
+        """Return (width_mm, height_mm) for the selected paper size with a
+        1/4" safety inset on each dimension, or None if not using paper size.
+
+        The inset shrinks the cut area away from the physical paper edge so
+        the user has room to align the paper in the laser cutter without
+        running the bed clear of room for tape, fixtures, or eyeballed
+        registration. Without it the nest can pack discs right up against
+        the edge, which is awkward to align cleanly.
+        """
         if not self.card_paper_var.get():
             return None
-        # Parse the dropdown value to determine paper size
+        inset_mm = 0.25 * 25.4  # 1/4 inch margin
         dropdown_val = self.card_paper_dropdown.get().lower()
         if dropdown_val.startswith("a4"):
-            return (210.0, 297.0)  # A4 in mm
+            return (210.0 - inset_mm, 297.0 - inset_mm)  # A4 minus margin
         else:
-            return (8.5 * 25.4, 11.0 * 25.4)  # Letter: 215.9 x 279.4 mm
+            return (8.5 * 25.4 - inset_mm, 11.0 * 25.4 - inset_mm)  # Letter minus margin
 
     def _update_shape_status(self):
         """Update the custom shape status indicator."""

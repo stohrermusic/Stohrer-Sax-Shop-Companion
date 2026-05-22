@@ -4378,6 +4378,44 @@ class UserGuideWindow(tk.Toplevel):
                     "existing settings\" for a one-off test with custom values."))
         self._blank()
 
+        self._h2(_("Tooling \u2014 Speed & Power Test"))
+        self._body(_("Beta. Generates a sheet of small test discs, each cut at a different "
+                    "combination of speed/power/passes. Each disc is engraved with its 2-digit "
+                    "ID; a legend.txt saved alongside the G-code maps each ID to its parameters. "
+                    "Cut the sheet, inspect which discs came free cleanly without scorching, then "
+                    "use those values as your starting point for that material."))
+        self._bullet(_("Pick the material and click \"Apply material defaults\" to pre-fill the "
+                      "speed/power fields with sensible starting values for that material."))
+        self._bullet(_("Disc diameter is yours to set. Smaller saves material; bigger helps the "
+                      "engraving stay legible. 20 mm is a good default."))
+        self._bullet(_("Three sweep rows \u2014 Speed, Power, Passes. Check \"Sweep\" to test "
+                      "\"Stops\" evenly-spaced values from Start to End; uncheck to hold constant "
+                      "at \"Value\". You can sweep 0, 1, 2, or 3 variables \u2014 a single disc, "
+                      "a row, a grid, or a 3-D block."))
+        self._bullet(_("Engraving speed/power are editable too. The label engraving has to be "
+                      "readable for the test to be useful, so don't leave it at zero \u2014 the "
+                      "\"Apply material defaults\" button fills it from the material's existing "
+                      "engraving settings."))
+        self._bullet(_("\"Air assist\" toggles air on/off for every disc. \"Also test with air off\" "
+                      "doubles the matrix so half the discs run with air and half without, "
+                      "side by side."))
+        self._bullet(_("\"Preview before saving\" pops a layout view so you can sanity-check disc "
+                      "count and arrangement before committing to the file dialog."))
+        self._bullet(_("G-code only \u2014 no SVG output, since the per-disc speed/power/passes "
+                      "would be lost on import. The legend.txt is the source of truth for "
+                      "looking up which disc had which settings."))
+        self._blank()
+
+        self._h2(_("Tooling \u2014 Pad Press Spacers"))
+        self._body(_("3D-printable spacer biscuits for pad pressing. 1.75\" (44.45 mm) square "
+                    "biscuits with their thickness engraved on top \u2014 stack them to set pad "
+                    "press depth. PLA or PETG both work."))
+        self._bullet(_("Half-step set: 3.0 / 3.5 / 4.0 / 4.5 mm (4 of each, 16 total)."))
+        self._bullet(_("Quarter-step set: 3.25 / 3.75 / 4.25 mm (4 of each, 12 total)."))
+        self._bullet(_("Organizer rack: 7 compartments to hold the whole spacer set."))
+        self._body(_("Save the .stl files to disk and slice them in your 3D printer software."))
+        self._blank()
+
         self._h2(_("Tooling \u2014 Settings"))
         self._body(_("Options > Settings opens the Tooling Settings dialog with:"))
         self._bullet(_("Acrylic G-code parameters: speed, power, kerf, and air assist "
@@ -5302,6 +5340,171 @@ class NestingPreviewWindow(tk.Toplevel):
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
+        r = int(r + (255 - r) * factor)
+        g = int(g + (255 - g) * factor)
+        b = int(b + (255 - b) * factor)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+
+class SpeedPowerTestPreview(tk.Toplevel):
+    """Preview window for the Tooling-tab Speed & Power Test.
+
+    Mirrors NestingPreviewWindow's shape (modal canvas, Save/Adjust buttons)
+    but renders the test-disc grid: each disc shows its 2-char numeric ID,
+    and when "Also test with air off" is enabled the two air states are
+    color-coded so the user can spot at a glance which discs are which.
+
+    Result:
+        self.result = "save" if user clicks Save, None if Adjust/close.
+    """
+
+    AIR_ON_COLOR = "#3a78c2"   # blue outline
+    AIR_OFF_COLOR = "#cc7a3a"  # orange outline
+    NEUTRAL_COLOR = "#555555"  # dark gray when air doesn't vary
+
+    def __init__(self, parent, test_pieces, sheet_w_mm, sheet_h_mm,
+                  eng_speed, eng_power, material_display):
+        super().__init__(parent)
+        self.title(_("Speed & Power Test Preview"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+        self._pieces = test_pieces
+        self._sheet_w = sheet_w_mm
+        self._sheet_h = sheet_h_mm
+        self._eng_speed = eng_speed
+        self._eng_power = eng_power
+        self._material_display = material_display
+
+        air_states = {p.get('air_assist', True) for p in test_pieces}
+        self._air_varies = len(air_states) > 1
+
+        # Summary line(s) at top
+        sample = test_pieces[0] if test_pieces else None
+        if sample is not None:
+            speeds = sorted({p['speed'] for p in test_pieces})
+            powers = sorted({p['power'] for p in test_pieces})
+            passes_vals = sorted({p['passes'] for p in test_pieces})
+
+            def _rng(vals):
+                if len(vals) == 1:
+                    return str(vals[0])
+                return f"{vals[0]}-{vals[-1]}"
+
+            summary_text = _("{n} discs - Speed {sp} mm/min, Power {pw}%, "
+                              "Passes {ps}").format(
+                n=len(test_pieces),
+                sp=_rng(speeds),
+                pw=_rng(powers),
+                ps=_rng(passes_vals))
+        else:
+            summary_text = ""
+
+        tk.Label(self, text=summary_text, bg=DIALOG_BG,
+                 font=("Helvetica", 10, "bold")).pack(pady=(10, 2))
+
+        eng_line = _("Material: {m}   Sheet: {w:.0f} x {h:.0f} mm   "
+                      "Engraving: {es} mm/min @ {ep}%").format(
+            m=material_display, w=sheet_w_mm, h=sheet_h_mm,
+            es=int(eng_speed), ep=int(eng_power))
+        tk.Label(self, text=eng_line, bg=DIALOG_BG,
+                 font=("Helvetica", 9), fg="#555555").pack(pady=(0, 4))
+
+        if self._air_varies:
+            legend_frame = tk.Frame(self, bg=DIALOG_BG)
+            legend_frame.pack(pady=(0, 4))
+            tk.Label(legend_frame, text="●", bg=DIALOG_BG,
+                     fg=self.AIR_ON_COLOR,
+                     font=("Helvetica", 14)).pack(side="left")
+            tk.Label(legend_frame, text=_("air ON  "), bg=DIALOG_BG,
+                     font=("Helvetica", 9)).pack(side="left")
+            tk.Label(legend_frame, text="●", bg=DIALOG_BG,
+                     fg=self.AIR_OFF_COLOR,
+                     font=("Helvetica", 14)).pack(side="left")
+            tk.Label(legend_frame, text=_("air OFF"), bg=DIALOG_BG,
+                     font=("Helvetica", 9)).pack(side="left")
+
+        # Canvas
+        self._canvas = tk.Canvas(self, bg="white", highlightthickness=1,
+                                  highlightbackground="#999999")
+        self._canvas.pack(fill="both", expand=True, padx=10, pady=(2, 5))
+        self._canvas.bind("<Configure>", lambda e: self._draw())
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=(0, 10))
+        tk.Button(btn_frame, text=_("Save G-code"), command=self._on_save,
+                  font=("Helvetica", 10, "bold"), width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text=_("Adjust"), command=self._on_adjust,
+                  font=("Helvetica", 10), width=12).pack(side="left", padx=5)
+
+        self.geometry("720x600")
+        self.minsize(420, 320)
+        self.protocol("WM_DELETE_WINDOW", self._on_adjust)
+        self.wait_window(self)
+
+    def _on_save(self):
+        self.result = "save"
+        self.destroy()
+
+    def _on_adjust(self):
+        self.result = None
+        self.destroy()
+
+    def _draw(self):
+        cv = self._canvas
+        cv.delete("all")
+
+        cw = cv.winfo_width()
+        ch = cv.winfo_height()
+        if cw < 20 or ch < 20:
+            return
+
+        margin = 20
+        draw_w = cw - 2 * margin
+        draw_h = ch - 2 * margin
+        scale_x = draw_w / self._sheet_w if self._sheet_w > 0 else 1
+        scale_y = draw_h / self._sheet_h if self._sheet_h > 0 else 1
+        scale = min(scale_x, scale_y)
+
+        offset_x = margin + (draw_w - self._sheet_w * scale) / 2
+        offset_y = margin + (draw_h - self._sheet_h * scale) / 2
+
+        # Sheet outline
+        cv.create_rectangle(
+            offset_x, offset_y,
+            offset_x + self._sheet_w * scale,
+            offset_y + self._sheet_h * scale,
+            fill="#F8F8F0", outline="#888888", width=2)
+
+        for piece in self._pieces:
+            cx = offset_x + piece['cx'] * scale
+            cy = offset_y + piece['cy'] * scale
+            sr = (piece['diameter'] / 2.0) * scale
+            if self._air_varies:
+                color = (self.AIR_ON_COLOR
+                          if piece.get('air_assist', True)
+                          else self.AIR_OFF_COLOR)
+            else:
+                color = self.NEUTRAL_COLOR
+            fill = _PREVIEW_COLORS.get('felt', '#dddddd')  # subtle light fill
+            fill = self._lighten_hex(color, 0.85)
+            cv.create_oval(cx - sr, cy - sr, cx + sr, cy + sr,
+                           fill=fill, outline=color, width=1)
+            # ID label
+            if sr > 8:
+                font_size = max(7, min(12, int(sr * 0.6)))
+                cv.create_text(cx, cy, text=piece['id'],
+                               fill=color, font=("Helvetica", font_size, "bold"))
+
+    @staticmethod
+    def _lighten_hex(hex_color, factor):
+        h = hex_color.lstrip('#')
+        r = int(h[0:2], 16)
+        g = int(h[2:4], 16)
+        b = int(h[4:6], 16)
         r = int(r + (255 - r) * factor)
         g = int(g + (255 - g) * factor)
         b = int(b + (255 - b) * factor)
