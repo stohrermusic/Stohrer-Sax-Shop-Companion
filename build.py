@@ -110,11 +110,15 @@ def _patch_macos_plist():
         'The tuner and tone analyzer need microphone access '
         'to detect pitch and analyze harmonics.'
     )
+    plist['NSCameraUsageDescription'] = (
+        'Camera access is needed to capture scrap outlines from the '
+        'laser bed and to calibrate the laser-bed camera.'
+    )
 
     with open(plist_path, 'wb') as f:
         plistlib.dump(plist, f)
 
-    print("  Added NSMicrophoneUsageDescription to Info.plist")
+    print("  Added NSMicrophoneUsageDescription + NSCameraUsageDescription to Info.plist")
 
 
 def build():
@@ -205,6 +209,17 @@ def build():
         print("  tuner_render found — including GPU strobe renderer")
     except ImportError:
         print("  tuner_render not found — tuner will use CPU canvas rendering")
+
+    # OpenCV — powers the camera-capture feature (Calibration Card,
+    # Camera Calibration wizard, Get-from-camera button).
+    try:
+        import cv2  # noqa: F401
+        cmd.extend([
+            '--collect-all', 'cv2',
+        ])
+        print("  OpenCV found — including camera-capture support")
+    except ImportError:
+        print("  OpenCV not found — building without camera-capture")
 
     # Add the main script
     cmd.append(MAIN_SCRIPT)

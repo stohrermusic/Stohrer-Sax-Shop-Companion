@@ -287,6 +287,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tooling_options_menu = tk.Menu(self.tooling_menu, tearoff=0)
         self.tooling_menu.add_cascade(label=_("Options"), menu=tooling_options_menu)
         tooling_options_menu.add_command(label=_("Settings..."), command=self._open_tooling_gcode_settings)
+        tooling_options_menu.add_separator()
+        tooling_options_menu.add_command(label=_("Camera Calibration..."),
+                                          command=self._open_camera_calibration)
 
         # --- Tuner Menu ---
         self.tuner_menu = tk.Menu(self.root)

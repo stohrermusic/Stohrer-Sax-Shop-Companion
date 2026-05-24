@@ -3151,9 +3151,66 @@ class PolygonDrawWindow(tk.Toplevel):
         btn_frame.pack(pady=10)
 
         tk.Button(btn_frame, text=_("Clear"), command=self.on_clear, width=10).pack(side="left", padx=5)
+        # "Get from camera" — only shown when OpenCV is available AND a
+        # camera calibration file exists on disk.
+        if self._camera_capture_available():
+            tk.Button(btn_frame, text=_("Get from camera"),
+                      command=self.on_get_from_camera,
+                      width=15).pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Submit"), command=self.on_submit, width=10,
                   font=("Helvetica", 10, "bold")).pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Cancel"), command=self.on_cancel, width=10).pack(side="left", padx=5)
+
+    @staticmethod
+    def _camera_capture_available():
+        """Return True if camera capture is wired up and calibrated."""
+        try:
+            import camera_capture
+        except ImportError:
+            return False
+        if not camera_capture.HAS_OPENCV:
+            return False
+        return camera_capture.load_calibration(
+            camera_capture.default_calibration_path()) is not None
+
+    def on_get_from_camera(self):
+        """Open CameraCaptureDialog and adopt the returned polygon."""
+        try:
+            import camera_capture
+        except ImportError:
+            return
+        # Pick a camera index (same precedence as the calibration dialog).
+        cam_idx = camera_capture.find_falcon_camera_index()
+        if cam_idx is None:
+            cams = camera_capture.enumerate_cameras()
+            if not cams:
+                messagebox.showerror(_("No Camera"),
+                                      _("No cameras detected."), parent=self)
+                return
+            cam_idx = cams[-1]['index']
+
+        dlg = CameraCaptureDialog(
+            self, camera_index=cam_idx,
+            calibration_path=camera_capture.default_calibration_path())
+        if not dlg.result_polygon_mm:
+            return
+
+        # The captured polygon is in mm with origin at (0, 0). Convert into
+        # this dialog's grid units (inch or cm) so it appears on the canvas.
+        scale_to_unit = 1.0 / 25.4 if self.unit == "in" else 1.0 / 10.0
+        captured = [(x * scale_to_unit, y * scale_to_unit)
+                     for (x, y) in dlg.result_polygon_mm]
+        # Clamp to grid + downsample to MAX_POINTS if the contour is denser.
+        if len(captured) > self.MAX_POINTS:
+            step = len(captured) / self.MAX_POINTS
+            captured = [captured[int(i * step)] for i in range(self.MAX_POINTS)]
+        self.points = [(max(0, min(self.grid_size, x)),
+                        max(0, min(self.grid_size, y)))
+                        for (x, y) in captured]
+        self.polygon_closed = True
+        self._redraw_polygon()
+        self.status_var.set(
+            _("Captured {n} points from camera").format(n=len(self.points)))
 
     def _draw_grid(self):
         """Draw the grid lines on the canvas."""
@@ -4416,6 +4473,40 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("Save the .stl files to disk and slice them in your 3D printer software."))
         self._blank()
 
+        self._h2(_("Tooling \u2014 Calibration Card"))
+        self._body(_("Beta. Engraves a ChArUco pattern on basswood to "
+                    "calibrate the laser-bed camera. The Pad Maker's "
+                    "polygon-draw dialog grows a 'Get from camera' button "
+                    "once you've engraved the card and run the calibration "
+                    "wizard \u2014 then you can snap a photo of a scrap piece "
+                    "on the bed and the app will trace its outline as a "
+                    "custom polygon instead of you tracing it by hand."))
+        self._bullet(_("Defaults produce a 220 \u00d7 170 mm card (8 \u00d7 6 grid of 25 mm squares "
+                      "with a 10 mm border). Fits 12 \u00d7 12 or 12 \u00d7 16 basswood with room "
+                      "for handling."))
+        self._bullet(_("Default engraving recipe: 6000 mm/min @ 25% on basswood, "
+                      "single pass. Override in the form to suit your machine."))
+        self._bullet(_("No cutting required; the basswood stays whole. Place the "
+                      "engraved card flat on the bed, close the cover, and run "
+                      "Options > Camera Calibration."))
+        self._bullet(_("Requires opencv-python and Pillow (bundled with the "
+                      "installer; install separately if running from source)."))
+        self._blank()
+
+        self._h2(_("Tooling \u2014 Camera Calibration"))
+        self._body(_("Options > Camera Calibration opens a one-time wizard "
+                    "for the laser-bed camera. Place the engraved calibration "
+                    "card on the bed at several positions (and slight tilts), "
+                    "capture 12+ good frames, and click Calibrate & Save."))
+        self._bullet(_("RMS reprojection error under 1 px is excellent; under "
+                      "3 px is fine. Higher means recapture."))
+        self._bullet(_("The calibration is saved to a JSON file in the platform "
+                      "config dir and reused across sessions \u2014 you only "
+                      "calibrate once per camera mounting."))
+        self._bullet(_("Use Pad Maker's polygon-draw dialog with the "
+                      "'Get from camera' button to capture scrap outlines."))
+        self._blank()
+
         self._h2(_("Tooling \u2014 Settings"))
         self._body(_("Options > Settings opens the Tooling Settings dialog with:"))
         self._bullet(_("Acrylic G-code parameters: speed, power, kerf, and air assist "
@@ -5265,9 +5356,20 @@ class NestingPreviewWindow(tk.Toplevel):
         draw_w = cw - 2 * margin
         draw_h = ch - 2 * margin
 
-        # Scale to fit sheet in canvas, maintaining aspect ratio
-        sheet_w = self._width_mm
-        sheet_h = self._height_mm
+        # Scale to fit sheet in canvas, maintaining aspect ratio.
+        # When a polygon is loaded the nest packs in the polygon's own
+        # coordinate space (its bounding box), which may not match the
+        # user's typed width/height fields — typically a polygon drawn
+        # at e.g. 0..200mm with a 38x76 sheet typed in. Use the polygon's
+        # actual bbox for canvas scaling so the contents land in view.
+        if self._polygon:
+            poly_xs = [p[0] for p in self._polygon]
+            poly_ys = [p[1] for p in self._polygon]
+            sheet_w = max(poly_xs) - min(poly_xs)
+            sheet_h = max(poly_ys) - min(poly_ys)
+        else:
+            sheet_w = self._width_mm
+            sheet_h = self._height_mm
         scale_x = draw_w / sheet_w if sheet_w > 0 else 1
         scale_y = draw_h / sheet_h if sheet_h > 0 else 1
         scale = min(scale_x, scale_y)
@@ -5509,3 +5611,419 @@ class SpeedPowerTestPreview(tk.Toplevel):
         g = int(g + (255 - g) * factor)
         b = int(b + (255 - b) * factor)
         return f"#{r:02x}{g:02x}{b:02x}"
+
+
+class CameraCalibrationDialog(tk.Toplevel):
+    """One-time camera calibration wizard.
+
+    Shows the live camera feed at ~10 fps with detected ChArUco corners
+    overlaid in green. User moves the calibration card to several
+    positions on the bed; each frame where the board is detected gets
+    captured. Once enough good frames are collected, the user clicks
+    Calibrate; the dialog runs the calibration math and saves the result.
+
+    Result:
+        self.result = "saved" if calibration was successfully saved, else None.
+    """
+
+    LIVE_REFRESH_MS = 100   # ~10 fps preview
+    TARGET_FRAMES = 12      # frames to collect for a robust calibration
+    PREVIEW_W = 640
+    PREVIEW_H = 480
+
+    def __init__(self, parent, camera_index, calibration_path):
+        super().__init__(parent)
+        self.title(_("Camera Calibration"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.result = None
+
+        self._camera_index = camera_index
+        self._calibration_path = calibration_path
+        self._cap = None
+        self._board = None
+        self._detector_imports_ok = False
+        self._captures = []       # list of (charuco_corners, charuco_ids)
+        self._last_frame_shape = None
+        self._image_size = (640, 480)
+        self._latest_photo = None  # keep a reference so PIL doesn't GC it
+        self._refresh_after_id = None
+
+        # Try to import deps. If they're missing we'll show an error and close.
+        try:
+            import camera_capture
+            from PIL import Image, ImageTk
+            self._cam_mod = camera_capture
+            self._PIL_Image = Image
+            self._PIL_ImageTk = ImageTk
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV is not available")
+            self._board = camera_capture.make_charuco_board()
+            self._detector_imports_ok = True
+        except ImportError as e:
+            tk.Label(self, text=_("Camera calibration requires opencv-python "
+                                    "and Pillow:\n\n    pip install opencv-python Pillow\n\n"
+                                    "Error: {e}").format(e=e),
+                     bg=DIALOG_BG, fg="#a30000", padx=20, pady=20).pack()
+            tk.Button(self, text=_("Close"),
+                      command=self.destroy).pack(pady=(0, 15))
+            return
+
+        # ---- UI ----
+        tk.Label(self, text=_("Camera Calibration"),
+                 bg=DIALOG_BG, font=("Helvetica", 12, "bold")
+                 ).pack(pady=(10, 2))
+        instructions = _(
+            "Place the engraved calibration card flat on the laser bed. "
+            "Move it to several positions (corners, center, tilted slightly) "
+            "and watch the green-corner overlay. Each frame with a complete "
+            "board detection counts toward calibration.\n\n"
+            "Target: {n} good frames. Tilt the card slightly between captures "
+            "for the math to solve cleanly."
+        ).format(n=self.TARGET_FRAMES)
+        tk.Label(self, text=instructions, bg=DIALOG_BG,
+                 wraplength=620, justify="left", font=("Helvetica", 9)
+                 ).pack(padx=15, pady=(0, 8))
+
+        self._preview_label = tk.Label(
+            self, bg="#000000", width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label.pack(padx=15, pady=(0, 8))
+
+        self._status_var = tk.StringVar(
+            value=_("Opening camera ..."))
+        tk.Label(self, textvariable=self._status_var, bg=DIALOG_BG,
+                 font=("Helvetica", 10)).pack(pady=(0, 4))
+
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=(0, 12))
+        self._capture_btn = tk.Button(
+            btn_frame, text=_("Capture this frame"),
+            command=self._on_capture_clicked,
+            font=("Helvetica", 10, "bold"), width=20, state="disabled")
+        self._capture_btn.pack(side="left", padx=5)
+        self._calibrate_btn = tk.Button(
+            btn_frame, text=_("Calibrate & Save"),
+            command=self._on_calibrate_clicked,
+            font=("Helvetica", 10), width=18, state="disabled")
+        self._calibrate_btn.pack(side="left", padx=5)
+        tk.Button(btn_frame, text=_("Cancel"),
+                  command=self._on_close, width=10
+                  ).pack(side="left", padx=5)
+
+        self.geometry(f"{self.PREVIEW_W + 50}x{self.PREVIEW_H + 280}")
+        self.minsize(660, 700)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Kick off camera open + live refresh
+        self.after(50, self._open_camera_and_start)
+        self.wait_window(self)
+
+    # ------------------------------------------------------------------
+    def _open_camera_and_start(self):
+        try:
+            self._cap = self._cam_mod.open_camera(self._camera_index)
+            ok, frame = self._cap.read()
+            if not ok or frame is None:
+                raise RuntimeError(_("Camera opened but returned no frame."))
+            h, w = frame.shape[:2]
+            self._image_size = (w, h)
+            self._last_frame_shape = (h, w)
+            self._status_var.set(
+                _("Camera live. Captured 0 / {n} good frames.").format(n=self.TARGET_FRAMES))
+            self._refresh_loop()
+        except Exception as e:
+            self._status_var.set(
+                _("Could not open camera index {i}: {e}").format(
+                    i=self._camera_index, e=e))
+
+    def _refresh_loop(self):
+        if not self.winfo_exists() or self._cap is None:
+            return
+        ok, frame = self._cap.read()
+        if ok and frame is not None:
+            self._latest_frame = frame
+            self._render_frame_with_overlay(frame)
+        self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
+                                              self._refresh_loop)
+
+    def _render_frame_with_overlay(self, frame):
+        import cv2
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids = self._cam_mod.detect_charuco(gray, self._board)
+
+        annotated = frame.copy()
+        detected_count = 0 if corners is None else len(corners)
+        if corners is not None and ids is not None and len(corners) >= 4:
+            # Draw green dots at detected ChArUco corners
+            for pt in corners:
+                x, y = int(pt[0][0]), int(pt[0][1])
+                cv2.circle(annotated, (x, y), 4, (0, 255, 0), -1)
+            self._capture_btn.config(state="normal")
+        else:
+            self._capture_btn.config(state="disabled")
+
+        # OpenCV is BGR; PIL/tk want RGB.
+        rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+        img = self._PIL_Image.fromarray(rgb)
+        # Cap preview size while preserving aspect ratio
+        img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
+        self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
+        self._preview_label.config(image=self._latest_photo,
+                                    width=img.width, height=img.height)
+
+        n_caps = len(self._captures)
+        if corners is not None:
+            self._status_var.set(
+                _("Detected {d} corners — captured {n} / {target} good frames.").format(
+                    d=detected_count, n=n_caps, target=self.TARGET_FRAMES))
+        else:
+            self._status_var.set(
+                _("Move the card into view — captured {n} / {target} good frames.").format(
+                    n=n_caps, target=self.TARGET_FRAMES))
+
+    def _on_capture_clicked(self):
+        if not hasattr(self, '_latest_frame'):
+            return
+        import cv2
+        gray = cv2.cvtColor(self._latest_frame, cv2.COLOR_BGR2GRAY)
+        corners, ids = self._cam_mod.detect_charuco(gray, self._board)
+        if corners is None or ids is None or len(corners) < 4:
+            return
+        self._captures.append((corners, ids))
+        n = len(self._captures)
+        target = self.TARGET_FRAMES
+        if n >= self._cam_mod.CALIB_MIN_FRAMES:
+            self._calibrate_btn.config(state="normal")
+        self._status_var.set(
+            _("Captured {n} / {t} good frames. {hint}").format(
+                n=n, t=target,
+                hint=(_("Click Calibrate & Save when ready.")
+                       if n >= target else
+                       _("Reposition the card and capture again."))))
+
+    def _on_calibrate_clicked(self):
+        if len(self._captures) < self._cam_mod.CALIB_MIN_FRAMES:
+            return
+        self._stop_refresh()
+        self._status_var.set(_("Computing calibration ..."))
+        self.update()
+        try:
+            calib = self._cam_mod.calibrate_from_frames(
+                self._captures, self._image_size, self._board)
+            self._cam_mod.save_calibration(calib, self._calibration_path)
+            self.result = "saved"
+            messagebox.showinfo(
+                _("Calibration Saved"),
+                _("Camera calibration complete.\n\n"
+                  "RMS reprojection error: {rms:.2f} px (lower is better; "
+                  "< 1 px is excellent)\n"
+                  "Frames used: {n}\n\n"
+                  "Saved to:\n{p}").format(
+                    rms=calib['rms_reprojection_error_px'],
+                    n=calib['frame_count'], p=self._calibration_path),
+                parent=self)
+            self._on_close()
+        except Exception as e:
+            messagebox.showerror(_("Calibration Failed"),
+                                  _("Calibration did not converge:\n\n{e}\n\n"
+                                    "Try capturing more frames at different "
+                                    "positions and tilts.").format(e=e),
+                                  parent=self)
+            # Resume the refresh loop so user can capture more
+            self._refresh_loop()
+
+    def _stop_refresh(self):
+        if self._refresh_after_id is not None:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+
+    def _on_close(self):
+        self._stop_refresh()
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self.destroy()
+
+
+class CameraCaptureDialog(tk.Toplevel):
+    """Live camera-capture dialog for snapping a scrap polygon from the bed.
+
+    Shows the live camera feed with the detected scrap contour overlaid
+    in green. User can adjust the threshold sensitivity, then click Use
+    to accept the polygon (returned in mm coords) or Retry to keep
+    looking. Requires a saved camera calibration.
+
+    Result:
+        self.result_polygon_mm = list of (x_mm, y_mm) on success, None on cancel.
+    """
+
+    LIVE_REFRESH_MS = 100
+    PREVIEW_W = 640
+    PREVIEW_H = 480
+
+    def __init__(self, parent, camera_index, calibration_path):
+        super().__init__(parent)
+        self.title(_("Capture Scrap Outline"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.result_polygon_mm = None
+
+        self._camera_index = camera_index
+        self._cap = None
+        self._calibration = None
+        self._latest_undistorted = None
+        self._latest_polygon_px = None
+        self._latest_polygon_mm = None
+        self._latest_photo = None
+        self._refresh_after_id = None
+
+        # Dependency check + calibration load
+        try:
+            import camera_capture
+            from PIL import Image, ImageTk
+            self._cam_mod = camera_capture
+            self._PIL_Image = Image
+            self._PIL_ImageTk = ImageTk
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV not loaded")
+            self._calibration = camera_capture.load_calibration(calibration_path)
+            if not self._calibration:
+                raise RuntimeError(_("No camera calibration found. Run "
+                                       "Options > Camera Calibration first."))
+        except (ImportError, RuntimeError) as e:
+            tk.Label(self, text=str(e), bg=DIALOG_BG, fg="#a30000",
+                     padx=20, pady=20, wraplength=400).pack()
+            tk.Button(self, text=_("Close"),
+                      command=self.destroy).pack(pady=(0, 15))
+            return
+
+        # ---- UI ----
+        tk.Label(self, text=_("Capture Scrap Outline"),
+                 bg=DIALOG_BG, font=("Helvetica", 12, "bold")
+                 ).pack(pady=(10, 2))
+        tk.Label(self, text=_(
+            "Place the scrap on the laser bed (close the cover). The green "
+            "outline shows what will be captured. Click Use when it looks "
+            "right, or Retry to re-detect."),
+            bg=DIALOG_BG, wraplength=620, justify="left",
+            font=("Helvetica", 9)).pack(padx=15, pady=(0, 6))
+
+        self._preview_label = tk.Label(
+            self, bg="#000000", width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label.pack(padx=15, pady=(0, 8))
+
+        self._status_var = tk.StringVar(value=_("Opening camera ..."))
+        tk.Label(self, textvariable=self._status_var, bg=DIALOG_BG,
+                 font=("Helvetica", 10)).pack(pady=(0, 4))
+
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=(0, 12))
+        self._use_btn = tk.Button(
+            btn_frame, text=_("Use"), command=self._on_use_clicked,
+            font=("Helvetica", 10, "bold"), width=12, state="disabled")
+        self._use_btn.pack(side="left", padx=5)
+        tk.Button(btn_frame, text=_("Cancel"),
+                  command=self._on_close, width=10
+                  ).pack(side="left", padx=5)
+
+        self.geometry(f"{self.PREVIEW_W + 50}x{self.PREVIEW_H + 240}")
+        self.minsize(660, 660)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self.after(50, self._open_camera_and_start)
+        self.wait_window(self)
+
+    def _open_camera_and_start(self):
+        try:
+            self._cap = self._cam_mod.open_camera(self._camera_index)
+            ok, _frame = self._cap.read()
+            if not ok:
+                raise RuntimeError(_("Camera opened but returned no frame."))
+            self._refresh_loop()
+        except Exception as e:
+            self._status_var.set(_("Could not open camera: {e}").format(e=e))
+
+    def _refresh_loop(self):
+        if not self.winfo_exists() or self._cap is None:
+            return
+        ok, frame = self._cap.read()
+        if ok and frame is not None:
+            self._render_frame_with_overlay(frame)
+        self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
+                                              self._refresh_loop)
+
+    def _render_frame_with_overlay(self, frame):
+        import cv2
+        # Undistort + detect contour
+        undistorted = self._cam_mod.undistort_frame(frame, self._calibration)
+        polygon_px = self._cam_mod.detect_scrap_contour(undistorted)
+        self._latest_undistorted = undistorted
+        self._latest_polygon_px = polygon_px
+        if polygon_px:
+            self._latest_polygon_mm = self._cam_mod.pixels_to_mm(
+                polygon_px, self._calibration)
+        else:
+            self._latest_polygon_mm = None
+
+        # Overlay the polygon
+        annotated = undistorted.copy()
+        if polygon_px and len(polygon_px) >= 3:
+            import numpy as np
+            pts = np.array(polygon_px, dtype=np.int32).reshape(-1, 1, 2)
+            cv2.polylines(annotated, [pts], isClosed=True,
+                          color=(0, 255, 0), thickness=2)
+            self._use_btn.config(state="normal")
+            n_pts = len(polygon_px)
+            # Compute bbox extent in mm for the status line
+            xs_mm = [p[0] for p in self._latest_polygon_mm]
+            ys_mm = [p[1] for p in self._latest_polygon_mm]
+            w_mm = max(xs_mm) - min(xs_mm)
+            h_mm = max(ys_mm) - min(ys_mm)
+            self._status_var.set(_(
+                "Detected: {n}-vertex polygon, {w:.0f} × {h:.0f} mm bbox").format(
+                n=n_pts, w=w_mm, h=h_mm))
+        else:
+            self._use_btn.config(state="disabled")
+            self._status_var.set(_("No scrap detected — place a piece on the bed."))
+
+        # OpenCV BGR → PIL RGB
+        rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+        img = self._PIL_Image.fromarray(rgb)
+        img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
+        self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
+        self._preview_label.config(image=self._latest_photo,
+                                    width=img.width, height=img.height)
+
+    def _on_use_clicked(self):
+        if self._latest_polygon_mm:
+            # Translate so polygon min coords are at (0, 0), matching the
+            # convention used by PolygonDrawWindow (custom_polygon coords).
+            xs = [p[0] for p in self._latest_polygon_mm]
+            ys = [p[1] for p in self._latest_polygon_mm]
+            x_min, y_min = min(xs), min(ys)
+            self.result_polygon_mm = [(x - x_min, y - y_min)
+                                        for (x, y) in self._latest_polygon_mm]
+        self._on_close()
+
+    def _on_close(self):
+        if self._refresh_after_id is not None:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self.destroy()

@@ -1639,6 +1639,60 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
         f.write('\n'.join(gcode_lines))
 
 
+def generate_calibration_card_gcode(filename, cols=8, rows=6,
+                                     square_mm=25.0, marker_mm=18.0,
+                                     border_mm=10.0,
+                                     engrave_speed=6000, engrave_power=25,
+                                     engrave_passes=1, line_spacing_mm=0.15,
+                                     settings=None, air_assist=True):
+    """Generate G-code engraving the ChArUco camera-calibration card.
+
+    The card is rendered at a DPI matched to line_spacing_mm and raster-
+    engraved as horizontal scan lines. Single layer, no cut path — the
+    basswood stays whole and just gets the pattern burned in.
+
+    Defaults (6000 mm/min, 25%, single pass) are tuned for basswood on
+    a Creality Falcon2 Pro 40W; user can override in the Tooling-tab UI.
+    """
+    from camera_capture import make_calibration_card_strokes
+
+    settings = settings or {}
+    return_speed = settings.get("gcode_return_speed", 1000)
+    overscan_mm = 0
+    if settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
+
+    # Build the strokes with the pattern offset by `border_mm` from the
+    # G-code origin (which sits at the bottom-left of the sheet).
+    strokes_y_down = make_calibration_card_strokes(
+        cols, rows, square_mm, marker_mm,
+        line_spacing_mm=line_spacing_mm,
+        origin_x_mm=border_mm, origin_y_mm=border_mm,
+    )
+
+    sheet_w = cols * square_mm + 2 * border_mm
+    sheet_h = rows * square_mm + 2 * border_mm
+
+    # camera_capture returns strokes in SVG Y-down coords (row 0 at top).
+    # G-code uses Y-up with origin at bottom-left, so flip every Y.
+    strokes_y_up = [
+        [(x, sheet_h - y) for (x, y) in stroke]
+        for stroke in strokes_y_down
+    ]
+
+    lines = []
+    lines.extend(generate_gcode_header(0, 0, sheet_w, sheet_h))
+    lines.extend(generate_gcode_layer(
+        strokes_y_up, engrave_speed, engrave_power, 'CAL',
+        overscan_mm=overscan_mm, air_assist=air_assist,
+        passes=engrave_passes,
+    ))
+    lines.extend(generate_gcode_footer(return_speed=return_speed))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(lines))
+
+
 def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filename,
                                      settings, air_assist=True,
                                      eng_speed_override=None,

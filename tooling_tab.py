@@ -93,6 +93,7 @@ class ToolingTabMixin:
             ("kerf_test", _("Kerf Test")),
             ("feeds_speeds_tester", _("Speed & Power Test")),
             ("pad_press_spacers", _("Pad Press Spacers")),
+            ("calibration_card", _("Calibration Card")),
         ]
         row_frames = [tk.Frame(selector_frame, bg=bg), tk.Frame(selector_frame, bg=bg)]
         row_frames[0].pack(fill='x')
@@ -639,6 +640,92 @@ class ToolingTabMixin:
 
         self._tooling_sections['pad_press_spacers'] = spacers_frame
 
+        # ========================================
+        # CALIBRATION CARD SECTION
+        # ========================================
+        cal_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        tk.Label(cal_frame, text=_("BETA"), bg=bg, fg="#cc6600",
+                 font=("Helvetica", 9, "bold")).pack(anchor='w')
+
+        cal_info = tk.Label(
+            cal_frame, bg=bg, font=("Helvetica", 9), fg="gray",
+            text=_("Engrave a ChArUco calibration card for the laser-bed "
+                   "camera. Engrave the pattern on basswood (defaults "
+                   "tuned for the Creality Falcon2 Pro 40W on basswood), "
+                   "then use Options > Camera Calibration to walk through "
+                   "the one-time calibration with this card.\n\n"
+                   "Defaults produce a 220 × 170 mm card — fits comfortably "
+                   "on 12 × 12 or 12 × 16 basswood with room for handling. "
+                   "No cutting required; the basswood stays whole."),
+            justify="left", wraplength=540)
+        cal_info.pack(anchor='w', pady=(0, 8))
+
+        # Pattern dimensions
+        cal_dim_row = tk.Frame(cal_frame, bg=bg)
+        cal_dim_row.pack(fill='x', pady=(0, 5))
+        tk.Label(cal_dim_row, text=_("Pattern:"), bg=bg).pack(side='left')
+        self.cal_cols_var = tk.StringVar(value="8")
+        tk.Entry(cal_dim_row, textvariable=self.cal_cols_var, width=4
+                 ).pack(side='left', padx=(5, 2))
+        tk.Label(cal_dim_row, text=_("cols ×"), bg=bg).pack(side='left')
+        self.cal_rows_var = tk.StringVar(value="6")
+        tk.Entry(cal_dim_row, textvariable=self.cal_rows_var, width=4
+                 ).pack(side='left', padx=(5, 2))
+        tk.Label(cal_dim_row, text=_("rows ×"), bg=bg).pack(side='left')
+        self.cal_square_var = tk.StringVar(value="25")
+        tk.Entry(cal_dim_row, textvariable=self.cal_square_var, width=5
+                 ).pack(side='left', padx=(5, 2))
+        tk.Label(cal_dim_row, text=_("mm squares"),
+                 bg=bg).pack(side='left')
+
+        # Engraving recipe
+        cal_eng_row = tk.Frame(cal_frame, bg=bg)
+        cal_eng_row.pack(fill='x', pady=(0, 5))
+        tk.Label(cal_eng_row, text=_("Engrave speed:"),
+                 bg=bg).pack(side='left')
+        self.cal_speed_var = tk.StringVar(value="6000")
+        tk.Entry(cal_eng_row, textvariable=self.cal_speed_var, width=6
+                 ).pack(side='left', padx=(2, 2))
+        tk.Label(cal_eng_row, text=_("mm/min"), bg=bg
+                 ).pack(side='left', padx=(0, 15))
+        tk.Label(cal_eng_row, text=_("Power:"), bg=bg).pack(side='left')
+        self.cal_power_var = tk.StringVar(value="25")
+        tk.Entry(cal_eng_row, textvariable=self.cal_power_var, width=4
+                 ).pack(side='left', padx=(2, 2))
+        tk.Label(cal_eng_row, text="%", bg=bg).pack(side='left',
+                                                       padx=(0, 15))
+        tk.Label(cal_eng_row, text=_("Passes:"), bg=bg).pack(side='left')
+        self.cal_passes_var = tk.StringVar(value="1")
+        tk.Entry(cal_eng_row, textvariable=self.cal_passes_var, width=3
+                 ).pack(side='left', padx=(2, 0))
+
+        # Air assist
+        cal_opt_row = tk.Frame(cal_frame, bg=bg)
+        cal_opt_row.pack(fill='x', pady=(0, 5))
+        self.cal_air_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(cal_opt_row, text=_("Air assist"),
+                       variable=self.cal_air_var, bg=bg).pack(side='left')
+
+        # Output filename
+        cal_name_row = tk.Frame(cal_frame, bg=bg)
+        cal_name_row.pack(fill='x', pady=(0, 5))
+        tk.Label(cal_name_row, text=_("Output filename:"),
+                 bg=bg).pack(side='left')
+        self.cal_filename_var = tk.StringVar(value="calibration_card")
+        tk.Entry(cal_name_row, textvariable=self.cal_filename_var, width=25
+                 ).pack(side='left', padx=(5, 0))
+
+        # Generate button (G-code only — no SVG, since the pattern is
+        # OpenCV-generated raster, not parametric vector geometry)
+        cal_gen_frame = tk.Frame(cal_frame, bg=bg)
+        cal_gen_frame.pack(fill='x', pady=(5, 0))
+        tk.Button(cal_gen_frame, text=_("Generate G-code"), width=15,
+                  command=self._on_generate_calibration_card
+                  ).pack(side='left')
+
+        self._tooling_sections['calibration_card'] = cal_frame
+
         # Nothing shown initially — user clicks a button
         self._active_tooling_section = None
 
@@ -751,6 +838,46 @@ class ToolingTabMixin:
         acrylic_materials = [("acrylic", _("Acrylic"))]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
                             materials=acrylic_materials, show_tooling_engraving=True)
+
+    def _open_camera_calibration(self):
+        """Open the one-time ChArUco camera-calibration wizard.
+
+        Requires opencv-python and an engraved calibration card on the bed.
+        Saves the resulting calibration JSON to the platform config dir;
+        the "Get from camera" buttons (Pad Maker scrap mode / polygon draw)
+        become available once the calibration file exists.
+        """
+        from ui_dialogs import CameraCalibrationDialog
+        try:
+            import camera_capture
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV not loaded")
+        except ImportError:
+            messagebox.showerror(
+                _("OpenCV Required"),
+                _("Camera calibration needs OpenCV (opencv-python):\n\n"
+                  "    pip install opencv-python Pillow"))
+            return
+
+        # Decide which camera index to use. Prefer the saved override; fall
+        # back to find_falcon_camera_index; fall back to the last enumerated.
+        cam_idx = self.settings.get("camera_index_override")
+        if cam_idx is None:
+            cam_idx = camera_capture.find_falcon_camera_index()
+        if cam_idx is None:
+            cams = camera_capture.enumerate_cameras()
+            if not cams:
+                messagebox.showerror(_("No Camera"),
+                                      _("No cameras were detected. Plug in "
+                                        "the laser camera and try again."))
+                return
+            cam_idx = cams[-1]['index']
+
+        CameraCalibrationDialog(
+            self.root,
+            camera_index=cam_idx,
+            calibration_path=camera_capture.default_calibration_path(),
+        )
 
     def _update_tooling_settings(self):
         """Sync tooling UI state back to settings dict."""
@@ -1710,6 +1837,89 @@ class ToolingTabMixin:
                 _("G-code Generated"),
                 _("Wrote {n} test discs to:\n{p}\n\nLegend saved to:\n{l}").format(
                     n=len(test_pieces), p=save_path, l=legend_path))
+
+        except Exception as e:
+            messagebox.showerror(_("Error"),
+                                  _("Something went wrong:\n\n{e}").format(e=e))
+
+    # ========================================
+    # CALIBRATION CARD
+    # ========================================
+
+    def _on_generate_calibration_card(self):
+        """Generate G-code for the ChArUco camera-calibration card."""
+        try:
+            # OpenCV must be available — the engine helper depends on it.
+            try:
+                import camera_capture  # noqa: F401
+                if not camera_capture.HAS_OPENCV:
+                    raise ImportError("OpenCV not loaded")
+            except ImportError:
+                messagebox.showerror(
+                    _("OpenCV Required"),
+                    _("Generating the calibration card needs OpenCV "
+                      "(opencv-python). Install it with:\n\n"
+                      "    pip install opencv-python"))
+                return
+
+            try:
+                cols = int(self.cal_cols_var.get())
+                rows = int(self.cal_rows_var.get())
+                square_mm = float(self.cal_square_var.get())
+                speed = float(self.cal_speed_var.get())
+                power = float(self.cal_power_var.get())
+                passes = int(self.cal_passes_var.get())
+            except (ValueError, TypeError):
+                messagebox.showerror(_("Invalid Input"),
+                                      _("All numeric fields must be valid numbers."))
+                return
+            if cols < 4 or rows < 3:
+                messagebox.showerror(_("Invalid Input"),
+                                      _("Pattern must be at least 4 cols × 3 rows."))
+                return
+            if square_mm <= 0 or speed <= 0 or power <= 0 or passes < 1:
+                messagebox.showerror(_("Invalid Input"),
+                                      _("Speed, power, square size must be > 0; passes ≥ 1."))
+                return
+
+            base = self.cal_filename_var.get().strip() or "calibration_card"
+            save_path = filedialog.asksaveasfilename(
+                title=_("Save Calibration Card G-code"),
+                defaultextension=".gcode",
+                filetypes=[(_("G-code files"), "*.gcode")],
+                initialfile=f"{base}.gcode",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+
+            # marker_mm at ~0.72 * square_mm matches OpenCV's recommended ratio
+            marker_mm = square_mm * 0.72
+
+            from gcode_engine import generate_calibration_card_gcode
+            generate_calibration_card_gcode(
+                save_path,
+                cols=cols, rows=rows,
+                square_mm=square_mm, marker_mm=marker_mm,
+                engrave_speed=speed, engrave_power=power,
+                engrave_passes=passes,
+                settings=self.settings,
+                air_assist=bool(self.cal_air_var.get()),
+            )
+
+            total_w = cols * square_mm + 20  # 10mm border each side
+            total_h = rows * square_mm + 20
+            messagebox.showinfo(
+                _("Calibration Card Generated"),
+                _("Wrote calibration card G-code to:\n{p}\n\n"
+                  "Card size: {w:.0f} × {h:.0f} mm\n"
+                  "Engrave on basswood at {s:.0f} mm/min @ {pw:.0f}% — "
+                  "no through-cut.\n\n"
+                  "After engraving, place the card on the laser bed and run "
+                  "Options > Camera Calibration.").format(
+                    p=save_path, w=total_w, h=total_h,
+                    s=speed, pw=power))
 
         except Exception as e:
             messagebox.showerror(_("Error"),

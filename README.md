@@ -58,12 +58,13 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Import Matt's Specs from [stohrermusic.com](https://www.stohrermusic.com/articles/screw-specs-library/)
 - Import/export for sharing specs
 
-### Tooling — Die Inserts & Die Holders
-- Generate SVG/G-code for laser-cut acrylic pad die inserts (small: 50mm OD, large: 70mm OD)
-- Die holders: 85mm OD, 6-layer stack (solid base, magnet disc, three pin discs, retaining ring)
-- Enter individual sizes, ranges, or generate full sets
-- Kerf test pattern for calibrating your laser
-- Scrap mode for spreading dies across multiple sheets
+### Tooling
+- **Die Inserts** — laser-cut acrylic dies (small: 50mm OD, large: 70mm OD). Enter individual sizes, ranges, or generate full sets. Scrap mode for spreading dies across multiple sheets.
+- **Die Holders** — 85mm OD stack. Pick 5-layer (solid + magnet + 2× pin + ring) or 6-layer (solid + magnet + 3× pin + ring), and variant Large / Small / Both (Both nests two complete independent holders onto a single sheet). User-defined sheet size with a clear minimum-size error if pieces don't fit.
+- **Die Organizer** — SVG templates for a stackable die organizer (230 × 330 mm). Cut three Uppers and one Lower, align the four 1/8″ corner holes, glue the stack together.
+- **Pad Press Spacers** — bundled 3D-printable STL files for setting pad press depth. Half-step set (3.0 / 3.5 / 4.0 / 4.5 mm), quarter-step set (3.25 / 3.75 / 4.25 mm), and an organizer rack.
+- **Kerf Test** — quick three-circle pattern for measuring kerf on any material.
+- **Speed & Power Test (beta, v2.40)** — generate a sheet of small test discs at different speed / power / passes combinations to dial in laser settings on a new material. Each disc engraved with a 2-digit ID; a `legend.txt` saved alongside the G-code maps each ID to its parameters. Sweep 0–3 variables; "Also test with air off" doubles the matrix for side-by-side air-quality comparison.
 
 ### Chromatic Strobe Tuner
 
