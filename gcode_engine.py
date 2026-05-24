@@ -1639,6 +1639,68 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
         f.write('\n'.join(gcode_lines))
 
 
+def extract_gcode_bbox(gcode_text):
+    """Scan a G-code text blob for X/Y coordinates and return bbox.
+
+    Returns ``(xmin, xmax, ymin, ymax)`` in mm, or ``None`` if no
+    coordinates were found. Used by the framing helper so the laser
+    can trace the actual cut area, not the full sheet.
+    """
+    import re
+    x_re = re.compile(r'X(-?\d+\.?\d*)')
+    y_re = re.compile(r'Y(-?\d+\.?\d*)')
+    xs = []
+    ys = []
+    for line in gcode_text.splitlines():
+        if line.startswith(';'):
+            continue
+        for m in x_re.finditer(line):
+            try:
+                xs.append(float(m.group(1)))
+            except ValueError:
+                pass
+        for m in y_re.finditer(line):
+            try:
+                ys.append(float(m.group(1)))
+            except ValueError:
+                pass
+    if not xs or not ys:
+        return None
+    return min(xs), max(xs), min(ys), max(ys)
+
+
+def generate_framing_gcode(xmin, ymin, xmax, ymax,
+                            power_s=10, feed=2000, repeat=1):
+    """Produce G-code that traces a bounding-box rectangle at low power.
+
+    Used as a pre-cut "framing" pass so the user can verify the cut area
+    is where the material actually sits before committing. Default
+    power_s=10 (~1% on a Grbl 0-1000 scale) is enough to see a visible
+    beam on most materials without burning them; user can override.
+
+    Returns a list of G-code lines (no trailing newlines).
+    """
+    lines = [
+        '; --- Framing pass (low-power outline) ---',
+        'G90',
+        f'G0 X{xmin:.3f} Y{ymin:.3f}',
+        f'M3 S{int(power_s)}',
+    ]
+    for _ in range(max(1, int(repeat))):
+        lines.extend([
+            f'G1 X{xmax:.3f} Y{ymin:.3f} F{int(feed)}',
+            f'G1 X{xmax:.3f} Y{ymax:.3f}',
+            f'G1 X{xmin:.3f} Y{ymax:.3f}',
+            f'G1 X{xmin:.3f} Y{ymin:.3f}',
+        ])
+    lines.extend([
+        'M5',
+        'G0 X0 Y0',
+        '; --- End framing pass ---',
+    ])
+    return lines
+
+
 def generate_calibration_card_gcode(filename, cols=8, rows=6,
                                      square_mm=25.0, marker_mm=18.0,
                                      border_mm=10.0,

@@ -97,6 +97,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.custom_polygon = None  # For custom shape nesting
 
+        # --- Falcon (direct serial) state ---
+        # Detected on startup; the "Frame & Cut" button only appears when
+        # a Grbl controller answered the handshake on some serial port.
+        self.falcon_port = None
+        self._falcon_detect_attempted = False
+
         # --- Scrap Mode Session State ---
         self.scrap_session = {
             'active': False,
@@ -679,11 +685,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.filename_entry.insert(0, "my_pad_job")
         self.filename_entry.pack(padx=10)
 
-        # Two generate buttons side by side
+        # Generate buttons. The "Frame & Cut" button is created here but
+        # only packed when a Falcon (Grbl) controller is detected on USB.
+        # The check happens after the UI is built — see _detect_falcon_async.
         generate_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         generate_frame.pack(pady=(15, 5))
         tk.Button(generate_frame, text=_("Generate SVG"), command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
         tk.Button(generate_frame, text=_("Generate G-code"), command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
+        self._frame_cut_btn = tk.Button(
+            generate_frame, text=_("Frame && Cut"),
+            command=self.on_frame_and_cut,
+            font=('Helvetica', 10, 'bold'))
+        # Not packed yet — _detect_falcon_async will pack it if a
+        # Falcon is found.
 
         # Options below generate buttons
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
@@ -1418,6 +1432,172 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except Exception as e:
             print(f"An error occurred during scrap mode SVG generation: {e}")
             messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
+
+    def _detect_falcon_async(self):
+        """Probe USB serial ports for a Grbl controller; show the button if found.
+
+        Runs in a background thread (Probe takes ~1-2 seconds per port) and
+        marshals the result back to the Tk main thread. Safe to call any
+        time the user wants to re-scan.
+        """
+        if self._falcon_detect_attempted:
+            return
+        self._falcon_detect_attempted = True
+        try:
+            import falcon_sender
+            if not falcon_sender.HAS_PYSERIAL:
+                return
+        except ImportError:
+            return
+
+        import threading
+
+        def _worker():
+            try:
+                port = falcon_sender.auto_detect_falcon()
+            except Exception:
+                port = None
+            self.root.after(0, self._on_falcon_detected, port)
+
+        threading.Thread(target=_worker, name='falcon-detect', daemon=True).start()
+
+    def _on_falcon_detected(self, port):
+        """Called on the Tk main thread once detection finishes."""
+        if port:
+            self.falcon_port = port
+            # Show the Frame & Cut button by packing it now
+            if hasattr(self, '_frame_cut_btn'):
+                self._frame_cut_btn.pack(side="left", padx=5)
+
+    def on_frame_and_cut(self):
+        """Generate G-code in memory, frame the bbox, then stream to Falcon."""
+        try:
+            import falcon_sender
+            from gcode_engine import extract_gcode_bbox, generate_framing_gcode
+            from ui_dialogs import FalconRunDialog
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Frame & Cut needs pyserial:\n\n{e}").format(e=e))
+            return
+
+        if not self.falcon_port:
+            messagebox.showerror(_("Falcon Not Detected"),
+                                  _("No Grbl controller detected. Plug in "
+                                    "the Falcon over USB and try again."))
+            self._falcon_detect_attempted = False
+            self._detect_falcon_async()
+            return
+
+        # --- Mirror on_generate_gcode's input-validation up through nesting ---
+        if self.scrap_mode_var.get():
+            messagebox.showinfo(_("Scrap Mode"),
+                                 _("Frame & Cut isn't wired up for scrap "
+                                   "mode yet — please uncheck Scrap Mode."))
+            return
+        try:
+            params = self._prepare_generation()
+            if not params:
+                return
+            pads, hole_dia = params['pads'], params['hole_dia']
+            width_mm, height_mm = params['width_mm'], params['height_mm']
+            card_paper_dims = params['card_paper_dims']
+
+            supported_materials = [m for m, v in self.material_vars.items()
+                                     if v.get() and m != "exact_size"]
+            if len(supported_materials) != 1:
+                messagebox.showerror(
+                    _("Pick One Material"),
+                    _("Frame & Cut works with one material at a time. "
+                      "Please select exactly one material (not Exact Size)."))
+                return
+            material = supported_materials[0]
+            mat_w, mat_h, mat_polygon = self._get_material_dimensions(
+                material, width_mm, height_mm, card_paper_dims)
+
+            placed = nest_pads(pads, material, mat_w, mat_h, self.settings,
+                                polygon=mat_polygon)
+            if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings,
+                                       polygon=mat_polygon):
+                messagebox.showerror(
+                    _("Nesting Error"),
+                    _("Could not fit all '{m}' pieces in the available "
+                      "area.").format(m=material.replace('_', ' ')))
+                return
+
+            # Generate G-code to a temp file then read it back into memory.
+            import tempfile
+            import os as _os
+            with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
+                                              mode='w') as tmp:
+                tmp_path = tmp.name
+            try:
+                generate_gcode_from_placed(
+                    placed, material, mat_w, mat_h, tmp_path, hole_dia,
+                    self.settings, polygon=mat_polygon)
+                with open(tmp_path, 'r') as f:
+                    gcode_text = f.read()
+            finally:
+                try:
+                    _os.remove(tmp_path)
+                except Exception:
+                    pass
+
+            # Bounding box of the actual cuts — frame just that.
+            bbox = extract_gcode_bbox(gcode_text)
+            framing_lines = []
+            if bbox:
+                xmin, xmax, ymin, ymax = bbox
+                framing_lines = generate_framing_gcode(
+                    xmin, ymin, xmax, ymax,
+                    power_s=self.settings.get("falcon_framing_power_s", 10),
+                    feed=self.settings.get("falcon_framing_feed", 2000),
+                )
+
+            # Ask user whether to run framing pass first
+            do_frame = messagebox.askyesno(
+                _("Frame First?"),
+                _("Run a low-power framing pass first so you can verify "
+                  "the cut area is on the material?\n\n"
+                  "Yes — frame, pause, then cut.\n"
+                  "No — go straight to cut."))
+
+            sender = falcon_sender.FalconSender(port=self.falcon_port)
+            try:
+                sender.connect()
+            except Exception as e:
+                messagebox.showerror(_("Connection Failed"),
+                                      _("Could not connect to the Falcon at "
+                                        "{p}: {e}").format(p=self.falcon_port, e=e))
+                return
+
+            try:
+                if do_frame and framing_lines:
+                    fdlg = FalconRunDialog(
+                        self.root, sender, framing_lines,
+                        title=_("Framing — verify cut area"))
+                    if fdlg._final_reason != "complete":
+                        return  # user stopped or error during framing
+                    if not messagebox.askyesno(
+                            _("Frame Looks Good?"),
+                            _("Did the framed area land where you wanted? "
+                              "Click Yes to start cutting, No to cancel.")):
+                        return
+
+                # Stream the actual cut G-code
+                cut_lines = gcode_text.splitlines()
+                FalconRunDialog(
+                    self.root, sender, cut_lines,
+                    title=_("Cutting — {m}").format(m=material))
+            finally:
+                try:
+                    sender.disconnect()
+                except Exception:
+                    pass
+
+        except Exception as e:
+            messagebox.showerror(_("An Error Occurred"),
+                                  _("Something went wrong during Frame & Cut:\n\n"
+                                    "{error}").format(error=e))
 
     def on_generate_gcode(self):
         """Generate G-code files."""
@@ -2518,4 +2698,7 @@ if __name__ == '__main__':
     root.report_callback_exception = _handle_tk_exception
 
     app = PadSVGGeneratorApp(root)
+    # Detect the Falcon (Grbl) controller in the background so the
+    # "Frame & Cut" button appears as soon as detection succeeds.
+    root.after(500, app._detect_falcon_async)
     root.mainloop()

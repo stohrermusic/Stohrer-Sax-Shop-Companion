@@ -5,6 +5,7 @@ import math
 import random
 import json
 import sys
+import time
 
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, get_resonance_messages,
@@ -4507,6 +4508,36 @@ class UserGuideWindow(tk.Toplevel):
                       "'Get from camera' button to capture scrap outlines."))
         self._blank()
 
+        self._h2(_("Pad Maker \u2014 Frame & Cut (Falcon direct)"))
+        self._body(_("Beta. When a Grbl-compatible laser controller "
+                    "(e.g. Creality Falcon2 Pro 40W) is connected over "
+                    "USB, a third button appears next to Generate SVG / "
+                    "Generate G-code: Frame & Cut. It generates the G-code "
+                    "in memory, optionally jogs the head around the cut "
+                    "bounding box at low power so you can verify "
+                    "placement, then streams the actual cut to the laser "
+                    "while showing live progress (line, % done, elapsed, "
+                    "ETA). Pause / Resume / Stop buttons act in real time."))
+        self._bullet(_("Auto-detects the controller by handshaking with each "
+                      "USB serial port at 115200 baud and watching for the "
+                      "Grbl banner. Override the port in settings.json "
+                      "(falcon_serial_port_override) if auto-detection "
+                      "picks the wrong device."))
+        self._bullet(_("Framing power and feed are configurable in "
+                      "settings.json (falcon_framing_power_s, "
+                      "falcon_framing_feed). Defaults \u2014 S=10 (1% of full), "
+                      "2000 mm/min \u2014 show a visible beam on most "
+                      "materials without burning."))
+        self._bullet(_("Stop is an immediate soft-reset: laser power off, "
+                      "motion halts, planner buffer cleared. Use it for "
+                      "anything unexpected."))
+        self._bullet(_("If the Falcon throws an alarm (hard limit, soft "
+                      "limit, etc.) the streamer stops and surfaces it. "
+                      "Unlock via the controller or via $X (a future "
+                      "release will add an Unlock button)."))
+        self._bullet(_("Requires pyserial (bundled with the installer)."))
+        self._blank()
+
         self._h2(_("Tooling \u2014 Settings"))
         self._body(_("Options > Settings opens the Tooling Settings dialog with:"))
         self._bullet(_("Acrylic G-code parameters: speed, power, kerf, and air assist "
@@ -6027,3 +6058,234 @@ class CameraCaptureDialog(tk.Toplevel):
                 pass
             self._cap = None
         self.destroy()
+
+
+class FalconRunDialog(tk.Toplevel):
+    """Live-progress dialog while G-code streams to the Falcon.
+
+    Owns a FalconSender for the duration of the job. Callbacks from the
+    sender's worker thread are marshalled to the Tk main thread via
+    self.after(0, ...). Buttons send real-time commands via the sender.
+
+    Window-close ⨯ behaves as Stop (with confirm if mid-job).
+    """
+
+    def __init__(self, parent, sender, gcode_lines, title=None,
+                  on_finished=None):
+        super().__init__(parent)
+        self.title(title or _("Sending to Falcon"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        self._sender = sender
+        self._total = len(gcode_lines)
+        self._sent = 0
+        self._start_time = time.monotonic()
+        self._finished = False
+        self._on_finished = on_finished
+        self._final_reason = None
+
+        # Hook up callbacks. Marshal each to the Tk thread.
+        sender.on_status = lambda s: self.after(0, self._on_status, s)
+        sender.on_progress = lambda i, n: self.after(0, self._on_progress, i, n)
+        sender.on_error = lambda m: self.after(0, self._on_error, m)
+        sender.on_alarm = lambda m: self.after(0, self._on_alarm, m)
+        sender.on_done = lambda r: self.after(0, self._on_done, r)
+
+        # ---- UI ----
+        tk.Label(self, text=title or _("Sending to Falcon"),
+                 bg=DIALOG_BG, font=("Helvetica", 12, "bold")
+                 ).pack(pady=(12, 4))
+
+        self._state_var = tk.StringVar(value=_("Connecting ..."))
+        tk.Label(self, textvariable=self._state_var, bg=DIALOG_BG,
+                 font=("Helvetica", 11)).pack(pady=(0, 2))
+
+        self._pos_var = tk.StringVar(value="")
+        tk.Label(self, textvariable=self._pos_var, bg=DIALOG_BG,
+                 fg="#555555", font=("Courier", 10)).pack(pady=(0, 6))
+
+        # Progress bar
+        from tkinter import ttk
+        self._progress = ttk.Progressbar(self, length=400, mode='determinate',
+                                          maximum=self._total)
+        self._progress.pack(padx=20, pady=(0, 4))
+
+        self._progress_text_var = tk.StringVar(
+            value=_("Line 0 / {n}").format(n=self._total))
+        tk.Label(self, textvariable=self._progress_text_var, bg=DIALOG_BG,
+                 font=("Helvetica", 9)).pack(pady=(0, 4))
+
+        self._timing_var = tk.StringVar(value=_("Elapsed 0:00"))
+        tk.Label(self, textvariable=self._timing_var, bg=DIALOG_BG,
+                 fg="#555555", font=("Helvetica", 9)).pack(pady=(0, 10))
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg=DIALOG_BG)
+        btn_frame.pack(pady=(0, 14))
+        self._pause_btn = tk.Button(btn_frame, text=_("Pause"),
+                                      command=self._on_pause_clicked,
+                                      width=10)
+        self._pause_btn.pack(side="left", padx=4)
+        self._resume_btn = tk.Button(btn_frame, text=_("Resume"),
+                                       command=self._on_resume_clicked,
+                                       width=10, state="disabled")
+        self._resume_btn.pack(side="left", padx=4)
+        self._stop_btn = tk.Button(btn_frame, text=_("Stop"),
+                                     command=self._on_stop_clicked,
+                                     width=10, font=("Helvetica", 10, "bold"))
+        self._stop_btn.pack(side="left", padx=4)
+
+        self.protocol("WM_DELETE_WINDOW", self._on_close_window)
+
+        # Tick the timing display once a second
+        self._timing_tick()
+
+        # Kick off the stream
+        try:
+            sender.start_stream(gcode_lines)
+            self._state_var.set(_("Running ..."))
+        except Exception as e:
+            self._state_var.set(_("Failed to start: {e}").format(e=e))
+            self._stop_btn.config(text=_("Close"),
+                                    command=self._on_close_window)
+            self._finished = True
+
+        self.wait_window(self)
+
+    # ------------------------------------------------------------------
+    # Tk-thread callbacks (marshalled from FalconSender worker)
+    # ------------------------------------------------------------------
+
+    def _on_status(self, status):
+        state = status.get('state', '?')
+        labels = {
+            'Idle': _("Idle"),
+            'Run': _("Running"),
+            'Hold': _("Paused (feed hold)"),
+            'Alarm': _("ALARM"),
+            'Door': _("Safety door open"),
+            'Jog': _("Jogging"),
+            'Home': _("Homing"),
+            'Sleep': _("Sleeping"),
+        }
+        self._state_var.set(labels.get(state, state))
+        mpos = status.get('mpos')
+        if mpos:
+            self._pos_var.set(
+                f"X {mpos[0]:7.2f}  Y {mpos[1]:7.2f}  Z {mpos[2]:7.2f}")
+
+    def _on_progress(self, sent, total):
+        self._sent = sent
+        try:
+            self._progress['value'] = sent
+        except Exception:
+            pass
+        pct = (100.0 * sent / total) if total else 0
+        self._progress_text_var.set(
+            _("Line {s} / {t}  ({pct:.0f}%)").format(s=sent, t=total, pct=pct))
+
+    def _on_error(self, msg):
+        self._state_var.set(_("Error: {m}").format(m=msg))
+
+    def _on_alarm(self, msg):
+        self._state_var.set(_("ALARM: {m}").format(m=msg))
+
+    def _on_done(self, reason):
+        self._finished = True
+        self._final_reason = reason
+        if reason == "complete":
+            self._state_var.set(_("Complete ✓"))
+        elif reason == "stopped":
+            self._state_var.set(_("Stopped"))
+        elif reason == "error":
+            self._state_var.set(_("Stopped on error"))
+        # Switch buttons: only "Close" remains active
+        self._pause_btn.config(state="disabled")
+        self._resume_btn.config(state="disabled")
+        self._stop_btn.config(text=_("Close"),
+                                command=self._on_close_window,
+                                state="normal")
+        if self._on_finished:
+            try:
+                self._on_finished(reason)
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------
+    # Button handlers
+    # ------------------------------------------------------------------
+
+    def _on_pause_clicked(self):
+        try:
+            self._sender.pause()
+        except Exception:
+            pass
+        self._pause_btn.config(state="disabled")
+        self._resume_btn.config(state="normal")
+
+    def _on_resume_clicked(self):
+        try:
+            self._sender.resume()
+        except Exception:
+            pass
+        self._pause_btn.config(state="normal")
+        self._resume_btn.config(state="disabled")
+
+    def _on_stop_clicked(self):
+        if self._finished:
+            self._on_close_window()
+            return
+        if not messagebox.askyesno(
+                _("Stop?"),
+                _("Stop the job? This will soft-reset the laser and clear "
+                  "the planner buffer immediately. Material in progress "
+                  "may be ruined."), parent=self):
+            return
+        try:
+            self._sender.stop()
+        except Exception:
+            pass
+        # Sender's on_done will set self._finished and update buttons.
+
+    def _on_close_window(self):
+        if not self._finished:
+            if not messagebox.askyesno(
+                    _("Stop and close?"),
+                    _("A job is still running. Stop it and close the window?"),
+                    parent=self):
+                return
+            try:
+                self._sender.stop()
+            except Exception:
+                pass
+        self.destroy()
+
+    # ------------------------------------------------------------------
+    # Timing tick
+    # ------------------------------------------------------------------
+
+    def _timing_tick(self):
+        if not self.winfo_exists():
+            return
+        elapsed = int(time.monotonic() - self._start_time)
+        em, es = divmod(elapsed, 60)
+        if self._finished:
+            self._timing_var.set(_("Elapsed {em}:{es:02d}").format(em=em, es=es))
+        elif self._sent > 0 and self._total > 0:
+            # Simple linear ETA from progress so far
+            est_total = elapsed * (self._total / self._sent)
+            remaining = max(0, int(est_total - elapsed))
+            rm, rs = divmod(remaining, 60)
+            self._timing_var.set(
+                _("Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}").format(
+                    em=em, es=es, rm=rm, rs=rs))
+        else:
+            self._timing_var.set(_("Elapsed {em}:{es:02d}").format(em=em, es=es))
+        if not self._finished:
+            self.after(500, self._timing_tick)
+        else:
+            # One last tick after done to settle the elapsed display
+            self.after(1000, self._timing_tick)

@@ -177,7 +177,7 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.40"
+APP_VERSION = "3.0"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
@@ -659,6 +659,13 @@ DEFAULT_SETTINGS = {
     # SD CARD SETTINGS
     "sd_card_path": "",  # Last used SD card path for "Send to SD Card" feature
     "eject_sd_after_gcode": False,  # Auto-eject removable drive after G-code export
+
+    # FALCON DIRECT-CUT SETTINGS (v3.0+)
+    # Streamed directly to the Grbl controller via USB. Override port if
+    # auto-detection picks the wrong one (None = auto).
+    "falcon_serial_port_override": None,
+    "falcon_framing_power_s": 10,    # Grbl S value during framing (0-1000)
+    "falcon_framing_feed": 2000,     # mm/min during framing
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,

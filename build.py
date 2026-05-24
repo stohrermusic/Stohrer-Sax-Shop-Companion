@@ -221,6 +221,17 @@ def build():
     except ImportError:
         print("  OpenCV not found — building without camera-capture")
 
+    # pyserial — powers Frame & Cut (direct serial to Grbl-compatible lasers).
+    try:
+        import serial  # noqa: F401
+        cmd.extend([
+            '--hidden-import', 'serial',
+            '--hidden-import', 'serial.tools.list_ports',
+        ])
+        print("  pyserial found — including Frame & Cut support")
+    except ImportError:
+        print("  pyserial not found — building without Frame & Cut")
+
     # Add the main script
     cmd.append(MAIN_SCRIPT)
 
