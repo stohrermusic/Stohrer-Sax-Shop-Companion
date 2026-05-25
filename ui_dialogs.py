@@ -3097,6 +3097,7 @@ class PolygonDrawWindow(tk.Toplevel):
     CANVAS_PX = 450  # Canvas size in pixels
     POINT_RADIUS = 6  # Radius of drawn points in pixels
     CLOSE_THRESHOLD = 15  # Pixels - how close to first point to auto-close
+    OVERLAY_REFRESH_MS = 200  # 5 fps for the live camera underlay
 
     def __init__(self, parent, unit="in", settings=None):
         super().__init__(parent)
@@ -3107,31 +3108,46 @@ class PolygonDrawWindow(tk.Toplevel):
         # Grid size — Falcon-bed defaults (15in / 40cm) with settings
         # override for larger machines. Falling back to defaults keeps
         # existing call sites that don't pass settings working unchanged.
-        settings = settings or {}
+        self._settings = settings or {}
         if self.unit == "in":
             try:
                 self.grid_size = int(
-                    settings.get("polygon_draw_grid_size_in", 15))
+                    self._settings.get("polygon_draw_grid_size_in", 15))
             except (TypeError, ValueError):
                 self.grid_size = 15
         else:
             try:
                 self.grid_size = int(
-                    settings.get("polygon_draw_grid_size_cm", 40))
+                    self._settings.get("polygon_draw_grid_size_cm", 40))
             except (TypeError, ValueError):
                 self.grid_size = 40
         self.grid_size = max(2, self.grid_size)  # sanity floor
 
         self.points = []  # List of (x, y) in grid units, 0..grid_size each
-        # Set when the user captures from the camera AND has a valid
-        # calibration on disk — holds the polygon in ABSOLUTE machine-Y-up
-        # mm so Frame & Cut can offer auto-framing. Cleared the moment
-        # the user edits the polygon (any add/remove of a point), since
-        # grid-unit edits can't preserve the machine anchor.
-        self.result_machine_polygon_mm = None
+        # Set when the user captures from the camera. Anchors the grid's
+        # local (0, 0) to an absolute machine-mm point so the polygon
+        # can be reconstructed in machine coords (for nesting that knows
+        # the bed position) AND so a live camera overlay can render at
+        # the same machine→grid scale the polygon was captured at.
+        # Preserved across vertex edits — the grid frame doesn't move
+        # when you tweak a polygon point. Cleared only on Clear or
+        # Cancel.
+        self._camera_anchor_mm = None
+
+        # Camera-overlay state (populated when the user toggles "Show
+        # live camera"). None until enabled.
+        self._show_camera_var = None     # BooleanVar — created in _create_widgets
+        self._show_camera_chk = None     # Checkbutton widget reference
+        self._cap = None
+        self._cam_mod = None
+        self._calibration = None
+        self._PIL_Image = None
+        self._PIL_ImageTk = None
+        self._overlay_after_id = None
+        self._overlay_photo = None        # PhotoImage ref (prevent GC)
 
         self.title(_("Draw / Capture Shape"))
-        self.geometry("520x620")
+        self.geometry("520x680")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
@@ -3168,6 +3184,25 @@ class PolygonDrawWindow(tk.Toplevel):
         self.status_var = tk.StringVar(value="Click to add points...")
         tk.Label(self, textvariable=self.status_var, bg=DIALOG_BG, font=("Helvetica", 10)).pack(pady=5)
 
+        # Live-camera overlay toggle. Always created when a camera
+        # calibration exists, but starts DISABLED — the overlay needs
+        # a machine-coord anchor, which only exists after the user has
+        # captured a polygon from the camera. on_get_from_camera
+        # enables it. Lets the user adjust polygon vertices against
+        # the live camera image underneath the grid.
+        overlay_row = tk.Frame(self, bg=DIALOG_BG)
+        overlay_row.pack(pady=(0, 5))
+        if self._camera_capture_available():
+            self._show_camera_var = tk.BooleanVar(value=False)
+            self._show_camera_chk = tk.Checkbutton(
+                overlay_row,
+                text=_("Show live camera underneath (capture first)"),
+                variable=self._show_camera_var, bg=DIALOG_BG,
+                font=("Helvetica", 9),
+                command=self._on_camera_overlay_toggle,
+                state="disabled")
+            self._show_camera_chk.pack(side="left")
+
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=10)
@@ -3201,46 +3236,35 @@ class PolygonDrawWindow(tk.Toplevel):
             import camera_capture
         except ImportError:
             return
-        # Pick a camera index (same precedence as the calibration dialog).
-        cam_idx = camera_capture.find_falcon_camera_index()
+        cam_idx = self._resolve_camera_index()
         if cam_idx is None:
-            cams = camera_capture.enumerate_cameras()
-            if not cams:
-                messagebox.showerror(_("No Camera"),
-                                      _("No cameras detected."), parent=self)
-                return
-            cam_idx = cams[-1]['index']
+            messagebox.showerror(_("No Camera"),
+                                  _("No cameras detected."), parent=self)
+            return
 
         dlg = CameraCaptureDialog(
             self, camera_index=cam_idx,
-            calibration_path=camera_capture.default_calibration_path())
+            calibration_path=camera_capture.default_calibration_path(),
+            settings=self._settings)
         if not dlg.result_polygon_mm:
             return
 
-        # CameraCaptureDialog returns the polygon in ABSOLUTE
-        # machine-Y-up mm (via the integrated calibration's
-        # pixel→machine homography). Stash the raw absolute polygon
-        # for the caller — main.py's _adopt_camera_polygon applies
-        # the safety inset + normalization once it picks this up, so
-        # the same processing happens whether the user came in via
-        # the polygon dialog's camera button or the standalone "Get
-        # from camera" entry point.
+        # CameraCaptureDialog returns the polygon in ABSOLUTE machine-mm
+        # (Y-up). Record the bottom-left as the grid's machine anchor —
+        # then the grid stores everything in unitless grid coords, but
+        # we can reconstruct absolute machine coords any time as
+        # (grid * mm_per_unit + anchor). Persistent across vertex
+        # edits, so adjusted polygons still round-trip to machine.
         machine_polygon = list(dlg.result_polygon_mm)
-        self.result_machine_polygon_mm = machine_polygon
+        ox = min(p[0] for p in machine_polygon)
+        oy = min(p[1] for p in machine_polygon)
+        self._camera_anchor_mm = (ox, oy)
 
-        # Build the grid display. The grid stores Y-UP (high Y =
-        # top of canvas; _grid_to_canvas inverts via
-        # CANVAS_PX - gy*px_per_unit), and machine_polygon is also
-        # Y-UP after the pixels_to_mm fix — so just normalize and
-        # scale to grid units, no Y-flip needed. Back-of-bed (high
-        # machine Y) ends up at the top of the grid, matching what
-        # the user sees through the camera.
-        if machine_polygon:
-            ox = min(p[0] for p in machine_polygon)
-            oy = min(p[1] for p in machine_polygon)
-            polygon_norm = [(p[0] - ox, p[1] - oy) for p in machine_polygon]
-        else:
-            polygon_norm = []
+        # Build the grid display: subtract the anchor to normalize, then
+        # scale machine-mm → grid units. machine_polygon is Y-up, and
+        # the grid is also Y-up (high gy = top of canvas via
+        # _grid_to_canvas inversion), so no Y-flip needed here.
+        polygon_norm = [(p[0] - ox, p[1] - oy) for p in machine_polygon]
         scale_to_unit = 1.0 / 25.4 if self.unit == "in" else 1.0 / 10.0
         captured = [(x * scale_to_unit, y * scale_to_unit)
                      for (x, y) in polygon_norm]
@@ -3254,8 +3278,205 @@ class PolygonDrawWindow(tk.Toplevel):
                         for (x, y) in captured]
         self.polygon_closed = True
         self._redraw_polygon()
+        # The overlay needs an anchor — now that we have one, light up
+        # the checkbox so the user can switch on the live underlay.
+        if self._show_camera_chk is not None:
+            try:
+                self._show_camera_chk.config(
+                    state="normal",
+                    text=_("Show live camera underneath"))
+            except tk.TclError:
+                pass
         self.status_var.set(
             _("Captured {n} points from camera").format(n=len(self.points)))
+
+    def _resolve_camera_index(self):
+        """Same resolver pattern as the dialogs in main.py: persisted
+        override first, then Falcon-name heuristic, then last enumerated."""
+        try:
+            import camera_capture
+        except ImportError:
+            return None
+        if not camera_capture.HAS_OPENCV:
+            return None
+        if self._settings:
+            override = self._settings.get("camera_index_override")
+            if override is not None:
+                try:
+                    return int(override)
+                except (TypeError, ValueError):
+                    pass
+        idx = camera_capture.find_falcon_camera_index()
+        if idx is not None:
+            return idx
+        cams = camera_capture.enumerate_cameras()
+        if cams:
+            return cams[-1]['index']
+        return None
+
+    # ------------------------------------------------------------------
+    # Live camera overlay
+    # ------------------------------------------------------------------
+
+    def _on_camera_overlay_toggle(self):
+        """Checkbox handler — start/stop the live underlay."""
+        if self._show_camera_var.get():
+            self._start_camera_overlay()
+        else:
+            self._stop_camera_overlay()
+
+    def _start_camera_overlay(self):
+        if self._camera_anchor_mm is None:
+            # Shouldn't happen — checkbox is disabled until capture
+            # provides an anchor — but be defensive.
+            self._show_camera_var.set(False)
+            return
+        if self._cap is not None:
+            return  # already running
+        try:
+            import camera_capture
+            from PIL import Image, ImageTk
+            self._cam_mod = camera_capture
+            self._PIL_Image = Image
+            self._PIL_ImageTk = ImageTk
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV not loaded")
+            self._calibration = camera_capture.load_calibration(
+                camera_capture.default_calibration_path())
+            if not self._calibration:
+                raise RuntimeError(_("No camera calibration on disk."))
+        except (ImportError, RuntimeError) as e:
+            messagebox.showerror(_("Camera Overlay Unavailable"),
+                                  str(e), parent=self)
+            self._show_camera_var.set(False)
+            return
+        cam_idx = self._resolve_camera_index()
+        if cam_idx is None:
+            messagebox.showerror(_("No Camera"),
+                                  _("No cameras detected."), parent=self)
+            self._show_camera_var.set(False)
+            return
+        self._camera_index = cam_idx
+        self.status_var.set(_("Opening camera for overlay..."))
+        import threading
+
+        def _worker():
+            try:
+                cap = camera_capture.open_camera(cam_idx)
+                ok, _frame = cap.read()
+                if not ok:
+                    cap.release()
+                    raise RuntimeError(_("Camera no frame"))
+                self.after(0, self._camera_overlay_ready, cap)
+            except Exception as e:
+                self.after(0, self._camera_overlay_failed, e)
+
+        threading.Thread(target=_worker, name='polydraw-overlay',
+                          daemon=True).start()
+
+    def _camera_overlay_ready(self, cap):
+        # User may have toggled off / cancelled in the meantime.
+        if not self._show_camera_var or not self._show_camera_var.get():
+            try:
+                cap.release()
+            except Exception:
+                pass
+            return
+        self._cap = cap
+        self.status_var.set(_("Live camera underlay on."))
+        self._overlay_refresh_loop()
+
+    def _camera_overlay_failed(self, err):
+        self.status_var.set(_("Camera open failed: {e}").format(e=err))
+        if self._show_camera_var is not None:
+            self._show_camera_var.set(False)
+
+    def _overlay_refresh_loop(self):
+        if (self._cap is None
+                or not self.winfo_exists()
+                or self._show_camera_var is None
+                or not self._show_camera_var.get()):
+            return
+        try:
+            ok, frame = self._cap.read()
+        except Exception:
+            ok = False
+        if ok and frame is not None:
+            try:
+                self._render_overlay(frame)
+            except Exception:
+                pass  # don't kill the loop on a bad frame
+        self._overlay_after_id = self.after(
+            self.OVERLAY_REFRESH_MS, self._overlay_refresh_loop)
+
+    def _render_overlay(self, frame):
+        """Warp the camera frame into canvas-pixel space using the same
+        pixel→machine homography the capture used, plus the grid's
+        machine anchor + canvas px-per-mm scale. Result lands UNDER
+        the grid + polygon items via tag_lower."""
+        import cv2
+        import numpy as np
+        undist = self._cam_mod.undistort_frame(frame, self._calibration)
+        h, w = undist.shape[:2]
+        # Map four image corners through pixels_to_mm (which handles
+        # schema-1 Y-flip compat internally), then through our
+        # machine→canvas-pixel affine, to get the destination corners
+        # for the perspective warp.
+        src_corners = [(0.0, 0.0), (float(w), 0.0),
+                       (float(w), float(h)), (0.0, float(h))]
+        machine_corners = self._cam_mod.pixels_to_mm(
+            src_corners, self._calibration)
+        mm_per_unit = 25.4 if self.unit == "in" else 10.0
+        scale = self.px_per_unit / mm_per_unit  # canvas-px per machine-mm
+        ax, ay = self._camera_anchor_mm
+        dst_corners = []
+        for mx, my in machine_corners:
+            cx = (mx - ax) * scale
+            # Canvas Y is image-down; grid Y is up — invert here.
+            cy = self.CANVAS_PX - (my - ay) * scale
+            dst_corners.append((cx, cy))
+        src_arr = np.array(src_corners, dtype=np.float32)
+        dst_arr = np.array(dst_corners, dtype=np.float32)
+        try:
+            homography = cv2.getPerspectiveTransform(src_arr, dst_arr)
+        except cv2.error:
+            return
+        warped = cv2.warpPerspective(
+            undist, homography,
+            (self.CANVAS_PX, self.CANVAS_PX),
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(255, 255, 255))
+        rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
+        img = self._PIL_Image.fromarray(rgb)
+        self._overlay_photo = self._PIL_ImageTk.PhotoImage(img)
+        try:
+            self.canvas.delete('camera_overlay')
+            self.canvas.create_image(
+                0, 0, image=self._overlay_photo, anchor='nw',
+                tags='camera_overlay')
+            # Send to the bottom so grid + polygon items stay visible.
+            self.canvas.tag_lower('camera_overlay')
+        except tk.TclError:
+            pass
+
+    def _stop_camera_overlay(self):
+        if self._overlay_after_id is not None:
+            try:
+                self.after_cancel(self._overlay_after_id)
+            except Exception:
+                pass
+            self._overlay_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        try:
+            self.canvas.delete('camera_overlay')
+        except tk.TclError:
+            pass
+        self._overlay_photo = None
 
     def _draw_grid(self):
         """Draw the grid lines on the canvas."""
@@ -3343,16 +3564,16 @@ class PolygonDrawWindow(tk.Toplevel):
             self.status_var.set(f"{len(self.points)} points. {remaining} remaining. Click near first point to close.")
 
     def on_canvas_click(self, event):
-        """Handle click on canvas."""
+        """Handle click on canvas. The grid's machine anchor (if set
+        via camera capture) is preserved across vertex edits — moving
+        a point in grid coords still has a valid machine-coord
+        translation, so the polygon round-trips to machine on submit."""
         if self.polygon_closed:
             # If already closed, check if clicking on a point to remove it
             clicked_idx = self._get_clicked_point_index(event.x, event.y)
             if clicked_idx is not None:
                 self.points.pop(clicked_idx)
                 self.polygon_closed = False
-                # Edit invalidates the machine anchor (grid edits live
-                # in unitless grid coords, no longer machine-mm).
-                self.result_machine_polygon_mm = None
                 self._redraw_polygon()
                 self._update_status()
             return
@@ -3371,7 +3592,6 @@ class PolygonDrawWindow(tk.Toplevel):
         clicked_idx = self._get_clicked_point_index(event.x, event.y)
         if clicked_idx is not None:
             self.points.pop(clicked_idx)
-            self.result_machine_polygon_mm = None  # edit invalidates anchor
             self._redraw_polygon()
             self._update_status()
             return
@@ -3389,7 +3609,6 @@ class PolygonDrawWindow(tk.Toplevel):
 
         # Add the point
         self.points.append((gx, gy))
-        self.result_machine_polygon_mm = None  # edit invalidates anchor
         self._redraw_polygon()
         self._update_status()
 
@@ -3403,19 +3622,35 @@ class PolygonDrawWindow(tk.Toplevel):
         return None
 
     def on_clear(self):
-        """Clear all points."""
+        """Clear all points AND the machine anchor — Clear is the
+        'starting fresh' button. The grid's machine reference frame
+        is gone too, so the camera overlay turns off."""
         self.points = []
         self.polygon_closed = False
-        self.result_machine_polygon_mm = None
+        self._camera_anchor_mm = None
+        if self._show_camera_var is not None and self._show_camera_var.get():
+            self._show_camera_var.set(False)
+            self._stop_camera_overlay()
+        if self._show_camera_chk is not None:
+            try:
+                self._show_camera_chk.config(
+                    state="disabled",
+                    text=_("Show live camera underneath (capture first)"))
+            except tk.TclError:
+                pass
         self._redraw_polygon()
         self._update_status()
 
     def get_machine_polygon_mm(self):
-        """Return the camera-captured ABSOLUTE machine-Y-up polygon if
-        the user captured from the camera and didn't subsequently edit
-        the polygon. Returns None otherwise — caller should fall back
-        to the grid polygon (drawn / camera-then-edited)."""
-        return self.result_machine_polygon_mm
+        """Return absolute machine-Y-up polygon, reconstructed from the
+        current grid points + the camera-set anchor. None if no anchor
+        (purely drawn polygon — no machine reference)."""
+        if self._camera_anchor_mm is None or not self.points:
+            return None
+        mm_per_unit = 25.4 if self.unit == "in" else 10.0
+        ax, ay = self._camera_anchor_mm
+        return [(gx * mm_per_unit + ax, gy * mm_per_unit + ay)
+                for (gx, gy) in self.points]
 
     def on_submit(self):
         """Submit the polygon."""
@@ -3433,18 +3668,26 @@ class PolygonDrawWindow(tk.Toplevel):
                                    parent=self)
             return
 
+        # Release camera + cancel refresh timer before destroying the
+        # dialog. get_machine_polygon_mm() is reconstructed on demand
+        # from self.points + self._camera_anchor_mm, both of which
+        # survive past destroy(), so the caller can still read the
+        # absolute polygon after we close.
+        self._stop_camera_overlay()
         # Return points as list of (x, y) tuples in grid units
         self.result = list(self.points)
         self.destroy()
 
     def on_cancel(self):
         """Cancel and close."""
+        # Stop the camera overlay first — releases the cv2 cap handle
+        # and cancels the refresh timer. Calling destroy() without
+        # this would leak the camera.
+        self._stop_camera_overlay()
         self.result = None
-        # Cancel discards everything — including a camera-captured
-        # polygon that was sitting on the canvas waiting to be
-        # submitted. Without this clear, get_machine_polygon_mm would
-        # still return the captured polygon after a user-cancel.
-        self.result_machine_polygon_mm = None
+        # Drop the anchor so get_machine_polygon_mm doesn't return a
+        # stale polygon after the user explicitly cancelled.
+        self._camera_anchor_mm = None
         self.destroy()
 
     def get_polygon(self):
