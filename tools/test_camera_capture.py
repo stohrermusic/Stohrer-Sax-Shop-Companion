@@ -373,6 +373,164 @@ check("path includes StohrerSaxShopCompanion folder",
 
 
 # ============================================================
+print("\n=== Dot calibration: detect_dot_centers on synthetic image ===")
+# ============================================================
+#
+# Render a synthetic image of an 8x8 grid of 6mm dots + 1x 10mm marker
+# at known pixel positions. detect_dot_centers should find them all.
+# Then match_dots_to_grid + fit_dot_homography should round-trip the
+# known machine coords back to machine coords with sub-mm error.
+
+# Layout: 8x8 grid at 25mm spacing in local coords, marker at (200, 200).
+# Engrave offset: (50, 50) machine mm. So grid dots are at machine
+# (50 + col*25, 50 + row*25) for col, row in 0..7.
+# Render at 2 px/mm scale → grid spans (100, 100) to (450, 450) in pixels.
+# 600x600 image gives margin.
+PX_PER_MM = 2.0
+ENGRAVE_OFFSET = (50.0, 50.0)
+IMG_W, IMG_H = 600, 600
+
+
+def _machine_to_pixel(mx, my):
+    # Identity-ish mapping: (mx - 0) * px_per_mm = px (just shifted).
+    return (int(round(mx * PX_PER_MM)), int(round(my * PX_PER_MM)))
+
+
+synth = np.full((IMG_H, IMG_W), 230, dtype=np.uint8)  # light background
+# Grid dots
+expected_grid_machine = []
+for col in range(cam.DOT_GRID_COLS):
+    for row in range(cam.DOT_GRID_ROWS):
+        mx = ENGRAVE_OFFSET[0] + col * cam.DOT_SPACING_MM
+        my = ENGRAVE_OFFSET[1] + row * cam.DOT_SPACING_MM
+        px, py = _machine_to_pixel(mx, my)
+        radius_px = int(round(cam.DOT_DIAMETER_MM / 2.0 * PX_PER_MM))
+        cv2.circle(synth, (px, py), radius_px, 30, -1)
+        expected_grid_machine.append((mx, my))
+# Marker
+marker_mx = ENGRAVE_OFFSET[0] + cam.DOT_MARKER_LOCAL_XY[0]
+marker_my = ENGRAVE_OFFSET[1] + cam.DOT_MARKER_LOCAL_XY[1]
+m_px, m_py = _machine_to_pixel(marker_mx, marker_my)
+marker_radius_px = int(round(cam.DOT_MARKER_DIAMETER_MM / 2.0 * PX_PER_MM))
+cv2.circle(synth, (m_px, m_py), marker_radius_px, 30, -1)
+
+detected = cam.detect_dot_centers(synth, min_area_px=10, max_area_px=500)
+check(f"detected at least 65 dots ({len(detected)} found)",
+      len(detected) >= 65)
+
+# Build a synthetic "old calibration" matching the identity-ish mapping.
+# pixel_to_machine: mx = px / PX_PER_MM, my = py / PX_PER_MM.
+# Homography for that: [[1/PX_PER_MM, 0, 0], [0, 1/PX_PER_MM, 0], [0, 0, 1]]
+synthetic_old_cal = {
+    'calibration_schema_version': 2,
+    'camera_matrix': [[600.0, 0.0, IMG_W / 2.0],
+                       [0.0, 600.0, IMG_H / 2.0],
+                       [0.0, 0.0, 1.0]],
+    'dist_coeffs': [[0.0, 0.0, 0.0, 0.0, 0.0]],
+    'homography_px_to_machine_mm': [
+        [1.0 / PX_PER_MM, 0.0, 0.0],
+        [0.0, 1.0 / PX_PER_MM, 0.0],
+        [0.0, 0.0, 1.0],
+    ],
+}
+
+match_result = cam.match_dots_to_grid(
+    detected, synthetic_old_cal, ENGRAVE_OFFSET)
+check(f"match_dots_to_grid no error: {match_result.get('error')}",
+      match_result.get('error') is None)
+check(f"matched at least 60 grid dots ({len(match_result['matched_grid'])})",
+      len(match_result['matched_grid']) >= 60)
+check("marker_pixel identified",
+      match_result.get('marker_pixel') is not None)
+
+# Fit the homography and verify round-trip accuracy.
+new_homography = cam.fit_dot_homography(match_result['matched_grid'])
+check("fit_dot_homography returns 3x3", len(new_homography) == 3 and len(new_homography[0]) == 3)
+
+# Round-trip: pick a few detected dots, apply new homography, compare to known machine coords.
+new_cal = cam.build_dot_calibration(
+    synthetic_old_cal, new_homography, ENGRAVE_OFFSET,
+    len(match_result['matched_grid']))
+errors = []
+for (px, py), _cell, _local, (true_mx, true_my) in match_result['matched_grid']:
+    pred = cam.pixels_to_mm([(px, py)], new_cal)[0]
+    err = ((pred[0] - true_mx) ** 2 + (pred[1] - true_my) ** 2) ** 0.5
+    errors.append(err)
+mean_err = sum(errors) / len(errors)
+max_err = max(errors)
+check(f"round-trip mean error < 0.5mm (got {mean_err:.3f})", mean_err < 0.5)
+check(f"round-trip max error < 1.5mm (got {max_err:.3f})", max_err < 1.5)
+
+
+# ============================================================
+print("\n=== Dot calibration: build_dot_calibration preserves intrinsics ===")
+# ============================================================
+
+# Take an existing calibration, build a dot-cal result, check that
+# camera_matrix and dist_coeffs are unchanged (intrinsics preserved
+# from the prior ChArUco fit — that's the whole point of dot-cal).
+test_old = {
+    'calibration_schema_version': 2,
+    'camera_matrix': [[600.0, 0.0, 320.0], [0.0, 600.0, 240.0], [0.0, 0.0, 1.0]],
+    'dist_coeffs': [[-0.3, 0.1, 0.0, 0.0, 0.0]],
+    'rms_reprojection_error_px': 0.42,
+    'homography_px_to_machine_mm': [[0.5, 0.0, -100.0],
+                              [0.0, 0.5, -75.0],
+                              [0.0, 0.0, 1.0]],
+    'image_size': [640, 480],
+    'frame_count': 12,
+}
+new_h = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+test_new = cam.build_dot_calibration(test_old, new_h, (60.0, 70.0), 50)
+
+check("intrinsics preserved: camera_matrix",
+      test_new['camera_matrix'] == test_old['camera_matrix'])
+check("intrinsics preserved: dist_coeffs",
+      test_new['dist_coeffs'] == test_old['dist_coeffs'])
+check("intrinsics preserved: rms_reprojection_error_px",
+      test_new['rms_reprojection_error_px']
+      == test_old['rms_reprojection_error_px'])
+check("homography overwritten",
+      test_new['homography_px_to_machine_mm'] == new_h)
+check("schema bumped to 3",
+      test_new['calibration_schema_version'] == 3)
+check("card_engrave_offset_mm overwritten",
+      test_new['card_engrave_offset_mm'] == [60.0, 70.0])
+check("calibration_method set to dot_grid",
+      test_new.get('calibration_method') == 'dot_grid')
+
+
+# ============================================================
+print("\n=== Dot calibration: compare_calibrations math ===")
+# ============================================================
+
+# Build two calibrations and a matched_grid with synthetic data.
+# Old maps pixel (100, 100) → machine (50, 50). Truth is (60, 60). Error = sqrt(200) ~= 14.14mm.
+# New maps pixel (100, 100) → machine (60, 60). Error = 0.
+fake_matched = [
+    ((100.0, 100.0), (0, 0), (0.0, 0.0), (60.0, 60.0)),
+]
+cal_off = {
+    'calibration_schema_version': 2,
+    'camera_matrix': [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    'dist_coeffs': [[0.0, 0.0, 0.0, 0.0, 0.0]],
+    'homography_px_to_machine_mm': [[0.5, 0.0, 0.0], [0.0, 0.5, 0.0], [0.0, 0.0, 1.0]],
+}
+cal_perfect = {
+    'calibration_schema_version': 2,
+    'camera_matrix': [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    'dist_coeffs': [[0.0, 0.0, 0.0, 0.0, 0.0]],
+    'homography_px_to_machine_mm': [[0.6, 0.0, 0.0], [0.0, 0.6, 0.0], [0.0, 0.0, 1.0]],
+}
+comp = cam.compare_calibrations(cal_off, cal_perfect, fake_matched)
+check(f"compare: old error ~= 14.14 (got {comp['old_avg_mm']:.2f})",
+      abs(comp['old_avg_mm'] - 14.142) < 0.1)
+check(f"compare: new error ~= 0 (got {comp['new_avg_mm']:.4f})",
+      comp['new_avg_mm'] < 0.001)
+check("compare: n_dots matches input", comp['n_dots'] == 1)
+
+
+# ============================================================
 print(f"\n=== Summary: {passed} passed, {failed} failed ===\n")
 # ============================================================
 

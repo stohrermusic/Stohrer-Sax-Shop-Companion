@@ -6393,8 +6393,8 @@ class CameraCalibrationDialog(tk.Toplevel):
         try:
             FalconRunDialog(
                 self, sender, _framing_provider(),
-                title=_("Framing — jog to position, click Stop when "
-                         "done aligning"),
+                title=_("Framing — jog to position, click Done when "
+                         "alignment looks right"),
                 loop=True, gcode_provider=_framing_provider,
                 show_pause_resume=False, show_cut_button=False,
                 stop_needs_confirm=False)
@@ -7767,10 +7767,51 @@ class FalconRunDialog(tk.Toplevel):
             self._finished = True
             self._final_reason = "error"
 
+    def _is_door_open(self):
+        """True if Grbl currently reports the safety door is open.
+
+        Reads the cached status (set by the on_status callbacks at
+        STATUS_POLL_HZ during streaming) — no synchronous get_status
+        call, so this stays non-blocking and doesn't race the
+        streamer for the serial port. Cache is at most ~250ms stale
+        during active framing, which is fine for a "is the door open
+        right now?" confirmation.
+        """
+        st = self._sender.status or {}
+        if st.get('state') == 'Door':
+            return True
+        # Grbl 1.1 Pn: field reports active input pins. 'D' = door.
+        pins = st.get('pins') or ''
+        if 'D' in pins:
+            return True
+        return False
+
+    def _confirm_door_closed(self):
+        """If the door is open, pop a confirmation. Returns True if it
+        is safe to proceed (door closed OR user explicitly accepted
+        the warning), False if the user backed out.
+
+        Used at every "leaving the framing dialog into something that
+        fires the laser" boundary — without this, an open lid silently
+        wedges the next stream because Grbl blocks motion in Door
+        state (no error returned, just an unresponsive controller)."""
+        if not self._is_door_open():
+            return True
+        return messagebox.askyesno(
+            _("Lid Appears Open"),
+            _("The laser is reporting that the safety lid is open. "
+              "Grbl blocks motion in Door state, so the next step "
+              "won't fire until the lid is closed.\n\n"
+              "Close the lid, then click Yes to continue. Click No "
+              "to stay in framing."),
+            parent=self)
+
     def _on_cut_clicked(self):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
         request; the current pass will be allowed to finish, then the
         loop exits cleanly with reason='complete'."""
+        if not self._confirm_door_closed():
+            return
         self._cut_requested = True
         try:
             self._cut_btn.config(state='disabled',
@@ -7818,6 +7859,8 @@ class FalconRunDialog(tk.Toplevel):
         # reset. Same mechanism as the Cut button uses.
         graceful = self._loop and not self._show_cut_button
         if graceful:
+            if not self._confirm_door_closed():
+                return
             self._cut_requested = True
             try:
                 self._stop_btn.config(state='disabled',
@@ -8002,4 +8045,773 @@ class LiveCameraWindow(tk.Toplevel):
         except Exception:
             pass
 
+
+class DotCalibrationDialog(tk.Toplevel):
+    """Fast laser-head recalibration via a dot pattern.
+
+    Mirrors the engrave-phase UX of CameraCalibrationDialog but on a
+    much smaller scale: ~3-4 min engrave instead of ~3 hours, single
+    photo for capture, no multi-pose intrinsics fit. Re-fits only the
+    pixel→machine homography; preserves camera intrinsics from the
+    prior ChArUco calibration.
+
+    Workflow:
+      1. (Optional) Home laser.
+      2. Frame — low-power loop traces the pattern bbox at head MPos.
+         User jogs to position the pattern over their basswood.
+      3. Done — head parks at pattern center, framing closes.
+      4. Engrave — captures MPos as engrave_offset, engraves dots.
+      5. Capture — single photo, detect dots, fit new homography.
+      6. Compare — shows old-vs-new error in mm; user chooses.
+
+    Refuses to run without a prior calibration on disk (needs the
+    camera intrinsics).
+    """
+
+    LIVE_REFRESH_MS = 100
+    PREVIEW_W = 640
+    PREVIEW_H = 480
+
+    def __init__(self, parent, camera_index, calibration_path,
+                  falcon_port=None, settings=None):
+        super().__init__(parent)
+        self.title(_("Recalibrate Laser Head"))
+        self.configure(bg=DIALOG_BG)
+        self.grab_set()
+        self.resizable(True, True)
+        self.result = None
+
+        self._camera_index = camera_index
+        self._calibration_path = calibration_path
+        self._falcon_port = falcon_port
+        self._settings = settings or {}
+        self._cap = None
+        self._latest_photo = None
+        self._latest_frame = None
+        self._refresh_after_id = None
+        self._failed_reads = 0
+        self._phase = 'engrave'  # 'engrave' → 'capture'
+        self._engrave_homed = False
+        self._framing_done = False
+        self._captured_engrave_offset = None
+        # Populated on successful Capture+fit.
+        self._new_calibration = None
+        self._matched_grid = None
+
+        # Load prior calibration — refuse to proceed without it.
+        try:
+            import camera_capture
+            from PIL import Image, ImageTk
+            self._cam_mod = camera_capture
+            self._PIL_Image = Image
+            self._PIL_ImageTk = ImageTk
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV not loaded")
+        except ImportError as e:
+            tk.Label(self, text=_("Dot calibration needs OpenCV + Pillow:\n\n"
+                                    "    pip install opencv-python Pillow\n\n"
+                                    "Error: {e}").format(e=e),
+                     bg=DIALOG_BG, fg="#a30000", padx=20, pady=20).pack()
+            tk.Button(self, text=_("Close"), command=self.destroy).pack(pady=(0, 15))
+            return
+        self._old_calibration = self._cam_mod.load_calibration(calibration_path)
+        if self._old_calibration is None:
+            tk.Label(self, text=_(
+                "Dot calibration needs a prior ChArUco calibration on disk — "
+                "it re-fits only the pixel→machine mapping; it can't generate "
+                "camera intrinsics from scratch.\n\n"
+                "Run Pad Maker > Options > Machine > Camera Calibration first."),
+                bg=DIALOG_BG, fg="#a30000", wraplength=460,
+                padx=20, pady=20).pack()
+            tk.Button(self, text=_("Close"), command=self.destroy).pack(pady=(0, 15))
+            return
+
+        # Block sleep through the long engrave + camera capture.
+        try:
+            import sleep_lock
+            sleep_lock.prevent_sleep()
+        except Exception:
+            pass
+
+        # ---- UI layout: title + status + horizontal-split body ----
+        tk.Label(self, text=_("Recalibrate Laser Head"),
+                 bg=DIALOG_BG, font=("Helvetica", 12, "bold")
+                 ).pack(side='top', pady=(10, 2))
+
+        self._status_var = tk.StringVar(value="")
+        tk.Label(self, textvariable=self._status_var, bg=DIALOG_BG,
+                 font=("Helvetica", 10)).pack(side='bottom', pady=(0, 8))
+
+        body = tk.Frame(self, bg=DIALOG_BG)
+        body.pack(side='top', fill='both', expand=True, padx=10, pady=(0, 8))
+
+        # LEFT: camera preview
+        preview_frame = tk.Frame(body, bg='black')
+        preview_frame.pack(side='left', fill='both', expand=True, padx=(0, 8))
+        self._preview_label = tk.Label(
+            preview_frame, bg="#000000", fg="#cccccc",
+            text=_("Camera opens after engrave."),
+            font=("Helvetica", 12),
+            width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label.pack(fill='both', expand=True)
+
+        # RIGHT: control panel
+        right_panel = tk.Frame(body, bg=DIALOG_BG, width=340)
+        right_panel.pack(side='left', fill='y')
+        right_panel.pack_propagate(False)
+
+        self._instructions_var = tk.StringVar(value="")
+        self._instructions_label = tk.Label(
+            right_panel, textvariable=self._instructions_var,
+            bg=DIALOG_BG, wraplength=325, justify="left",
+            font=("Helvetica", 9))
+        self._instructions_label.pack(side='top', anchor='w',
+                                        padx=4, pady=(0, 8))
+
+        self._btn_frame = tk.Frame(right_panel, bg=DIALOG_BG)
+        self._btn_frame.pack(side='bottom', pady=(0, 8), fill='x')
+
+        # Engrave-phase buttons
+        self._frame_btn = tk.Button(
+            self._btn_frame, text=_("Frame"),
+            command=self._on_frame_clicked,
+            font=("Helvetica", 10), width=24)
+        self._engrave_btn = tk.Button(
+            self._btn_frame, text=_("Engrave"),
+            command=self._on_engrave_clicked,
+            font=("Helvetica", 10), width=24, state="disabled")
+
+        # Capture-phase buttons
+        self._capture_btn = tk.Button(
+            self._btn_frame, text=_("Capture"),
+            command=self._on_capture_clicked,
+            font=("Helvetica", 10, "bold"), width=20, state="disabled")
+        self._retake_btn = tk.Button(
+            self._btn_frame, text=_("Retake capture"),
+            command=self._on_retake_clicked,
+            font=("Helvetica", 9), width=16)
+
+        # Engrave-phase utility
+        self._home_btn = tk.Button(
+            self._btn_frame, text=_("Home Laser ($H)"),
+            command=self._on_home_clicked,
+            font=("Helvetica", 9), width=22)
+
+        # Always-visible recovery
+        self._reconnect_btn = tk.Button(
+            self._btn_frame, text=_("Reconnect camera"),
+            command=self._on_reconnect_camera,
+            font=("Helvetica", 9), width=22)
+        self._cancel_btn = tk.Button(
+            self._btn_frame, text=_("Cancel"),
+            command=self._on_close, width=10)
+
+        self.geometry(f"{self.PREVIEW_W + 380}x{max(self.PREVIEW_H, 500)}")
+        self.minsize(900, 500)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self._enter_engrave_phase()
+        self.wait_window(self)
+
+    # ------------------------------------------------------------------
+    # Engrave phase
+    # ------------------------------------------------------------------
+
+    def _enter_engrave_phase(self):
+        self._phase = 'engrave'
+        self._instructions_var.set(_(
+            "Step 1 of 2 — engrave the dot pattern on basswood.\n\n"
+            "1. Pin a 12×12-inch basswood blank in the lower-left of "
+            "the bed.\n"
+            "2. Home Laser if you haven't this session.\n"
+            "3. Click Frame — the trace shows where the ~200×200mm "
+            "pattern will engrave. Jog the laser to center it on your "
+            "basswood. Click Done when alignment looks right.\n"
+            "4. Click Engrave — takes ~3-4 minutes.\n"
+            "5. Don't move the basswood until capture is done."))
+        self._status_var.set(
+            _("Ready. Home + Frame + Engrave, in that order."))
+        for w in (self._capture_btn, self._retake_btn):
+            w.pack_forget()
+        self._home_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._frame_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._reconnect_btn.pack_forget()
+        self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
+        # Engrave gated on framing being done. Reset state so back-from-
+        # capture (retake) doesn't carry stale flags.
+        self._engrave_btn.config(state="normal" if self._framing_done
+                                  else "disabled")
+
+    def _on_home_clicked(self):
+        if not self._falcon_port:
+            messagebox.showerror(_("Falcon Not Detected"),
+                                  _("No Falcon connection."), parent=self)
+            return
+        if not messagebox.askyesno(
+                _("Home Laser?"),
+                _("Send the laser home? Head will travel to the home "
+                  "corner at full speed."), parent=self):
+            return
+        try:
+            import falcon_sender
+        except ImportError:
+            return
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"), str(e), parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        self._status_var.set(_("Homing..."))
+        self.update_idletasks()
+        import threading
+        result = {}
+
+        def _worker():
+            try:
+                ok, m = sender.home(timeout_s=60.0)
+                result['ok'] = ok
+                result['msg'] = m
+            except Exception as exc:
+                result['ok'] = False
+                result['msg'] = str(exc)
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        done_var = tk.BooleanVar(value=False)
+
+        def _check():
+            if t.is_alive():
+                self.after(50, _check)
+            else:
+                done_var.set(True)
+
+        self.after(50, _check)
+        self.wait_variable(done_var)
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if result.get('ok'):
+            self._engrave_homed = True
+            self._status_var.set(
+                _("Homed. Now jog into the bed area and Frame."))
+        else:
+            self._status_var.set(
+                _("Home failed: {m}").format(m=result.get('msg', '?')))
+
+    def _on_frame_clicked(self):
+        """Loop-mode framing — bbox follows the head as the user jogs."""
+        if not self._falcon_port:
+            messagebox.showerror(_("Falcon Not Detected"),
+                                  _("No Falcon connection."), parent=self)
+            return
+        try:
+            import falcon_sender
+            from gcode_engine import generate_framing_gcode
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  str(e), parent=self)
+            return
+
+        # Pattern bbox in local coords: marker extends past grid corner.
+        # The framing trace covers the full pattern bbox so the user can
+        # see exactly where every dot will engrave.
+        cam = self._cam_mod
+        max_x_local = max((cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM,
+                          cam.DOT_MARKER_LOCAL_XY[0]
+                          + cam.DOT_MARKER_DIAMETER_MM / 2.0)
+        max_y_local = max((cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM,
+                          cam.DOT_MARKER_LOCAL_XY[1]
+                          + cam.DOT_MARKER_DIAMETER_MM / 2.0)
+        min_x_local = -cam.DOT_DIAMETER_MM / 2.0
+        min_y_local = -cam.DOT_DIAMETER_MM / 2.0
+        # Pattern is centered on head's grid-center, which is at local
+        # ((cols-1)*spacing/2, (rows-1)*spacing/2) = (87.5, 87.5) for 8x8 @25.
+        gx_center = (cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM / 2.0
+        gy_center = (cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM / 2.0
+
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"), str(e), parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+
+        def _framing_provider():
+            st = sender.get_status(timeout=0.3)
+            if not st or not st.get('mpos'):
+                hx, hy = 100.0, 100.0
+            else:
+                hx, hy = st['mpos'][0], st['mpos'][1]
+            ox = hx - gx_center
+            oy = hy - gy_center
+            return generate_framing_gcode(
+                ox + min_x_local, oy + min_y_local,
+                ox + max_x_local, oy + max_y_local,
+                power_s=self._settings.get("laser_framing_power_s", 10),
+                feed=self._settings.get("laser_framing_feed", 2000),
+                return_to_origin=False,
+            )
+
+        try:
+            FalconRunDialog(
+                self, sender, _framing_provider(),
+                title=_("Framing — jog to position, click Done when "
+                         "alignment looks right"),
+                loop=True, gcode_provider=_framing_provider,
+                show_pause_resume=False, show_cut_button=False,
+                stop_needs_confirm=False)
+        finally:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+        self._framing_done = True
+        try:
+            self._engrave_btn.config(state="normal")
+            self._status_var.set(
+                _("Framing done. Click Engrave when ready (~3-4 min)."))
+        except tk.TclError:
+            pass
+
+    def _on_engrave_clicked(self):
+        """Capture MPos as engrave_offset, engrave the pattern."""
+        if not self._falcon_port:
+            messagebox.showerror(_("Falcon Not Detected"),
+                                  _("No Falcon connection."), parent=self)
+            return
+        try:
+            import falcon_sender
+            from gcode_engine import generate_dot_calibration_gcode
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  str(e), parent=self)
+            return
+
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+            status = sender.get_status(timeout=0.5)
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"), str(e), parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        if not status or not status.get('mpos'):
+            messagebox.showerror(
+                _("No machine position"),
+                _("Couldn't read MPos. Home the laser first."),
+                parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        head_x, head_y = status['mpos'][0], status['mpos'][1]
+
+        cam = self._cam_mod
+        gx_center = (cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM / 2.0
+        gy_center = (cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM / 2.0
+        engrave_offset = (head_x - gx_center, head_y - gy_center)
+
+        if not messagebox.askyesno(
+                _("Start Engrave?"),
+                _("Engrave the dot pattern centered on machine "
+                  "(X={x:.0f}, Y={y:.0f})?\n\n"
+                  "Pattern: 8×8 grid + 1 marker = 65 dots, ~200×200mm.\n"
+                  "Takes ~3-4 minutes. Lid must stay closed for the "
+                  "laser to fire.").format(x=head_x, y=head_y),
+                parent=self):
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+
+        # Generate G-code to a temp file then stream.
+        import tempfile
+        import os as _os
+        with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
+                                          mode='w') as tmp:
+            tmp_path = tmp.name
+        try:
+            generate_dot_calibration_gcode(
+                tmp_path, engrave_offset[0], engrave_offset[1],
+                grid_cols=cam.DOT_GRID_COLS,
+                grid_rows=cam.DOT_GRID_ROWS,
+                spacing_mm=cam.DOT_SPACING_MM,
+                dot_diameter_mm=cam.DOT_DIAMETER_MM,
+                marker_local_xy=cam.DOT_MARKER_LOCAL_XY,
+                marker_diameter_mm=cam.DOT_MARKER_DIAMETER_MM,
+                settings=self._settings,
+            )
+            with open(tmp_path, 'r') as f:
+                gcode_lines = f.read().splitlines()
+        finally:
+            try:
+                _os.remove(tmp_path)
+            except Exception:
+                pass
+
+        try:
+            run_dlg = FalconRunDialog(
+                self, sender, gcode_lines,
+                title=_("Engraving Dot Pattern"))
+            if run_dlg._final_reason != "complete":
+                self._status_var.set(
+                    _("Engrave stopped. Place fresh basswood, "
+                      "Frame, and Engrave again."))
+                self._framing_done = False
+                try:
+                    self._engrave_btn.config(state="disabled")
+                except tk.TclError:
+                    pass
+                return
+        finally:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+
+        self._captured_engrave_offset = engrave_offset
+        messagebox.showinfo(
+            _("Engrave Done — DON'T TOUCH"),
+            _("Pattern engraved. ⚠ Don't move the basswood. ⚠\n\n"
+              "Next: Capture takes one photo and computes the new "
+              "calibration."), parent=self)
+        self._enter_capture_phase()
+
+    # ------------------------------------------------------------------
+    # Capture phase
+    # ------------------------------------------------------------------
+
+    def _enter_capture_phase(self):
+        self._phase = 'capture'
+        self._instructions_var.set(_(
+            "Step 2 of 2 — capture the engraved pattern.\n\n"
+            "Click Capture to take one photo. The app will detect the "
+            "dots, fit a new homography, and show how it compares to "
+            "your current calibration.\n\n"
+            "If the detection misses too many dots, click Retake — "
+            "adjust lighting (cover ambient glare, no shadows on the "
+            "basswood) and try again."))
+        self._status_var.set(_("Opening camera..."))
+        for w in (self._home_btn, self._frame_btn, self._engrave_btn):
+            w.pack_forget()
+        self._capture_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._retake_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._cancel_btn.pack_forget()
+        self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self.after(50, self._open_camera_and_start)
+
+    def _open_camera_and_start(self):
+        import threading
+        self._status_var.set(_("Opening camera..."))
+
+        def _worker():
+            try:
+                cap = self._cam_mod.open_camera(self._camera_index)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    cap.release()
+                    raise RuntimeError(_("Camera returned no frame."))
+                self.after(0, self._camera_ready, cap, frame)
+            except Exception as e:
+                self.after(0, self._camera_failed, e)
+
+        threading.Thread(target=_worker, name='dotcal-cam',
+                          daemon=True).start()
+
+    def _camera_ready(self, cap, first_frame):
+        self._cap = cap
+        self._latest_frame = first_frame
+        self._status_var.set(
+            _("Camera live. Position confirmed; click Capture."))
+        try:
+            self._capture_btn.config(state="normal")
+        except tk.TclError:
+            pass
+        self._refresh_loop()
+
+    def _camera_failed(self, err):
+        self._status_var.set(
+            _("Camera open failed: {e}").format(e=err))
+
+    def _refresh_loop(self):
+        if not self.winfo_exists() or self._cap is None:
+            return
+        try:
+            ok, frame = self._cap.read()
+        except Exception:
+            ok = False
+        if ok and frame is not None:
+            self._failed_reads = 0
+            self._latest_frame = frame
+            self._render_frame()
+        else:
+            self._failed_reads += 1
+            if self._failed_reads == 30:
+                try:
+                    self._status_var.set(_(
+                        "Camera lost — click Reconnect camera to recover."))
+                except tk.TclError:
+                    pass
+        self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
+                                              self._refresh_loop)
+
+    def _render_frame(self, overlay_centers=None, overlay_marker=None):
+        import cv2
+        # Undistort if we have a prior calibration; otherwise raw frame.
+        if self._old_calibration:
+            try:
+                frame = self._cam_mod.undistort_frame(
+                    self._latest_frame, self._old_calibration)
+            except Exception:
+                frame = self._latest_frame
+        else:
+            frame = self._latest_frame
+        annotated = frame.copy()
+        if overlay_centers:
+            for (cx, cy) in overlay_centers:
+                cv2.circle(annotated, (int(cx), int(cy)), 4, (0, 255, 0), -1)
+        if overlay_marker:
+            cv2.circle(annotated, (int(overlay_marker[0]),
+                                    int(overlay_marker[1])),
+                       8, (0, 0, 255), 2)
+        rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+        img = self._PIL_Image.fromarray(rgb)
+        img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
+        self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
+        try:
+            self._preview_label.config(image=self._latest_photo,
+                                        width=img.width, height=img.height)
+        except tk.TclError:
+            pass
+
+    def _on_capture_clicked(self):
+        """Single capture: detect dots, match to grid, fit homography,
+        show comparison dialog, let user confirm before save."""
+        if self._latest_frame is None:
+            return
+        if self._captured_engrave_offset is None:
+            messagebox.showerror(_("No Engrave Offset"),
+                                  _("Internal error: no engrave offset "
+                                    "captured. Re-engrave."), parent=self)
+            return
+        try:
+            undist = self._cam_mod.undistort_frame(
+                self._latest_frame, self._old_calibration)
+            centers = self._cam_mod.detect_dot_centers(undist)
+        except Exception as e:
+            messagebox.showerror(_("Detection Failed"),
+                                  str(e), parent=self)
+            return
+        if len(centers) < self._cam_mod.DOT_MIN_MATCHED + 1:
+            messagebox.showerror(
+                _("Not Enough Dots"),
+                _("Only detected {n} dots — need at least {m}. "
+                  "Try improving lighting and Retake.").format(
+                    n=len(centers),
+                    m=self._cam_mod.DOT_MIN_MATCHED + 1),
+                parent=self)
+            # Show what we found so the user knows what's failing
+            self._render_frame(overlay_centers=[c[0] for c in centers])
+            return
+
+        match_result = self._cam_mod.match_dots_to_grid(
+            centers, self._old_calibration,
+            self._captured_engrave_offset)
+        if match_result.get('error') or not match_result['matched_grid']:
+            messagebox.showerror(
+                _("Match Failed"),
+                _("Couldn't match detected dots to the grid: {e}").format(
+                    e=match_result.get('error', 'unknown')),
+                parent=self)
+            self._render_frame(
+                overlay_centers=[c[0] for c in centers],
+                overlay_marker=match_result.get('marker_pixel'))
+            return
+
+        matched = match_result['matched_grid']
+        if len(matched) < self._cam_mod.DOT_MIN_MATCHED:
+            messagebox.showwarning(
+                _("Too Few Matches"),
+                _("Matched only {n} of {total} detected dots. Need at "
+                  "least {m} for a stable fit.").format(
+                    n=len(matched), total=len(centers),
+                    m=self._cam_mod.DOT_MIN_MATCHED),
+                parent=self)
+            self._render_frame(
+                overlay_centers=[c[0] for c in centers],
+                overlay_marker=match_result.get('marker_pixel'))
+            return
+
+        # Show what was matched so the user can see the detection result.
+        matched_pixels = [m[0] for m in matched]
+        self._render_frame(overlay_centers=matched_pixels,
+                           overlay_marker=match_result.get('marker_pixel'))
+
+        try:
+            new_homography = self._cam_mod.fit_dot_homography(matched)
+            new_calibration = self._cam_mod.build_dot_calibration(
+                self._old_calibration, new_homography,
+                self._captured_engrave_offset, len(matched))
+        except Exception as e:
+            messagebox.showerror(_("Fit Failed"), str(e), parent=self)
+            return
+
+        self._new_calibration = new_calibration
+        self._matched_grid = matched
+
+        # Comparison dialog: show old vs new error, let user pick.
+        comp = self._cam_mod.compare_calibrations(
+            self._old_calibration, new_calibration, matched)
+        self._show_comparison_and_save(comp)
+
+    def _show_comparison_and_save(self, comp):
+        """Modal numeric comparison + Switch / Keep buttons. Switch
+        writes the new calibration to disk; Keep discards."""
+        dlg = tk.Toplevel(self)
+        dlg.title(_("Calibration Comparison"))
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.configure(bg=DIALOG_BG)
+        dlg.resizable(False, False)
+
+        tk.Label(dlg, text=_("Calibration check"),
+                 bg=DIALOG_BG, font=("Helvetica", 12, "bold")
+                 ).pack(padx=20, pady=(15, 4))
+        tk.Label(dlg, text=_(
+            "{n} of {total} grid dots matched."
+        ).format(n=comp['n_dots'],
+                  total=self._cam_mod.DOT_GRID_COLS
+                        * self._cam_mod.DOT_GRID_ROWS),
+                 bg=DIALOG_BG, font=("Helvetica", 10)
+                 ).pack(padx=20, pady=(0, 12))
+
+        grid = tk.Frame(dlg, bg=DIALOG_BG)
+        grid.pack(padx=20, pady=(0, 12))
+        tk.Label(grid, text="", bg=DIALOG_BG).grid(row=0, column=0,
+                                                       padx=10)
+        tk.Label(grid, text=_("avg mm"), bg=DIALOG_BG,
+                 font=("Helvetica", 10, "bold")
+                 ).grid(row=0, column=1, padx=10)
+        tk.Label(grid, text=_("max mm"), bg=DIALOG_BG,
+                 font=("Helvetica", 10, "bold")
+                 ).grid(row=0, column=2, padx=10)
+        tk.Label(grid, text=_("Current calibration:"), bg=DIALOG_BG,
+                 anchor='w').grid(row=1, column=0, padx=10, sticky='w')
+        tk.Label(grid, text=f"{comp['old_avg_mm']:.2f}", bg=DIALOG_BG,
+                 font=("Courier", 11)).grid(row=1, column=1, padx=10)
+        tk.Label(grid, text=f"{comp['old_max_mm']:.2f}", bg=DIALOG_BG,
+                 font=("Courier", 11)).grid(row=1, column=2, padx=10)
+        tk.Label(grid, text=_("New (dot-cal):"), bg=DIALOG_BG,
+                 anchor='w').grid(row=2, column=0, padx=10, sticky='w')
+        tk.Label(grid, text=f"{comp['new_avg_mm']:.2f}", bg=DIALOG_BG,
+                 font=("Courier", 11)).grid(row=2, column=1, padx=10)
+        tk.Label(grid, text=f"{comp['new_max_mm']:.2f}", bg=DIALOG_BG,
+                 font=("Courier", 11)).grid(row=2, column=2, padx=10)
+
+        tk.Label(dlg, text=_(
+            "The new calibration is fit specifically to these dots, so "
+            "it will score near-zero in this area by construction. "
+            "Your current calibration's error is what auto-frame would "
+            "actually be off by here."),
+            bg=DIALOG_BG, wraplength=420, justify='left',
+            font=("Helvetica", 9), fg="#555555").pack(padx=20, pady=(0, 12))
+
+        btn_row = tk.Frame(dlg, bg=DIALOG_BG)
+        btn_row.pack(padx=20, pady=(0, 15))
+
+        def _switch():
+            try:
+                self._cam_mod.save_calibration(
+                    self._new_calibration, self._calibration_path)
+                self.result = "saved"
+                messagebox.showinfo(
+                    _("Calibration Updated"),
+                    _("Saved. Camera intrinsics preserved; only the "
+                      "laser-head mapping was refreshed."), parent=dlg)
+            except Exception as e:
+                messagebox.showerror(_("Save Failed"),
+                                      str(e), parent=dlg)
+                return
+            dlg.destroy()
+            self._on_close()
+
+        def _keep():
+            dlg.destroy()
+            # Stay in the dialog so the user can Retake if they want.
+            self._status_var.set(_(
+                "Kept current calibration. Click Retake for another try, "
+                "or Cancel to close."))
+
+        tk.Button(btn_row, text=_("Switch to new calibration"),
+                   command=_switch, width=24,
+                   font=("Helvetica", 10, "bold"),
+                   bg="#4caf50", fg="white",
+                   activebackground="#388e3c").pack(side='left', padx=5)
+        tk.Button(btn_row, text=_("Keep current"),
+                   command=_keep, width=14).pack(side='left', padx=5)
+        dlg.wait_window()
+
+    def _on_retake_clicked(self):
+        """Throw away the latest analysis; refresh from camera to try again."""
+        self._new_calibration = None
+        self._matched_grid = None
+        self._render_frame()  # clear overlays
+        self._status_var.set(_("Ready for another capture."))
+
+    def _on_reconnect_camera(self):
+        if self._refresh_after_id:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self._failed_reads = 0
+        self._status_var.set(_("Reopening camera..."))
+        self.after(50, self._open_camera_and_start)
+
+    def _on_close(self):
+        if self._refresh_after_id:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        try:
+            import sleep_lock
+            sleep_lock.allow_sleep()
+        except Exception:
+            pass
+        self.destroy()
 

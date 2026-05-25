@@ -324,6 +324,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         machine_menu.add_separator()
         machine_menu.add_command(label=_("Camera Calibration..."),
                                    command=self._on_machine_recalibrate)
+        machine_menu.add_command(label=_("Recalibrate Laser Head (fast)..."),
+                                   command=self._on_machine_recalibrate_fast)
         machine_menu.add_command(label=_("Auto-Framing Inset Margin..."),
                                    command=self._on_machine_inset_settings)
 
@@ -2061,6 +2063,50 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Delegate to the existing handler (inherited from
         # ToolingTabMixin) — same dialog, same flow.
         self._open_camera_calibration()
+
+    def _on_machine_recalibrate_fast(self):
+        """Open the dot-pattern fast laser-head recalibration.
+
+        Distinct from Camera Calibration: this re-fits only the
+        pixel→machine homography (laser-head position drift) using a
+        small dot grid that engraves in ~3-4 min. Preserves camera
+        intrinsics from the prior ChArUco calibration — refuses to run
+        without one.
+        """
+        if not self._machine_require_falcon():
+            return
+        try:
+            import camera_capture
+        except ImportError:
+            messagebox.showerror(
+                _("OpenCV Required"),
+                _("Dot calibration needs OpenCV:\n\n"
+                  "    pip install opencv-python Pillow"))
+            return
+        cal_path = camera_capture.default_calibration_path()
+        if camera_capture.load_calibration(cal_path) is None:
+            messagebox.showinfo(
+                _("Camera Calibration Required First"),
+                _("This is the FAST recalibration — it only refreshes "
+                  "the laser-head position, not the lens calibration.\n\n"
+                  "Run the full Camera Calibration first (engraves a "
+                  "ChArUco card, takes ~60 min). After that, this "
+                  "dot-calibration can be run whenever you notice "
+                  "auto-frame drift, in ~5 min total."))
+            return
+        cam_idx = self._resolve_camera_index()
+        if cam_idx is None:
+            messagebox.showerror(_("No Camera"),
+                                  _("No cameras detected."))
+            return
+        from ui_dialogs import DotCalibrationDialog
+        DotCalibrationDialog(
+            self.root,
+            camera_index=cam_idx,
+            calibration_path=cal_path,
+            falcon_port=self.falcon_port,
+            settings=self.settings,
+        )
 
     def _on_machine_inset_settings(self):
         """Small dialog: edit camera_polygon_inset_mm."""
