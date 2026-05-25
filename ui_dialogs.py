@@ -9153,7 +9153,34 @@ class DotCalibrationDialog(tk.Toplevel):
             "Your current calibration's error is what auto-frame would "
             "actually be off by here."),
             bg=DIALOG_BG, wraplength=420, justify='left',
-            font=("Helvetica", 9), fg="#555555").pack(padx=20, pady=(0, 12))
+            font=("Helvetica", 9), fg="#555555").pack(padx=20, pady=(0, 8))
+
+        # Confidence banner based on matched-dot count. Fewer dots =
+        # less reliable fit (in the limit, RANSAC with 4-6 points can
+        # match almost any pixel→machine mapping, so the fit could be
+        # arbitrarily wrong outside the few sampled positions).
+        n = comp['n_dots']
+        if n < 12:
+            banner_text = _(
+                "⚠ Only {n} dots matched. The new fit may be over-"
+                "determined by too little data and could be wrong "
+                "outside these few positions. RECOMMEND Keep current "
+                "and recapture with better detection (more dots).").format(n=n)
+            banner_fg = "#a30000"
+        elif n < 30:
+            banner_text = _(
+                "Moderate confidence — {n} dots matched. Fit is "
+                "usable but more dots would be safer.").format(n=n)
+            banner_fg = "#cc6600"
+        else:
+            banner_text = _(
+                "Good confidence — {n} dots matched. Fit should be "
+                "reliable across the calibrated area.").format(n=n)
+            banner_fg = "#006600"
+        tk.Label(dlg, text=banner_text,
+                 bg=DIALOG_BG, wraplength=420, justify='left',
+                 font=("Helvetica", 10, "bold"),
+                 fg=banner_fg).pack(padx=20, pady=(0, 12))
 
         btn_row = tk.Frame(dlg, bg=DIALOG_BG)
         btn_row.pack(padx=20, pady=(0, 15))

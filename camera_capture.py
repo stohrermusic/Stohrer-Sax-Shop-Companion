@@ -185,18 +185,30 @@ def detect_dot_centers(frame, min_area_px=None, max_area_px=None,
     if max_area_px is None:
         max_area_px = max(500.0, img_area * 0.005)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    otsu_val, thresh = cv2.threshold(
-        blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    # Adaptive (local) thresholding instead of global Otsu. Engraved
+    # dots are a SMALL variation against the basswood, while the
+    # basswood-vs-bed transition is the dominant intensity step in
+    # the frame. Global Otsu picks a threshold for THAT step and
+    # classifies dots as "basswood" — so dots disappear from the
+    # mask. Adaptive compares each pixel to a local neighborhood
+    # mean, which makes dots-on-basswood pop out properly.
+    #
+    # block_size: must be odd, big enough to span the local "wood
+    # background" around a dot but smaller than the basswood-vs-bed
+    # transition. For dots ~10-25 px diameter on 640x480, blocks
+    # ~31-51 px work well. Auto-scale to image area.
+    block_size = max(11, int((img_area ** 0.5) * 0.05) | 1)
+    # C parameter: subtracted from the local mean. Positive = stricter
+    # (only pixels darker than mean - C are flagged). threshold_bias
+    # is applied here so the existing slider semantics carry over —
+    # positive bias = less sensitive, negative = more sensitive.
+    c_offset = 5 + int(threshold_bias)
+    thresh = cv2.adaptiveThreshold(
+        blurred, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        block_size, c_offset,
     )
-    if threshold_bias:
-        # Negative bias = lower threshold = more pixels classified as "dot"
-        # = more sensitive. We're inverted, so the Otsu value being lower
-        # actually means MORE area passes (the dark region grows). Apply
-        # bias as-is — positive raises the cutoff (fewer pixels = stricter).
-        biased = max(0, min(255, int(round(otsu_val + threshold_bias))))
-        _, thresh = cv2.threshold(blurred, biased, 255,
-                                    cv2.THRESH_BINARY_INV)
-
     contours, _ = cv2.findContours(
         thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
