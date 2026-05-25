@@ -8376,20 +8376,24 @@ class DotCalibrationDialog(tk.Toplevel):
         self._instructions_var.set(_(
             "Step 1 of 2 — engrave the dot pattern on basswood.\n\n"
             "1. Pin a 12×12-inch basswood blank in the lower-left of "
-            "the bed. The live camera preview shows you the bed — "
-            "place the basswood so its lower-left covers roughly bed "
-            "center to bed corner.\n"
+            "the bed (use the live camera preview to position it).\n"
             "2. Home Laser if you haven't this session.\n"
-            "3. Click Frame — the trace shows where the ~200×200mm "
-            "pattern will engrave. Jog the laser to center it on your "
-            "basswood (watch the camera). Click Done when alignment "
-            "looks right.\n"
-            "4. Click Engrave — takes ~3-4 minutes.\n"
-            "5. Don't move the basswood after engrave is done."))
+            "3. JOG the head into the bed before framing — homing "
+            "puts it at the corner where the 200×200mm pattern won't "
+            "fit. Aim for roughly bed center (X≈200, Y≈200).\n"
+            "4. Click Frame — the trace shows where the pattern will "
+            "engrave. Jog more if needed (the trace follows the head). "
+            "Click Done when alignment looks right.\n"
+            "5. Click Engrave — takes ~3-4 minutes.\n"
+            "6. Don't move the basswood after engrave is done."))
         self._status_var.set(
-            _("Ready. Home + Frame + Engrave, in that order."))
+            _("Ready. Home + jog into bed + Frame + Engrave."))
         for w in (self._capture_btn, self._retake_btn):
             w.pack_forget()
+        # Build jog cluster + MPos display once.
+        if not hasattr(self, '_engrave_jog_frame'):
+            self._build_engrave_controls()
+        self._engrave_jog_frame.pack(side='bottom', pady=(0, 8))
         self._home_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._frame_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
@@ -8406,6 +8410,177 @@ class DotCalibrationDialog(tk.Toplevel):
         # CameraCalibrationDialog pattern.
         if self._cap is None:
             self.after(50, self._open_camera_and_start)
+        self._start_mpos_polling()
+
+    def _build_engrave_controls(self):
+        """Jog cluster + MPos display for the engrave-phase position
+        step. Same controls as CameraCalibrationDialog so the user can
+        jog directly inside the dialog without needing to escape to
+        the Machine menu."""
+        self._engrave_jog_frame = tk.LabelFrame(
+            self._btn_frame.master, text=_("Position the head"),
+            bg=DIALOG_BG, padx=8, pady=4)
+        row = tk.Frame(self._engrave_jog_frame, bg=DIALOG_BG)
+        row.pack(anchor='w')
+        self._mpos_var = tk.StringVar(value=_("MPos: --"))
+        tk.Label(row, textvariable=self._mpos_var, bg=DIALOG_BG,
+                  font=("Courier", 10)).pack(side='left', padx=4)
+        step_row = tk.Frame(self._engrave_jog_frame, bg=DIALOG_BG)
+        step_row.pack(anchor='w', pady=(4, 2))
+        tk.Label(step_row, text=_("Step (mm):"), bg=DIALOG_BG,
+                  font=("Helvetica", 9)).pack(side='left')
+        self._engrave_jog_step = tk.DoubleVar(value=10.0)
+        for step in (1.0, 10.0, 50.0):
+            tk.Radiobutton(
+                step_row, text=str(step),
+                variable=self._engrave_jog_step, value=step,
+                bg=DIALOG_BG, font=("Helvetica", 9),
+                highlightthickness=0).pack(side='left')
+        btn_grid = tk.Frame(self._engrave_jog_frame, bg=DIALOG_BG)
+        btn_grid.pack(pady=2)
+        tk.Button(btn_grid, text="↑", width=3,
+                   command=lambda: self._engrave_jog(0, 1)
+                   ).grid(row=0, column=1, padx=2, pady=1)
+        tk.Button(btn_grid, text="←", width=3,
+                   command=lambda: self._engrave_jog(-1, 0)
+                   ).grid(row=1, column=0, padx=2, pady=1)
+        tk.Button(btn_grid, text="→", width=3,
+                   command=lambda: self._engrave_jog(1, 0)
+                   ).grid(row=1, column=2, padx=2, pady=1)
+        tk.Button(btn_grid, text="↓", width=3,
+                   command=lambda: self._engrave_jog(0, -1)
+                   ).grid(row=2, column=1, padx=2, pady=1)
+
+    def _engrave_jog(self, dx_sign, dy_sign):
+        """Send a relative jog. Same quick connect/disconnect pattern
+        as the ChArUco calibration dialog — held to a single command
+        so it doesn't tie up the port."""
+        if not self._falcon_port:
+            return
+        try:
+            import falcon_sender
+            s = falcon_sender.FalconSender(port=self._falcon_port)
+            s.connect()
+            try:
+                step = float(self._engrave_jog_step.get())
+            except Exception:
+                step = 10.0
+            s.jog(x=dx_sign * step, y=dy_sign * step,
+                   feed=3000, relative=True)
+            s.disconnect()
+        except Exception:
+            pass
+
+    def _start_mpos_polling(self):
+        if self._phase != 'engrave' or not self._falcon_port:
+            return
+        self._mpos_after_id = self.after(300, self._poll_mpos)
+
+    def _poll_mpos(self):
+        if self._phase != 'engrave' or not self._falcon_port:
+            return
+        try:
+            import falcon_sender
+            s = falcon_sender.FalconSender(port=self._falcon_port)
+            s.connect()
+            st = s.get_status(timeout=0.2)
+            s.disconnect()
+            if st and st.get('mpos'):
+                self._mpos_var.set(
+                    _("MPos: X={x:7.2f}  Y={y:7.2f}").format(
+                        x=st['mpos'][0], y=st['mpos'][1]))
+        except Exception:
+            pass
+        if self._phase == 'engrave':
+            self._mpos_after_id = self.after(800, self._poll_mpos)
+
+    def _stop_mpos_polling(self):
+        aid = getattr(self, '_mpos_after_id', None)
+        if aid:
+            try:
+                self.after_cancel(aid)
+            except Exception:
+                pass
+            self._mpos_after_id = None
+
+    def _pattern_bbox_local(self):
+        """Return (min_x, min_y, max_x, max_y) of the full pattern in
+        local coords — used by the bed-bounds check and by framing."""
+        cam = self._cam_mod
+        max_x = max((cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM,
+                    cam.DOT_MARKER_LOCAL_XY[0]
+                    + cam.DOT_MARKER_DIAMETER_MM / 2.0)
+        max_y = max((cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM,
+                    cam.DOT_MARKER_LOCAL_XY[1]
+                    + cam.DOT_MARKER_DIAMETER_MM / 2.0)
+        min_x = -cam.DOT_DIAMETER_MM / 2.0
+        min_y = -cam.DOT_DIAMETER_MM / 2.0
+        return (min_x, min_y, max_x, max_y)
+
+    def _check_position_safe(self):
+        """Read MPos and refuse to frame/engrave if the pattern would
+        extend off the bed. Mid-stream soft-limit trips force a
+        controller reset (ALARM:3 / crash into the rails); cheap to
+        prevent here."""
+        try:
+            import falcon_sender
+        except ImportError:
+            return True  # can't check; let it run and fail loudly
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            st = sender.get_status(timeout=0.5)
+        except Exception:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return True
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if not st or not st.get('mpos'):
+            return True  # no MPos — let user proceed at their risk
+        hx, hy = st['mpos'][0], st['mpos'][1]
+        cam = self._cam_mod
+        gx_center = (cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM / 2.0
+        gy_center = (cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM / 2.0
+        ox = hx - gx_center
+        oy = hy - gy_center
+        min_x, min_y, max_x, max_y = self._pattern_bbox_local()
+        far_x = ox + max_x
+        far_y = oy + max_y
+        near_x = ox + min_x
+        near_y = oy + min_y
+        bed_x_max = float(self._settings.get("laser_bed_x_max", 400.0))
+        bed_y_max = float(self._settings.get("laser_bed_y_max", 415.0))
+        if (near_x < 0 or near_y < 0
+                or far_x > bed_x_max + 1.0 or far_y > bed_y_max + 1.0):
+            min_safe_x = gx_center - min_x
+            max_safe_x = bed_x_max - (max_x - gx_center)
+            min_safe_y = gy_center - min_y
+            max_safe_y = bed_y_max - (max_y - gy_center)
+            messagebox.showerror(
+                _("Pattern Would Run Off Bed"),
+                _("With head at machine (X={hx:.1f}, Y={hy:.1f}), the "
+                  "pattern would engrave at ({nx:.0f}, {ny:.0f}) to "
+                  "({fx:.0f}, {fy:.0f}) — outside the {bx:.0f}×{by:.0f} "
+                  "bed.\n\n"
+                  "Jog the head into the bed first. Safe range for "
+                  "this pattern:\n"
+                  "  X ≈ {msx:.0f}-{Msx:.0f}\n"
+                  "  Y ≈ {msy:.0f}-{Msy:.0f}\n\n"
+                  "Bed center ({mx:.0f}, {my:.0f}) is always safe."
+                  ).format(hx=hx, hy=hy, nx=near_x, ny=near_y,
+                           fx=far_x, fy=far_y,
+                           bx=bed_x_max, by=bed_y_max,
+                           msx=min_safe_x, Msx=max_safe_x,
+                           msy=min_safe_y, Msy=max_safe_y,
+                           mx=bed_x_max / 2.0, my=bed_y_max / 2.0),
+                parent=self)
+            return False
+        return True
 
     def _on_home_clicked(self):
         if not self._falcon_port:
@@ -8476,6 +8651,11 @@ class DotCalibrationDialog(tk.Toplevel):
             messagebox.showerror(_("Falcon Not Detected"),
                                   _("No Falcon connection."), parent=self)
             return
+        # Bed-bounds safety: refuse to send framing gcode that would
+        # send the head off the bed. Without this, framing at the home
+        # corner (0, 0) crashes the head into the rails.
+        if not self._check_position_safe():
+            return
         try:
             import falcon_sender
             from gcode_engine import generate_framing_gcode
@@ -8484,22 +8664,18 @@ class DotCalibrationDialog(tk.Toplevel):
                                   str(e), parent=self)
             return
 
-        # Pattern bbox in local coords: marker extends past grid corner.
-        # The framing trace covers the full pattern bbox so the user can
-        # see exactly where every dot will engrave.
+        # Pattern bbox in local coords (shared with _check_position_safe
+        # and _on_engrave_clicked via _pattern_bbox_local).
+        min_x_local, min_y_local, max_x_local, max_y_local = \
+            self._pattern_bbox_local()
         cam = self._cam_mod
-        max_x_local = max((cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM,
-                          cam.DOT_MARKER_LOCAL_XY[0]
-                          + cam.DOT_MARKER_DIAMETER_MM / 2.0)
-        max_y_local = max((cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM,
-                          cam.DOT_MARKER_LOCAL_XY[1]
-                          + cam.DOT_MARKER_DIAMETER_MM / 2.0)
-        min_x_local = -cam.DOT_DIAMETER_MM / 2.0
-        min_y_local = -cam.DOT_DIAMETER_MM / 2.0
         # Pattern is centered on head's grid-center, which is at local
         # ((cols-1)*spacing/2, (rows-1)*spacing/2) = (87.5, 87.5) for 8x8 @25.
         gx_center = (cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM / 2.0
         gy_center = (cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM / 2.0
+
+        # Stop the MPos poller while the streamer owns the port.
+        self._stop_mpos_polling()
 
         sender = falcon_sender.FalconSender(port=self._falcon_port)
         try:
@@ -8511,6 +8687,7 @@ class DotCalibrationDialog(tk.Toplevel):
                 sender.disconnect()
             except Exception:
                 pass
+            self._start_mpos_polling()
             return
 
         def _framing_provider():
@@ -8545,6 +8722,8 @@ class DotCalibrationDialog(tk.Toplevel):
             # cv2 frame stream stalls after a long-lived modal closes;
             # reopen so the user sees live frames again immediately.
             self._auto_recycle_camera()
+            # Resume MPos polling now that we own the port again.
+            self._start_mpos_polling()
         self._framing_done = True
         try:
             self._engrave_btn.config(state="normal")
@@ -8559,6 +8738,8 @@ class DotCalibrationDialog(tk.Toplevel):
             messagebox.showerror(_("Falcon Not Detected"),
                                   _("No Falcon connection."), parent=self)
             return
+        if not self._check_position_safe():
+            return
         try:
             import falcon_sender
             from gcode_engine import generate_dot_calibration_gcode
@@ -8566,6 +8747,9 @@ class DotCalibrationDialog(tk.Toplevel):
             messagebox.showerror(_("Missing Dependency"),
                                   str(e), parent=self)
             return
+
+        # Stop the MPos poller while the streamer owns the port.
+        self._stop_mpos_polling()
 
         sender = falcon_sender.FalconSender(port=self._falcon_port)
         try:
@@ -8578,6 +8762,7 @@ class DotCalibrationDialog(tk.Toplevel):
                 sender.disconnect()
             except Exception:
                 pass
+            self._start_mpos_polling()
             return
         if not status or not status.get('mpos'):
             messagebox.showerror(
@@ -8672,6 +8857,7 @@ class DotCalibrationDialog(tk.Toplevel):
 
     def _enter_capture_phase(self):
         self._phase = 'capture'
+        self._stop_mpos_polling()
         self._instructions_var.set(_(
             "Step 2 of 2 — capture the engraved pattern.\n\n"
             "Click Capture to take one photo. The app will detect the "
@@ -8682,6 +8868,8 @@ class DotCalibrationDialog(tk.Toplevel):
             "basswood) and try again."))
         for w in (self._home_btn, self._frame_btn, self._engrave_btn):
             w.pack_forget()
+        if hasattr(self, '_engrave_jog_frame'):
+            self._engrave_jog_frame.pack_forget()
         self._capture_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._retake_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
@@ -9056,6 +9244,7 @@ class DotCalibrationDialog(tk.Toplevel):
         self.after(50, self._open_camera_and_start)
 
     def _on_close(self):
+        self._stop_mpos_polling()
         if self._refresh_after_id:
             try:
                 self.after_cancel(self._refresh_after_id)
