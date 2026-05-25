@@ -8940,7 +8940,19 @@ class DotCalibrationDialog(tk.Toplevel):
         if ok and frame is not None:
             self._failed_reads = 0
             self._latest_frame = frame
-            self._render_frame()
+            # In capture phase, run live detection on every Nth frame
+            # so the user sees what's being detected in real time —
+            # green dots overlay every centroid the detector found.
+            # Lets the user adjust lighting/position WITHOUT having to
+            # click Capture and read an error popup each iteration.
+            # Throttle: 1 in 3 frames (~3 fps detection) keeps CPU low.
+            self._live_detect_tick = getattr(
+                self, '_live_detect_tick', 0) + 1
+            if (self._phase == 'capture'
+                    and self._live_detect_tick % 3 == 0):
+                self._render_capture_preview_with_detection()
+            else:
+                self._render_frame()
         else:
             self._failed_reads += 1
             if self._failed_reads == 30:
@@ -8951,6 +8963,36 @@ class DotCalibrationDialog(tk.Toplevel):
                     pass
         self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
                                               self._refresh_loop)
+
+    def _render_capture_preview_with_detection(self):
+        """Capture-phase preview: undistort + run dot detection + overlay
+        every detected centroid in green. Status bar shows the live
+        count so the user knows whether the detector is finding enough
+        dots before they click Capture."""
+        if self._latest_frame is None:
+            return
+        try:
+            undist = self._cam_mod.undistort_frame(
+                self._latest_frame, self._old_calibration)
+            centers = self._cam_mod.detect_dot_centers(undist)
+        except Exception:
+            self._render_frame()
+            return
+        n = len(centers)
+        need = self._cam_mod.DOT_MIN_MATCHED + 1
+        try:
+            if n >= need:
+                self._status_var.set(
+                    _("Live detection: {n} blobs. Click Capture to "
+                      "fit homography.").format(n=n))
+            else:
+                self._status_var.set(
+                    _("Live detection: {n} blobs (need ≥ {m}). "
+                      "Adjust lighting / camera and try again.").format(
+                        n=n, m=need))
+        except tk.TclError:
+            pass
+        self._render_frame(overlay_centers=[c[0] for c in centers])
 
     def _render_frame(self, overlay_centers=None, overlay_marker=None):
         import cv2

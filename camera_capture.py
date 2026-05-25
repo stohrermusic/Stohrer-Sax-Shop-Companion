@@ -146,8 +146,8 @@ DOT_NEAR_MARKER_CORNER_LOCAL_XY = (175.0, 175.0)
 DOT_MIN_MATCHED = 6
 
 
-def detect_dot_centers(frame, min_area_px=12, max_area_px=400,
-                       min_circularity=0.55,
+def detect_dot_centers(frame, min_area_px=None, max_area_px=None,
+                       min_circularity=0.3,
                        threshold_bias=0):
     """Find dark filled-circle centroids in a frame.
 
@@ -156,10 +156,18 @@ def detect_dot_centers(frame, min_area_px=12, max_area_px=400,
     ``((px, py), area_px)`` tuples — area lets the caller distinguish the
     larger orientation marker from regular grid dots.
 
-    Defaults are tuned for the Falcon camera at ~248mm height capturing a
-    pattern of 6mm grid dots and 1x 10mm marker (radius ~3-5 px). Tighten
-    the area range or raise ``min_circularity`` if lighting picks up dust
-    or other non-dot blobs.
+    Area bounds auto-scale to image area when not specified:
+      min = 0.001% of image area (catches dots down to ~3 px diameter
+            on a 640x480 image; ~6 px on 1080p)
+      max = 0.5% of image area (caps at a blob ~5x the expected
+            marker size — well over the marker but well under the
+            basswood region or full-frame artifacts)
+    For the Falcon's 640x480 camera at ~248mm height the expected
+    sizes work out to ~140 px² for a 6mm dot and ~395 px² for the
+    10mm marker; the auto-scaled defaults of (3, 1536) give comfortable
+    headroom on both ends.
+
+    Override the bounds for hand-tuning when lighting is unusual.
 
     ``threshold_bias`` shifts Otsu's auto-picked threshold (signed, same
     semantics as ``detect_scrap_contour`` — positive = less sensitive).
@@ -171,6 +179,11 @@ def detect_dot_centers(frame, min_area_px=12, max_area_px=400,
         cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if len(frame.shape) == 3 else frame
     )
+    img_area = gray.shape[0] * gray.shape[1]
+    if min_area_px is None:
+        min_area_px = max(3.0, img_area * 0.00001)
+    if max_area_px is None:
+        max_area_px = max(500.0, img_area * 0.005)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     otsu_val, thresh = cv2.threshold(
         blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
