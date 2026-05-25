@@ -8145,13 +8145,15 @@ class DotCalibrationDialog(tk.Toplevel):
         body = tk.Frame(self, bg=DIALOG_BG)
         body.pack(side='top', fill='both', expand=True, padx=10, pady=(0, 8))
 
-        # LEFT: camera preview
+        # LEFT: camera preview. Don't set width/height/text on the
+        # placeholder label — Tk would treat width=640 + text together
+        # as a 640-character-wide request (~4500 px), squeezing the
+        # right panel out of the layout. Match the CameraCalibrationDialog
+        # pattern: empty label, sized by its container via pack(fill=both).
         preview_frame = tk.Frame(body, bg='black')
         preview_frame.pack(side='left', fill='both', expand=True, padx=(0, 8))
         self._preview_label = tk.Label(
-            preview_frame, bg="#000000", fg="#cccccc",
-            text=_("Camera opens after engrave."),
-            font=("Helvetica", 12),
+            preview_frame, bg="#000000",
             width=self.PREVIEW_W, height=self.PREVIEW_H)
         self._preview_label.pack(fill='both', expand=True)
 
@@ -8222,13 +8224,16 @@ class DotCalibrationDialog(tk.Toplevel):
         self._instructions_var.set(_(
             "Step 1 of 2 — engrave the dot pattern on basswood.\n\n"
             "1. Pin a 12×12-inch basswood blank in the lower-left of "
-            "the bed.\n"
+            "the bed. The live camera preview shows you the bed — "
+            "place the basswood so its lower-left covers roughly bed "
+            "center to bed corner.\n"
             "2. Home Laser if you haven't this session.\n"
             "3. Click Frame — the trace shows where the ~200×200mm "
             "pattern will engrave. Jog the laser to center it on your "
-            "basswood. Click Done when alignment looks right.\n"
+            "basswood (watch the camera). Click Done when alignment "
+            "looks right.\n"
             "4. Click Engrave — takes ~3-4 minutes.\n"
-            "5. Don't move the basswood until capture is done."))
+            "5. Don't move the basswood after engrave is done."))
         self._status_var.set(
             _("Ready. Home + Frame + Engrave, in that order."))
         for w in (self._capture_btn, self._retake_btn):
@@ -8236,12 +8241,18 @@ class DotCalibrationDialog(tk.Toplevel):
         self._home_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._frame_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
-        self._reconnect_btn.pack_forget()
+        self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Engrave gated on framing being done. Reset state so back-from-
         # capture (retake) doesn't carry stale flags.
         self._engrave_btn.config(state="normal" if self._framing_done
                                   else "disabled")
+        # Open the camera now so the user can see the bed throughout
+        # framing and engraving — gives continuous visual feedback on
+        # head movement and basswood position. Matches the
+        # CameraCalibrationDialog pattern.
+        if self._cap is None:
+            self.after(50, self._open_camera_and_start)
 
     def _on_home_clicked(self):
         if not self._falcon_port:
@@ -8378,6 +8389,9 @@ class DotCalibrationDialog(tk.Toplevel):
                 sender.disconnect()
             except Exception:
                 pass
+            # cv2 frame stream stalls after a long-lived modal closes;
+            # reopen so the user sees live frames again immediately.
+            self._auto_recycle_camera()
         self._framing_done = True
         try:
             self._engrave_btn.config(state="normal")
@@ -8472,6 +8486,9 @@ class DotCalibrationDialog(tk.Toplevel):
             run_dlg = FalconRunDialog(
                 self, sender, gcode_lines,
                 title=_("Engraving Dot Pattern"))
+            # Always recycle after the long modal closes — preview would
+            # otherwise stall on the last good pre-engrave frame.
+            self._auto_recycle_camera()
             if run_dlg._final_reason != "complete":
                 self._status_var.set(
                     _("Engrave stopped. Place fresh basswood, "
@@ -8510,7 +8527,6 @@ class DotCalibrationDialog(tk.Toplevel):
             "If the detection misses too many dots, click Retake — "
             "adjust lighting (cover ambient glare, no shadows on the "
             "basswood) and try again."))
-        self._status_var.set(_("Opening camera..."))
         for w in (self._home_btn, self._frame_btn, self._engrave_btn):
             w.pack_forget()
         self._capture_btn.pack(side="top", fill='x', padx=5, pady=2)
@@ -8518,7 +8534,18 @@ class DotCalibrationDialog(tk.Toplevel):
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack_forget()
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
-        self.after(50, self._open_camera_and_start)
+        # Camera was opened back in engrave phase and (auto-)recycled
+        # after the engrave's FalconRunDialog closed. It should be
+        # streaming by now; only kick off a fresh open if it isn't.
+        if self._cap is None:
+            self.after(50, self._open_camera_and_start)
+        else:
+            self._status_var.set(
+                _("Camera live. Click Capture when ready."))
+            try:
+                self._capture_btn.config(state="normal")
+            except tk.TclError:
+                pass
 
     def _open_camera_and_start(self):
         import threading
@@ -8541,12 +8568,20 @@ class DotCalibrationDialog(tk.Toplevel):
     def _camera_ready(self, cap, first_frame):
         self._cap = cap
         self._latest_frame = first_frame
-        self._status_var.set(
-            _("Camera live. Position confirmed; click Capture."))
-        try:
-            self._capture_btn.config(state="normal")
-        except tk.TclError:
-            pass
+        # Phase-aware status + capture-button gating. Camera comes alive
+        # back in engrave phase (for visual framing reference), but the
+        # Capture button should ONLY be active once the user has engraved
+        # the dot pattern — capturing earlier would have no dots to detect.
+        if self._phase == 'capture':
+            self._status_var.set(
+                _("Camera live. Click Capture when ready."))
+            try:
+                self._capture_btn.config(state="normal")
+            except tk.TclError:
+                pass
+        else:
+            self._status_var.set(
+                _("Camera live. Home + Frame + Engrave, in that order."))
         self._refresh_loop()
 
     def _camera_failed(self, err):
@@ -8793,6 +8828,29 @@ class DotCalibrationDialog(tk.Toplevel):
             self._cap = None
         self._failed_reads = 0
         self._status_var.set(_("Reopening camera..."))
+        self.after(50, self._open_camera_and_start)
+
+    def _auto_recycle_camera(self):
+        """Release + reopen the camera. Called after every FalconRunDialog
+        close — the cv2 frame stream consistently stalls when a long-lived
+        modal closes (preview shows the last good frame forever, with no
+        error from cap.read()). Cheaper to just reopen than diagnose
+        the Windows DSHOW / USB-focus interaction. No-op if camera
+        wasn't open."""
+        if self._cap is None:
+            return
+        if self._refresh_after_id:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        try:
+            self._cap.release()
+        except Exception:
+            pass
+        self._cap = None
+        self._failed_reads = 0
         self.after(50, self._open_camera_and_start)
 
     def _on_close(self):
