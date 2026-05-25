@@ -703,18 +703,12 @@ DEFAULT_SETTINGS = {
     # instead of re-engraving. Cleared on Calibrate & Save (calibration
     # done) or on "Engrave new card" (user starts fresh).
     "camera_calibration_engrave_offset_mm": None,
-    # Same idea but for the fast dot-pattern recalibration. Stored
-    # separately so the two workflows don't clobber each other's
-    # in-progress state (e.g. a user could have a ChArUco card engraved
-    # AND a separate dot pattern on different basswood blanks).
-    "dot_calibration_engrave_offset_mm": None,
-    # Frame & Cut "Try auto-frame" checkbox state. When True AND a
-    # polygon with a saved machine offset is loaded AND camera
-    # calibration is present, Frame & Cut drives the head to the
-    # scrap's known bed position automatically. When False (default),
-    # MANUAL mode — user jogs the head to the material's bottom-left
-    # before framing/cutting.
-    "frame_cut_try_auto": False,
+    # (dot_calibration_engrave_offset_mm removed along with the dot-cal
+    # feature — load_settings silently ignores it if your old settings
+    # file still has it.)
+    # (frame_cut_try_auto removed when the AUTO-frame mode was stripped —
+    # if your settings file still has the key, load_settings silently
+    # ignores it.)
     # Persisted camera index — set after a successful camera
     # calibration so future runs skip the enumeration / find-Falcon
     # heuristic and open the known-working camera directly. None =

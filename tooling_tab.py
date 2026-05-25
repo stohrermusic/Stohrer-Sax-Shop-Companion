@@ -816,14 +816,6 @@ class ToolingTabMixin:
             falcon_port=getattr(self, 'falcon_port', None),
             settings=self.settings,
         )
-        # After the dialog closes, refresh the Try auto-frame
-        # checkbox visibility — if the user just completed their
-        # first calibration, the checkbox should now appear next to
-        # Frame & Cut without requiring an app restart.
-        try:
-            self._refresh_auto_frame_chk()
-        except Exception:
-            pass
 
     def _update_tooling_settings(self):
         """Sync tooling UI state back to settings dict."""

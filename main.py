@@ -128,8 +128,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         #     ui_dialogs.PolygonDrawWindow._{grid,canvas}_to_{canvas,grid}
         #   grid storage (UP) → custom_polygon (DOWN)
         #     on_draw_custom_shape (drawn path)
-        #   machine (UP) → custom_polygon (DOWN)
-        #     _adopt_camera_polygon (camera path)
+        #   machine-mm (UP) → custom_polygon (DOWN)
+        #     _adopt_camera_polygon (camera path) — only the SHAPE is
+        #     kept; the machine-coord offset isn't tracked since the
+        #     auto-frame feature was removed. The polygon gets nested
+        #     in local coords and cut at the user's manually-jogged
+        #     work origin via G92.
         #   custom_polygon (DOWN) → G-code (UP)
         #     gcode_engine.generate_polygon_framing_gcode
         #     gcode_engine.generate_gcode_from_placed (and die variant)
@@ -138,13 +142,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         #   G-code (UP) → SVG (DOWN) — arc text only
         #     svg_engine die/holder renderers
         self.custom_polygon = None
-        # When camera capture is active, the polygon is normalized to
-        # (0, 0)-top-left for nesting and the absolute machine-coord
-        # offset of the polygon's BOTTOM-LEFT (i.e. its (min_x, min_y)
-        # in Y-up machine coords) is stored here. Frame & Cut auto
-        # mode uses this to drive the head to the scrap's real bed
-        # position. None for drawn shapes (no machine reference).
-        self.custom_polygon_machine_offset = None
 
         # --- Falcon (direct serial) state ---
         # Detected on startup; the "Frame & Cut" button only appears when
@@ -324,9 +321,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         machine_menu.add_separator()
         machine_menu.add_command(label=_("Camera Calibration..."),
                                    command=self._on_machine_recalibrate)
-        machine_menu.add_command(label=_("Recalibrate Laser Head (fast)..."),
-                                   command=self._on_machine_recalibrate_fast)
-        machine_menu.add_command(label=_("Auto-Framing Inset Margin..."),
+        machine_menu.add_command(label=_("Camera-Polygon Inset Margin..."),
                                    command=self._on_machine_inset_settings)
 
         # --- Key Height Library Menu ---
@@ -776,25 +771,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             generate_frame, text=_("Frame & Cut"),
             command=self.on_frame_and_cut,
             font=('Helvetica', 10, 'bold'))
-        # "Try auto-frame" checkbox — appears next to Frame & Cut when
-        # a camera calibration is present. When checked AND the loaded
-        # polygon has a saved machine offset (camera-captured), Frame
-        # & Cut drives the head straight to the scrap's known bed
-        # position instead of asking the user to jog there. Default
-        # off — manual framing is the safer behavior, and most users
-        # without calibrated cameras need it anyway. Persisted across
-        # restarts so users who routinely use auto-framing don't have
-        # to re-check it each session.
-        self.auto_frame_var = tk.BooleanVar(
-            value=self.settings.get("frame_cut_try_auto", False))
-        self._auto_frame_chk = tk.Checkbutton(
-            generate_frame, text=_("Try auto-frame"),
-            variable=self.auto_frame_var,
-            bg=self.root.cget('bg'), font=('Helvetica', 9),
-            command=lambda: self._save_checkbox("frame_cut_try_auto",
-                                                  self.auto_frame_var))
-        # Neither widget packed yet — _detect_falcon_async / its
-        # calibration check decide when each becomes visible.
+        # Not packed yet — _detect_falcon_async packs it when a
+        # Grbl controller answers the handshake. Frame & Cut is
+        # manual-mode only: user jogs the head to their material's
+        # bottom-left corner, then framing + cutting use G92 to
+        # zero work coords at that position. (An earlier camera-
+        # offset AUTO mode was removed — calibration accuracy was
+        # never tight enough to make it worth the surprise factor.)
 
         # Options below generate buttons
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
@@ -862,13 +845,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Update the custom shape status indicator."""
         if self.custom_polygon:
             n = len(self.custom_polygon)
-            if self.custom_polygon_machine_offset:
-                # Auto-framing is wired in for this polygon — cuts will
-                # land at its absolute machine position on the bed.
-                txt = _("Shape loaded ({n} pts) · Auto-framing ON").format(n=n)
-            else:
-                txt = _("Shape loaded ({n} pts) · Manual framing").format(n=n)
-            self.shape_status_var.set(txt)
+            self.shape_status_var.set(
+                _("Shape loaded ({n} pts)").format(n=n))
             self.shape_status_label.config(fg="green")
             self.unload_shape_btn.pack(side="left", padx=2)
         else:
@@ -911,11 +889,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         dialog = PolygonDrawWindow(self.root, unit=unit,
                                      settings=self.settings)
-        # If the user captured from the camera inside the dialog and
-        # didn't edit afterward, take the absolute machine-mm polygon
-        # directly — that way Frame & Cut still offers auto-framing,
-        # which would otherwise be lost the moment we baked the polygon
-        # into unitless grid coords.
+        # Camera-captured polygons come back in absolute machine-mm;
+        # adopt those (the inset gets applied along the way).
         machine_polygon = dialog.get_machine_polygon_mm()
         if machine_polygon:
             self._adopt_camera_polygon(machine_polygon)
@@ -928,12 +903,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # the shared adopter which applies the boundary flip.
             mm_per_unit = 25.4 if unit == "in" else 10.0
             y_up_mm = [(x * mm_per_unit, y * mm_per_unit) for (x, y) in polygon]
-            self._set_custom_polygon_from_y_up(y_up_mm, machine_offset=None)
+            self._set_custom_polygon_from_y_up(y_up_mm)
 
     def on_unload_custom_shape(self):
         """Unload the custom shape and return to rectangle mode."""
         self.custom_polygon = None
-        self.custom_polygon_machine_offset = None
         self._update_shape_status()
 
     @staticmethod
@@ -986,20 +960,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # CameraCaptureDialog returns the polygon in ABSOLUTE machine-mm.
         # Hand off to the shared adopter so this path and the
         # polygon-dialog's "Capture from camera" path apply the same
-        # safety inset, normalization, and machine-offset stash.
+        # safety inset + normalization.
         self._adopt_camera_polygon(list(dlg.result_polygon_mm))
 
     def _adopt_camera_polygon(self, machine_polygon):
-        """Set custom_polygon + machine_offset from an ABSOLUTE
-        machine-Y-up polygon (as returned by the integrated
-        calibration's pixel→machine homography). Applies the safety
-        inset, then hands off to the shared adopter which performs
-        the Y-up→Y-down boundary flip and the normalization. Used by:
+        """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
+        pixel→machine homography) as the active scrap shape. Applies
+        the safety inset, then hands off to the shared adopter which
+        performs the Y-up→Y-down boundary flip and normalization.
 
+        Only the SHAPE is kept — the polygon's machine-coord offset
+        isn't tracked, since cuts are placed via G92 at the user's
+        manually-jogged work origin (Frame & Cut is manual-only).
+        Used by:
           - File menu / standalone "Get from camera" flow
           - The polygon dialog's "Capture from camera" sub-action
-            (preserves the offset so Frame & Cut can offer auto-framing
-            even when the user came in through Draw / Capture Shape)
         """
         if not machine_polygon:
             return
@@ -1015,12 +990,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     machine_polygon, inset_mm)
             except Exception:
                 pass  # fall back to uninsetted on failure
-        m_min_x = min(p[0] for p in machine_polygon)
-        m_min_y = min(p[1] for p in machine_polygon)
-        self._set_custom_polygon_from_y_up(
-            machine_polygon, machine_offset=(m_min_x, m_min_y))
+        self._set_custom_polygon_from_y_up(machine_polygon)
 
-    def _set_custom_polygon_from_y_up(self, points_y_up_mm, machine_offset):
+    def _set_custom_polygon_from_y_up(self, points_y_up_mm):
         """Single boundary crossing into custom_polygon storage.
 
         Input: a polygon in Y-UP mm (either grid-mm for drawn polygons
@@ -1028,11 +1000,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         that matters).
         Output: custom_polygon set to the SVG-Y-DOWN convention,
         normalized so (0, 0) sits at the top-left of the polygon bbox.
-
-        ``machine_offset`` is None for drawn polygons (no machine
-        anchor exists) and (min_x, min_y) in Y-up machine coords for
-        camera-captured ones. Frame & Cut auto-mode keys off the
-        non-None case.
         """
         if not points_y_up_mm:
             return
@@ -1040,7 +1007,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         max_y = max(p[1] for p in points_y_up_mm)
         self.custom_polygon = [(x - min_x, max_y - y)
                                for (x, y) in points_y_up_mm]
-        self.custom_polygon_machine_offset = machine_offset
         self._update_shape_status()
 
     def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
@@ -1098,7 +1064,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Handle scrap continue dialog button press."""
         if unload:
             self.custom_polygon = None
-            self.custom_polygon_machine_offset = None
             self._update_shape_status()
         dlg.destroy()
 
@@ -1107,7 +1072,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         this dialog, and immediately open the polygon dialog to
         capture a fresh shape for the next scrap."""
         self.custom_polygon = None
-        self.custom_polygon_machine_offset = None
         self._update_shape_status()
         dlg.destroy()
         self.on_draw_custom_shape()
@@ -1708,24 +1672,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Called on the Tk main thread once detection finishes."""
         if port:
             self.falcon_port = port
-            # Show Frame & Cut whenever a Falcon is detected. MANUAL
-            # mode (jog the head to your material's bottom-left, then
-            # frame + cut) works without a camera calibration, so the
-            # button is useful even when no calibration is on disk.
-            # The "Try auto-frame" checkbox next to it only appears
-            # when calibration IS present, since auto-framing needs the
-            # pixel→machine homography to know where the scrap sits.
+            # Show Frame & Cut whenever a Falcon is detected. The flow
+            # is manual-mode only — user jogs the head to their
+            # material's bottom-left and G92 zeroes work coords there
+            # before framing + cutting.
             if hasattr(self, '_frame_cut_btn'):
                 self._frame_cut_btn.pack(side="left", padx=5)
-            if hasattr(self, '_auto_frame_chk'):
-                try:
-                    import camera_capture as _cam
-                    has_cal = _cam.load_calibration(
-                        _cam.default_calibration_path()) is not None
-                except Exception:
-                    has_cal = False
-                if has_cal:
-                    self._auto_frame_chk.pack(side="left", padx=5)
             return
         # Not found this round. Auto-retry in 10s so users who started
         # SSC before powering on the Falcon get the button as soon as
@@ -1734,28 +1686,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # detection. Stops retrying once a port is found.
         self._falcon_detect_attempted = False
         self.root.after(10000, self._detect_falcon_async)
-
-    def _refresh_auto_frame_chk(self):
-        """Show/hide the Try auto-frame checkbox based on whether
-        camera calibration is present. Called after the calibration
-        dialog saves, so users who calibrate mid-session see the
-        checkbox appear immediately without restarting."""
-        if not hasattr(self, '_auto_frame_chk'):
-            return
-        try:
-            import camera_capture as _cam
-            has_cal = _cam.load_calibration(
-                _cam.default_calibration_path()) is not None
-        except Exception:
-            has_cal = False
-        try:
-            is_packed = bool(self._auto_frame_chk.winfo_manager())
-        except Exception:
-            is_packed = False
-        if has_cal and not is_packed:
-            self._auto_frame_chk.pack(side="left", padx=5)
-        elif not has_cal and is_packed:
-            self._auto_frame_chk.pack_forget()
 
     # ==================================================================
     # Machine menu handlers (Pad Maker > Machine cascade)
@@ -2064,54 +1994,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # ToolingTabMixin) — same dialog, same flow.
         self._open_camera_calibration()
 
-    def _on_machine_recalibrate_fast(self):
-        """Open the dot-pattern fast laser-head recalibration.
-
-        Distinct from Camera Calibration: this re-fits only the
-        pixel→machine homography (laser-head position drift) using a
-        small dot grid that engraves in ~3-4 min. Preserves camera
-        intrinsics from the prior ChArUco calibration — refuses to run
-        without one.
-        """
-        if not self._machine_require_falcon():
-            return
-        try:
-            import camera_capture
-        except ImportError:
-            messagebox.showerror(
-                _("OpenCV Required"),
-                _("Dot calibration needs OpenCV:\n\n"
-                  "    pip install opencv-python Pillow"))
-            return
-        cal_path = camera_capture.default_calibration_path()
-        if camera_capture.load_calibration(cal_path) is None:
-            messagebox.showinfo(
-                _("Camera Calibration Required First"),
-                _("This is the FAST recalibration — it only refreshes "
-                  "the laser-head position, not the lens calibration.\n\n"
-                  "Run the full Camera Calibration first (engraves a "
-                  "ChArUco card, takes ~60 min). After that, this "
-                  "dot-calibration can be run whenever you notice "
-                  "auto-frame drift, in ~5 min total."))
-            return
-        cam_idx = self._resolve_camera_index()
-        if cam_idx is None:
-            messagebox.showerror(_("No Camera"),
-                                  _("No cameras detected."))
-            return
-        from ui_dialogs import DotCalibrationDialog
-        DotCalibrationDialog(
-            self.root,
-            camera_index=cam_idx,
-            calibration_path=cal_path,
-            falcon_port=self.falcon_port,
-            settings=self.settings,
-        )
-
     def _on_machine_inset_settings(self):
         """Small dialog: edit camera_polygon_inset_mm."""
         dlg = tk.Toplevel(self.root)
-        dlg.title(_("Auto-Framing Inset Margin"))
+        dlg.title(_("Camera-Polygon Inset Margin"))
         dlg.transient(self.root)
         dlg.grab_set()
         dlg.resizable(False, False)
@@ -2328,18 +2214,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                         xmin, ymin, xmax, ymax, power_s=power_s, feed=feed,
                     )
 
-            # Decide mode from the "Try auto-frame" checkbox + offset
-            # availability. Auto-framing requires a polygon that knows
-            # its absolute bed position (camera-captured with a saved
-            # calibration). Without that, fall back to manual even if
-            # the user checked the box.
-            offset = self.custom_polygon_machine_offset
-            try:
-                want_auto = bool(self.auto_frame_var.get())
-            except Exception:
-                want_auto = False
-            mode = "auto" if (want_auto and offset) else "manual"
-
             sender = falcon_sender.FalconSender(port=self.falcon_port)
             try:
                 sender.connect()
@@ -2383,81 +2257,24 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # set as their material origin.
             sender.unlock()
 
-            # AUTO mode: pre-flight bed-bounds check. Refuse to send the
-            # job if it would extend past the bed's soft limits. Mid-
-            # stream soft-limit trips force a controller reset
-            # (ALARM:3), losing position and aborting mid-cut.
-            if mode == "auto" and self.custom_polygon:
-                bed_x_max = float(self.settings.get(
-                    "laser_bed_x_max", 400.0))
-                bed_y_max = float(self.settings.get(
-                    "laser_bed_y_max", 415.0))
-                poly_w = max(p[0] for p in self.custom_polygon)
-                poly_h = max(p[1] for p in self.custom_polygon)
-                far_x = offset[0] + poly_w
-                far_y = offset[1] + poly_h
-                if (offset[0] < 0 or offset[1] < 0
-                        or far_x > bed_x_max + 1.0
-                        or far_y > bed_y_max + 1.0):
-                    messagebox.showerror(
-                        _("Scrap Off Bed"),
-                        _("Auto-framing puts the cut at machine "
-                          "X={ox:.1f}-{fx:.1f}, Y={oy:.1f}-{fy:.1f}, "
-                          "but the bed only goes to {bx:.0f}×{by:.0f}.\n\n"
-                          "Move the scrap further from the right/back "
-                          "edge of the bed and recapture from camera."
-                          ).format(
-                            ox=offset[0], oy=offset[1],
-                            fx=far_x, fy=far_y,
-                            bx=bed_x_max, by=bed_y_max))
-                    return
-
-            # AUTO mode: auto-home so MPos has a known reference for
-            # the seed G1, then drive head to scrap's known bed position
-            # using G1 at laser_seed_feed (NOT G0 rapid — anything in
-            # the path between home corner and scrap would otherwise
-            # collide at full speed).
-            #
-            # MANUAL mode: skip auto-home entirely. G92 X0 Y0 at the
-            # start of each framing iteration zeros the work coords at
-            # whatever position the head is currently at, so MPos doesn't
-            # need to be accurate. Skipping the home avoids a needless
-            # rapid travel to the home corner that could destroy
-            # material in that region.
-            if mode == "auto":
-                if not getattr(self, '_falcon_homed_this_session', False):
-                    if not self._run_blocking_home(sender):
-                        return
-
-                # Seed move at moderate G1 speed instead of G0 rapid.
-                seed_feed = int(self.settings.get("laser_seed_feed", 4000))
-                seed_lines = ['G90',
-                              f'G1 X{offset[0]:.3f} Y{offset[1]:.3f} F{seed_feed}']
-                seed_dlg = FalconRunDialog(
-                    self.root, sender, seed_lines,
-                    title=_("Driving head to scrap position..."),
-                    show_pause_resume=False, show_cut_button=False,
-                    stop_needs_confirm=False,
-                    done_button_label=_("Start Frame →"))
-                if seed_dlg._final_reason != "complete":
-                    return
-            else:
-                # MANUAL mode: jog-to-position step. Empty stream
-                # completes immediately; FalconRunDialog stays open so
-                # the user can jog with its buttons. The Start Frame
-                # button is gated on at least one jog click (require_
-                # jog_first=True), preventing accidental framing/cut
-                # at whatever the head's current MPos happens to be.
-                jog_dlg = FalconRunDialog(
-                    self.root, sender, [],  # nothing to stream
-                    title=_("Jog the head to your material's "
-                             "bottom-left corner"),
-                    show_pause_resume=False, show_cut_button=False,
-                    stop_needs_confirm=False,
-                    done_button_label=_("Start Frame →"),
-                    require_jog_first=True)
-                if jog_dlg._final_reason != "complete":
-                    return
+            # Manual positioning step: jog dialog stays open so the
+            # user can fine-tune with the arrow buttons. They can ALSO
+            # have positioned the head physically (open lid → push head
+            # to material's lower-left → close lid → click Start Frame),
+            # so the Start Frame button is enabled immediately — no
+            # forced jog click. If the head's already where they want,
+            # they just click Start Frame straight through.
+            jog_dlg = FalconRunDialog(
+                self.root, sender, [],  # nothing to stream
+                title=_("Position the head at your material's "
+                         "bottom-left corner (jog here OR open the "
+                         "lid and physically move it), then click "
+                         "Start Frame"),
+                show_pause_resume=False, show_cut_button=False,
+                stop_needs_confirm=False,
+                done_button_label=_("Start Frame →"))
+            if jog_dlg._final_reason != "complete":
+                return
 
             # Both modes share the same framing-loop recipe:
             # G92 X0 Y0 re-anchors work coords at whatever the current
