@@ -624,7 +624,7 @@ def undistort_frame(frame, calibration):
 
 def detect_scrap_contour(frame, min_area_frac=SCRAP_MIN_AREA_FRAC,
                           epsilon_frac=SCRAP_APPROX_EPS_FRAC,
-                          threshold_bias=0):
+                          threshold_bias=0, invert=False):
     """Find the largest contour in the frame and approximate it as a polygon.
 
     Returns a list of (x, y) pixel-coordinate tuples or ``None`` if no
@@ -640,6 +640,13 @@ def detect_scrap_contour(frame, min_area_frac=SCRAP_MIN_AREA_FRAC,
     barely contrasts with the bed). Tune by eye in low-contrast
     conditions where Otsu's bimodal-histogram assumption breaks down
     (uneven lighting, scrap color similar to bed, etc.).
+
+    ``invert`` selects the threshold polarity. Default False uses
+    ``THRESH_BINARY`` — "scrap brighter than bed" (leather on dark
+    honeycomb). True uses ``THRESH_BINARY_INV`` — "scrap darker than
+    bed" (dark felt on a light scrap board). Without inversion, dark
+    scrap on a light surface produces no contour ("bed" is the largest
+    region, not the scrap).
     """
     _require_opencv()
     if frame is None:
@@ -649,15 +656,16 @@ def detect_scrap_contour(frame, min_area_frac=SCRAP_MIN_AREA_FRAC,
         if len(frame.shape) == 3 else frame
     )
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    base_mode = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
     otsu_val, thresh = cv2.threshold(
-        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        blurred, 0, 255, base_mode + cv2.THRESH_OTSU
     )
     if threshold_bias:
         # Re-threshold with the biased value (keeps Otsu as the baseline
         # so the slider centers naturally on the "automatic" pick).
         biased = max(0, min(255, int(round(otsu_val + threshold_bias))))
         _val, thresh = cv2.threshold(
-            blurred, biased, 255, cv2.THRESH_BINARY
+            blurred, biased, 255, base_mode
         )
     contours, _hier = cv2.findContours(
         thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE

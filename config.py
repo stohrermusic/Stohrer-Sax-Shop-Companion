@@ -660,12 +660,28 @@ DEFAULT_SETTINGS = {
     "sd_card_path": "",  # Last used SD card path for "Send to SD Card" feature
     "eject_sd_after_gcode": False,  # Auto-eject removable drive after G-code export
 
-    # FALCON DIRECT-CUT SETTINGS (v3.0+)
-    # Streamed directly to the Grbl controller via USB. Override port if
-    # auto-detection picks the wrong one (None = auto).
+    # LASER DIRECT-CUT SETTINGS (v3.0+)
+    # Streamed directly to a Grbl controller over USB. Falcon-specific
+    # bits (auto-detect heuristics, ChArUco card defaults) live in
+    # falcon_sender.py / camera_capture.py; the settings below are
+    # generic to any Grbl-compatible laser.
+    #
+    # Serial-port override is still "falcon_*" — auto-detection targets
+    # the Falcon's VID/PID; if a future user runs another Grbl laser,
+    # they'll set the port directly here and bypass detection.
     "falcon_serial_port_override": None,
-    "falcon_framing_power_s": 10,    # Grbl S value during framing (0-1000)
-    "falcon_framing_feed": 2000,     # mm/min during framing
+    "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
+    "laser_framing_feed": 2000,     # mm/min during framing
+    # Bed dimensions in machine-mm — defaults match the Creality Falcon2
+    # Pro 40W. Override here for other Grbl-compatible lasers.
+    "laser_bed_x_max": 400.0,
+    "laser_bed_y_max": 415.0,
+    # Seed-move feedrate for AUTO Frame & Cut (drives head from home
+    # corner to scrap's known machine position). G1 at this rate
+    # instead of G0 rapid so a stray object in the path doesn't crash
+    # at full speed. 4000 mm/min ≈ 67 mm/s — fast enough not to feel
+    # sluggish, slow enough to stop on contact.
+    "laser_seed_feed": 4000,
     # Safety margin: shrink camera-captured polygons by this many mm
     # on every edge before nesting. Camera measurement is least
     # accurate at the edges of its view, so insetting prevents pads
@@ -677,12 +693,37 @@ DEFAULT_SETTINGS = {
     # less sensitive (raise threshold), negative = more sensitive.
     # Persisted so the user's lighting preference survives restarts.
     "camera_detection_threshold_bias": 0,
+    # Invert-colors flag for scrap detection. False (default) assumes
+    # scrap is brighter than the bed (leather on honeycomb). True
+    # selects THRESH_BINARY_INV — for dark scrap on a light surface.
+    "camera_detection_invert": False,
     # Last successful calibration-card engrave offset (machine-mm,
     # [X, Y]). Persisted so a closed/reopened calibration dialog skips
     # straight to the capture phase against the existing engraved card
     # instead of re-engraving. Cleared on Calibrate & Save (calibration
     # done) or on "Engrave new card" (user starts fresh).
     "camera_calibration_engrave_offset_mm": None,
+    # Frame & Cut "Try auto-frame" checkbox state. When True AND a
+    # polygon with a saved machine offset is loaded AND camera
+    # calibration is present, Frame & Cut drives the head to the
+    # scrap's known bed position automatically. When False (default),
+    # MANUAL mode — user jogs the head to the material's bottom-left
+    # before framing/cutting.
+    "frame_cut_try_auto": False,
+    # Persisted camera index — set after a successful camera
+    # calibration so future runs skip the enumeration / find-Falcon
+    # heuristic and open the known-working camera directly. None =
+    # auto-detect on each open (find_falcon_camera_index → fall back
+    # to last enumerated).
+    "camera_index_override": None,
+    # Draw / Capture Shape grid size, in the corresponding unit.
+    # Defaults match a Falcon2 Pro 40W's 15.75 × 15.75 in / 400 × 415
+    # mm bed with a small margin. Override here for larger machines —
+    # the grid will display at the chosen size and camera-captured
+    # polygons larger than the grid would otherwise be silently
+    # vertex-clamped to the grid bounds.
+    "polygon_draw_grid_size_in": 15,
+    "polygon_draw_grid_size_cm": 40,
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
@@ -786,7 +827,7 @@ def load_settings():
             with open(SETTINGS_FILE, 'r') as f:
                 loaded_settings = json.load(f)
                 settings = copy.deepcopy(DEFAULT_SETTINGS)
-                
+
                 # Deep copy key_layout to avoid shared references
                 if "key_layout" not in loaded_settings:
                     loaded_settings["key_layout"] = settings["key_layout"].copy()

@@ -309,7 +309,6 @@ sender.on_done = lambda reason: done_reasons.append(reason)
 
 # Fire off a stream + interleave jogs from "another thread" (simulated
 # by calling jog() between waiting for the stream to complete).
-import threading as _t
 stream_lines = [f'G0X{i}' for i in range(20)]
 sender.start_stream(stream_lines)
 

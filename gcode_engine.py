@@ -1677,6 +1677,12 @@ def generate_polygon_framing_gcode(polygon, power_s=10, feed=2000, repeat=1):
     user see whether the cut area lands on the material, instead of a
     rectangle that overhangs every concave edge.
 
+    Uses M4 (dynamic power, scales with feed rate) so the beam goes to
+    zero whenever the head decelerates or stalls — critical for
+    continuous-loop framing where the head can sit at a vertex while
+    the user jogs or thinks. M3 (constant power) would keep firing the
+    full S value during any stall and scorch the material.
+
     Input convention: custom_polygon (SVG-Y-DOWN, normalized to (0, 0)
     top-left). Output: G-code (Y-UP). One Y-flip at this boundary —
     see the Y-axis conventions block at the top of PadSVGGeneratorApp
@@ -1691,7 +1697,7 @@ def generate_polygon_framing_gcode(polygon, power_s=10, feed=2000, repeat=1):
         '; --- Framing pass (polygon outline) ---',
         'G90',
         f'G0 X{x0:.3f} Y{y0:.3f}',
-        f'M3 S{int(power_s)}',
+        f'M4 S{int(power_s)}',
     ]
     for _ in range(max(1, int(repeat))):
         for x, y in polygon[1:]:
@@ -1716,13 +1722,18 @@ def generate_framing_gcode(xmin, ymin, xmax, ymax,
     power_s=10 (~1% on a Grbl 0-1000 scale) is enough to see a visible
     beam on most materials without burning them; user can override.
 
+    Uses M4 (dynamic power) — see ``generate_polygon_framing_gcode``
+    for why. Requires $32=1 (laser mode) on the controller; without
+    that, M4 behaves like M3 (constant power) which is the conservative
+    fallback rather than a safety regression.
+
     Returns a list of G-code lines (no trailing newlines).
     """
     lines = [
         '; --- Framing pass (low-power outline) ---',
         'G90',
         f'G0 X{xmin:.3f} Y{ymin:.3f}',
-        f'M3 S{int(power_s)}',
+        f'M4 S{int(power_s)}',
     ]
     for _ in range(max(1, int(repeat))):
         lines.extend([

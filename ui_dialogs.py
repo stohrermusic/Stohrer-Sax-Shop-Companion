@@ -3098,20 +3098,31 @@ class PolygonDrawWindow(tk.Toplevel):
     POINT_RADIUS = 6  # Radius of drawn points in pixels
     CLOSE_THRESHOLD = 15  # Pixels - how close to first point to auto-close
 
-    def __init__(self, parent, unit="in"):
+    def __init__(self, parent, unit="in", settings=None):
         super().__init__(parent)
         self.unit = unit
         self.polygon_closed = False
         self.result = None  # Will hold the final polygon or None if cancelled
 
-        # Grid size depends on unit: 15x15 inches or 40x40 cm
-        # Each grid square = 1 unit (1 inch or 1 cm)
+        # Grid size — Falcon-bed defaults (15in / 40cm) with settings
+        # override for larger machines. Falling back to defaults keeps
+        # existing call sites that don't pass settings working unchanged.
+        settings = settings or {}
         if self.unit == "in":
-            self.grid_size = 15  # 15x15 inches, 15 squares
+            try:
+                self.grid_size = int(
+                    settings.get("polygon_draw_grid_size_in", 15))
+            except (TypeError, ValueError):
+                self.grid_size = 15
         else:
-            self.grid_size = 40  # 40x40 cm, 40 squares
+            try:
+                self.grid_size = int(
+                    settings.get("polygon_draw_grid_size_cm", 40))
+            except (TypeError, ValueError):
+                self.grid_size = 40
+        self.grid_size = max(2, self.grid_size)  # sanity floor
 
-        self.points = []  # List of (x, y) in grid units (0-15 for inches, 0-40 for cm)
+        self.points = []  # List of (x, y) in grid units, 0..grid_size each
         # Set when the user captures from the camera AND has a valid
         # calibration on disk — holds the polygon in ABSOLUTE machine-Y-up
         # mm so Frame & Cut can offer auto-framing. Cleared the moment
@@ -4575,8 +4586,8 @@ class UserGuideWindow(tk.Toplevel):
                       "(falcon_serial_port_override) if auto-detection "
                       "picks the wrong device."))
         self._bullet(_("Framing power and feed are configurable in "
-                      "settings.json (falcon_framing_power_s, "
-                      "falcon_framing_feed). Defaults \u2014 S=10 (1% of full), "
+                      "settings.json (laser_framing_power_s, "
+                      "laser_framing_feed). Defaults \u2014 S=10 (1% of full), "
                       "2000 mm/min \u2014 show a visible beam on most "
                       "materials without burning."))
         self._bullet(_("Stop is an immediate soft-reset: laser power off, "
@@ -6126,7 +6137,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 pass
             return
         self._status_var.set(_("Homing..."))
-        self.update()
+        self.update_idletasks()
         import threading
         result = {}
 
@@ -6141,9 +6152,19 @@ class CameraCalibrationDialog(tk.Toplevel):
 
         t = threading.Thread(target=_worker, daemon=True)
         t.start()
-        while t.is_alive():
-            self.update()
-            time.sleep(0.05)
+        # after()-poll until done. wait_variable pumps the Tk event
+        # loop without the WM_DELETE_WINDOW destroy-root-mid-loop
+        # hazard of `while t.is_alive(): self.update()`.
+        done_var = tk.BooleanVar(value=False)
+
+        def _check():
+            if t.is_alive():
+                self.after(50, _check)
+            else:
+                done_var.set(True)
+
+        self.after(50, _check)
+        self.wait_variable(done_var)
         try:
             sender.disconnect()
         except Exception:
@@ -6254,9 +6275,9 @@ class CameraCalibrationDialog(tk.Toplevel):
         fx = ox + board_w + 2 * border
         fy = oy + board_h + 2 * border + label_h
         bed_x_max = float(
-            self._settings.get("falcon_bed_x_max", 400.0))
+            self._settings.get("laser_bed_x_max", 400.0))
         bed_y_max = float(
-            self._settings.get("falcon_bed_y_max", 415.0))
+            self._settings.get("laser_bed_y_max", 415.0))
         if (ox < 0 or oy < 0
                 or fx > bed_x_max + 1.0 or fy > bed_y_max + 1.0):
             messagebox.showerror(
@@ -6356,8 +6377,8 @@ class CameraCalibrationDialog(tk.Toplevel):
             fy = oy + board_h + 2 * border + label_h
             return generate_framing_gcode(
                 ox, oy, fx, fy,
-                power_s=self._settings.get("falcon_framing_power_s", 10),
-                feed=self._settings.get("falcon_framing_feed", 2000),
+                power_s=self._settings.get("laser_framing_power_s", 10),
+                feed=self._settings.get("laser_framing_feed", 2000),
                 return_to_origin=False,  # absolute coords; don't send
                                           # head to machine (0, 0) (=home
                                           # corner) between iterations —
@@ -6923,9 +6944,15 @@ class CameraCalibrationDialog(tk.Toplevel):
             # full calibration is on disk. Next dialog open should
             # start in engrave phase for a FRESH recalibration, not
             # auto-skip to capture against a stale offset.
+            #
+            # Also persist the working camera index so future opens
+            # (live preview, scrap capture) skip the enumerate /
+            # find-Falcon guess and go straight to the right camera.
             try:
                 self._settings.pop(
                     'camera_calibration_engrave_offset_mm', None)
+                self._settings['camera_index_override'] = int(
+                    self._camera_index)
                 from config import save_settings
                 save_settings(self._settings)
             except Exception:
@@ -7092,6 +7119,28 @@ class CameraCaptureDialog(tk.Toplevel):
         tk.Label(bias_frame, text=_("less"), bg=DIALOG_BG,
                  fg='#666', font=("Helvetica", 8)).pack(side='left')
 
+        # Invert toggle — flips the threshold polarity. Default off
+        # (THRESH_BINARY) assumes scrap is BRIGHTER than the bed (the
+        # common case: leather on a dark honeycomb). Turn on for the
+        # opposite (e.g. dark felt on a light scrap board) — without
+        # inversion, dark-on-light produces no contour because the
+        # largest bright region is the bed itself. Persisted so users
+        # who routinely shoot one polarity don't re-toggle each time.
+        invert_frame = tk.Frame(self, bg=DIALOG_BG)
+        invert_frame.pack(fill='x', padx=20, pady=(0, 6))
+        try:
+            initial_invert = bool(
+                self._settings.get('camera_detection_invert', False)
+                if self._settings else False)
+        except (AttributeError, TypeError):
+            initial_invert = False
+        self._invert_var = tk.BooleanVar(value=initial_invert)
+        tk.Checkbutton(
+            invert_frame, bg=DIALOG_BG,
+            text=_("Invert colors (use when scrap is DARKER than the bed)"),
+            variable=self._invert_var,
+            command=self._on_invert_changed).pack(side='left')
+
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=(0, 12))
         self._use_btn = tk.Button(
@@ -7159,6 +7208,17 @@ class CameraCaptureDialog(tk.Toplevel):
             except Exception:
                 pass  # never block the live preview on save failure
 
+    def _on_invert_changed(self):
+        """Persist the invert flag — same pattern as the bias slider."""
+        if self._settings is not None:
+            try:
+                self._settings['camera_detection_invert'] = bool(
+                    self._invert_var.get())
+                from config import save_settings
+                save_settings(self._settings)
+            except Exception:
+                pass
+
     def _render_frame_with_overlay(self, frame):
         import cv2
         # Undistort + detect contour
@@ -7167,8 +7227,12 @@ class CameraCaptureDialog(tk.Toplevel):
             bias = int(self._bias_var.get())
         except (AttributeError, tk.TclError, ValueError):
             bias = 0
+        try:
+            invert = bool(self._invert_var.get())
+        except (AttributeError, tk.TclError, ValueError):
+            invert = False
         polygon_px = self._cam_mod.detect_scrap_contour(
-            undistorted, threshold_bias=bias)
+            undistorted, threshold_bias=bias, invert=invert)
         self._latest_undistorted = undistorted
         self._latest_polygon_px = polygon_px
         if polygon_px:
@@ -7290,7 +7354,8 @@ class FalconRunDialog(tk.Toplevel):
     def __init__(self, parent, sender, gcode_lines, title=None,
                   on_finished=None, loop=False, gcode_provider=None,
                   show_pause_resume=True, show_cut_button=True,
-                  stop_needs_confirm=True, done_button_label=None):
+                  stop_needs_confirm=True, done_button_label=None,
+                  require_jog_first=False):
         super().__init__(parent)
         self.title(title or _("Sending to Falcon"))
         self.configure(bg=DIALOG_BG)
@@ -7347,6 +7412,15 @@ class FalconRunDialog(tk.Toplevel):
         # button text describes what happens next, not just that this
         # dialog goes away.
         self._done_button_label = done_button_label or _("Close")
+        # MANUAL-mode safety gate: the post-stream done button stays
+        # disabled until the user clicks at least one jog button. Used
+        # by the "jog to material position" step so the user can't
+        # accidentally proceed with the head still at the home corner
+        # (where framing/cutting could destroy material). When False
+        # (the default), the done button enables immediately on
+        # stream completion.
+        self._require_jog_first = require_jog_first
+        self._has_jogged = not require_jog_first
 
         # Hook up callbacks. Marshal each to the Tk thread.
         sender.on_status = lambda s: self.after(0, self._on_status, s)
@@ -7585,9 +7659,15 @@ class FalconRunDialog(tk.Toplevel):
         except tk.TclError:
             pass
         try:
-            self._stop_btn.config(text=self._done_button_label,
-                                    command=self._on_close_window,
-                                    state="normal")
+            self._stop_btn.config(
+                text=self._done_button_label,
+                command=self._on_close_window,
+                state="normal" if self._has_jogged else "disabled")
+            if not self._has_jogged:
+                self._state_var.set(
+                    _("Jog the head to your material's bottom-left "
+                      "corner, then click {label}.").format(
+                        label=self._done_button_label))
         except tk.TclError:
             pass
         if self._on_finished:
@@ -7637,7 +7717,14 @@ class FalconRunDialog(tk.Toplevel):
             st = None
         state = (st or {}).get('state')
         if state in ('Idle', None):
-            self._restart_stream()
+            # Settle delay before restart: gives any in-flight jog its
+            # ok-byte time to land in the OS serial buffer so
+            # start_stream's reset_input_buffer can flush it (without
+            # this, a jog issued mid-settle can have its ack arrive
+            # after the new worker has started reading, where it's
+            # misattributed to a stream-line ack). Empirically 150ms
+            # covers Falcon USB latency comfortably.
+            self.after(150, self._restart_stream)
             return
         # Still busy (Jog / Run / Hold). Wait a bit and re-check.
         self._wait_idle_retries += 1
@@ -7708,6 +7795,18 @@ class FalconRunDialog(tk.Toplevel):
                               feed=2000, relative=True)
         except Exception:
             pass
+        # If this dialog is gating its done-button on a jog click
+        # (MANUAL-mode position confirmation), unlock it now.
+        if not self._has_jogged:
+            self._has_jogged = True
+            if self._finished:
+                try:
+                    self._stop_btn.config(state="normal")
+                    self._state_var.set(
+                        _("Head positioned. Click {label} when ready.").format(
+                            label=self._done_button_label))
+                except tk.TclError:
+                    pass
 
     def _on_stop_clicked(self):
         if self._finished:

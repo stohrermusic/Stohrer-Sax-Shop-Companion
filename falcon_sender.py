@@ -561,11 +561,21 @@ class FalconSender:
         self._sent_lines = 0
         self.latest_error = None
         self.latest_alarm = None
-        # Reset jog tracking so any leftover (an ack arrived after the
-        # last stream ended but before start_stream() was called)
-        # doesn't bleed into this stream's character-counting state.
+        # Reset jog tracking AND drain the OS serial buffer so any
+        # leftover bytes (typically a jog `ok` from between-stream
+        # nudging — the framing-loop window is a common trigger) don't
+        # bleed into this stream's character-counting state. Without the
+        # drain, the new worker's first read consumes the orphan `ok`
+        # and treats it as a stream-line ack; that's mostly harmless
+        # (it inflates ack_count without popping sent_lengths) but can
+        # confuse the buffer-fullness estimate in subtle race cases.
         with self._lock:
             self._jogs_in_flight = 0
+            try:
+                if self._serial is not None:
+                    self._serial.reset_input_buffer()
+            except (serial.SerialException, OSError):
+                pass
         self._worker = threading.Thread(
             target=self._stream_worker, args=(list(gcode_lines),),
             name='FalconSender-stream', daemon=True,
