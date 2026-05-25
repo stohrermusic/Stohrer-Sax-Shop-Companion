@@ -1859,6 +1859,11 @@ def _filled_circle_scan_strokes(cx_mm, cy_mm, diameter_mm, line_spacing_mm):
     Each stroke is a 2-point list ``[(x0, y), (x1, y)]`` ready for
     ``generate_gcode_layer``. Caller is responsible for the Y-orientation;
     these strokes are emitted in the same coordinate frame as the input.
+
+    Scan direction ALTERNATES (boustrophedon): even lines left-to-right,
+    odd lines right-to-left. Cuts engraving time roughly in half vs.
+    always-L-to-R, since the head no longer has to G0 back across the
+    full dot diameter between every line.
     """
     strokes = []
     r = diameter_mm / 2.0
@@ -1874,7 +1879,10 @@ def _filled_circle_scan_strokes(cx_mm, cy_mm, diameter_mm, line_spacing_mm):
         if d2 <= 0:
             continue
         half = d2 ** 0.5
-        strokes.append([(cx_mm - half, y), (cx_mm + half, y)])
+        if i % 2 == 0:
+            strokes.append([(cx_mm - half, y), (cx_mm + half, y)])
+        else:
+            strokes.append([(cx_mm + half, y), (cx_mm - half, y)])
     return strokes
 
 

@@ -703,6 +703,11 @@ DEFAULT_SETTINGS = {
     # instead of re-engraving. Cleared on Calibrate & Save (calibration
     # done) or on "Engrave new card" (user starts fresh).
     "camera_calibration_engrave_offset_mm": None,
+    # Same idea but for the fast dot-pattern recalibration. Stored
+    # separately so the two workflows don't clobber each other's
+    # in-progress state (e.g. a user could have a ChArUco card engraved
+    # AND a separate dot pattern on different basswood blanks).
+    "dot_calibration_engrave_offset_mm": None,
     # Frame & Cut "Try auto-frame" checkbox state. When True AND a
     # polygon with a saved machine offset is loaded AND camera
     # calibration is present, Frame & Cut drives the head to the

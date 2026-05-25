@@ -8269,6 +8269,22 @@ class DotCalibrationDialog(tk.Toplevel):
             tk.Button(self, text=_("Close"), command=self.destroy).pack(pady=(0, 15))
             return
 
+        # Restore a persisted engrave offset from a prior session, if
+        # any. The dot pattern survives across SSC restarts (it's just
+        # engraved basswood sitting on the bed), so a user who captured
+        # bad numbers and clicked Keep Current can reopen the dialog
+        # and skip straight to the capture phase against the existing
+        # engrave — no need to burn fresh basswood. Cleared after a
+        # successful Switch, or manually via "Engrave new pattern".
+        saved = self._settings.get('dot_calibration_engrave_offset_mm')
+        if (saved and isinstance(saved, (list, tuple))
+                and len(saved) == 2):
+            try:
+                self._captured_engrave_offset = (
+                    float(saved[0]), float(saved[1]))
+            except (TypeError, ValueError):
+                pass
+
         # Block sleep through the long engrave + camera capture.
         try:
             import sleep_lock
@@ -8356,6 +8372,23 @@ class DotCalibrationDialog(tk.Toplevel):
             self._btn_frame, text=_("Switch camera"),
             command=self._on_switch_camera,
             font=("Helvetica", 9), width=22)
+        # "Engrave new pattern" — capture-phase escape hatch that
+        # clears the persisted engrave offset and returns to engrave
+        # phase. For when the user wants to retry on fresh basswood
+        # (the current dots are smudged, the camera moved, etc.).
+        self._engrave_new_btn = tk.Button(
+            self._btn_frame, text=_("Engrave new pattern"),
+            command=self._on_engrave_new_clicked,
+            font=("Helvetica", 9), width=22)
+        # "Enter offset manually" — engrave-phase escape hatch for
+        # recovering when an engrave succeeded but the offset wasn't
+        # persisted (older SSC version, settings file edit, etc.).
+        # User punches in the MPos they jogged to at engrave time;
+        # dialog jumps straight to capture against the existing dots.
+        self._manual_offset_btn = tk.Button(
+            self._btn_frame, text=_("Enter offset manually..."),
+            command=self._on_manual_offset_clicked,
+            font=("Helvetica", 9), width=22)
         self._cancel_btn = tk.Button(
             self._btn_frame, text=_("Cancel"),
             command=self._on_close, width=10)
@@ -8364,7 +8397,14 @@ class DotCalibrationDialog(tk.Toplevel):
         self.minsize(900, 500)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        self._enter_engrave_phase()
+        # Start in capture phase if a prior engrave's offset was
+        # restored — the user is reopening to retry against existing
+        # engraved basswood. Otherwise engrave phase as usual.
+        if (self._captured_engrave_offset is not None
+                and self._falcon_port):
+            self._enter_capture_phase()
+        else:
+            self._enter_engrave_phase()
         self.wait_window(self)
 
     # ------------------------------------------------------------------
@@ -8388,7 +8428,8 @@ class DotCalibrationDialog(tk.Toplevel):
             "6. Don't move the basswood after engrave is done."))
         self._status_var.set(
             _("Ready. Home + jog into bed + Frame + Engrave."))
-        for w in (self._capture_btn, self._retake_btn):
+        for w in (self._capture_btn, self._retake_btn,
+                   self._engrave_new_btn):
             w.pack_forget()
         # Build jog cluster + MPos display once.
         if not hasattr(self, '_engrave_jog_frame'):
@@ -8399,6 +8440,7 @@ class DotCalibrationDialog(tk.Toplevel):
         self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._switch_cam_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._manual_offset_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Engrave gated on framing being done. Reset state so back-from-
         # capture (retake) doesn't carry stale flags.
@@ -8844,11 +8886,23 @@ class DotCalibrationDialog(tk.Toplevel):
                 pass
 
         self._captured_engrave_offset = engrave_offset
+        # Persist the offset so a close+reopen returns straight to
+        # capture phase against the existing engrave — saves a fresh
+        # basswood blank during detection bug-hunting iterations.
+        try:
+            self._settings['dot_calibration_engrave_offset_mm'] = [
+                float(engrave_offset[0]), float(engrave_offset[1])]
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
         messagebox.showinfo(
             _("Engrave Done — DON'T TOUCH"),
             _("Pattern engraved. ⚠ Don't move the basswood. ⚠\n\n"
               "Next: Capture takes one photo and computes the new "
-              "calibration."), parent=self)
+              "calibration. You can close and reopen this dialog "
+              "without re-engraving — the position is saved."),
+            parent=self)
         self._enter_capture_phase()
 
     # ------------------------------------------------------------------
@@ -8874,6 +8928,10 @@ class DotCalibrationDialog(tk.Toplevel):
         self._retake_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._switch_cam_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._engrave_new_btn.pack(side="top", fill='x', padx=5, pady=2)
+        # Manual-offset button is engrave-phase-only — hide here.
+        if hasattr(self, '_manual_offset_btn'):
+            self._manual_offset_btn.pack_forget()
         self._cancel_btn.pack_forget()
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Camera was opened back in engrave phase and (auto-)recycled
@@ -9189,6 +9247,17 @@ class DotCalibrationDialog(tk.Toplevel):
             try:
                 self._cam_mod.save_calibration(
                     self._new_calibration, self._calibration_path)
+                # Calibration committed — clear the persisted engrave
+                # offset so the next dialog open starts fresh in
+                # engrave phase. (The old basswood is now stale state
+                # the user shouldn't be encouraged to recapture against.)
+                try:
+                    self._settings.pop(
+                        'dot_calibration_engrave_offset_mm', None)
+                    from config import save_settings
+                    save_settings(self._settings)
+                except Exception:
+                    pass
                 self.result = "saved"
                 messagebox.showinfo(
                     _("Calibration Updated"),
@@ -9223,6 +9292,86 @@ class DotCalibrationDialog(tk.Toplevel):
         self._matched_grid = None
         self._render_frame()  # clear overlays
         self._status_var.set(_("Ready for another capture."))
+
+    def _on_manual_offset_clicked(self):
+        """Engrave-phase escape hatch: user enters the MPos they
+        jogged to at engrave time, dialog skips straight to capture
+        against the existing engraved pattern. Recovers offset state
+        when the persisted offset was lost (older SSC version, etc.)
+        without burning a fresh basswood blank."""
+        from tkinter import simpledialog
+        prompt = _(
+            "Enter the machine MPos you were jogged to when the dot "
+            "pattern was engraved.\n\n"
+            "Format: X,Y (e.g. 200,200)\n\n"
+            "Pattern is centered on head MPos, so this is the head "
+            "position at engrave time — the SAME position the framing "
+            "trace was centered on. If you're not sure, click Cancel "
+            "and engrave a fresh pattern.")
+        val = simpledialog.askstring(
+            _("Enter Engrave MPos"), prompt, parent=self)
+        if not val:
+            return
+        try:
+            parts = val.replace(';', ',').split(',')
+            if len(parts) != 2:
+                raise ValueError("need two numbers separated by a comma")
+            hx = float(parts[0].strip())
+            hy = float(parts[1].strip())
+        except (ValueError, TypeError) as e:
+            messagebox.showerror(
+                _("Bad MPos"),
+                _("Couldn't parse '{v}' as X,Y mm:\n{e}").format(
+                    v=val, e=e), parent=self)
+            return
+        # MPos is the head position = grid center. Convert to
+        # engrave_offset (local (0,0) machine coord) = head - grid_center.
+        cam = self._cam_mod
+        gx_center = (cam.DOT_GRID_COLS - 1) * cam.DOT_SPACING_MM / 2.0
+        gy_center = (cam.DOT_GRID_ROWS - 1) * cam.DOT_SPACING_MM / 2.0
+        self._captured_engrave_offset = (hx - gx_center, hy - gy_center)
+        try:
+            self._settings['dot_calibration_engrave_offset_mm'] = [
+                self._captured_engrave_offset[0],
+                self._captured_engrave_offset[1]]
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
+        self._status_var.set(
+            _("Offset set to ({x:.2f}, {y:.2f}). Switching to "
+              "capture phase.").format(
+                x=self._captured_engrave_offset[0],
+                y=self._captured_engrave_offset[1]))
+        self._enter_capture_phase()
+
+    def _on_engrave_new_clicked(self):
+        """Capture-phase escape: discard the persisted engrave offset
+        and return to engrave phase to lay down a fresh pattern. Use
+        when the existing dots got smudged / the camera or basswood
+        moved / you want to try a different position."""
+        if not messagebox.askyesno(
+                _("Engrave a New Pattern?"),
+                _("Discard the persisted engrave position and return "
+                  "to the engrave phase?\n\n"
+                  "Use this if you want to lay down a fresh pattern "
+                  "on new basswood (or in a different position) "
+                  "rather than recapturing the existing one.\n\n"
+                  "Continue?"),
+                parent=self):
+            return
+        self._captured_engrave_offset = None
+        self._new_calibration = None
+        self._matched_grid = None
+        self._framing_done = False
+        try:
+            self._settings.pop(
+                'dot_calibration_engrave_offset_mm', None)
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
+        self._enter_engrave_phase()
 
     def _on_reconnect_camera(self):
         if self._refresh_after_id:
