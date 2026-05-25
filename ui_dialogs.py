@@ -8204,6 +8204,15 @@ class DotCalibrationDialog(tk.Toplevel):
             self._btn_frame, text=_("Reconnect camera"),
             command=self._on_reconnect_camera,
             font=("Helvetica", 9), width=22)
+        # Switch to next enumerated camera — fallback for when the
+        # auto-resolver picked the wrong device (e.g. integrated
+        # laptop webcam instead of the overhead Falcon camera).
+        # Persists the chosen index to settings so future dialogs
+        # default correctly.
+        self._switch_cam_btn = tk.Button(
+            self._btn_frame, text=_("Switch camera"),
+            command=self._on_switch_camera,
+            font=("Helvetica", 9), width=22)
         self._cancel_btn = tk.Button(
             self._btn_frame, text=_("Cancel"),
             command=self._on_close, width=10)
@@ -8242,6 +8251,7 @@ class DotCalibrationDialog(tk.Toplevel):
         self._frame_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._switch_cam_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Engrave gated on framing being done. Reset state so back-from-
         # capture (retake) doesn't carry stale flags.
@@ -8532,6 +8542,7 @@ class DotCalibrationDialog(tk.Toplevel):
         self._capture_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._retake_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._switch_cam_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack_forget()
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Camera was opened back in engrave phase and (auto-)recycled
@@ -8828,6 +8839,54 @@ class DotCalibrationDialog(tk.Toplevel):
             self._cap = None
         self._failed_reads = 0
         self._status_var.set(_("Reopening camera..."))
+        self.after(50, self._open_camera_and_start)
+
+    def _on_switch_camera(self):
+        """Cycle to the next enumerated camera. Persists the choice so
+        next time the dialog (or any other camera-using dialog) opens
+        it defaults to this one."""
+        try:
+            cams = self._cam_mod.enumerate_cameras()
+        except Exception:
+            cams = []
+        if len(cams) < 2:
+            messagebox.showinfo(
+                _("Only One Camera"),
+                _("Only one camera is detected, so there's nothing to "
+                  "switch to."), parent=self)
+            return
+        indices = [c['index'] for c in cams]
+        try:
+            pos = indices.index(self._camera_index)
+        except ValueError:
+            pos = -1
+        next_pos = (pos + 1) % len(indices)
+        self._camera_index = indices[next_pos]
+        # Persist so all subsequent camera opens (this dialog + capture
+        # dialog + live preview) default to the chosen camera.
+        self._settings['camera_index_override'] = int(self._camera_index)
+        try:
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
+        self._status_var.set(
+            _("Switched to camera index {i} (of {n}). Reopening...").format(
+                i=self._camera_index, n=len(indices)))
+        # Force a reopen even if cap is None (e.g., previous open failed).
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        if self._refresh_after_id:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        self._failed_reads = 0
         self.after(50, self._open_camera_and_start)
 
     def _auto_recycle_camera(self):
