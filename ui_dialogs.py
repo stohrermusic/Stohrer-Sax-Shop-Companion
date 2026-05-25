@@ -5949,6 +5949,14 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._btn_frame, text=_("Reconnect camera"),
             command=self._on_reconnect_camera_clicked,
             font=("Helvetica", 9), width=18)
+        # Switch camera — fallback for when the auto-resolver picked
+        # the wrong device (laptop webcam vs overhead Falcon cam).
+        # Persists the chosen index so other camera-using dialogs also
+        # default correctly afterward.
+        self._switch_cam_btn = tk.Button(
+            self._btn_frame, text=_("Switch camera"),
+            command=self._on_switch_camera_clicked,
+            font=("Helvetica", 9), width=18)
 
         # Manual-offset entry — escape hatch when an engrave succeeded
         # but the persisted offset was lost (e.g. older settings file
@@ -6024,6 +6032,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._next_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._switch_cam_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._manual_offset_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Reset to disabled, then enable based on current flow flags.
@@ -6225,6 +6234,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._reengrave_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._calibrate_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._switch_cam_btn.pack(side="top", fill='x', padx=5, pady=2)
         self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
         # Always-visible Reconnect — the camera can die during the long
         # engrave or at dialog-transition. Without an explicit reopen
@@ -6767,6 +6777,42 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._status_var.set(_("Reopening camera..."))
         self.after(50, self._open_camera_and_start)
 
+    def _on_switch_camera_clicked(self):
+        """Cycle to the next enumerated camera; persist the choice."""
+        try:
+            cams = self._cam_mod.enumerate_cameras()
+        except Exception:
+            cams = []
+        if len(cams) < 2:
+            messagebox.showinfo(
+                _("Only One Camera"),
+                _("Only one camera is detected."), parent=self)
+            return
+        indices = [c['index'] for c in cams]
+        try:
+            pos = indices.index(self._camera_index)
+        except ValueError:
+            pos = -1
+        self._camera_index = indices[(pos + 1) % len(indices)]
+        try:
+            self._settings['camera_index_override'] = int(self._camera_index)
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
+        self._status_var.set(
+            _("Switched to camera index {i}. Reopening...").format(
+                i=self._camera_index))
+        self._stop_refresh()
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self._failed_reads = 0
+        self.after(50, self._open_camera_and_start)
+
     def _auto_recycle_camera(self):
         """Called after every FalconRunDialog close. The cv2 frame
         stream consistently stalls when a long-lived modal dialog
@@ -7147,6 +7193,12 @@ class CameraCaptureDialog(tk.Toplevel):
             btn_frame, text=_("Use"), command=self._on_use_clicked,
             font=("Helvetica", 10, "bold"), width=12, state="disabled")
         self._use_btn.pack(side="left", padx=5)
+        # Switch camera — fallback for when the auto-resolver picked the
+        # wrong device (e.g. integrated laptop webcam). Cycles through
+        # enumerated cameras and persists the choice.
+        tk.Button(btn_frame, text=_("Switch camera"),
+                  command=self._on_switch_camera, width=14
+                  ).pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Cancel"),
                   command=self._on_close, width=10
                   ).pack(side="left", padx=5)
@@ -7157,6 +7209,48 @@ class CameraCaptureDialog(tk.Toplevel):
 
         self.after(50, self._open_camera_and_start)
         self.wait_window(self)
+
+    def _on_switch_camera(self):
+        """Cycle to the next enumerated camera; persist the choice."""
+        try:
+            cams = self._cam_mod.enumerate_cameras()
+        except Exception:
+            cams = []
+        if len(cams) < 2:
+            messagebox.showinfo(
+                _("Only One Camera"),
+                _("Only one camera is detected."), parent=self)
+            return
+        indices = [c['index'] for c in cams]
+        try:
+            pos = indices.index(self._camera_index)
+        except ValueError:
+            pos = -1
+        self._camera_index = indices[(pos + 1) % len(indices)]
+        if self._settings is not None:
+            self._settings['camera_index_override'] = int(self._camera_index)
+            try:
+                from config import save_settings
+                save_settings(self._settings)
+            except Exception:
+                pass
+        self._status_var.set(
+            _("Switched to camera index {i}. Reopening...").format(
+                i=self._camera_index))
+        # Release current and reopen.
+        if self._refresh_after_id is not None:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self.after(50, self._open_camera_and_start)
 
     def _open_camera_and_start(self):
         """Background-thread camera open so the dialog stays responsive
@@ -7939,13 +8033,14 @@ class LiveCameraWindow(tk.Toplevel):
     PREVIEW_W = 480
     PREVIEW_H = 360
 
-    def __init__(self, parent, camera_index, title=None):
+    def __init__(self, parent, camera_index, title=None, settings=None):
         super().__init__(parent)
         self.title(title or _("Live camera"))
         self.configure(bg=DIALOG_BG)
         # Non-modal — explicitly DON'T grab_set or transient-parent, so
         # the FalconRunDialog stays interactive on top of us.
         self._camera_index = camera_index
+        self._settings = settings
         self._cap = None
         self._latest_photo = None
         self._refresh_after_id = None
@@ -7964,14 +8059,22 @@ class LiveCameraWindow(tk.Toplevel):
                      bg=DIALOG_BG, padx=15, pady=15).pack()
             return
 
+        # Preview label — match the CameraCaptureDialog pattern (no
+        # text in the initial label so width/height are interpreted
+        # as the placeholder pixel size, not 480 characters wide).
         self._preview_label = tk.Label(
-            self, bg="#222222", fg="#cccccc",
-            text=_("Waking camera..."),
-            font=("Helvetica", 12),
+            self, bg="#222222",
             width=self.PREVIEW_W, height=self.PREVIEW_H)
-        self._preview_label.pack(padx=8, pady=8)
+        self._preview_label.pack(padx=8, pady=(8, 4))
 
-        self.geometry(f"{self.PREVIEW_W + 30}x{self.PREVIEW_H + 30}")
+        # Switch camera button below the preview — single-line bar.
+        ctrl_row = tk.Frame(self, bg=DIALOG_BG)
+        ctrl_row.pack(fill='x', padx=8, pady=(0, 8))
+        tk.Button(ctrl_row, text=_("Switch camera"),
+                   command=self._on_switch_camera,
+                   font=("Helvetica", 9)).pack(side='right')
+
+        self.geometry(f"{self.PREVIEW_W + 30}x{self.PREVIEW_H + 60}")
         # Position to the right of the parent so it doesn't overlap the
         # FalconRunDialog that will open after us.
         try:
@@ -7982,6 +8085,46 @@ class LiveCameraWindow(tk.Toplevel):
             pass
 
         self.protocol("WM_DELETE_WINDOW", self.close)
+        self.after(50, self._open_camera_async)
+
+    def _on_switch_camera(self):
+        """Cycle to the next enumerated camera; persist the choice."""
+        try:
+            cams = self._cam_mod.enumerate_cameras()
+        except Exception:
+            cams = []
+        if len(cams) < 2:
+            from tkinter import messagebox
+            messagebox.showinfo(
+                _("Only One Camera"),
+                _("Only one camera is detected."), parent=self)
+            return
+        indices = [c['index'] for c in cams]
+        try:
+            pos = indices.index(self._camera_index)
+        except ValueError:
+            pos = -1
+        self._camera_index = indices[(pos + 1) % len(indices)]
+        if self._settings is not None:
+            self._settings['camera_index_override'] = int(self._camera_index)
+            try:
+                from config import save_settings
+                save_settings(self._settings)
+            except Exception:
+                pass
+        # Cancel pending refresh, release current cap, reopen.
+        if self._refresh_after_id is not None:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
         self.after(50, self._open_camera_async)
 
     def _open_camera_async(self):

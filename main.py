@@ -2371,7 +2371,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                         cam_idx = self._resolve_camera_index()
                         if cam_idx is not None:
                             self._live_cam_window = LiveCameraWindow(
-                                self.root, camera_index=cam_idx)
+                                self.root, camera_index=cam_idx,
+                                settings=self.settings)
                 except Exception:
                     pass  # never block the cut on preview failure
 
