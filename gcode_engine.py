@@ -1714,7 +1714,8 @@ def generate_polygon_framing_gcode(polygon, power_s=10, feed=2000, repeat=1):
 
 def generate_framing_gcode(xmin, ymin, xmax, ymax,
                             power_s=10, feed=2000, repeat=1,
-                            return_to_origin=True):
+                            return_to_origin=True,
+                            park_xy=None):
     """Produce G-code that traces a bounding-box rectangle at low power.
 
     Used as a pre-cut "framing" pass so the user can verify the cut area
@@ -1726,6 +1727,16 @@ def generate_framing_gcode(xmin, ymin, xmax, ymax,
     for why. Requires $32=1 (laser mode) on the controller; without
     that, M4 behaves like M3 (constant power) which is the conservative
     fallback rather than a safety regression.
+
+    ``park_xy``: when return_to_origin is False, park the head at this
+    (X, Y) machine coord after the trace. Defaults to the BBOX center,
+    but loop-mode framing needs the head parked where the CALLER's
+    MPos-to-bbox conversion will reproduce the same bbox on the next
+    iteration. For symmetric bboxes that's the bbox center; for
+    asymmetric ones (e.g. the dot-cal pattern, where the orientation
+    marker sticks out past one corner) it must be passed explicitly
+    to avoid the head drifting by the bbox-vs-CALLER-center offset
+    each iteration.
 
     Returns a list of G-code lines (no trailing newlines).
     """
@@ -1751,15 +1762,22 @@ def generate_framing_gcode(xmin, ymin, xmax, ymax,
         # the home corner instead of leaving it near the framed area.
         lines.append('G0 X0 Y0')
     else:
-        # Park head at the BBOX CENTER. Loop-mode framing reads MPos
-        # at the start of each iteration to choose the new center.
-        # Without this, the head ends each pass at the bottom-left
-        # corner (last G1), so the next iteration would treat that
-        # corner as the new center — the trace would drift further
-        # left+down each loop until a soft-limit fires.
-        cx = (float(xmin) + float(xmax)) / 2.0
-        cy = (float(ymin) + float(ymax)) / 2.0
-        lines.append(f'G0 X{cx:.3f} Y{cy:.3f}')
+        # Park head where the next iteration expects MPos to be. For
+        # callers whose MPos→bbox conversion is symmetric, that's the
+        # bbox center; for asymmetric callers (dot-cal pattern, where
+        # the marker pushes the bbox past the grid) the caller must
+        # pass ``park_xy`` explicitly. Without that, the head drifts
+        # by the bbox-vs-caller-center offset each iteration (the
+        # rationale for parking at *anything* is to prevent drift —
+        # the last G1 corner would push the trace further off each
+        # loop until a soft-limit fires).
+        if park_xy is not None:
+            px = float(park_xy[0])
+            py = float(park_xy[1])
+        else:
+            px = (float(xmin) + float(xmax)) / 2.0
+            py = (float(ymin) + float(ymax)) / 2.0
+        lines.append(f'G0 X{px:.3f} Y{py:.3f}')
     lines.append('; --- End framing pass ---')
     return lines
 

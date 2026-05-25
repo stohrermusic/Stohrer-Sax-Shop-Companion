@@ -6393,6 +6393,13 @@ class CameraCalibrationDialog(tk.Toplevel):
                                           # head to machine (0, 0) (=home
                                           # corner) between iterations —
                                           # that loses user's jog edits.
+                # Park at the head's original MPos so the next iter
+                # produces the same bbox (and so the engrave-phase
+                # MPos read after Done matches what the user jogged
+                # to). The card geometry is slightly asymmetric in Y
+                # (label adds ~4mm offset) — parking at hx, hy keeps
+                # MPos invariant across iterations.
+                park_xy=(hx, hy),
             )
 
         # Stop MPos polling while the streamer owns the port.
@@ -8746,6 +8753,14 @@ class DotCalibrationDialog(tk.Toplevel):
                 power_s=self._settings.get("laser_framing_power_s", 10),
                 feed=self._settings.get("laser_framing_feed", 2000),
                 return_to_origin=False,
+                # Park at the GRID center (= the head's MPos), not the
+                # pattern bbox center — the marker pushes the bbox out
+                # past the grid in +X+Y, so bbox center is ~13.5mm
+                # offset from grid center. Parking at bbox center
+                # would shift MPos by that amount each iteration AND
+                # make Engrave commit at the shifted position instead
+                # of the user's jogged-to position.
+                park_xy=(hx, hy),
             )
 
         try:
