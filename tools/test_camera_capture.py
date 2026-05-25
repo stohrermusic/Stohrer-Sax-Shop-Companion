@@ -6,8 +6,8 @@ Covers:
   - ChArUco board generation produces a valid PNG of expected pixel size
   - ChArUco detection round-trips on the rendered card itself
   - Calibration JSON save/load round-trip
-  - Synthetic full pipeline: render board → 'photograph' it via warp →
-    detect → calibrate → undistort → verify low reprojection error
+  - Synthetic full pipeline: render board -> 'photograph' it via warp ->
+    detect -> calibrate -> undistort -> verify low reprojection error
   - Scrap contour detection on a synthetic image with a known shape
   - pixels_to_mm honors the homography
   - default_calibration_path returns a platform-appropriate path
@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     img = cv2.imread(png_path)
     check("PNG is readable by cv2", img is not None)
 
-    # At 300 DPI, 6 cols × 25mm + 2× 10mm border ≈ 2006 px wide
+    # At 300 DPI, 6 cols × 25mm + 2× 10mm border ~= 2006 px wide
     # (slight slop because px_per_square is rounded to whole pixels).
     expected_w = int(cam.CHARUCO_COLS * cam.CHARUCO_SQUARE_MM * 300 / 25.4
                      + 2 * 10.0 * 300 / 25.4)
@@ -121,7 +121,7 @@ fake_calib = {
     'rms_reprojection_error_px': 0.42,
     'image_size': [640, 480],
     'frame_count': 12,
-    'homography_px_to_mm': [[0.5, 0.0, -100.0],
+    'homography_px_to_machine_mm': [[0.5, 0.0, -100.0],
                               [0.0, 0.5, -75.0],
                               [0.0, 0.0, 1.0]],
     'board': {'cols': 6, 'rows': 4, 'square_mm': 25.0,
@@ -137,7 +137,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     check("loaded matches saved (camera_matrix)",
           loaded['camera_matrix'] == fake_calib['camera_matrix'])
     check("loaded matches saved (homography)",
-          loaded['homography_px_to_mm'] == fake_calib['homography_px_to_mm'])
+          loaded['homography_px_to_machine_mm'] == fake_calib['homography_px_to_machine_mm'])
 
     # load_calibration returns None for missing file
     missing = cam.load_calibration(os.path.join(tmpdir, "nope.json"))
@@ -160,7 +160,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
     # each side), the rendered card is ~290x220 px, leaving room to
     # paste it at several positions inside the canvas.
     png_path = os.path.join(tmpdir, "card.png")
-    cam.render_charuco_card_png(png_path, dpi=35, border_mm=5)
+    # dpi=20 keeps the rendered 10×10×27mm card under ~270px so it
+    # fits inside the 480x640 synthetic test canvas with room for
+    # multiple positions.
+    cam.render_charuco_card_png(png_path, dpi=20, border_mm=5)
     card_img = cv2.imread(png_path)
     card_gray = cv2.cvtColor(card_img, cv2.COLOR_BGR2GRAY)
     ch, cw = card_gray.shape[:2]
@@ -203,9 +206,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
         # No real distortion, so reprojection error should be tiny
         check("rms_reprojection_error_px < 1 px on undistorted synthetic",
               calib['rms_reprojection_error_px'] < 1.0)
-        check("homography_px_to_mm shape is 3x3",
-              len(calib['homography_px_to_mm']) == 3
-              and len(calib['homography_px_to_mm'][0]) == 3)
+        check("homography_px_to_machine_mm shape is 3x3",
+              len(calib['homography_px_to_machine_mm']) == 3
+              and len(calib['homography_px_to_machine_mm'][0]) == 3)
 
         # Undistort one of the synthetic frames using the calibration —
         # should run without error and preserve shape.
@@ -242,11 +245,13 @@ check("contour below min_area_frac -> None",
 print("\n=== pixels_to_mm uses the homography ===")
 # ============================================================
 
-# Use an identity homography: pixel coords == mm coords.
+# Use an identity homography: pixel coords == mm coords. Mark as
+# schema 2 so the legacy Y-flip correction doesn't fire.
 identity_calib = {
+    'calibration_schema_version': 2,
     'camera_matrix': [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
     'dist_coeffs': [[0.0, 0.0, 0.0, 0.0, 0.0]],
-    'homography_px_to_mm': [[1.0, 0.0, 0.0],
+    'homography_px_to_machine_mm': [[1.0, 0.0, 0.0],
                               [0.0, 1.0, 0.0],
                               [0.0, 0.0, 1.0]],
 }
@@ -256,17 +261,103 @@ check("identity homography preserves coords",
 
 # Scale-by-0.5 homography: pixels halved into mm
 scale_calib = dict(identity_calib)
-scale_calib['homography_px_to_mm'] = [[0.5, 0.0, 0.0],
+scale_calib['homography_px_to_machine_mm'] = [[0.5, 0.0, 0.0],
                                         [0.0, 0.5, 0.0],
                                         [0.0, 0.0, 1.0]]
 mm = cam.pixels_to_mm([(100, 200), (300, 400)], scale_calib)
 check("scale-0.5 homography halves the coords",
       mm == [(50.0, 100.0), (150.0, 200.0)])
 
+# Legacy calibration: schema_version absent → pixels_to_mm applies a
+# Y-flip correction to undo the broken _board_corner_to_machine_mm
+# convention used during schema-1 fits. With a known card geometry
+# (offset_y=99, border=10, label_h=8, board_h=250) the constant K is
+# 2*99 + 2*10 + 8 + 250 = 476. So a homography output of (x, 142)
+# should be flipped to (x, 334).
+legacy_calib = {
+    'camera_matrix': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    'dist_coeffs': [[0]],
+    'homography_px_to_machine_mm': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    'card_engrave_offset_mm': [66.0, 99.0],
+    'card_border_mm': 10.0,
+    'card_label_height_mm': 8.0,
+    'board': {'rows': 10, 'square_mm': 25.0},
+    # NOTE: no calibration_schema_version → treated as schema 1
+}
+mm = cam.pixels_to_mm([(100.0, 142.0), (200.0, 342.0)], legacy_calib)
+check("legacy calibration Y-flips around card center",
+      mm == [(100.0, 334.0), (200.0, 134.0)])
+
 # Empty polygon round-trips
 check("pixels_to_mm([]) returns []", cam.pixels_to_mm([], identity_calib) == [])
 check("pixels_to_mm with None calibration returns input unchanged",
       cam.pixels_to_mm([(1, 2)], None) == [(1, 2)])
+
+
+# ============================================================
+print("\n=== Integrated calibration helpers ===")
+# ============================================================
+
+# Board-corner to machine-mm: board frame is Y-DOWN (OpenCV convention,
+# verified by detecting a freshly-rendered board image), so corner
+# (0, 0) is the TOP-LEFT of the board area which lands at machine
+# (offset_x + border, offset_y + border + board_h) — the back-left of
+# the engraved card area.
+m_xy = cam._board_corner_to_machine_mm(
+    (0.0, 0.0), offset_x=50.0, offset_y=50.0,
+    board_h_mm=250.0, border_mm=10.0, label_height_mm=8.0)
+check("board (0,0) -> machine (offset_x + border, offset_y + border + board_h)",
+      m_xy == (60.0, 310.0))
+
+# Bottom-right of the board area in board frame is (board_w, board_h);
+# after Y-flip it lands at the FRONT of the board area, just above
+# the label strip: machine (offset_x + border + bw, offset_y + border).
+m_xy_far = cam._board_corner_to_machine_mm(
+    (200.0, 250.0), offset_x=50.0, offset_y=50.0,
+    board_h_mm=250.0, border_mm=10.0, label_height_mm=8.0)
+check("board (200, board_h) -> machine (260, 60)",
+      m_xy_far == (260.0, 60.0))
+
+# Constants exist and are sane defaults.
+check("CARD_ENGRAVE_OFFSET_X_MM is 50",
+      cam.CARD_ENGRAVE_OFFSET_X_MM == 50.0)
+check("CARD_ENGRAVE_OFFSET_Y_MM is 50",
+      cam.CARD_ENGRAVE_OFFSET_Y_MM == 50.0)
+
+
+# ============================================================
+print("\n=== Legacy calibration detection ===")
+# ============================================================
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    legacy_cal = {
+        'camera_matrix': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        'dist_coeffs': [[0]],
+        'homography_px_to_mm': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        # Note: no homography_px_to_machine_mm
+    }
+    p = os.path.join(tmpdir, "legacy.json")
+    import json
+    with open(p, 'w') as f:
+        json.dump(legacy_cal, f)
+    check("is_legacy_calibration True on old format",
+          cam.is_legacy_calibration(p))
+    check("load_calibration returns None on legacy format",
+          cam.load_calibration(p) is None)
+
+    new_cal = dict(legacy_cal)
+    del new_cal['homography_px_to_mm']
+    new_cal['homography_px_to_machine_mm'] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    p2 = os.path.join(tmpdir, "new.json")
+    with open(p2, 'w') as f:
+        json.dump(new_cal, f)
+    check("is_legacy_calibration False on new format",
+          not cam.is_legacy_calibration(p2))
+    check("load_calibration loads new format successfully",
+          cam.load_calibration(p2) is not None)
+    check("is_legacy_calibration False on missing file",
+          not cam.is_legacy_calibration(
+              os.path.join(tmpdir, "nope.json")))
 
 
 # ============================================================

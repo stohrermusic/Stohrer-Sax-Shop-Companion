@@ -1669,8 +1669,46 @@ def extract_gcode_bbox(gcode_text):
     return min(xs), max(xs), min(ys), max(ys)
 
 
+def generate_polygon_framing_gcode(polygon, power_s=10, feed=2000, repeat=1):
+    """Trace a polygon outline at low power for framing.
+
+    Preferred over the bbox-based framer when cutting on irregular scrap
+    (e.g. camera-captured leather): tracing the actual outline lets the
+    user see whether the cut area lands on the material, instead of a
+    rectangle that overhangs every concave edge.
+
+    Input convention: custom_polygon (SVG-Y-DOWN, normalized to (0, 0)
+    top-left). Output: G-code (Y-UP). One Y-flip at this boundary —
+    see the Y-axis conventions block at the top of PadSVGGeneratorApp
+    in main.py.
+    """
+    if not polygon or len(polygon) < 3:
+        return []
+    ymax = max(p[1] for p in polygon)
+    polygon = [(x, ymax - y) for (x, y) in polygon]
+    x0, y0 = polygon[0]
+    lines = [
+        '; --- Framing pass (polygon outline) ---',
+        'G90',
+        f'G0 X{x0:.3f} Y{y0:.3f}',
+        f'M3 S{int(power_s)}',
+    ]
+    for _ in range(max(1, int(repeat))):
+        for x, y in polygon[1:]:
+            lines.append(f'G1 X{x:.3f} Y{y:.3f} F{int(feed)}')
+        # Close the loop
+        lines.append(f'G1 X{x0:.3f} Y{y0:.3f}')
+    lines.extend([
+        'M5',
+        'G0 X0 Y0',
+        '; --- End framing pass ---',
+    ])
+    return lines
+
+
 def generate_framing_gcode(xmin, ymin, xmax, ymax,
-                            power_s=10, feed=2000, repeat=1):
+                            power_s=10, feed=2000, repeat=1,
+                            return_to_origin=True):
     """Produce G-code that traces a bounding-box rectangle at low power.
 
     Used as a pre-cut "framing" pass so the user can verify the cut area
@@ -1693,11 +1731,25 @@ def generate_framing_gcode(xmin, ymin, xmax, ymax,
             f'G1 X{xmin:.3f} Y{ymax:.3f}',
             f'G1 X{xmin:.3f} Y{ymin:.3f}',
         ])
-    lines.extend([
-        'M5',
-        'G0 X0 Y0',
-        '; --- End framing pass ---',
-    ])
+    lines.append('M5')
+    if return_to_origin:
+        # Useful for Frame & Cut (G92 set work origin at head's
+        # starting position — this returns there after framing).
+        # NOT useful for calibration-style framing where coords are
+        # absolute machine — returning to "X0 Y0" sends the head to
+        # the home corner instead of leaving it near the framed area.
+        lines.append('G0 X0 Y0')
+    else:
+        # Park head at the BBOX CENTER. Loop-mode framing reads MPos
+        # at the start of each iteration to choose the new center.
+        # Without this, the head ends each pass at the bottom-left
+        # corner (last G1), so the next iteration would treat that
+        # corner as the new center — the trace would drift further
+        # left+down each loop until a soft-limit fires.
+        cx = (float(xmin) + float(xmax)) / 2.0
+        cy = (float(ymin) + float(ymax)) / 2.0
+        lines.append(f'G0 X{cx:.3f} Y{cy:.3f}')
+    lines.append('; --- End framing pass ---')
     return lines
 
 
@@ -1706,17 +1758,37 @@ def generate_calibration_card_gcode(filename, cols=8, rows=6,
                                      border_mm=10.0,
                                      engrave_speed=6000, engrave_power=25,
                                      engrave_passes=1, line_spacing_mm=0.15,
-                                     settings=None, air_assist=True):
+                                     settings=None, air_assist=True,
+                                     offset_x_mm=None, offset_y_mm=None,
+                                     home_first=False):
     """Generate G-code engraving the ChArUco camera-calibration card.
 
-    The card is rendered at a DPI matched to line_spacing_mm and raster-
-    engraved as horizontal scan lines. Single layer, no cut path — the
-    basswood stays whole and just gets the pattern burned in.
+    The card is positioned with its bottom-left corner at machine
+    (``offset_x_mm``, ``offset_y_mm``) — defaults to
+    ``camera_capture.CARD_ENGRAVE_OFFSET_*_MM``. Caller is
+    responsible for homing the laser beforehand so absolute coords
+    are meaningful; set ``home_first=True`` to prepend ``$H`` to the
+    output for batch-style use.
+
+    Pinning the engrave to a known machine position lets the camera
+    calibration solver pair each detected ChArUco corner with its
+    exact machine-mm coord — collapsing the homography from
+    pixel↔board-mm into pixel↔machine-mm directly. No separate
+    auto-framing step is needed.
 
     Defaults (6000 mm/min, 25%, single pass) are tuned for basswood on
     a Creality Falcon2 Pro 40W; user can override in the Tooling-tab UI.
     """
-    from camera_capture import make_calibration_card_strokes
+    from camera_capture import (
+        make_calibration_card_strokes,
+        CARD_ENGRAVE_OFFSET_X_MM,
+        CARD_ENGRAVE_OFFSET_Y_MM,
+    )
+
+    if offset_x_mm is None:
+        offset_x_mm = CARD_ENGRAVE_OFFSET_X_MM
+    if offset_y_mm is None:
+        offset_y_mm = CARD_ENGRAVE_OFFSET_Y_MM
 
     settings = settings or {}
     return_speed = settings.get("gcode_return_speed", 1000)
@@ -1737,15 +1809,29 @@ def generate_calibration_card_gcode(filename, cols=8, rows=6,
 
     # camera_capture returns strokes in SVG Y-down coords (row 0 at top).
     # G-code uses Y-up with origin at bottom-left, so flip every Y.
-    strokes_y_up = [
-        [(x, sheet_h - y) for (x, y) in stroke]
+    # Then translate to the card's known machine-coord position.
+    strokes_machine = [
+        [(x + offset_x_mm, (sheet_h - y) + offset_y_mm)
+         for (x, y) in stroke]
         for stroke in strokes_y_down
     ]
 
+    # Bounds in machine coords (for the header comment + safety).
+    bounds_min_x = offset_x_mm
+    bounds_min_y = offset_y_mm
+    bounds_max_x = offset_x_mm + sheet_w
+    bounds_max_y = offset_y_mm + sheet_h
+
     lines = []
-    lines.extend(generate_gcode_header(0, 0, sheet_w, sheet_h))
+    if home_first:
+        lines.extend([
+            '; --- Home laser so machine coords have a known reference ---',
+            '$H',
+        ])
+    lines.extend(generate_gcode_header(
+        bounds_min_x, bounds_min_y, bounds_max_x, bounds_max_y))
     lines.extend(generate_gcode_layer(
-        strokes_y_up, engrave_speed, engrave_power, 'CAL',
+        strokes_machine, engrave_speed, engrave_power, 'CAL',
         overscan_mm=overscan_mm, air_assist=air_assist,
         passes=engrave_passes,
     ))

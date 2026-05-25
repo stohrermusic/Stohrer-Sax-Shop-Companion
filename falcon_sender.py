@@ -58,6 +58,16 @@ DEFAULT_BAUD = 115200
 GRBL_RX_BUFFER = 128          # bytes, fixed in Grbl firmware
 STATUS_POLL_HZ = 4            # `?` polls per second during streaming
 CONNECT_WAKEUP_DELAY_S = 1.5  # time to wait for Grbl banner after open
+# Stall watchdog: when Grbl reports Idle continuously for this many
+# seconds while we still have lines waiting on acks, the
+# character-counting state has desynced — an `ok` was lost over USB.
+# Grbl being Idle means its planner is empty AND its serial RX has
+# been processed, so every line we sent has definitely executed. We
+# can safely clear the in-flight queue and keep streaming.
+STALL_TIMEOUT_S = 15.0
+# After this many recoveries on a single stream, give up — the USB
+# link is too unreliable to trust (probably a bad cable or hub).
+MAX_STALL_RECOVERIES = 5
 
 # Grbl real-time command bytes (single-byte, immediate, don't queue)
 RT_STATUS = b'?'              # request status report
@@ -67,9 +77,11 @@ RT_SOFT_RESET = b'\x18'       # Ctrl-X, clears planner + serial buffer
 RT_SAFETY_DOOR = b'\x84'
 RT_JOG_CANCEL = b'\x85'
 
-# Falcon2 Pro identifies as a CH340 USB-serial adapter on most installs.
-# Match by VID:PID when possible; fall back to handshake.
+# Falcon2 Pro 40W identifies as Espressif (ESP32-S3 onboard); older
+# Falcons use CH340. Match by VID when possible to skip non-laser
+# devices first; fall back to handshake on every port either way.
 FALCON_VID_PID_HINTS = [
+    (0x303A, 0x4001),  # Espressif ESP32-S3 (Falcon2 Pro 40W)
     (0x1A86, 0x7523),  # CH340
     (0x1A86, 0x55D4),  # CH9102
     (0x1A86, 0x7522),  # CH340N
@@ -98,25 +110,35 @@ def list_serial_ports():
 
 
 def _probe_for_grbl(port, baud=DEFAULT_BAUD, timeout_s=CONNECT_WAKEUP_DELAY_S):
-    """Open a port, wait for Grbl banner, return True if seen."""
+    """Open a port, send a soft-reset, wait for the Grbl banner.
+
+    A passive listen doesn't work for the Falcon2 Pro 40W's ESP32-S3
+    controller — it boots silently and only emits the banner in response
+    to ``\\x18`` (Ctrl-X soft-reset). The reset is harmless to send to a
+    non-Grbl device; pyserial will just close the port and we'll move on.
+    """
     if not HAS_PYSERIAL:
         return False
     try:
-        # Open with DTR low to avoid resetting some boards on connect;
-        # for Grbl we DO want a reset to get the banner, so default DTR is fine.
         s = serial.Serial(port, baud, timeout=0.2)
     except (serial.SerialException, OSError):
         return False
     try:
-        # Some boards take a moment to enumerate after open. Read for the
-        # full timeout window and look for a Grbl banner.
+        # Give the port a moment to settle after enumeration, drain
+        # whatever the OS buffered, then kick the controller and listen
+        # for its boot banner.
+        time.sleep(0.2)
+        try:
+            s.reset_input_buffer()
+            s.write(RT_SOFT_RESET)
+        except (serial.SerialException, OSError):
+            return False
         deadline = time.monotonic() + timeout_s
         buf = b''
         while time.monotonic() < deadline:
             chunk = s.read(256)
             if chunk:
                 buf += chunk
-                # The banner looks like "Grbl 1.1f ['$' for help]"
                 if b'Grbl' in buf:
                     return True
         return b'Grbl' in buf
@@ -253,6 +275,12 @@ class FalconSender:
         self._stop_flag = threading.Event()
         self._pause_flag = threading.Event()
         self._lock = threading.RLock()
+        # Outstanding jogs whose ``ok`` Grbl hasn't yet returned. Each
+        # ``$J=`` ack must be consumed BEFORE we treat any ``ok`` as a
+        # stream-line ack — otherwise the character-counting protocol
+        # over-counts and either terminates the stream early or leaves
+        # the planner over-loaded. Read/written under self._lock.
+        self._jogs_in_flight = 0
 
         self.status = {'state': 'Disconnected'}
         self.latest_error = None
@@ -265,27 +293,60 @@ class FalconSender:
     # ------------------------------------------------------------------
 
     def connect(self):
-        """Open the serial port and wait for the Grbl banner."""
+        """Open the serial port and confirm Grbl is responsive.
+
+        Strategy: send ``?`` (real-time status query) and check for a
+        ``<...>`` reply. Grbl responds to ``?`` in every state
+        including Alarm, so this is a non-destructive liveness probe.
+        Only if the probe gets nothing do we fall back to the heavier
+        soft-reset (which DOES elicit the boot banner — but also
+        puts the controller into Alarm state if homing is required,
+        causing a continuous beep).
+        """
         with self._lock:
             if self._serial is not None and self._serial.is_open:
                 return
             self._serial = serial.Serial(self.port, self.baud, timeout=0.05)
-            # Wait for the boot banner. If we don't see it within the window,
-            # try a soft-reset; that always elicits the banner.
+            time.sleep(0.1)  # let port settle
+
+            # Probe with ? — non-destructive
+            try:
+                self._serial.reset_input_buffer()
+                self._serial.write(RT_STATUS)
+            except (serial.SerialException, OSError):
+                pass
+            time.sleep(0.2)
+            try:
+                buf = self._serial.read(self._serial.in_waiting or 256)
+            except (serial.SerialException, OSError):
+                buf = b''
+            if b'<' in buf and b'>' in buf:
+                # Grbl alive — done, no soft-reset needed
+                self._serial.reset_input_buffer()
+                self.status = {'state': 'Idle',
+                                'raw': buf.decode('ascii', 'replace')}
+                return
+
+            # Probe failed — wait for the boot banner (Falcon sometimes
+            # needs a beat after USB enumeration before it'll talk).
             deadline = time.monotonic() + CONNECT_WAKEUP_DELAY_S
-            buf = b''
             while time.monotonic() < deadline:
                 chunk = self._serial.read(256)
                 if chunk:
                     buf += chunk
                     if b'Grbl' in buf:
                         break
-            if b'Grbl' not in buf:
+
+            # Last resort: soft-reset. This DOES wake the controller but
+            # puts it back into Alarm if homing is required ($22=1).
+            # Only get here on a really stuck connection.
+            if b'Grbl' not in buf and (b'<' not in buf or b'>' not in buf):
                 self._serial.write(RT_SOFT_RESET)
                 time.sleep(CONNECT_WAKEUP_DELAY_S)
                 buf += self._serial.read(self._serial.in_waiting or 256)
             self._serial.reset_input_buffer()
-            self.status = {'state': 'Idle', 'raw': buf.decode('ascii', 'replace')}
+            self.status = {'state': 'Idle',
+                            'raw': buf.decode('ascii', 'replace')}
 
     def disconnect(self):
         """Close the serial port. Stops any in-flight stream first."""
@@ -331,11 +392,17 @@ class FalconSender:
         """Emergency stop: soft-reset clears planner buffer and stops motion.
 
         The worker thread is signalled to exit. Safe to call from any thread.
+
+        Only sends RT_SOFT_RESET when there's an active stream to stop.
+        Without the guard, the soft-reset puts the Falcon into Alarm
+        state every time disconnect() is called — including the
+        connect-poll-disconnect cycle used by status polling — which
+        produces a continuous beep.
         """
         self._stop_flag.set()
         self._pause_flag.clear()
-        self.send_realtime(RT_SOFT_RESET)
         if self._worker is not None and self._worker.is_alive():
+            self.send_realtime(RT_SOFT_RESET)
             self._worker.join(timeout=2.0)
         self._worker = None
 
@@ -349,12 +416,103 @@ class FalconSender:
             except (serial.SerialException, OSError):
                 pass
 
+    def home(self, timeout_s=60.0):
+        """Send ``$H`` and block until Grbl returns ``ok`` (homing done)
+        or an ``error:N`` / ``ALARM:N`` arrives.
+
+        Returns a ``(success, message)`` tuple. ``message`` is the raw
+        Grbl response (e.g. ``"ok"`` or ``"error:5"``). Caller must
+        ensure no stream is active — this races for reads with the
+        worker thread.
+
+        ``timeout_s`` covers the whole homing cycle. On a Falcon2 Pro
+        40W with $130=400/$131=415, homing typically completes in 15-25
+        seconds; 60s is comfortable headroom.
+        """
+        with self._lock:
+            if self._serial is None or not self._serial.is_open:
+                return (False, "not connected")
+            try:
+                self._serial.reset_input_buffer()
+                self._serial.write(b'$H\n')
+            except (serial.SerialException, OSError) as e:
+                return (False, f"write failed: {e}")
+            deadline = time.monotonic() + timeout_s
+            buf = b''
+            while time.monotonic() < deadline:
+                try:
+                    chunk = self._serial.read(self._serial.in_waiting or 1)
+                except (serial.SerialException, OSError) as e:
+                    return (False, f"read failed: {e}")
+                if chunk:
+                    buf += chunk
+                    while b'\n' in buf:
+                        line, buf = buf.split(b'\n', 1)
+                        text = line.decode('ascii', 'replace').strip()
+                        if not text:
+                            continue
+                        if text == 'ok':
+                            return (True, 'ok')
+                        if text.startswith('error:'):
+                            self.latest_error = text
+                            return (False, text)
+                        if text.startswith('ALARM:'):
+                            self.latest_alarm = text
+                            return (False, text)
+                else:
+                    time.sleep(0.05)
+            return (False, f"timeout after {timeout_s:.0f}s")
+
+    def get_status(self, timeout=0.3):
+        """Synchronous ``?`` query. Returns a parsed status dict or None.
+
+        Caller must not invoke this during an active stream — the worker
+        thread reads the port and will race for the response. Intended
+        for between-job UIs (origin calibration, jog dialogs) where the
+        sender is connected but idle.
+        """
+        with self._lock:
+            if self._serial is None or not self._serial.is_open:
+                return None
+            try:
+                self._serial.reset_input_buffer()
+                self._serial.write(RT_STATUS)
+            except (serial.SerialException, OSError):
+                return None
+            deadline = time.monotonic() + timeout
+            buf = b''
+            while time.monotonic() < deadline:
+                try:
+                    chunk = self._serial.read(256)
+                except (serial.SerialException, OSError):
+                    return None
+                if chunk:
+                    buf += chunk
+                    if b'>' in buf and b'<' in buf:
+                        break
+            for line in buf.decode('ascii', 'replace').splitlines():
+                line = line.strip()
+                if line.startswith('<') and line.endswith('>'):
+                    parsed = parse_status(line)
+                    if parsed:
+                        self.status = parsed
+                        return parsed
+            return None
+
     # ------------------------------------------------------------------
     # Jog
     # ------------------------------------------------------------------
 
     def jog(self, x=None, y=None, z=None, feed=2000, relative=False):
-        """Send a jog command. Uses Grbl 1.1 `$J=` syntax (cancellable)."""
+        """Send a jog command. Uses Grbl 1.1 `$J=` syntax (cancellable).
+
+        Safe to call during streaming: the write is serialized with
+        the streamer's writes via self._lock, and the jog's eventual
+        ``ok`` from Grbl is consumed by the stream reader without
+        being counted as a stream-line ack (see ``_jogs_in_flight``).
+        Without that bookkeeping, a mid-stream jog corrupts the
+        character-counting protocol and Grbl can return error:8.
+        """
         parts = []
         if relative:
             parts.append('G91')
@@ -373,8 +531,9 @@ class FalconSender:
                 return
             try:
                 self._serial.write(cmd.encode('ascii'))
+                self._jogs_in_flight += 1
             except (serial.SerialException, OSError):
-                pass
+                pass  # do NOT count an unack-able jog
 
     # ------------------------------------------------------------------
     # Streaming
@@ -384,17 +543,29 @@ class FalconSender:
         """Start streaming a list of G-code lines on a worker thread.
 
         Lines should be strings WITHOUT trailing newlines (the streamer
-        appends `\\n`). Comment-only / blank lines are kept (we send
-        them too, so progress numbers match user-visible line counts).
+        appends `\\n`). Comment-only / blank lines are skipped in
+        the streamer loop (Grbl doesn't ack them).
         """
+        # Old worker may still be exiting after _notify_done — give it
+        # a brief join window before refusing. Without this, fast
+        # restart-stream loops (calibration framing) hit a race where
+        # is_alive() is still True for milliseconds after the worker
+        # has logically completed.
         if self._worker is not None and self._worker.is_alive():
-            raise RuntimeError("A stream is already in progress")
+            self._worker.join(timeout=0.5)
+            if self._worker.is_alive():
+                raise RuntimeError("A stream is already in progress")
         self._stop_flag.clear()
         self._pause_flag.clear()
         self._total_lines = len(gcode_lines)
         self._sent_lines = 0
         self.latest_error = None
         self.latest_alarm = None
+        # Reset jog tracking so any leftover (an ack arrived after the
+        # last stream ended but before start_stream() was called)
+        # doesn't bleed into this stream's character-counting state.
+        with self._lock:
+            self._jogs_in_flight = 0
         self._worker = threading.Thread(
             target=self._stream_worker, args=(list(gcode_lines),),
             name='FalconSender-stream', daemon=True,
@@ -424,6 +595,16 @@ class FalconSender:
             self._notify_done("error")
             return
 
+        # Wake-ping. Empirically the Falcon2 Pro 40W can sit unresponsive
+        # at the start of a stream if there's been an extended idle gap
+        # since the last command (e.g. between the auto-frame seed move
+        # closing and the user clicking "Start Frame →"). Sending `?`
+        # nudges the controller without affecting state — a no-op when
+        # it's already awake. The status response is harmlessly read
+        # by the loop below.
+        self.send_realtime(RT_STATUS)
+        time.sleep(0.05)
+
         sent_lengths = deque()  # lengths of in-flight lines waiting on "ok"
         ack_count = 0           # how many lines have been acknowledged
         line_idx = 0
@@ -432,6 +613,9 @@ class FalconSender:
         poll_interval = 1.0 / STATUS_POLL_HZ
         finished_sending = False
         reason = "complete"
+        last_ack_time = time.monotonic()      # for stall watchdog
+        idle_since = None                      # when state first became Idle
+        stall_recoveries = 0                   # count per stream
 
         while True:
             if self._stop_flag.is_set():
@@ -442,11 +626,29 @@ class FalconSender:
             if (not finished_sending
                 and not self._pause_flag.is_set()
                 and line_idx < len(lines)):
-                next_line = lines[line_idx].strip() + '\n'
+                raw = lines[line_idx].strip()
+                # Grbl 1.1 does NOT send `ok` for comment-only or
+                # blank lines. Sending them anyway would leave the
+                # character-counting streamer waiting forever for an
+                # ack that never arrives. Skip them client-side and
+                # advance ack_count alongside line_idx so the
+                # done-check (ack_count >= line_idx) still fires.
+                if not raw or raw.startswith(';'):
+                    line_idx += 1
+                    ack_count += 1
+                    self._sent_lines = line_idx
+                    self._notify_progress(line_idx, self._total_lines)
+                    continue
+                next_line = raw + '\n'
                 next_bytes = next_line.encode('ascii', errors='replace')
                 if sum(sent_lengths) + len(next_bytes) < GRBL_RX_BUFFER:
+                    # Serialize with jog() / send_realtime() / etc. so
+                    # the bytes can't interleave with another writer.
+                    # Concurrent writes garble Grbl's line parser and
+                    # produce things like error:8.
                     try:
-                        ser.write(next_bytes)
+                        with self._lock:
+                            ser.write(next_bytes)
                     except (serial.SerialException, OSError) as e:
                         self._notify_error(f"serial write failed: {e}")
                         reason = "error"
@@ -476,10 +678,33 @@ class FalconSender:
                     if not text:
                         continue
                     if text == 'ok':
+                        # Each jog command Grbl receives also produces an
+                        # `ok`. Consume those FIRST so we don't mistake a
+                        # jog ack for a stream-line ack (which would drain
+                        # sent_lengths early and let the streamer over-
+                        # fill Grbl's RX buffer).
+                        with self._lock:
+                            if self._jogs_in_flight > 0:
+                                self._jogs_in_flight -= 1
+                                continue
                         if sent_lengths:
                             sent_lengths.popleft()
                         ack_count += 1
+                        last_ack_time = time.monotonic()
                     elif text.startswith('error:'):
+                        # If jogs are in flight, this error is more
+                        # likely from the jog than from the stream
+                        # (Grbl returns errors in command-receive
+                        # order). Consume it against the jog queue
+                        # and keep streaming — surfacing the error
+                        # so the UI can show it, but not killing the
+                        # stream over a rejected jog.
+                        with self._lock:
+                            if self._jogs_in_flight > 0:
+                                self._jogs_in_flight -= 1
+                                self.latest_error = text
+                                self._notify_error(text)
+                                continue
                         self.latest_error = text
                         self._notify_error(text)
                         # Per Grbl docs, an error means the controller
@@ -505,6 +730,12 @@ class FalconSender:
                         parsed = parse_status(text)
                         if parsed:
                             self.status = parsed
+                            # Track Idle continuity for the stall watchdog
+                            if parsed.get('state') == 'Idle':
+                                if idle_since is None:
+                                    idle_since = time.monotonic()
+                            else:
+                                idle_since = None
                             if self.on_status:
                                 try:
                                     self.on_status(parsed)
@@ -516,6 +747,45 @@ class FalconSender:
             if now - last_poll >= poll_interval:
                 self.send_realtime(RT_STATUS)
                 last_poll = now
+
+            # 3b) Stall watchdog with auto-recovery. If Grbl has been
+            # Idle for STALL_TIMEOUT_S while we still have lines
+            # marked in-flight (sent_lengths non-empty) and no ack
+            # has arrived in that window, an `ok` byte was lost over
+            # USB. Because Idle means Grbl's planner is empty AND
+            # its serial RX has been processed, every line we sent
+            # is definitively done — we just lost the ack(s). Safely
+            # resync the character-count and continue. Cap recoveries
+            # per stream so a truly broken USB link still fails out
+            # instead of looping forever.
+            if (sent_lengths
+                    and idle_since is not None
+                    and (now - idle_since) > STALL_TIMEOUT_S
+                    and (now - last_ack_time) > STALL_TIMEOUT_S):
+                pct = (100 * line_idx // self._total_lines
+                       if self._total_lines else 0)
+                recovered = len(sent_lengths)
+                stall_recoveries += 1
+                if stall_recoveries > MAX_STALL_RECOVERIES:
+                    self._notify_error(
+                        f"streamer giving up at line {line_idx} / "
+                        f"{self._total_lines} ({pct}%) — "
+                        f"{MAX_STALL_RECOVERIES} lost-ack recoveries "
+                        f"in one job. Check USB cable / hub."
+                    )
+                    reason = "error"
+                    break
+                # Resync. Grbl is done with every sent line.
+                sent_lengths.clear()
+                ack_count = line_idx
+                last_ack_time = now
+                idle_since = None  # require fresh Idle observation
+                self._notify_error(
+                    f"recovered lost ack(s) at line {line_idx} / "
+                    f"{self._total_lines} ({pct}%) — {recovered} "
+                    f"line(s) confirmed done via Idle state. "
+                    f"Continuing."
+                )
 
             # 4) Are we done? All sent AND all acknowledged.
             if finished_sending and ack_count >= line_idx:

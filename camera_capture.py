@@ -35,6 +35,18 @@ try:
     import cv2
     import numpy as np
     HAS_OPENCV = True
+    # Silence OpenCV's DSHOW probe warnings ("backend is generally
+    # available but can't be used to capture by index N"). They fire
+    # for every empty camera slot we probe in enumerate_cameras and
+    # clutter the console with apparent errors that aren't.
+    try:
+        cv2.setLogLevel(cv2.LOG_LEVEL_ERROR)
+    except (AttributeError, Exception):
+        try:
+            cv2.utils.logging.setLogLevel(
+                cv2.utils.logging.LOG_LEVEL_ERROR)
+        except Exception:
+            pass
 except ImportError:  # pragma: no cover
     cv2 = None
     np = None
@@ -50,10 +62,25 @@ except ImportError:  # pragma: no cover
 # enough markers (15) for OpenCV to solve a robust calibration even when
 # part of the board is occluded.
 CHARUCO_DICT_NAME = "DICT_4X4_50"
-CHARUCO_COLS = 8
-CHARUCO_ROWS = 6
+# 10×10 board × 25mm squares = 250×250mm board. With 10mm borders +
+# 8mm label strip the engraved card is ~278×278mm ≈ 10.9" square.
+# On a 12×12-inch (305mm) basswood blank that leaves ~½" margin all
+# around — generous enough that small positioning errors don't put
+# the trace off-material. Square layout = equal corner spread in
+# X and Y. 50 markers needed (half of 100 squares); DICT_4X4_50
+# has exactly 50 IDs.
+CHARUCO_COLS = 10
+CHARUCO_ROWS = 10
 CHARUCO_SQUARE_MM = 25.0
 CHARUCO_MARKER_MM = 18.0  # ~0.72 * square_mm — OpenCV's recommended ratio
+
+# Default machine-coord position for the card's bottom-left corner
+# when SSC engraves it. The integrated calibration dialog now lets
+# the user JOG the head into the camera's view and engrave around
+# the head's current position, so these defaults are only used as a
+# fallback when the user doesn't pick a position.
+CARD_ENGRAVE_OFFSET_X_MM = 50.0
+CARD_ENGRAVE_OFFSET_Y_MM = 50.0
 
 # Default engraving recipe for the calibration card on basswood
 # (Creality Falcon2 Pro 40W). User can override in the Tooling tab.
@@ -98,9 +125,11 @@ def enumerate_cameras(max_index=6):
     """
     if not HAS_OPENCV:
         return []
+    use_dshow = platform.system() == "Windows"
     cams = []
     for i in range(max_index):
-        cap = cv2.VideoCapture(i)
+        cap = (cv2.VideoCapture(i, cv2.CAP_DSHOW)
+               if use_dshow else cv2.VideoCapture(i))
         if not cap.isOpened():
             cap.release()
             continue
@@ -158,9 +187,18 @@ def find_falcon_camera_index():
 
 
 def open_camera(index, request_width=None, request_height=None):
-    """Open a camera by index. Returns a VideoCapture (caller releases)."""
+    """Open a camera by index. Returns a VideoCapture (caller releases).
+
+    Forces the DirectShow backend on Windows. Without it, OpenCV
+    defaults to Media Foundation (CAP_MSMF) which adds 2-3 seconds of
+    initialization latency on every open — DirectShow opens USB webcams
+    in well under a second. Other platforms get the default backend.
+    """
     _require_opencv()
-    cap = cv2.VideoCapture(index)
+    if platform.system() == "Windows":
+        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(index)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open camera index {index}")
     if request_width:
@@ -214,39 +252,72 @@ def make_calibration_card_strokes(cols=CHARUCO_COLS, rows=CHARUCO_ROWS,
                                     square_mm=CHARUCO_SQUARE_MM,
                                     marker_mm=CHARUCO_MARKER_MM,
                                     line_spacing_mm=0.15,
-                                    origin_x_mm=0.0, origin_y_mm=0.0):
+                                    origin_x_mm=0.0, origin_y_mm=0.0,
+                                    orientation_label="FRONT OF MACHINE",
+                                    label_height_mm=8.0):
     """Convert the ChArUco board to horizontal scan-line strokes in mm.
 
     Each stroke is a 2-point list ``[(x0_mm, y_mm), (x1_mm, y_mm)]`` that
     can be passed to gcode_engine's ``generate_gcode_layer`` for raster
     engraving. The image is rendered at a DPI matched to ``line_spacing_mm``
     so every pixel row corresponds to exactly one engraved line.
+
+    ``orientation_label`` is rendered below the ChArUco board (via cv2.putText)
+    so the user can place the card in the same orientation every time. The
+    text is engraved on the bottom edge — lay the card with this text
+    closest to the front of the machine for the captured-polygon coordinate
+    system to align with the user's mental model of the bed. Pass an empty
+    string to skip the label.
     """
     _require_opencv()
     board = make_charuco_board(cols, rows, square_mm, marker_mm)
 
     # DPI chosen so each pixel row equals `line_spacing_mm` in width.
     px_per_mm = 1.0 / line_spacing_mm
-    img_w = int(round(cols * square_mm * px_per_mm))
-    img_h = int(round(rows * square_mm * px_per_mm))
-    img = board.generateImage((img_w, img_h), marginSize=0)
+    board_w_px = int(round(cols * square_mm * px_per_mm))
+    board_h_px = int(round(rows * square_mm * px_per_mm))
+    board_img = board.generateImage((board_w_px, board_h_px), marginSize=0)
 
-    # Convert to a dark-pixel mask. `generateImage` returns 8-bit grayscale.
+    # Compose a final image that has the ChArUco board on top and an
+    # orientation-label strip below (white background, black text).
+    label_h_px = int(round(label_height_mm * px_per_mm)) if orientation_label else 0
+    img_w = board_w_px
+    img_h = board_h_px + label_h_px
+    img = np.full((img_h, img_w), 255, dtype=np.uint8)
+    img[:board_h_px, :] = board_img
+
+    if orientation_label and label_h_px > 0:
+        font = cv2.FONT_HERSHEY_DUPLEX
+        # Pick a font scale that makes the text height ~60% of the label strip
+        target_text_h_px = int(label_h_px * 0.6)
+        # The font face Hershey-Duplex at scale=1 produces text ~22px tall;
+        # scale linearly from there.
+        font_scale = max(0.4, target_text_h_px / 22.0)
+        thickness = max(1, int(round(font_scale * 1.5)))
+        (text_w, text_h), _baseline = cv2.getTextSize(
+            orientation_label, font, font_scale, thickness)
+        text_x = max(0, (img_w - text_w) // 2)
+        text_y = board_h_px + (label_h_px + text_h) // 2
+        cv2.putText(img, orientation_label, (text_x, text_y), font,
+                     font_scale, color=0, thickness=thickness,
+                     lineType=cv2.LINE_AA)
+
+    # Convert to a dark-pixel mask. Scan-line every row.
     mask = img < 128
 
     strokes = []
+    total_h_mm = (img_h / px_per_mm)
     mm_per_px_x = (cols * square_mm) / img_w
-    mm_per_px_y = (rows * square_mm) / img_h
+    mm_per_px_y = total_h_mm / img_h
     for y in range(img_h):
         row = mask[y]
         if not row.any():
             continue
-        # Find runs of dark pixels via diff on a padded boolean row.
         padded = np.concatenate(([False], row, [False])).astype(np.int8)
         diffs = np.diff(padded)
         starts = np.where(diffs == 1)[0]
         ends = np.where(diffs == -1)[0]
-        y_mm = origin_y_mm + (y + 0.5) * mm_per_px_y  # center of pixel row
+        y_mm = origin_y_mm + (y + 0.5) * mm_per_px_y
         for s, e in zip(starts, ends):
             x0 = origin_x_mm + s * mm_per_px_x
             x1 = origin_x_mm + e * mm_per_px_x
@@ -311,21 +382,92 @@ def detect_charuco(frame, board=None):
     return charuco_corners, charuco_ids
 
 
-def calibrate_from_frames(detections, image_size, board=None):
-    """Compute camera intrinsics + bed-plane homography from multiple captures.
+def _board_corner_to_machine_mm(board_xy, offset_x, offset_y,
+                                  board_h_mm,
+                                  border_mm=10.0, label_height_mm=8.0):
+    """Convert a ChArUco board-frame corner position to machine-mm,
+    given the engrave offset and card geometry.
 
-    ``detections`` is a list of ``(charuco_corners, charuco_ids)`` tuples,
-    one per usable frame. ``image_size`` is ``(width, height)`` in pixels.
+    Card layout (assuming engrave G-code uses make_calibration_card_strokes
+    with default border + label):
 
-    Returns a dict with the calibration data, suitable for ``save_calibration``.
+        ┌────────────────────────┐ ← back of machine (high Y)
+        │ border                 │
+        │  ┌──────────────────┐  │
+        │  │  ChArUco board   │  │
+        │  │  (image y=0 at   │  │
+        │  │   top, y=board_h │  │
+        │  │   at bottom)     │  │
+        │  └──────────────────┘  │
+        │ FRONT OF MACHINE label │
+        └────────────────────────┘ ← front of machine (low Y, machine origin nearby)
+        ↑ offset_x               ↑ offset_x + sheet_w
+
+    OpenCV's CharucoBoard.getChessboardCorners() returns points in a
+    Y-DOWN frame matching the rendered image (verified empirically: a
+    corner at board (25, 25) lands at image pixel (100, 100) when
+    rendered at 4 px/mm — top-left area). The engraved card places
+    image-top at the back of the machine (high machine Y), so board Y
+    must be FLIPPED to machine Y:
+
+      board (0, 0)              → image top-left      → machine high Y, low X
+      board (board_w, board_h)  → image bottom-right  → machine low Y,  high X
+
+    The board area in machine coords spans
+    ``[offset_y + border, offset_y + border + board_h]``.
+    """
+    bx, by = float(board_xy[0]), float(board_xy[1])
+    machine_x = offset_x + border_mm + bx
+    machine_y = offset_y + border_mm + (board_h_mm - by)
+    # label_height_mm is part of the function signature for source-of-
+    # truth bookkeeping but the board-area math doesn't depend on it
+    # (the label sits BELOW the board area in machine Y, at
+    # [offset_y + border - label_h, offset_y + border]).
+    _ = label_height_mm
+    return (machine_x, machine_y)
+
+
+def calibrate_from_frames(detections, image_size, board=None,
+                           reference_indices=None,
+                           card_offset_x_mm=None,
+                           card_offset_y_mm=None,
+                           card_border_mm=10.0,
+                           card_label_height_mm=8.0):
+    """Compute camera intrinsics + pixel→machine-mm homography from
+    multiple captures.
+
+    Integrated calibration:
+      - All captures feed ``cv2.calibrateCamera`` for intrinsics +
+        distortion (the more poses the better).
+      - One or more REFERENCE captures (``reference_indices``, default
+        ``(0,)`` — just the first) are taken with the card untouched
+        at its engraved position. Each detected ChArUco corner in
+        those frames has a KNOWN machine-mm position. Pooling all
+        reference corners and fitting one homography averages out
+        detection noise → more accurate pixel→machine-mm mapping.
+
+    ``card_offset_x_mm`` / ``card_offset_y_mm`` default to the
+    constants the engrave G-code used (``CARD_ENGRAVE_OFFSET_*_MM``).
+
+    Returns a calibration dict suitable for ``save_calibration``.
     """
     _require_opencv()
     if board is None:
         board = make_charuco_board()
+    if card_offset_x_mm is None:
+        card_offset_x_mm = CARD_ENGRAVE_OFFSET_X_MM
+    if card_offset_y_mm is None:
+        card_offset_y_mm = CARD_ENGRAVE_OFFSET_Y_MM
+    if reference_indices is None:
+        reference_indices = (0,)
     if len(detections) < CALIB_MIN_FRAMES:
         raise ValueError(
             f"Need at least {CALIB_MIN_FRAMES} detected frames; got {len(detections)}"
         )
+    for ref_idx in reference_indices:
+        if not (0 <= ref_idx < len(detections)):
+            raise ValueError(
+                f"reference index {ref_idx} out of range")
 
     # OpenCV 4.7+ removed cv2.aruco.calibrateCameraCharuco. Use the new
     # board.matchImagePoints API to convert each frame's detected ChArUco
@@ -349,22 +491,37 @@ def calibrate_from_frames(detections, image_size, board=None):
         all_obj_points, all_img_points, image_size, None, None
     )
 
-    # Bed-plane homography: assume the last detection was the "card flat on
-    # the bed" pose. Map detected ChArUco corner pixel positions to their
-    # known mm positions on the card to get the H pixel→mm transform.
-    bed_corners_px, bed_ids = detections[-1]
-    board_corners_mm = board.getChessboardCorners()  # Nx3, mm coords
-    # Pick out only the corners we actually detected, in the same order.
-    src_pts = bed_corners_px.reshape(-1, 2).astype(np.float32)
-    dst_pts = np.array(
-        [board_corners_mm[int(i[0]), :2] for i in bed_ids],
-        dtype=np.float32,
-    )
+    # pixel → machine-mm homography. Pool corners from every reference
+    # frame (card untouched between them). Each detected ChArUco
+    # corner has a known machine-mm position; using N×corners across
+    # M reference frames gives the findHomography RANSAC fit more
+    # data and averages out per-frame detection noise.
+    board_corners_mm = board.getChessboardCorners()  # Nx3 in board frame
+    rows = board.getChessboardSize()[1]
+    board_h_mm = rows * (board.getSquareLength() if hasattr(board, 'getSquareLength')
+                          else CHARUCO_SQUARE_MM)
+    src_pts_list = []
+    machine_dst_pts = []
+    for ref_idx in reference_indices:
+        ref_corners_px, ref_ids = detections[ref_idx]
+        src_pts_list.append(
+            ref_corners_px.reshape(-1, 2).astype(np.float32))
+        for i in ref_ids:
+            bxy = board_corners_mm[int(i[0]), :2]
+            mxy = _board_corner_to_machine_mm(
+                bxy, card_offset_x_mm, card_offset_y_mm,
+                board_h_mm=board_h_mm,
+                border_mm=card_border_mm,
+                label_height_mm=card_label_height_mm)
+            machine_dst_pts.append(mxy)
+    src_pts = np.vstack(src_pts_list)
+    dst_pts = np.array(machine_dst_pts, dtype=np.float32)
     if len(src_pts) < 4:
-        raise ValueError("Last detection has too few corners for homography")
+        raise ValueError(
+            "Reference frames have too few corners for homography")
 
-    # Undistort the source points so the homography lives in the undistorted
-    # image plane, matching what undistort_frame produces at use time.
+    # Undistort source pixels so the homography lives in the undistorted
+    # image plane (matching what undistort_frame produces at use time).
     undist_src = cv2.undistortPoints(
         src_pts.reshape(-1, 1, 2), camera_matrix, dist_coeffs, P=camera_matrix
     ).reshape(-1, 2)
@@ -372,12 +529,26 @@ def calibrate_from_frames(detections, image_size, board=None):
 
     return {
         'opencv_version': cv2.__version__,
+        # Bumped to 2 when _board_corner_to_machine_mm started using
+        # the correct Y-DOWN board frame (was treating it as Y-UP,
+        # which fit a vertically-mirrored homography). pixels_to_mm
+        # checks this on load and applies a Y-flip correction for
+        # legacy (v1 / missing) calibrations so users don't have to
+        # re-engrave + re-capture a card.
+        'calibration_schema_version': 2,
         'camera_matrix': camera_matrix.tolist(),
         'dist_coeffs': dist_coeffs.tolist(),
         'rms_reprojection_error_px': float(rms),
         'image_size': list(image_size),
         'frame_count': len(detections),
-        'homography_px_to_mm': homography.tolist(),
+        'reference_frame_count': len(reference_indices),
+        # Replaces the old `homography_px_to_mm` (board-frame). The
+        # name change makes it clear this homography returns machine
+        # coords directly, no further transform needed.
+        'homography_px_to_machine_mm': homography.tolist(),
+        'card_engrave_offset_mm': [card_offset_x_mm, card_offset_y_mm],
+        'card_border_mm': card_border_mm,
+        'card_label_height_mm': card_label_height_mm,
         'board': {
             'cols': CHARUCO_COLS,
             'rows': CHARUCO_ROWS,
@@ -396,11 +567,35 @@ def save_calibration(calibration, path):
 
 
 def load_calibration(path):
-    """Load a previously-saved calibration JSON. Returns None if not present."""
+    """Load a previously-saved calibration JSON. Returns None if not
+    present. Returns None and prints a hint if it's an OLD-FORMAT
+    calibration (board-frame homography from the pre-integrated
+    workflow) — old calibrations are incompatible and the user must
+    recalibrate."""
     if not os.path.exists(path):
         return None
     with open(path, encoding='utf-8') as f:
-        return json.load(f)
+        cal = json.load(f)
+    if 'homography_px_to_machine_mm' not in cal:
+        # Old format (had homography_px_to_mm + machine_origin_transform)
+        # — the geometry meaning differs, can't be silently migrated.
+        return None
+    return cal
+
+
+def is_legacy_calibration(path):
+    """True if a calibration JSON exists at ``path`` but uses the
+    pre-integrated format (old board-frame homography). UI can use
+    this to show a "please recalibrate" prompt."""
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path, encoding='utf-8') as f:
+            cal = json.load(f)
+    except Exception:
+        return False
+    return ('homography_px_to_mm' in cal
+            and 'homography_px_to_machine_mm' not in cal)
 
 
 def _calibration_arrays(calibration):
@@ -409,7 +604,8 @@ def _calibration_arrays(calibration):
     return (
         np.array(calibration['camera_matrix'], dtype=np.float64),
         np.array(calibration['dist_coeffs'], dtype=np.float64),
-        np.array(calibration['homography_px_to_mm'], dtype=np.float64),
+        np.array(calibration['homography_px_to_machine_mm'],
+                  dtype=np.float64),
     )
 
 
@@ -427,13 +623,23 @@ def undistort_frame(frame, calibration):
 
 
 def detect_scrap_contour(frame, min_area_frac=SCRAP_MIN_AREA_FRAC,
-                          epsilon_frac=SCRAP_APPROX_EPS_FRAC):
+                          epsilon_frac=SCRAP_APPROX_EPS_FRAC,
+                          threshold_bias=0):
     """Find the largest contour in the frame and approximate it as a polygon.
 
     Returns a list of (x, y) pixel-coordinate tuples or ``None`` if no
     contour above ``min_area_frac`` was found. Uses Otsu thresholding,
     which works well when the scrap is significantly brighter or darker
     than the bed (typical case for leather on the Falcon's honeycomb).
+
+    ``threshold_bias`` shifts Otsu's auto-picked threshold by N units
+    on the 0–255 grayscale scale. Range typically [-80, 80]. Default 0
+    = use Otsu as-is. Positive values raise the threshold (fewer
+    pixels classified as scrap, less sensitive to dim material).
+    Negative values lower it (more aggressive — catches material that
+    barely contrasts with the bed). Tune by eye in low-contrast
+    conditions where Otsu's bimodal-histogram assumption breaks down
+    (uneven lighting, scrap color similar to bed, etc.).
     """
     _require_opencv()
     if frame is None:
@@ -443,9 +649,16 @@ def detect_scrap_contour(frame, min_area_frac=SCRAP_MIN_AREA_FRAC,
         if len(frame.shape) == 3 else frame
     )
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    _thresh_val, thresh = cv2.threshold(
+    otsu_val, thresh = cv2.threshold(
         blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
+    if threshold_bias:
+        # Re-threshold with the biased value (keeps Otsu as the baseline
+        # so the slider centers naturally on the "automatic" pick).
+        biased = max(0, min(255, int(round(otsu_val + threshold_bias))))
+        _val, thresh = cv2.threshold(
+            blurred, biased, 255, cv2.THRESH_BINARY
+        )
     contours, _hier = cv2.findContours(
         thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
@@ -462,9 +675,90 @@ def detect_scrap_contour(frame, min_area_frac=SCRAP_MIN_AREA_FRAC,
     return [(float(p[0][0]), float(p[0][1])) for p in approx]
 
 
+def inset_polygon_mm(polygon_mm, inset_mm, resolution_per_mm=10):
+    """Shrink a polygon inward by ``inset_mm`` on every edge.
+
+    Used as a safety margin for camera-captured polygons: the camera's
+    measurement accuracy is worst near the edges of its view, so we
+    inset the captured shape by a few mm before nesting. Any pad that
+    would have landed near the edge is now pulled inboard, preventing
+    "circle hangs off the edge of the leather because the camera was
+    off by 2mm" failures.
+
+    Approach: rasterize the polygon at ``resolution_per_mm`` px/mm,
+    erode by a circular kernel of size ``inset_mm``, re-extract the
+    largest contour, convert back to mm. This handles concave
+    polygons cleanly without the per-vertex math of a true geometric
+    offset.
+
+    Returns the inset polygon as a list of ``(x, y)`` mm tuples. If
+    ``inset_mm <= 0`` the input is returned unchanged. If the inset
+    would eliminate the polygon (too aggressive), the original is
+    returned with no inset applied.
+    """
+    _require_opencv()
+    if not polygon_mm or inset_mm <= 0:
+        return polygon_mm
+
+    xs = [p[0] for p in polygon_mm]
+    ys = [p[1] for p in polygon_mm]
+    xmin, ymin = min(xs), min(ys)
+    xmax, ymax = max(xs), max(ys)
+    w_mm = xmax - xmin
+    h_mm = ymax - ymin
+
+    res = resolution_per_mm
+    margin_mm = inset_mm + 2.0
+    margin_px = int(round(margin_mm * res))
+    img_w = int(round(w_mm * res)) + 2 * margin_px
+    img_h = int(round(h_mm * res)) + 2 * margin_px
+
+    img = np.zeros((img_h, img_w), dtype=np.uint8)
+    poly_px = np.array(
+        [((p[0] - xmin) * res + margin_px,
+          (p[1] - ymin) * res + margin_px) for p in polygon_mm],
+        dtype=np.int32)
+    cv2.fillPoly(img, [poly_px], 255)
+
+    kernel_diameter = max(1, int(round(inset_mm * res * 2)) | 1)
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (kernel_diameter, kernel_diameter))
+    eroded = cv2.erode(img, kernel)
+
+    contours, _hier = cv2.findContours(
+        eroded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return polygon_mm  # eroded away — too aggressive, fall back
+    largest = max(contours, key=cv2.contourArea)
+    if cv2.contourArea(largest) < 100:
+        return polygon_mm
+    epsilon = 0.005 * cv2.arcLength(largest, True)
+    approx = cv2.approxPolyDP(largest, epsilon, True)
+    result = []
+    for pt in approx:
+        px, py = pt[0]
+        x = (px - margin_px) / res + xmin
+        y = (py - margin_px) / res + ymin
+        result.append((float(x), float(y)))
+    return result
+
+
 def pixels_to_mm(polygon_px, calibration):
-    """Apply the bed-plane homography to convert a pixel-coord polygon
-    into bed-millimeter coordinates.
+    """Apply the pixel→machine-mm homography to convert a pixel-coord
+    polygon into MACHINE-MM coordinates.
+
+    The integrated calibration baked the camera-to-machine transform
+    into the homography itself (using the engrave card's known machine
+    position as the geometric reference), so this returns machine
+    coords directly — no separate auto-framing step needed.
+
+    Schema-1 (legacy) calibrations were fit with a vertically-flipped
+    set of destination points because ``_board_corner_to_machine_mm``
+    treated OpenCV's Y-DOWN board frame as Y-UP. The homography returns
+    machine coords that are MIRRORED in Y around the card's center line.
+    We detect those by the missing ``calibration_schema_version`` field
+    and undo the flip post-hoc so the user doesn't have to re-engrave +
+    re-capture a card.
     """
     _require_opencv()
     if not calibration or not polygon_px:
@@ -472,7 +766,32 @@ def pixels_to_mm(polygon_px, calibration):
     _cm, _dc, homography = _calibration_arrays(calibration)
     pts = np.array(polygon_px, dtype=np.float64).reshape(-1, 1, 2)
     transformed = cv2.perspectiveTransform(pts, homography)
-    return [(float(p[0][0]), float(p[0][1])) for p in transformed]
+    out = [(float(p[0][0]), float(p[0][1])) for p in transformed]
+
+    if int(calibration.get('calibration_schema_version', 1)) < 2:
+        # Recover the right Y values by mirroring around the card's
+        # vertical center line in the schema-1 coord system. In the
+        # broken function:
+        #   broken_y = offset_y + border + label_h + by
+        # In the correct one:
+        #   correct_y = offset_y + border + board_h - by
+        # Adding them:  broken_y + correct_y = 2*offset_y + 2*border
+        #                                       + label_h + board_h
+        # So: correct_y = K - broken_y, where K is the constant above.
+        try:
+            off = calibration.get('card_engrave_offset_mm') or [0.0, 0.0]
+            offset_y = float(off[1])
+            border = float(calibration.get('card_border_mm', 10.0))
+            label_h = float(calibration.get('card_label_height_mm', 8.0))
+            board_info = calibration.get('board') or {}
+            board_h = (float(board_info.get('rows', CHARUCO_ROWS))
+                       * float(board_info.get('square_mm', CHARUCO_SQUARE_MM)))
+            k = 2 * offset_y + 2 * border + label_h + board_h
+            out = [(x, k - y) for (x, y) in out]
+        except (TypeError, ValueError, KeyError):
+            pass
+    return out
+
 
 
 def capture_scrap_polygon(cap, calibration, min_area_frac=SCRAP_MIN_AREA_FRAC,

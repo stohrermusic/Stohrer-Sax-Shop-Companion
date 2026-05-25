@@ -95,13 +95,67 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.sizing_presets["Default"] = settings_to_sizing_preset(self.settings)
             save_presets(self.sizing_presets, SIZING_PRESET_FILE)
 
-        self.custom_polygon = None  # For custom shape nesting
+        # --- Custom polygon state ---
+        # custom_polygon holds the active scrap outline used for
+        # nesting + framing. ALWAYS stored in SVG-Y-DOWN convention
+        # (origin (0, 0) at top-left of polygon bbox). Both drawn and
+        # camera-captured polygons go through the same Y-flip-then-
+        # normalize path (see _adopt_camera_polygon and the drawn
+        # path in on_draw_custom_shape) so downstream code never has
+        # to care which source produced it.
+        #
+        # ---- Y-axis conventions across the codebase ----
+        # The flip sites below cross EXACTLY one boundary each.
+        # Adding a new flip without crossing a boundary is a bug.
+        #
+        #   Layer                                  | Y direction
+        #   ---------------------------------------|------------
+        #   Tk canvas (PolygonDrawWindow display)  | DOWN (Tk native)
+        #   Grid storage (PolygonDrawWindow.points)| UP   (graph-paper)
+        #   OpenCV pixel coords                    | DOWN (image native)
+        #   OpenCV ChArUco board frame             | DOWN (matches image)
+        #   Machine coords (Grbl/Falcon)           | UP   (Y=0 at front)
+        #   custom_polygon (this attribute)        | DOWN (SVG-style)
+        #   SVG output                             | DOWN (SVG native)
+        #   G-code emission                        | UP   (matches Grbl)
+        #
+        # Boundary flip sites (one per boundary, no redundancy):
+        #   board (DOWN) → machine (UP)
+        #     camera_capture._board_corner_to_machine_mm
+        #   legacy schema-1 pixels_to_mm output → corrected machine
+        #     camera_capture.pixels_to_mm (compat shim)
+        #   grid (UP) ↔ canvas (DOWN)
+        #     ui_dialogs.PolygonDrawWindow._{grid,canvas}_to_{canvas,grid}
+        #   grid storage (UP) → custom_polygon (DOWN)
+        #     on_draw_custom_shape (drawn path)
+        #   machine (UP) → custom_polygon (DOWN)
+        #     _adopt_camera_polygon (camera path)
+        #   custom_polygon (DOWN) → G-code (UP)
+        #     gcode_engine.generate_polygon_framing_gcode
+        #     gcode_engine.generate_gcode_from_placed (and die variant)
+        #   calibration-card strokes (DOWN) → G-code (UP)
+        #     gcode_engine.generate_calibration_card_gcode
+        #   G-code (UP) → SVG (DOWN) — arc text only
+        #     svg_engine die/holder renderers
+        self.custom_polygon = None
+        # When camera capture is active, the polygon is normalized to
+        # (0, 0)-top-left for nesting and the absolute machine-coord
+        # offset of the polygon's BOTTOM-LEFT (i.e. its (min_x, min_y)
+        # in Y-up machine coords) is stored here. Frame & Cut auto
+        # mode uses this to drive the head to the scrap's real bed
+        # position. None for drawn shapes (no machine reference).
+        self.custom_polygon_machine_offset = None
 
         # --- Falcon (direct serial) state ---
         # Detected on startup; the "Frame & Cut" button only appears when
         # a Grbl controller answered the handshake on some serial port.
         self.falcon_port = None
         self._falcon_detect_attempted = False
+        # Tracks whether the laser has been homed in this SSC session.
+        # Frame & Cut and the calibration dialog both check this to
+        # decide whether to auto-home or skip. Reset on Machine > Reset
+        # (soft-reset loses position).
+        self._falcon_homed_this_session = False
 
         # --- Scrap Mode Session State ---
         self.scrap_session = {
@@ -253,6 +307,25 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_options_menu.add_command(label=_("Layer Colors..."), command=self.open_color_window)
         pad_options_menu.add_separator()
         pad_options_menu.add_command(label=_("G-code Settings..."), command=self.open_gcode_settings_window)
+        pad_options_menu.add_separator()
+
+        # Machine submenu under Options: groups all the connected-
+        # hardware actions (Falcon control + camera-related settings).
+        machine_menu = tk.Menu(pad_options_menu, tearoff=0)
+        pad_options_menu.add_cascade(label=_("Machine"), menu=machine_menu)
+        machine_menu.add_command(label=_("Home Laser"),
+                                   command=self._on_machine_home_falcon)
+        machine_menu.add_command(label=_("Test Connection"),
+                                   command=self._on_machine_test_connection)
+        machine_menu.add_command(label=_("Clear Errors ($X)"),
+                                   command=self._on_machine_clear_errors)
+        machine_menu.add_command(label=_("Reset Falcon (soft-reset)"),
+                                   command=self._on_machine_reset_falcon)
+        machine_menu.add_separator()
+        machine_menu.add_command(label=_("Camera Calibration..."),
+                                   command=self._on_machine_recalibrate)
+        machine_menu.add_command(label=_("Auto-Framing Inset Margin..."),
+                                   command=self._on_machine_inset_settings)
 
         # --- Key Height Library Menu ---
         self.key_menu = tk.Menu(self.root)
@@ -670,7 +743,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         shape_btn_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
         shape_btn_frame.grid(row=3, column=0, columnspan=2, pady=(8, 0))
 
-        tk.Button(shape_btn_frame, text=_("Draw Custom Shape..."), command=self.on_draw_custom_shape).pack(side="left")
+        # Single entry point for both drawn-by-hand shapes and camera-
+        # captured shapes. The dialog handles both modes — keeps the
+        # main pane simpler and avoids duplicate UI for the camera path.
+        tk.Button(shape_btn_frame, text=_("Draw / Capture Shape..."),
+                  command=self.on_draw_custom_shape).pack(side="left")
         self.shape_status_var = tk.StringVar(value="")
         self.shape_status_label = tk.Label(shape_btn_frame, textvariable=self.shape_status_var,
                                            bg=self.root.cget('bg'), fg="gray", font=("Helvetica", 9))
@@ -693,7 +770,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Button(generate_frame, text=_("Generate SVG"), command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
         tk.Button(generate_frame, text=_("Generate G-code"), command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
         self._frame_cut_btn = tk.Button(
-            generate_frame, text=_("Frame && Cut"),
+            generate_frame, text=_("Frame & Cut"),
             command=self.on_frame_and_cut,
             font=('Helvetica', 10, 'bold'))
         # Not packed yet — _detect_falcon_async will pack it if a
@@ -707,6 +784,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Checkbutton(options_frame, text=_("Preview before saving"),
                        variable=self.preview_var, bg=self.root.cget('bg'),
                        command=lambda: self._save_checkbox("show_preview", self.preview_var)
+                       ).pack(side="left", padx=(0, 15))
+
+        # Live camera preview during Frame & Cut. State persists; the
+        # window opens alongside the run dialog and closes automatically
+        # when the job ends.
+        self.live_camera_var = tk.BooleanVar(
+            value=self.settings.get("show_live_camera", False))
+        tk.Checkbutton(options_frame, text=_("Live camera preview"),
+                       variable=self.live_camera_var, bg=self.root.cget('bg'),
+                       command=lambda: self._save_checkbox("show_live_camera",
+                                                             self.live_camera_var)
                        ).pack(side="left", padx=(0, 15))
 
         self.eject_sd_var = tk.BooleanVar(value=self.settings.get("eject_sd_after_gcode", False))
@@ -753,7 +841,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _update_shape_status(self):
         """Update the custom shape status indicator."""
         if self.custom_polygon:
-            self.shape_status_var.set(_("Drawn shape loaded ({n} pts)").format(n=len(self.custom_polygon)))
+            n = len(self.custom_polygon)
+            if self.custom_polygon_machine_offset:
+                # Auto-framing is wired in for this polygon — cuts will
+                # land at its absolute machine position on the bed.
+                txt = _("Shape loaded ({n} pts) · Auto-framing ON").format(n=n)
+            else:
+                txt = _("Shape loaded ({n} pts) · Manual framing").format(n=n)
+            self.shape_status_var.set(txt)
             self.shape_status_label.config(fg="green")
             self.unload_shape_btn.pack(side="left", padx=2)
         else:
@@ -795,29 +890,139 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             unit = "cm"  # Use cm for the grid when mm is selected
 
         dialog = PolygonDrawWindow(self.root, unit=unit)
-        polygon = dialog.get_polygon()
+        # If the user captured from the camera inside the dialog and
+        # didn't edit afterward, take the absolute machine-mm polygon
+        # directly — that way Frame & Cut still offers auto-framing,
+        # which would otherwise be lost the moment we baked the polygon
+        # into unitless grid coords.
+        machine_polygon = dialog.get_machine_polygon_mm()
+        if machine_polygon:
+            self._adopt_camera_polygon(machine_polygon)
+            return
 
+        polygon = dialog.get_polygon()
         if polygon:
-            # Convert to mm for internal use
-            # Flip Y axis: drawing uses Y=0 at bottom, SVG uses Y=0 at top
-            # Grid size depends on unit: 15x15 inches or 40x40 cm
-            if unit == "in":
-                grid_size = 15  # 15x15 inches
-                # Convert inches to mm
-                raw = [(x * 25.4, (grid_size - y) * 25.4) for (x, y) in polygon]
-            else:
-                grid_size = 40  # 40x40 cm
-                # Convert cm to mm
-                raw = [(x * 10, (grid_size - y) * 10) for (x, y) in polygon]
-            # Normalize so bounding box starts at (0, 0)
-            min_x = min(p[0] for p in raw)
-            min_y = min(p[1] for p in raw)
-            self.custom_polygon = [(x - min_x, y - min_y) for (x, y) in raw]
-            self._update_shape_status()
+            # Grid stores Y-UP (graph-paper); custom_polygon stores
+            # Y-DOWN (SVG). Scale to mm in Y-UP, then hand off to
+            # the shared adopter which applies the boundary flip.
+            mm_per_unit = 25.4 if unit == "in" else 10.0
+            y_up_mm = [(x * mm_per_unit, y * mm_per_unit) for (x, y) in polygon]
+            self._set_custom_polygon_from_y_up(y_up_mm, machine_offset=None)
 
     def on_unload_custom_shape(self):
         """Unload the custom shape and return to rectangle mode."""
         self.custom_polygon = None
+        self.custom_polygon_machine_offset = None
+        self._update_shape_status()
+
+    @staticmethod
+    def _camera_capture_ready():
+        """True iff OpenCV is installed AND a camera calibration file exists."""
+        try:
+            import camera_capture
+        except ImportError:
+            return False
+        if not camera_capture.HAS_OPENCV:
+            return False
+        return camera_capture.load_calibration(
+            camera_capture.default_calibration_path()) is not None
+
+    def on_get_shape_from_camera(self):
+        """Open CameraCaptureDialog and adopt the detected polygon as the
+        active custom shape. Works for irregular AND rectangular material —
+        even on square stock the camera-detected outline beats measuring."""
+        try:
+            import camera_capture
+            from ui_dialogs import CameraCaptureDialog
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Get from camera needs OpenCV + Pillow:\n\n{e}").format(e=e))
+            return
+
+        if camera_capture.load_calibration(
+                camera_capture.default_calibration_path()) is None:
+            messagebox.showinfo(
+                _("Calibration Required"),
+                _("Camera capture needs a one-time calibration first.\n\n"
+                  "On the Tooling tab: generate the Calibration Card, "
+                  "engrave it on basswood, then run "
+                  "Options > Camera Calibration."))
+            return
+
+        cam_idx = camera_capture.find_falcon_camera_index()
+        if cam_idx is None:
+            cams = camera_capture.enumerate_cameras()
+            if not cams:
+                messagebox.showerror(_("No Camera"),
+                                      _("No cameras detected."))
+                return
+            cam_idx = cams[-1]['index']
+
+        cal_path = camera_capture.default_calibration_path()
+        dlg = CameraCaptureDialog(
+            self.root, camera_index=cam_idx, calibration_path=cal_path,
+            settings=self.settings)
+        if not dlg.result_polygon_mm:
+            return
+
+        # CameraCaptureDialog returns the polygon in ABSOLUTE machine-mm.
+        # Hand off to the shared adopter so this path and the
+        # polygon-dialog's "Capture from camera" path apply the same
+        # safety inset, normalization, and machine-offset stash.
+        self._adopt_camera_polygon(list(dlg.result_polygon_mm))
+
+    def _adopt_camera_polygon(self, machine_polygon):
+        """Set custom_polygon + machine_offset from an ABSOLUTE
+        machine-Y-up polygon (as returned by the integrated
+        calibration's pixel→machine homography). Applies the safety
+        inset, then hands off to the shared adopter which performs
+        the Y-up→Y-down boundary flip and the normalization. Used by:
+
+          - File menu / standalone "Get from camera" flow
+          - The polygon dialog's "Capture from camera" sub-action
+            (preserves the offset so Frame & Cut can offer auto-framing
+            even when the user came in through Draw / Capture Shape)
+        """
+        if not machine_polygon:
+            return
+        try:
+            import camera_capture
+        except ImportError:
+            return
+        inset_mm = float(
+            self.settings.get("camera_polygon_inset_mm", 3.0))
+        if inset_mm > 0:
+            try:
+                machine_polygon = camera_capture.inset_polygon_mm(
+                    machine_polygon, inset_mm)
+            except Exception:
+                pass  # fall back to uninsetted on failure
+        m_min_x = min(p[0] for p in machine_polygon)
+        m_min_y = min(p[1] for p in machine_polygon)
+        self._set_custom_polygon_from_y_up(
+            machine_polygon, machine_offset=(m_min_x, m_min_y))
+
+    def _set_custom_polygon_from_y_up(self, points_y_up_mm, machine_offset):
+        """Single boundary crossing into custom_polygon storage.
+
+        Input: a polygon in Y-UP mm (either grid-mm for drawn polygons
+        or machine-mm for camera-captured ones — the Y direction is all
+        that matters).
+        Output: custom_polygon set to the SVG-Y-DOWN convention,
+        normalized so (0, 0) sits at the top-left of the polygon bbox.
+
+        ``machine_offset`` is None for drawn polygons (no machine
+        anchor exists) and (min_x, min_y) in Y-up machine coords for
+        camera-captured ones. Frame & Cut auto-mode keys off the
+        non-None case.
+        """
+        if not points_y_up_mm:
+            return
+        min_x = min(p[0] for p in points_y_up_mm)
+        max_y = max(p[1] for p in points_y_up_mm)
+        self.custom_polygon = [(x - min_x, max_y - y)
+                               for (x, y) in points_y_up_mm]
+        self.custom_polygon_machine_offset = machine_offset
         self._update_shape_status()
 
     def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
@@ -848,12 +1053,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         btn_frame = tk.Frame(dlg, bg=bg)
         btn_frame.pack(pady=15)
-        tk.Button(btn_frame, text=_("Unload Shape"), width=16,
+        # Re-capture from camera: shortcut for the per-scrap workflow.
+        # Most users with camera calibration will swap scraps between
+        # cuts, so they want a new polygon each time without unloading
+        # + opening the polygon dialog manually.
+        if self._camera_capture_ready():
+            tk.Button(btn_frame, text=_("Re-capture from camera"),
+                       width=20,
+                       command=lambda: self._scrap_dialog_recapture(dlg)
+                       ).pack(side="left", padx=4)
+        tk.Button(btn_frame, text=_("Unload Shape"), width=14,
                   command=lambda: self._scrap_dialog_close(dlg, unload=True)
-                  ).pack(side="left", padx=8)
-        tk.Button(btn_frame, text=_("Keep Shape"), width=16,
+                  ).pack(side="left", padx=4)
+        tk.Button(btn_frame, text=_("Keep Shape"), width=14,
                   command=lambda: self._scrap_dialog_close(dlg, unload=False)
-                  ).pack(side="left", padx=8)
+                  ).pack(side="left", padx=4)
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: self._scrap_dialog_close(dlg, unload=False))
         dlg.update_idletasks()
@@ -866,8 +1080,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Handle scrap continue dialog button press."""
         if unload:
             self.custom_polygon = None
+            self.custom_polygon_machine_offset = None
             self._update_shape_status()
         dlg.destroy()
+
+    def _scrap_dialog_recapture(self, dlg):
+        """Scrap-continue shortcut: clear the current polygon, close
+        this dialog, and immediately open the polygon dialog to
+        capture a fresh shape for the next scrap."""
+        self.custom_polygon = None
+        self.custom_polygon_machine_offset = None
+        self._update_shape_status()
+        dlg.destroy()
+        self.on_draw_custom_shape()
 
     # --- Edge Bias Methods ---
 
@@ -1465,20 +1690,392 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Called on the Tk main thread once detection finishes."""
         if port:
             self.falcon_port = port
-            # Show the Frame & Cut button by packing it now
+            # Show the Frame & Cut button by packing it now — but
+            # only if there's a saved camera calibration too. Without
+            # calibration there's no auto-framing reference and the
+            # button would just fall back to manual G92 mode, which
+            # is confusing. Users without calibration use Generate
+            # G-code + their preferred external sender.
             if hasattr(self, '_frame_cut_btn'):
-                self._frame_cut_btn.pack(side="left", padx=5)
+                try:
+                    import camera_capture as _cam
+                    has_cal = _cam.load_calibration(
+                        _cam.default_calibration_path()) is not None
+                except Exception:
+                    has_cal = False
+                if has_cal:
+                    self._frame_cut_btn.pack(side="left", padx=5)
+            return
+        # Not found this round. Auto-retry in 10s so users who started
+        # SSC before powering on the Falcon get the button as soon as
+        # the controller comes online — without having to restart the
+        # app or click a Machine menu item to manually retrigger
+        # detection. Stops retrying once a port is found.
+        self._falcon_detect_attempted = False
+        self.root.after(10000, self._detect_falcon_async)
+
+    # ==================================================================
+    # Machine menu handlers (Pad Maker > Machine cascade)
+    # ==================================================================
+
+    def _machine_require_falcon(self):
+        """Common pre-flight: ensure Falcon is detected. Returns True
+        if good, False (with an error popup) if not."""
+        if not self.falcon_port:
+            messagebox.showerror(
+                _("Falcon Not Detected"),
+                _("No Grbl controller detected. Plug in the Falcon "
+                  "over USB and try again."))
+            self._falcon_detect_attempted = False
+            self._detect_falcon_async()
+            return False
+        return True
+
+    def _on_machine_home_falcon(self):
+        """Standalone $H. Same flow as Frame & Cut's home prompt."""
+        if not self._machine_require_falcon():
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Home needs pyserial: {e}").format(e=e))
+            return
+        if not messagebox.askyesno(
+                _("Home Laser?"),
+                _("Send the laser home? The head will travel to the "
+                  "home corner at full speed. Make sure nothing is "
+                  "in its path.")):
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  _("Couldn't connect: {e}").format(e=e))
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        import threading
+        result = {}
+
+        def _worker():
+            try:
+                ok, m = sender.home(timeout_s=60.0)
+                result['ok'] = ok
+                result['msg'] = m
+            except Exception as exc:
+                result['ok'] = False
+                result['msg'] = str(exc)
+
+        self._show_homing_status()
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        while t.is_alive():
+            self.root.update()
+            time.sleep(0.05)
+        self._hide_homing_status()
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if result.get('ok'):
+            self._falcon_homed_this_session = True
+            messagebox.showinfo(_("Homed"),
+                                 _("Laser homed. Head is parked at "
+                                   "the home corner."))
+        else:
+            messagebox.showerror(_("Homing Failed"),
+                                  _("Falcon returned: {m}").format(
+                                      m=result.get('msg', '?')))
+
+    def _on_machine_test_connection(self):
+        """Quick Falcon ping: connect, read status, disconnect, report."""
+        if not self._machine_require_falcon():
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Test needs pyserial: {e}").format(e=e))
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            status = sender.get_status(timeout=0.5)
+        except Exception as e:
+            messagebox.showerror(
+                _("Connection Failed"),
+                _("Couldn't connect to the Falcon at {p}: {e}").format(
+                    p=self.falcon_port, e=e))
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        finally:
+            pass
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if not status:
+            messagebox.showwarning(
+                _("Connected, no response"),
+                _("Port opened at {p}, but Grbl didn't reply to a "
+                  "status query. Try the Reset Falcon menu item, "
+                  "then test again.").format(p=self.falcon_port))
+            return
+        mpos = status.get('mpos') or [0, 0, 0]
+        messagebox.showinfo(
+            _("Connection OK"),
+            _("Falcon connected on {p}.\n\n"
+              "State: {s}\n"
+              "MPos: X={x:.2f}  Y={y:.2f}  Z={z:.2f}").format(
+                p=self.falcon_port, s=status.get('state', '?'),
+                x=mpos[0], y=mpos[1], z=mpos[2]))
+
+    def _on_machine_clear_errors(self):
+        """Send $X to unlock motion after an alarm. Doesn't reset
+        position info, just clears the alarm state."""
+        if not self._machine_require_falcon():
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Clear needs pyserial: {e}").format(e=e))
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  _("Couldn't connect: {e}").format(e=e))
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        finally:
+            pass
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        messagebox.showinfo(
+            _("Errors Cleared"),
+            _("Sent $X unlock. Motion is allowed again. If the "
+              "Falcon was in an alarm state, it should now be Idle "
+              "— check with Test Connection."))
+
+    def _on_machine_reset_falcon(self):
+        """Send Ctrl-X (RT_SOFT_RESET) to reboot the controller's
+        firmware state. Stops any in-progress motion immediately,
+        clears alarms, resets the planner buffer."""
+        if not self._machine_require_falcon():
+            return
+        if not messagebox.askyesno(
+                _("Reset Falcon?"),
+                _("Send a soft-reset (Ctrl-X) to the Falcon. This:\n"
+                  "  • Immediately stops any motion in progress\n"
+                  "  • Clears alarm + error states\n"
+                  "  • Resets the planner buffer\n"
+                  "  • Loses the machine's known position (you'll "
+                  "need to home again)\n\n"
+                  "Only use this when the Falcon is stuck in a bad "
+                  "state and Clear Errors didn't help.\n\n"
+                  "Continue?")):
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Reset needs pyserial: {e}").format(e=e))
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            sender.send_realtime(falcon_sender.RT_SOFT_RESET)
+            time.sleep(1.0)  # let firmware reboot
+        except Exception as e:
+            messagebox.showerror(_("Reset Failed"),
+                                  _("Couldn't reset: {e}").format(e=e))
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        # Soft-reset loses machine position — clear the homed flag so
+        # the next Frame & Cut auto-homes again.
+        self._falcon_homed_this_session = False
+        messagebox.showinfo(
+            _("Falcon Reset"),
+            _("Soft-reset sent. The Falcon is now in alarm state — "
+              "use Home Laser to recover, then jog as needed."))
+
+    def _on_machine_recalibrate(self):
+        """Open Camera Calibration with a strong warning since the
+        engrave + capture flow takes the better part of an hour."""
+        try:
+            import camera_capture
+        except ImportError:
+            messagebox.showerror(
+                _("OpenCV Required"),
+                _("Camera calibration needs OpenCV:\n\n"
+                  "    pip install opencv-python Pillow"))
+            return
+        cal_path = camera_capture.default_calibration_path()
+        existing = camera_capture.load_calibration(cal_path) is not None
+        if existing:
+            if not messagebox.askyesno(
+                    _("Recalibrate Camera?"),
+                    _("⚠ This will REPLACE your existing calibration. "
+                      "⚠\n\n"
+                      "The full calibration takes ~60 minutes — the "
+                      "calibration card has to be engraved on fresh "
+                      "basswood, then you take 12+ photos.\n\n"
+                      "Only recalibrate if:\n"
+                      "  • The camera was bumped / re-mounted\n"
+                      "  • Cuts are landing in the wrong spot\n"
+                      "  • You're sure the existing one is wrong\n\n"
+                      "Proceed?")):
+                return
+        # Delegate to the existing handler (inherited from
+        # ToolingTabMixin) — same dialog, same flow.
+        self._open_camera_calibration()
+
+    def _on_machine_inset_settings(self):
+        """Small dialog: edit camera_polygon_inset_mm."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Auto-Framing Inset Margin"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+        bg = self._get_theme_color() if hasattr(
+            self, '_get_theme_color') else None
+        if bg:
+            dlg.configure(bg=bg)
+
+        tk.Label(dlg, justify='left', wraplength=420,
+                  text=_("Camera-captured polygons are shrunk by this "
+                          "many millimeters on every edge before "
+                          "nesting. This safety margin compensates "
+                          "for camera measurement error near the "
+                          "edges of its view — keeps pads from "
+                          "landing where a chunk of leather might "
+                          "actually be missing.\n\n"
+                          "Typical: 2-5mm. Set to 0 to disable.")
+                  ).pack(padx=20, pady=(15, 10))
+
+        row = tk.Frame(dlg)
+        row.pack(pady=(0, 15))
+        tk.Label(row, text=_("Inset margin (mm):")).pack(side='left',
+                                                            padx=5)
+        var = tk.StringVar(
+            value=str(self.settings.get("camera_polygon_inset_mm", 3.0)))
+        entry = tk.Entry(row, textvariable=var, width=8,
+                          font=("Helvetica", 11))
+        entry.pack(side='left', padx=5)
+        entry.focus_set()
+
+        def _ok():
+            try:
+                v = float(var.get())
+                if v < 0 or v > 50:
+                    raise ValueError("out of range")
+            except (ValueError, TypeError):
+                messagebox.showerror(_("Invalid"),
+                                      _("Inset must be a number 0-50."),
+                                      parent=dlg)
+                return
+            self.settings["camera_polygon_inset_mm"] = v
+            from config import save_settings
+            try:
+                save_settings(self.settings)
+            except Exception as e:
+                messagebox.showerror(_("Save Failed"),
+                                      str(e), parent=dlg)
+                return
+            dlg.destroy()
+
+        btn_row = tk.Frame(dlg)
+        btn_row.pack(pady=(0, 15))
+        tk.Button(btn_row, text=_("Save"), command=_ok,
+                   width=10, font=("Helvetica", 10, "bold")
+                   ).pack(side='left', padx=5)
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy,
+                   width=10).pack(side='left', padx=5)
+
+    def _show_homing_status(self):
+        """Modal 'Homing...' window held open while $H blocks.
+
+        Created as a Toplevel rather than a messagebox so we can dismiss
+        it programmatically when homing returns. Lives in
+        self._homing_status_win.
+        """
+        win = tk.Toplevel(self.root)
+        win.title(_("Homing"))
+        win.transient(self.root)
+        win.resizable(False, False)
+        try:
+            win.grab_set()
+        except Exception:
+            pass
+        tk.Label(win, text=_("Homing the laser...\n\n"
+                              "Head is moving to the home corner."),
+                 padx=30, pady=20,
+                 font=("Helvetica", 11), justify='left').pack()
+        win.update_idletasks()
+        # Center on root window
+        try:
+            x = (self.root.winfo_x()
+                 + (self.root.winfo_width() // 2)
+                 - (win.winfo_width() // 2))
+            y = (self.root.winfo_y()
+                 + (self.root.winfo_height() // 2)
+                 - (win.winfo_height() // 2))
+            win.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
+        self._homing_status_win = win
+        win.update()
+
+    def _hide_homing_status(self):
+        win = getattr(self, '_homing_status_win', None)
+        if win is not None:
+            try:
+                win.destroy()
+            except Exception:
+                pass
+            self._homing_status_win = None
 
     def on_frame_and_cut(self):
         """Generate G-code in memory, frame the bbox, then stream to Falcon."""
         try:
             import falcon_sender
-            from gcode_engine import extract_gcode_bbox, generate_framing_gcode
+            from gcode_engine import (
+                extract_gcode_bbox,
+                generate_framing_gcode,
+                generate_polygon_framing_gcode,
+            )
             from ui_dialogs import FalconRunDialog
         except ImportError as e:
             messagebox.showerror(_("Missing Dependency"),
                                   _("Frame & Cut needs pyserial:\n\n{e}").format(e=e))
             return
+
+        # Long cuts can run for tens of minutes; block sleep so the
+        # USB serial doesn't get killed mid-job. Released in the
+        # finally block below.
+        try:
+            import sleep_lock
+            sleep_lock.prevent_sleep()
+        except Exception:
+            pass
 
         if not self.falcon_port:
             messagebox.showerror(_("Falcon Not Detected"),
@@ -1487,6 +2084,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self._falcon_detect_attempted = False
             self._detect_falcon_async()
             return
+
+        # No "would you like to recapture from camera?" prompt here —
+        # the Draw / Capture Shape dialog already offered both paths
+        # before the user picked one. If they drew a polygon, that's
+        # their choice; proceeding in manual mode is the right
+        # default. (An earlier two-button layout had Draw and Capture
+        # as separate top-level buttons, and this prompt was the
+        # bridge between them; with the consolidated dialog it just
+        # makes users repeat work they already chose against.)
 
         # --- Mirror on_generate_gcode's input-validation up through nesting ---
         if self.scrap_mode_var.get():
@@ -1542,24 +2148,47 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 except Exception:
                     pass
 
-            # Bounding box of the actual cuts — frame just that.
-            bbox = extract_gcode_bbox(gcode_text)
+            # Framing pass. If a custom polygon is loaded (drawn or camera-
+            # captured), trace the polygon outline — on irregular scrap a
+            # bbox rectangle overhangs every concave edge and tells the user
+            # nothing about whether the cuts land on material. Fall back to
+            # the bbox rectangle for rectangular jobs (no polygon loaded).
+            power_s = self.settings.get("falcon_framing_power_s", 10)
+            feed = self.settings.get("falcon_framing_feed", 2000)
             framing_lines = []
-            if bbox:
-                xmin, xmax, ymin, ymax = bbox
-                framing_lines = generate_framing_gcode(
-                    xmin, ymin, xmax, ymax,
-                    power_s=self.settings.get("falcon_framing_power_s", 10),
-                    feed=self.settings.get("falcon_framing_feed", 2000),
+            if self.custom_polygon and len(self.custom_polygon) >= 3:
+                framing_lines = generate_polygon_framing_gcode(
+                    self.custom_polygon, power_s=power_s, feed=feed,
                 )
+            else:
+                bbox = extract_gcode_bbox(gcode_text)
+                if bbox:
+                    xmin, xmax, ymin, ymax = bbox
+                    framing_lines = generate_framing_gcode(
+                        xmin, ymin, xmax, ymax, power_s=power_s, feed=feed,
+                    )
+
+            # Tell the user which mode Frame & Cut is about to use, so
+            # there's no surprise when the head lands at the home corner
+            # instead of the scrap (the difference is whether the
+            # captured polygon has a saved machine offset from auto-
+            # framing calibration).
+            mode_label = (_("AUTO — cuts will land at the scrap's actual "
+                            "position on the bed")
+                          if self.custom_polygon_machine_offset
+                          else _("MANUAL — cuts use the laser head's "
+                                  "current position as the bottom-left "
+                                  "of the work area (jog the head to "
+                                  "your material first)"))
 
             # Ask user whether to run framing pass first
             do_frame = messagebox.askyesno(
                 _("Frame First?"),
-                _("Run a low-power framing pass first so you can verify "
+                _("Mode: {mode}\n\n"
+                  "Run a low-power framing pass first so you can verify "
                   "the cut area is on the material?\n\n"
                   "Yes — frame, pause, then cut.\n"
-                  "No — go straight to cut."))
+                  "No — go straight to cut.").format(mode=mode_label))
 
             sender = falcon_sender.FalconSender(port=self.falcon_port)
             try:
@@ -1570,25 +2199,190 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                                         "{p}: {e}").format(p=self.falcon_port, e=e))
                 return
 
+            # Optional live camera window — opens alongside the run dialog
+            # so the user can watch the laser head while it works, and stays
+            # open after the cut so the user can see the finished result.
+            # Stored on self so the reference persists past this function.
+            # Only ONE window at a time: if a previous Frame & Cut left
+            # a live cam open (it intentionally outlives the cut), focus
+            # that one instead of opening a duplicate.
+            if self.live_camera_var.get():
+                try:
+                    import camera_capture
+                    from ui_dialogs import LiveCameraWindow
+                    existing = getattr(self, '_live_cam_window', None)
+                    if existing is not None and existing.winfo_exists():
+                        try:
+                            existing.lift()
+                            existing.focus_force()
+                        except Exception:
+                            pass
+                    elif camera_capture.HAS_OPENCV:
+                        cam_idx = camera_capture.find_falcon_camera_index()
+                        if cam_idx is None:
+                            cams = camera_capture.enumerate_cameras()
+                            if cams:
+                                cam_idx = cams[-1]['index']
+                        if cam_idx is not None:
+                            self._live_cam_window = LiveCameraWindow(
+                                self.root, camera_index=cam_idx)
+                except Exception:
+                    pass  # never block the cut on preview failure
+
+            # After our connect+soft-reset, Grbl is in alarm state
+            # (homing required). $X clears that so motion is allowed.
+            # We don't $H here — that would fly the head to the homing
+            # switches and override whatever position the user manually
+            # set as their material origin.
+            sender.unlock()
+
+            # Choose the work-origin prefix.
+            #   - Auto-framing calibrated AND polygon has a machine offset:
+            #     home the laser first (so MPos has a known reference),
+            #     then move to the scrap's actual bed position, then set
+            #     work origin there. No manual jog needed.
+            #   - Otherwise (drawn shape, no calibration, or rectangle
+            #     mode): use the head's current position as work origin
+            #     (G92 X0 Y0). User must jog the head to the bottom-left
+            #     corner of their material before Frame & Cut.
+            offset = self.custom_polygon_machine_offset
+            if offset and self.custom_polygon:
+                # Safety: refuse to send the job if it would extend
+                # past the bed's soft limits. Mid-stream soft-limit
+                # trips force a controller reset (ALARM:3), losing
+                # position and aborting mid-cut.
+                bed_x_max = float(self.settings.get(
+                    "falcon_bed_x_max", 400.0))
+                bed_y_max = float(self.settings.get(
+                    "falcon_bed_y_max", 415.0))
+                poly_w = max(p[0] for p in self.custom_polygon)
+                poly_h = max(p[1] for p in self.custom_polygon)
+                far_x = offset[0] + poly_w
+                far_y = offset[1] + poly_h
+                if (offset[0] < 0 or offset[1] < 0
+                        or far_x > bed_x_max + 1.0
+                        or far_y > bed_y_max + 1.0):
+                    messagebox.showerror(
+                        _("Scrap Off Bed"),
+                        _("Auto-framing puts the cut at machine "
+                          "X={ox:.1f}-{fx:.1f}, Y={oy:.1f}-{fy:.1f}, "
+                          "but the bed only goes to {bx:.0f}×{by:.0f}.\n\n"
+                          "Move the scrap further from the right/back "
+                          "edge of the bed and recapture from camera."
+                          ).format(
+                            ox=offset[0], oy=offset[1],
+                            fx=far_x, fy=far_y,
+                            bx=bed_x_max, by=bed_y_max))
+                    return
+
+            # Mode choice. If the polygon has a saved machine offset
+            # (camera-captured with calibration), the user can choose
+            # AUTO (head drives to scrap's known machine position) or
+            # MANUAL (user jogs head to material's bottom-left). If
+            # there's no offset (drawn shape), MANUAL is the only
+            # option — skip the prompt.
+            mode = "manual"
+            if offset:
+                choice = messagebox.askyesnocancel(
+                    _("Frame & Cut Mode"),
+                    _("Polygon has machine-position data from camera "
+                      "capture. Which mode?\n\n"
+                      "Yes — AUTO: laser drives to the scrap's known "
+                      "bed position, frames, you confirm.\n"
+                      "No — MANUAL: you jog the head to the material's "
+                      "bottom-left corner, then it frames there.\n"
+                      "Cancel — back out."))
+                if choice is None:
+                    return
+                mode = "auto" if choice else "manual"
+
+            # Auto-home the laser if we haven't yet this session.
+            # Both modes need a known machine-coord reference (Auto for
+            # the absolute G0, Manual to start from a clean state).
+            if not getattr(self, '_falcon_homed_this_session', False):
+                import threading
+                home_result = {}
+
+                def _home_worker():
+                    try:
+                        ok, m = sender.home(timeout_s=60.0)
+                        home_result['ok'] = ok
+                        home_result['msg'] = m
+                    except Exception as exc:
+                        home_result['ok'] = False
+                        home_result['msg'] = str(exc)
+
+                self._show_homing_status()
+                t = threading.Thread(target=_home_worker, daemon=True)
+                t.start()
+                while t.is_alive():
+                    self.root.update()
+                    time.sleep(0.05)
+                self._hide_homing_status()
+                if not home_result.get('ok'):
+                    messagebox.showerror(
+                        _("Homing Failed"),
+                        _("Falcon returned: {m}").format(
+                            m=home_result.get('msg', 'no response')))
+                    return
+                self._falcon_homed_this_session = True
+
+            # Seed the head's starting position.
+            # AUTO: drive to the scrap's known machine BL once, before
+            #       framing starts. The framing loop then re-zeros work
+            #       coords at the current head each iteration, so any
+            #       jog the user does during framing is honored.
+            # MANUAL: the user starts framing from wherever the head
+            #         currently is; jog buttons in the framing dialog
+            #         move it during the loop.
+            if mode == "auto":
+                seed_lines = ['G90',
+                              f'G0 X{offset[0]:.3f} Y{offset[1]:.3f}']
+                seed_dlg = FalconRunDialog(
+                    self.root, sender, seed_lines,
+                    title=_("Driving head to scrap position..."),
+                    show_pause_resume=False, show_cut_button=False,
+                    stop_needs_confirm=False,
+                    done_button_label=_("Start Frame →"))
+                if seed_dlg._final_reason != "complete":
+                    return
+
+            # Both modes share the same framing-loop recipe:
+            # G92 X0 Y0 re-anchors work coords at whatever the current
+            # head position is — so the framing trace tracks the head
+            # as the user jogs between (or during) loop iterations.
+            prefix = ['G92 X0 Y0']
+            if framing_lines:
+                framing_lines = prefix + framing_lines
+
             try:
                 if do_frame and framing_lines:
+                    # Loop mode: the framing pass repeats until the user
+                    # clicks "Looks Good — Cut!" or Stop. Lets them
+                    # take their time verifying alignment and nudge the
+                    # head with the jog buttons between/during passes.
                     fdlg = FalconRunDialog(
                         self.root, sender, framing_lines,
-                        title=_("Framing — verify cut area"))
+                        title=_("Framing — verify cut area, jog if "
+                                 "needed, click Cut when ready"),
+                        loop=True)
                     if fdlg._final_reason != "complete":
                         return  # user stopped or error during framing
-                    if not messagebox.askyesno(
-                            _("Frame Looks Good?"),
-                            _("Did the framed area land where you wanted? "
-                              "Click Yes to start cutting, No to cancel.")):
-                        return
+                    # No "Frame Looks Good?" prompt — the user already
+                    # confirmed by clicking Cut Now.
 
-                # Stream the actual cut G-code
-                cut_lines = gcode_text.splitlines()
+                # Cut at the final user-confirmed head position. G92
+                # zeros work coords there — NOT a re-driven absolute
+                # position, so jogs during framing carry over to the
+                # actual cut.
+                cut_lines = ['G92 X0 Y0'] + gcode_text.splitlines()
                 FalconRunDialog(
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
             finally:
+                # Intentionally don't auto-close live_cam — users want
+                # to see the finished result. They close it manually,
+                # or it dies with the app when SSC exits.
                 try:
                     sender.disconnect()
                 except Exception:
@@ -1598,6 +2392,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showerror(_("An Error Occurred"),
                                   _("Something went wrong during Frame & Cut:\n\n"
                                     "{error}").format(error=e))
+        finally:
+            try:
+                import sleep_lock
+                sleep_lock.allow_sleep()
+            except Exception:
+                pass
 
     def on_generate_gcode(self):
         """Generate G-code files."""

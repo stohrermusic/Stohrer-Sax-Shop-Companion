@@ -3089,7 +3089,11 @@ class PolygonDrawWindow(tk.Toplevel):
     A dialog for drawing a polygon shape on a grid.
     Used for defining irregular leather skin shapes.
     """
-    MAX_POINTS = 8
+    # 32 is comfortable for the canvas + handles camera-captured contours
+    # well; previous 8-cap was a leftover from when nesting was slow and
+    # high-vertex polygons made the per-pad point-in-polygon checks crawl.
+    # Vectorized nesting (v2.40) handles 30+ vertices easily.
+    MAX_POINTS = 32
     CANVAS_PX = 450  # Canvas size in pixels
     POINT_RADIUS = 6  # Radius of drawn points in pixels
     CLOSE_THRESHOLD = 15  # Pixels - how close to first point to auto-close
@@ -3108,8 +3112,14 @@ class PolygonDrawWindow(tk.Toplevel):
             self.grid_size = 40  # 40x40 cm, 40 squares
 
         self.points = []  # List of (x, y) in grid units (0-15 for inches, 0-40 for cm)
+        # Set when the user captures from the camera AND has a valid
+        # calibration on disk — holds the polygon in ABSOLUTE machine-Y-up
+        # mm so Frame & Cut can offer auto-framing. Cleared the moment
+        # the user edits the polygon (any add/remove of a point), since
+        # grid-unit edits can't preserve the machine anchor.
+        self.result_machine_polygon_mm = None
 
-        self.title(_("Draw Custom Shape"))
+        self.title(_("Draw / Capture Shape"))
         self.geometry("520x620")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
@@ -3196,12 +3206,35 @@ class PolygonDrawWindow(tk.Toplevel):
         if not dlg.result_polygon_mm:
             return
 
-        # The captured polygon is in mm with origin at (0, 0). Convert into
-        # this dialog's grid units (inch or cm) so it appears on the canvas.
+        # CameraCaptureDialog returns the polygon in ABSOLUTE
+        # machine-Y-up mm (via the integrated calibration's
+        # pixel→machine homography). Stash the raw absolute polygon
+        # for the caller — main.py's _adopt_camera_polygon applies
+        # the safety inset + normalization once it picks this up, so
+        # the same processing happens whether the user came in via
+        # the polygon dialog's camera button or the standalone "Get
+        # from camera" entry point.
+        machine_polygon = list(dlg.result_polygon_mm)
+        self.result_machine_polygon_mm = machine_polygon
+
+        # Build the grid display. The grid stores Y-UP (high Y =
+        # top of canvas; _grid_to_canvas inverts via
+        # CANVAS_PX - gy*px_per_unit), and machine_polygon is also
+        # Y-UP after the pixels_to_mm fix — so just normalize and
+        # scale to grid units, no Y-flip needed. Back-of-bed (high
+        # machine Y) ends up at the top of the grid, matching what
+        # the user sees through the camera.
+        if machine_polygon:
+            ox = min(p[0] for p in machine_polygon)
+            oy = min(p[1] for p in machine_polygon)
+            polygon_norm = [(p[0] - ox, p[1] - oy) for p in machine_polygon]
+        else:
+            polygon_norm = []
         scale_to_unit = 1.0 / 25.4 if self.unit == "in" else 1.0 / 10.0
         captured = [(x * scale_to_unit, y * scale_to_unit)
-                     for (x, y) in dlg.result_polygon_mm]
-        # Clamp to grid + downsample to MAX_POINTS if the contour is denser.
+                     for (x, y) in polygon_norm]
+        # Downsample to MAX_POINTS if the contour is denser. Picks every
+        # k-th vertex (uniform sampling along the contour).
         if len(captured) > self.MAX_POINTS:
             step = len(captured) / self.MAX_POINTS
             captured = [captured[int(i * step)] for i in range(self.MAX_POINTS)]
@@ -3306,6 +3339,9 @@ class PolygonDrawWindow(tk.Toplevel):
             if clicked_idx is not None:
                 self.points.pop(clicked_idx)
                 self.polygon_closed = False
+                # Edit invalidates the machine anchor (grid edits live
+                # in unitless grid coords, no longer machine-mm).
+                self.result_machine_polygon_mm = None
                 self._redraw_polygon()
                 self._update_status()
             return
@@ -3324,6 +3360,7 @@ class PolygonDrawWindow(tk.Toplevel):
         clicked_idx = self._get_clicked_point_index(event.x, event.y)
         if clicked_idx is not None:
             self.points.pop(clicked_idx)
+            self.result_machine_polygon_mm = None  # edit invalidates anchor
             self._redraw_polygon()
             self._update_status()
             return
@@ -3341,6 +3378,7 @@ class PolygonDrawWindow(tk.Toplevel):
 
         # Add the point
         self.points.append((gx, gy))
+        self.result_machine_polygon_mm = None  # edit invalidates anchor
         self._redraw_polygon()
         self._update_status()
 
@@ -3357,8 +3395,16 @@ class PolygonDrawWindow(tk.Toplevel):
         """Clear all points."""
         self.points = []
         self.polygon_closed = False
+        self.result_machine_polygon_mm = None
         self._redraw_polygon()
         self._update_status()
+
+    def get_machine_polygon_mm(self):
+        """Return the camera-captured ABSOLUTE machine-Y-up polygon if
+        the user captured from the camera and didn't subsequently edit
+        the polygon. Returns None otherwise — caller should fall back
+        to the grid polygon (drawn / camera-then-edited)."""
+        return self.result_machine_polygon_mm
 
     def on_submit(self):
         """Submit the polygon."""
@@ -3383,6 +3429,11 @@ class PolygonDrawWindow(tk.Toplevel):
     def on_cancel(self):
         """Cancel and close."""
         self.result = None
+        # Cancel discards everything — including a camera-captured
+        # polygon that was sitting on the canvas waiting to be
+        # submitted. Without this clear, get_machine_polygon_mm would
+        # still return the captured polygon after a user-cancel.
+        self.result_machine_polygon_mm = None
         self.destroy()
 
     def get_polygon(self):
@@ -5662,16 +5713,23 @@ class CameraCalibrationDialog(tk.Toplevel):
     PREVIEW_W = 640
     PREVIEW_H = 480
 
-    def __init__(self, parent, camera_index, calibration_path):
+    def __init__(self, parent, camera_index, calibration_path,
+                  falcon_port=None, settings=None):
         super().__init__(parent)
         self.title(_("Camera Calibration"))
         self.configure(bg=DIALOG_BG)
-        self.transient(parent)
+        # NOT transient(parent) — on Windows that strips the maximize
+        # button. The dialog has a lot of content (instructions +
+        # preview + jog cluster + buttons) that benefits from being
+        # maximizable on small screens.
         self.grab_set()
+        self.resizable(True, True)
         self.result = None
 
         self._camera_index = camera_index
         self._calibration_path = calibration_path
+        self._falcon_port = falcon_port
+        self._settings = settings or {}
         self._cap = None
         self._board = None
         self._detector_imports_ok = False
@@ -5680,6 +5738,71 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._image_size = (640, 480)
         self._latest_photo = None  # keep a reference so PIL doesn't GC it
         self._refresh_after_id = None
+        # Phase state: 'engrave' or 'capture'. Decided after the
+        # persisted-offset check below — if SSC saved an offset from
+        # a previous (possibly 2-hour) engrave, default to capture
+        # phase so the user isn't asked to re-engrave a card that's
+        # already on the bed.
+        self._phase = None  # set below after offset restore
+        # Capture-phase sub-state: 'reference' (card untouched, take
+        # 1+ reference captures) → 'intrinsics' (card moved for
+        # different poses). Tracked so calibrate_from_frames can pool
+        # all reference captures for the machine-mm homography.
+        self._capture_substate = 'reference'
+        self._reference_count = 0
+        # Has the laser been homed this dialog session? Required
+        # before Engrave so MPos is meaningful — otherwise the
+        # calibration's machine reference is whatever bogus value
+        # Grbl booted with.
+        self._engrave_homed = False
+        # Linear-flow flags driving button enablement: Frame →
+        # _framing_done → enables Engrave; Engrave → engrave offset
+        # set → enables Next; Next → capture phase.
+        self._framing_done = False
+        # Center of the last framing pass, captured by the framing
+        # provider on each iteration. Engrave uses THIS (not current
+        # MPos) so Stopping mid-trace doesn't move the engrave's
+        # center to wherever the head happened to be when Stop hit.
+        self._framing_center = None
+
+        # Where the card was engraved on the bed, in machine-mm.
+        # Either captured this session (set by _on_engrave_clicked
+        # after a successful engrave) or restored from a previously-
+        # persisted value (below).
+        self._captured_engrave_offset = None
+
+        # If the previous engrave's offset was saved (persisted to
+        # settings on engrave success), restore it. Then the dialog
+        # opens straight in capture mode — the user shouldn't have
+        # to remember a "Skip — already engraved" step if the system
+        # already knows the card was engraved at a specific offset.
+        saved = self._settings.get(
+            'camera_calibration_engrave_offset_mm')
+        if (saved and isinstance(saved, (list, tuple))
+                and len(saved) == 2):
+            try:
+                self._captured_engrave_offset = (
+                    float(saved[0]), float(saved[1]))
+            except (TypeError, ValueError):
+                pass
+
+        # Phase pick: capture if we have a saved offset (most users
+        # will, after their first engrave), else engrave. Without a
+        # Falcon connected, can't engrave anyway → capture.
+        if self._captured_engrave_offset is not None or not falcon_port:
+            self._phase = 'capture'
+        else:
+            self._phase = 'engrave'
+
+        # Block system/display sleep for the lifetime of the dialog —
+        # the engrave can run 45-60 minutes and Windows would
+        # otherwise sleep the system and kill the USB serial mid-job.
+        # Released in _on_close.
+        try:
+            import sleep_lock
+            sleep_lock.prevent_sleep()
+        except Exception:
+            pass
 
         # Try to import deps. If they're missing we'll show an error and close.
         try:
@@ -5702,81 +5825,943 @@ class CameraCalibrationDialog(tk.Toplevel):
             return
 
         # ---- UI ----
+        # Horizontal split layout: title bar at top, status at
+        # bottom, then a body with the camera preview on the LEFT
+        # (expands to fill) and the controls (instructions + buttons
+        # + engrave-jog cluster) on the RIGHT (fixed width). Makes
+        # better use of widescreen monitors and keeps everything
+        # visible without scrolling.
         tk.Label(self, text=_("Camera Calibration"),
                  bg=DIALOG_BG, font=("Helvetica", 12, "bold")
-                 ).pack(pady=(10, 2))
-        instructions = _(
-            "Place the engraved calibration card flat on the laser bed. "
-            "Move it to several positions (corners, center, tilted slightly) "
-            "and watch the green-corner overlay. Each frame with a complete "
-            "board detection counts toward calibration.\n\n"
-            "Target: {n} good frames. Tilt the card slightly between captures "
-            "for the math to solve cleanly."
-        ).format(n=self.TARGET_FRAMES)
-        tk.Label(self, text=instructions, bg=DIALOG_BG,
-                 wraplength=620, justify="left", font=("Helvetica", 9)
-                 ).pack(padx=15, pady=(0, 8))
+                 ).pack(side='top', pady=(10, 2))
 
-        self._preview_label = tk.Label(
-            self, bg="#000000", width=self.PREVIEW_W, height=self.PREVIEW_H)
-        self._preview_label.pack(padx=15, pady=(0, 8))
-
-        self._status_var = tk.StringVar(
-            value=_("Opening camera ..."))
+        self._status_var = tk.StringVar(value="")
         tk.Label(self, textvariable=self._status_var, bg=DIALOG_BG,
-                 font=("Helvetica", 10)).pack(pady=(0, 4))
+                 font=("Helvetica", 10)).pack(side='bottom', pady=(0, 8))
 
-        btn_frame = tk.Frame(self, bg=DIALOG_BG)
-        btn_frame.pack(pady=(0, 12))
+        body = tk.Frame(self, bg=DIALOG_BG)
+        body.pack(side='top', fill='both', expand=True,
+                   padx=10, pady=(0, 8))
+
+        # LEFT: camera preview, expands to fill available space.
+        preview_frame = tk.Frame(body, bg='black')
+        preview_frame.pack(side='left', fill='both', expand=True,
+                            padx=(0, 8))
+        self._preview_label = tk.Label(
+            preview_frame, bg="#000000",
+            width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label.pack(fill='both', expand=True)
+
+        # RIGHT: control panel (instructions on top, jog/buttons
+        # below). Fixed width so the preview gets the rest.
+        right_panel = tk.Frame(body, bg=DIALOG_BG, width=340)
+        right_panel.pack(side='left', fill='y')
+        right_panel.pack_propagate(False)  # honor the width=340
+
+        # Instructions live in the right panel, narrower wraplength.
+        self._instructions_var = tk.StringVar(value="")
+        self._instructions_label = tk.Label(
+            right_panel, textvariable=self._instructions_var,
+            bg=DIALOG_BG, wraplength=325, justify="left",
+            font=("Helvetica", 9))
+        self._instructions_label.pack(side='top', anchor='w',
+                                        padx=4, pady=(0, 8))
+
+        # Bottom-row buttons in the right panel. Engrave jog cluster
+        # also lives here (added by _enter_engrave_phase).
+        self._btn_frame = tk.Frame(right_panel, bg=DIALOG_BG)
+        self._btn_frame.pack(side='bottom', pady=(0, 8), fill='x')
+
+        # Three-button linear flow: Frame → Engrave → Next. Each
+        # enables the next as its prerequisite completes. Cancel is
+        # always available.
+        self._frame_btn = tk.Button(
+            self._btn_frame, text=_("Frame"),
+            command=self._on_frame_clicked,
+            font=("Helvetica", 10), width=24)
+        self._engrave_btn = tk.Button(
+            self._btn_frame, text=_("Engrave"),
+            command=self._on_engrave_clicked,
+            font=("Helvetica", 10), width=24,
+            state="disabled")  # enabled after framing done
+        self._next_btn = tk.Button(
+            self._btn_frame, text=_("Next →"),
+            command=self._on_next_clicked,
+            font=("Helvetica", 10, "bold"), width=24,
+            bg="#4caf50", fg="white", activebackground="#388e3c",
+            state="disabled")  # enabled after engrave done
+        # "Engrave new card" — shown in CAPTURE phase to let the user
+        # start over with a fresh piece of basswood (can't re-engrave
+        # the same wood — each engrave is permanent, so a new card
+        # means new material). Skip — already engraved button was
+        # removed — it always used the (50,50) default which is wrong
+        # for users who jogged before engraving.
+        self._reengrave_btn = tk.Button(
+            self._btn_frame, text=_("Engrave new card"),
+            command=self._on_reengrave_clicked,
+            font=("Helvetica", 9), width=16)
+
+        # Capture-phase buttons. Label updates with substate.
         self._capture_btn = tk.Button(
-            btn_frame, text=_("Capture this frame"),
+            self._btn_frame, text=_("Capture reference"),
             command=self._on_capture_clicked,
             font=("Helvetica", 10, "bold"), width=20, state="disabled")
-        self._capture_btn.pack(side="left", padx=5)
+        # "Done with references — move card now" advances from the
+        # reference substate (multiple captures of the untouched
+        # card, pooled for the machine-mm homography) to the
+        # intrinsics substate (card moved, used for distortion).
+        self._done_refs_btn = tk.Button(
+            self._btn_frame, text=_("Done with references"),
+            command=self._on_done_refs_clicked,
+            font=("Helvetica", 9), width=18, state="disabled")
+        # Retake-last drops the most recent capture so the user can
+        # redo a bad one (detection sketchy, lighting bad, etc.)
+        # without losing everything else.
+        self._retake_ref_btn = tk.Button(
+            self._btn_frame, text=_("Retake last"),
+            command=self._on_retake_last_clicked,
+            font=("Helvetica", 9), width=12, state="disabled")
+        self._reset_btn = tk.Button(
+            self._btn_frame, text=_("Reset all"),
+            command=self._on_reset_captures_clicked,
+            font=("Helvetica", 9), width=10, state="disabled")
         self._calibrate_btn = tk.Button(
-            btn_frame, text=_("Calibrate & Save"),
+            self._btn_frame, text=_("Calibrate & Save"),
             command=self._on_calibrate_clicked,
             font=("Helvetica", 10), width=18, state="disabled")
-        self._calibrate_btn.pack(side="left", padx=5)
-        tk.Button(btn_frame, text=_("Cancel"),
-                  command=self._on_close, width=10
-                  ).pack(side="left", padx=5)
 
-        self.geometry(f"{self.PREVIEW_W + 50}x{self.PREVIEW_H + 280}")
-        self.minsize(660, 700)
+        # Reconnect Camera — recovery if the USB camera dies mid-session
+        # (the long engrave saturates USB and the cam can stall or drop;
+        # cv2.VideoCapture has a stale handle after that, so we need
+        # an explicit release+reopen to come back).
+        self._reconnect_btn = tk.Button(
+            self._btn_frame, text=_("Reconnect camera"),
+            command=self._on_reconnect_camera_clicked,
+            font=("Helvetica", 9), width=18)
+
+        # Manual-offset entry — escape hatch when an engrave succeeded
+        # but the persisted offset was lost (e.g. older settings file
+        # missing the DEFAULT_SETTINGS key, manual config edit, etc.)
+        # and the card is still sitting on the bed at known coords.
+        # Avoids requiring another 2-hour re-engrave to recover.
+        self._manual_offset_btn = tk.Button(
+            self._btn_frame, text=_("Enter offset manually..."),
+            command=self._on_manual_offset_clicked,
+            font=("Helvetica", 9), width=22)
+
+        # Always-visible Cancel
+        self._cancel_btn = tk.Button(
+            self._btn_frame, text=_("Cancel"),
+            command=self._on_close, width=10)
+
+        # Wide default: preview width + right panel + padding.
+        # Tall enough for the right panel's stacked controls.
+        self.geometry(f"{self.PREVIEW_W + 380}x{max(self.PREVIEW_H, 600)}")
+        self.minsize(900, 600)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # Kick off camera open + live refresh
-        self.after(50, self._open_camera_and_start)
+        # Enter the initial phase. If no Falcon connected, skip
+        # straight to capture phase (user runs engrave externally).
+        if self._phase == 'engrave':
+            self._enter_engrave_phase()
+        else:
+            self._enter_capture_phase()
         self.wait_window(self)
+
+    def _enter_engrave_phase(self):
+        """Show the engrave-phase UI: live camera preview + jog buttons
+        + MPos display + "Engrave Centered Here" button. User homes the
+        laser, jogs into the camera view, then clicks Engrave — card
+        engraves around the head's current position."""
+        self._phase = 'engrave'
+        self._instructions_var.set(_(
+            "Step 1 of 2 — engrave the calibration card.\n\n"
+            "1. Place a 12×12-inch basswood blank in roughly the "
+            "middle of the bed.\n"
+            "2. Click Home Laser — head parks at the home corner.\n"
+            "3. JOG THE HEAD TO ROUGHLY BED CENTER (X=200, Y=200, "
+            "or X=~8\", Y=~8\"). The card is ~11\" square and "
+            "engraves CENTERED on the head, so at the home corner "
+            "the trace runs off the bed. Use 50mm step for fast "
+            "travel, then 10mm or 1mm to fine-tune.\n"
+            "4. Click Frame — low-power outline traces where the "
+            "card will engrave (~11×11 inches). The outline follows "
+            "your jog buttons in real time. Adjust until the trace "
+            "sits comfortably on the basswood (~½\" margin all "
+            "around). Click Stop on the framing window.\n"
+            "5. Click Engrave to commit. Takes ~45-60 minutes."))
+        self._status_var.set(_("Ready. Home the laser and jog into position."))
+        self._preview_label.config(image="", text=_("Camera opening..."),
+                                    fg="#888888", bg="#000000")
+        for w in (self._capture_btn, self._done_refs_btn,
+                   self._retake_ref_btn, self._reset_btn,
+                   self._reengrave_btn, self._calibrate_btn,
+                   self._next_btn):
+            w.pack_forget()
+        self._engrave_btn.config(text=_("Engrave"))
+        # Build jog cluster + home + MPos display (once)
+        if not hasattr(self, '_engrave_jog_built'):
+            self._build_engrave_controls()
+            self._engrave_jog_built = True
+        # side='bottom' so the jog cluster pins above the bottom
+        # button row (status_var) regardless of preview size. Without
+        # this, on small screens the jog cluster falls off-screen
+        # below the preview.
+        self._engrave_jog_frame.pack(side='bottom', pady=(0, 8))
+        # Stack vertically in the narrow (340px) right panel.
+        self._frame_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._engrave_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._next_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._manual_offset_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
+        # Reset to disabled, then enable based on current flow flags.
+        # Without the reset, going from capture phase BACK to engrave
+        # phase via Engrave-new-card would leave stale enabled state.
+        self._engrave_btn.config(state="disabled")
+        self._next_btn.config(state="disabled")
+        if self._captured_engrave_offset is not None:
+            self._engrave_btn.config(state="normal")
+            self._next_btn.config(state="normal")
+        elif getattr(self, '_framing_done', False):
+            self._engrave_btn.config(state="normal")
+        # Open the camera early so the user can see the head as they jog.
+        if self._cap is None and self._detector_imports_ok:
+            self.after(50, self._open_camera_and_start)
+        self._start_mpos_polling()
+
+    def _build_engrave_controls(self):
+        """Build the home/jog/MPos cluster used during engrave-phase
+        positioning. Parented to the right-panel control area so it
+        sits with the other controls, not floating in the dialog."""
+        self._engrave_jog_frame = tk.LabelFrame(
+            self._btn_frame.master, text=_("Position the head"),
+            bg=DIALOG_BG, padx=8, pady=4)
+
+        row = tk.Frame(self._engrave_jog_frame, bg=DIALOG_BG)
+        row.pack(anchor='w')
+        tk.Button(row, text=_("Home Laser ($H)"),
+                   command=self._on_engrave_home).pack(side='left', padx=4)
+        self._mpos_var = tk.StringVar(value=_("MPos: --"))
+        tk.Label(row, textvariable=self._mpos_var, bg=DIALOG_BG,
+                  font=("Courier", 10)).pack(side='left', padx=10)
+
+        step_row = tk.Frame(self._engrave_jog_frame, bg=DIALOG_BG)
+        step_row.pack(anchor='w', pady=(4, 2))
+        tk.Label(step_row, text=_("Step (mm):"), bg=DIALOG_BG,
+                  font=("Helvetica", 9)).pack(side='left')
+        self._engrave_jog_step = tk.DoubleVar(value=10.0)
+        for step in (1.0, 10.0, 50.0):
+            tk.Radiobutton(
+                step_row, text=str(step),
+                variable=self._engrave_jog_step, value=step,
+                bg=DIALOG_BG, font=("Helvetica", 9),
+                highlightthickness=0).pack(side='left')
+
+        btn_grid = tk.Frame(self._engrave_jog_frame, bg=DIALOG_BG)
+        btn_grid.pack(pady=2)
+        tk.Button(btn_grid, text="↑", width=3,
+                   command=lambda: self._engrave_jog(0, 1)
+                   ).grid(row=0, column=1, padx=2, pady=1)
+        tk.Button(btn_grid, text="←", width=3,
+                   command=lambda: self._engrave_jog(-1, 0)
+                   ).grid(row=1, column=0, padx=2, pady=1)
+        tk.Button(btn_grid, text="→", width=3,
+                   command=lambda: self._engrave_jog(1, 0)
+                   ).grid(row=1, column=2, padx=2, pady=1)
+        tk.Button(btn_grid, text="↓", width=3,
+                   command=lambda: self._engrave_jog(0, -1)
+                   ).grid(row=2, column=1, padx=2, pady=1)
+
+    def _start_mpos_polling(self):
+        """Poll Falcon's MPos every ~300ms while in engrave phase."""
+        if self._phase != 'engrave' or not self._falcon_port:
+            return
+        self._mpos_after_id = self.after(300, self._poll_mpos)
+
+    def _poll_mpos(self):
+        if self._phase != 'engrave' or not self._falcon_port:
+            return
+        # Quick connect/disconnect to read status — the persistent
+        # sender pattern would tie up the port and conflict with the
+        # engrave/jog actions which also need to connect.
+        try:
+            import falcon_sender
+            s = falcon_sender.FalconSender(port=self._falcon_port)
+            s.connect()
+            st = s.get_status(timeout=0.2)
+            s.disconnect()
+            if st and st.get('mpos'):
+                self._mpos_var.set(
+                    _("MPos: X={x:7.2f}  Y={y:7.2f}").format(
+                        x=st['mpos'][0], y=st['mpos'][1]))
+        except Exception:
+            pass
+        if self._phase == 'engrave':
+            self._mpos_after_id = self.after(800, self._poll_mpos)
+
+    def _on_engrave_home(self):
+        """Send $H standalone, with a small "Homing..." indicator."""
+        if not self._falcon_port:
+            return
+        try:
+            import falcon_sender
+        except ImportError:
+            return
+        if not messagebox.askyesno(
+                _("Home Laser?"),
+                _("Send the laser home? The head will travel to the "
+                  "home corner at full speed."), parent=self):
+            return
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  str(e), parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        self._status_var.set(_("Homing..."))
+        self.update()
+        import threading
+        result = {}
+
+        def _worker():
+            try:
+                ok, m = sender.home(timeout_s=60.0)
+                result['ok'] = ok
+                result['msg'] = m
+            except Exception as exc:
+                result['ok'] = False
+                result['msg'] = str(exc)
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        while t.is_alive():
+            self.update()
+            time.sleep(0.05)
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if result.get('ok'):
+            self._engrave_homed = True
+            self._status_var.set(_("Homed. Now jog into the camera view."))
+        else:
+            self._status_var.set(
+                _("Home failed: {m}").format(m=result.get('msg', '?')))
+
+    def _engrave_jog(self, dx_sign, dy_sign):
+        """Send a relative jog via Grbl $J=."""
+        if not self._falcon_port:
+            return
+        try:
+            import falcon_sender
+            s = falcon_sender.FalconSender(port=self._falcon_port)
+            s.connect()
+            try:
+                step = float(self._engrave_jog_step.get())
+            except Exception:
+                step = 10.0
+            s.jog(x=dx_sign * step, y=dy_sign * step,
+                   feed=3000, relative=True)
+            s.disconnect()
+        except Exception:
+            pass
+
+    def _enter_capture_phase(self):
+        """Switch to live-preview + ChArUco capture mode."""
+        self._phase = 'capture'
+        self._instructions_var.set(_(
+            "Step 2 of 2 — calibration captures.\n\n"
+            "FIRST capture: leave the card untouched at its engraved "
+            "position. This is the position reference linking camera "
+            "coords to machine coords.\n\n"
+            "Next {n_more} captures: move the card to different "
+            "spots / tilt it slightly between each so the math can "
+            "solve lens distortion. Watch the green-corner overlay; "
+            "click Capture when the board's fully detected.\n\n"
+            "Target: {n} good captures total."
+        ).format(n=self.TARGET_FRAMES, n_more=self.TARGET_FRAMES - 1))
+        # Stop MPos polling and hide engrave-phase controls.
+        if hasattr(self, '_mpos_after_id') and self._mpos_after_id:
+            self.after_cancel(self._mpos_after_id)
+            self._mpos_after_id = None
+        for w in (self._frame_btn, self._engrave_btn, self._next_btn,
+                   self._reconnect_btn, self._manual_offset_btn):
+            w.pack_forget()
+        if hasattr(self, '_engrave_jog_frame'):
+            self._engrave_jog_frame.pack_forget()
+        self._status_var.set(_("Opening camera ..."))
+        self._capture_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._done_refs_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._retake_ref_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._reset_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._reengrave_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._calibrate_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._reconnect_btn.pack(side="top", fill='x', padx=5, pady=2)
+        self._cancel_btn.pack(side="top", fill='x', padx=5, pady=2)
+        # Always-visible Reconnect — the camera can die during the long
+        # engrave or at dialog-transition. Without an explicit reopen
+        # path the user has to cancel and lose any in-memory captures.
+        # Kick off camera open + live refresh (may already be open
+        # from engrave phase — _open_camera_and_start handles that).
+        self.after(50, self._open_camera_and_start)
+
+    def _engrave_geometry(self):
+        """Return (cols, rows, sq, board_w, board_h, border, label_h)
+        — the card-layout constants the engrave + framing flows both
+        need."""
+        import camera_capture as _cam
+        cols, rows = _cam.CHARUCO_COLS, _cam.CHARUCO_ROWS
+        sq = _cam.CHARUCO_SQUARE_MM
+        return (cols, rows, sq, cols * sq, rows * sq, 10.0, 8.0)
+
+    def _engrave_check_position_safe(self):
+        """Read current MPos and verify the engrave area would fit on
+        the bed. Returns True if safe, else False (with an error
+        already shown). Avoids ALARM:3 from soft-limit trips when
+        the user clicks Frame with the head still at home corner."""
+        try:
+            import falcon_sender
+        except ImportError:
+            return True  # can't check; let it run and fail loudly
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            st = sender.get_status(timeout=0.5)
+        except Exception:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return True
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if not st or not st.get('mpos'):
+            return True
+        hx, hy = st['mpos'][0], st['mpos'][1]
+        cols, rows, sq, board_w, board_h, border, label_h = \
+            self._engrave_geometry()
+        ox = hx - border - board_w / 2.0
+        oy = hy - border - label_h - board_h / 2.0
+        fx = ox + board_w + 2 * border
+        fy = oy + board_h + 2 * border + label_h
+        bed_x_max = float(
+            self._settings.get("falcon_bed_x_max", 400.0))
+        bed_y_max = float(
+            self._settings.get("falcon_bed_y_max", 415.0))
+        if (ox < 0 or oy < 0
+                or fx > bed_x_max + 1.0 or fy > bed_y_max + 1.0):
+            messagebox.showerror(
+                _("Card Would Run Off Bed"),
+                _("With head at machine (X={x:.1f}, Y={y:.1f}), the "
+                  "card would engrave at ({ox:.0f},{oy:.0f}) to "
+                  "({fx:.0f},{fy:.0f}) — outside the {bx:.0f}×{by:.0f}"
+                  " bed.\n\n"
+                  "Jog the head further from the home corner so the "
+                  "whole card area fits on the bed (and on basswood).\n\n"
+                  "Need head at roughly X={midx:.0f}-{maxx:.0f}, "
+                  "Y={midy:.0f}-{maxy:.0f}.").format(
+                    x=hx, y=hy, ox=ox, oy=oy, fx=fx, fy=fy,
+                    bx=bed_x_max, by=bed_y_max,
+                    midx=border + board_w / 2.0,
+                    maxx=bed_x_max - border - board_w / 2.0,
+                    midy=border + label_h + board_h / 2.0,
+                    maxy=bed_y_max - border - board_h / 2.0,
+                ), parent=self)
+            return False
+        return True
+
+    def _engrave_check_ready(self):
+        """Common pre-flight for Frame / Engrave: Falcon connected,
+        laser homed. Returns True if all good, else False (with the
+        appropriate error/prompt already shown). Sets self._engrave_homed
+        based on user choice."""
+        if not self._falcon_port:
+            messagebox.showerror(
+                _("Falcon Not Detected"),
+                _("Can't operate — no Falcon connection."), parent=self)
+            return False
+        if not self._engrave_homed:
+            choice = messagebox.askyesnocancel(
+                _("Home Laser First?"),
+                _("The laser needs to be homed so machine coordinates "
+                  "have a known reference. Without homing, the "
+                  "engrave's position is bogus.\n\n"
+                  "Yes — home now (head moves to home corner).\n"
+                  "No — I already homed this session (LightBurn / "
+                  "physical button / before opening SSC).\n"
+                  "Cancel — back out."),
+                parent=self)
+            if choice is None:
+                return False
+            if choice:
+                self._on_engrave_home()
+                if not self._engrave_homed:
+                    return False
+            else:
+                self._engrave_homed = True
+        return True
+
+    def _on_frame_clicked(self):
+        """Run a continuous framing loop that re-reads MPos each
+        iteration — the trace FOLLOWS the head as the user jogs
+        with the in-dialog buttons. User clicks Stop or the X to
+        end framing, then can verify alignment and click Engrave."""
+        if not self._engrave_check_ready():
+            return
+        if not self._engrave_check_position_safe():
+            return
+        try:
+            import falcon_sender
+            from gcode_engine import generate_framing_gcode
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Frame needs pyserial: {e}"
+                                    ).format(e=e), parent=self)
+            return
+        cols, rows, sq, board_w, board_h, border, label_h = \
+            self._engrave_geometry()
+
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  str(e), parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+
+        def _framing_provider():
+            st = sender.get_status(timeout=0.3)
+            if not st or not st.get('mpos'):
+                # Fall back to a default near home rather than crash
+                hx, hy = 100.0, 100.0
+            else:
+                hx, hy = st['mpos'][0], st['mpos'][1]
+            ox = hx - border - board_w / 2.0
+            oy = hy - border - label_h - board_h / 2.0
+            fx = ox + board_w + 2 * border
+            fy = oy + board_h + 2 * border + label_h
+            return generate_framing_gcode(
+                ox, oy, fx, fy,
+                power_s=self._settings.get("falcon_framing_power_s", 10),
+                feed=self._settings.get("falcon_framing_feed", 2000),
+                return_to_origin=False,  # absolute coords; don't send
+                                          # head to machine (0, 0) (=home
+                                          # corner) between iterations —
+                                          # that loses user's jog edits.
+            )
+
+        # Stop MPos polling while the streamer owns the port.
+        if hasattr(self, '_mpos_after_id') and self._mpos_after_id:
+            self.after_cancel(self._mpos_after_id)
+            self._mpos_after_id = None
+
+        try:
+            FalconRunDialog(
+                self, sender, _framing_provider(),
+                title=_("Framing — jog to position, click Stop when "
+                         "done aligning"),
+                loop=True, gcode_provider=_framing_provider,
+                show_pause_resume=False, show_cut_button=False,
+                stop_needs_confirm=False)
+        finally:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            self._start_mpos_polling()
+            # Recycle the camera handle. Empirically the cv2.VideoCapture
+            # frame stream stalls (frozen preview) when a long-lived
+            # modal FalconRunDialog closes — probably a Windows
+            # DirectShow / USB-focus quirk we can't suppress at the
+            # cv2 layer. Cheaper to just reopen than diagnose.
+            self._auto_recycle_camera()
+        # Framing window closed (Stop or X). Treat as "user is done
+        # positioning" — enable the Engrave button. User may run
+        # Frame again to re-verify or jog more; that's fine.
+        self._framing_done = True
+        if self._phase == 'engrave':
+            try:
+                self._engrave_btn.config(state="normal")
+                self._status_var.set(
+                    _("Framing done. Click Engrave when ready."))
+            except tk.TclError:
+                pass
+
+    def _on_next_clicked(self):
+        """Engrave-phase Next button: advance to capture phase. Only
+        active after the engrave has completed and saved an offset."""
+        if self._captured_engrave_offset is None:
+            messagebox.showerror(
+                _("Engrave first"),
+                _("No engrave offset on file yet. Click Engrave (and "
+                  "wait for it to finish) before moving to captures."),
+                parent=self)
+            return
+        self._enter_capture_phase()
+
+    def _on_engrave_clicked(self):
+        """Commit to the engrave at the head's current position.
+        Confirmation popup ("are you sure?"). If yes, ~45-60 minute
+        engrave runs. If no, returns to the engrave-phase dialog
+        where the user can Frame again or jog."""
+        if not self._engrave_check_ready():
+            return
+        if not self._engrave_check_position_safe():
+            return
+        try:
+            import falcon_sender
+            from gcode_engine import generate_calibration_card_gcode
+            import camera_capture as _cam
+        except ImportError as e:
+            messagebox.showerror(
+                _("Missing Dependency"),
+                _("Engrave needs pyserial:\n\n{e}").format(e=e),
+                parent=self)
+            return
+
+        # Read the head's current MPos to center the engrave around it.
+        sender = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+            status = sender.get_status(timeout=0.5)
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  str(e), parent=self)
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        if not status or not status.get('mpos'):
+            messagebox.showerror(
+                _("No machine position"),
+                _("Couldn't read MPos. Home the laser first."),
+                parent=self)
+            sender.disconnect()
+            return
+        head_x, head_y = status['mpos'][0], status['mpos'][1]
+
+        # Compute offset so the BOARD's center lands at (head_x, head_y).
+        # Card layout: bottom-left at (offset_x, offset_y), board area
+        # at (offset_x + border, offset_y + border + label_h) to
+        # (offset_x + border + board_w, offset_y + border + label_h + board_h).
+        border = 10.0
+        label_h = 8.0
+        cols, rows = _cam.CHARUCO_COLS, _cam.CHARUCO_ROWS
+        sq = _cam.CHARUCO_SQUARE_MM
+        board_w = cols * sq
+        board_h = rows * sq
+        offset_x = head_x - border - board_w / 2.0
+        offset_y = head_y - border - label_h - board_h / 2.0
+
+        card_far_x = offset_x + board_w + 2 * border
+        card_far_y = offset_y + board_h + 2 * border + label_h
+        if not messagebox.askyesno(
+                _("Start Engrave?"),
+                _("Are you sure? Card will engrave centered on machine "
+                  "(X={x:.0f}, Y={y:.0f}), covering ({ox:.0f}, "
+                  "{oy:.0f}) to ({fx:.0f}, {fy:.0f}).\n\n"
+                  "Takes ~45-60 minutes. The cover must stay closed "
+                  "for the laser to fire.\n\n"
+                  "If you haven't framed yet to verify placement, "
+                  "click No and run Frame first.").format(
+                    x=head_x, y=head_y,
+                    ox=offset_x, oy=offset_y,
+                    fx=card_far_x, fy=card_far_y),
+                parent=self):
+            sender.disconnect()
+            return
+
+        # Generate G-code to a temp file (no $H — head's already homed
+        # and at the user-chosen jog position; G-code uses absolute
+        # coords from there). Read as a list of lines for the streamer.
+        import tempfile
+        import os as _os
+        with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
+                                          mode='w') as tmp:
+            tmp_path = tmp.name
+        try:
+            generate_calibration_card_gcode(
+                tmp_path,
+                cols=cols, rows=rows,
+                square_mm=sq, marker_mm=_cam.CHARUCO_MARKER_MM,
+                settings=self._settings,
+                offset_x_mm=offset_x, offset_y_mm=offset_y,
+                home_first=False)  # already homed
+            with open(tmp_path, 'r') as f:
+                gcode_lines = f.read().splitlines()
+        finally:
+            try:
+                _os.remove(tmp_path)
+            except Exception:
+                pass
+
+        # Stop polling MPos while the stream owns the port.
+        if hasattr(self, '_mpos_after_id') and self._mpos_after_id:
+            self.after_cancel(self._mpos_after_id)
+            self._mpos_after_id = None
+
+        try:
+            run_dlg = FalconRunDialog(
+                self, sender, gcode_lines,
+                title=_("Engraving Calibration Card"))
+            # Run dialog closed (regardless of success/stop/error).
+            # Recycle the camera before the next phase needs it — see
+            # _auto_recycle_camera for the rationale.
+            self._auto_recycle_camera()
+            if run_dlg._final_reason != "complete":
+                # Engrave stopped or errored mid-flight — the head
+                # is now at some weird mid-trace MPos that's no
+                # longer the planned card center. Force a re-frame
+                # (with fresh basswood, presumably) before allowing
+                # another engrave.
+                self._framing_done = False
+                try:
+                    self._engrave_btn.config(state="disabled")
+                    self._status_var.set(
+                        _("Engrave stopped. Put fresh basswood, "
+                          "re-Frame, then Engrave."))
+                except tk.TclError:
+                    pass
+                self._start_mpos_polling()
+                return
+        finally:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+
+        # Engrave done — remember the offset for the calibration solver
+        # AND persist it to settings so a closed/reopened dialog or
+        # crashed-then-relaunched SSC can pick up where we left off
+        # (the engrave is the most expensive step; losing the offset
+        # to a UI hiccup wastes ~2 hours of basswood).
+        self._captured_engrave_offset = (offset_x, offset_y)
+        try:
+            self._settings['camera_calibration_engrave_offset_mm'] = [
+                offset_x, offset_y]
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass  # never block on settings save
+        # Activate Next — but DON'T auto-transition. User clicks Next
+        # explicitly. Prevents losing the offset to a dialog-close
+        # accident, and lets the user verify the engrave looks right
+        # before moving on. Disable Frame + Engrave so user can't
+        # accidentally re-engrave at a different MPos (would mismatch
+        # the saved offset).
+        try:
+            self._frame_btn.config(state="disabled")
+            self._engrave_btn.config(state="disabled")
+            self._next_btn.config(state="normal")
+            self._status_var.set(
+                _("Engrave complete. Click Next when ready for "
+                  "calibration captures."))
+        except tk.TclError:
+            pass
+        messagebox.showinfo(
+            _("Card Engraved — DO NOT TOUCH"),
+            _("Card engraved successfully.\n\n"
+              "⚠ DO NOT MOVE THE CARD. ⚠\n\n"
+              "Click Next to start calibration captures. The first "
+              "capture becomes the position reference linking the "
+              "camera to machine coords — if the card moves before "
+              "then, the calibration is off."), parent=self)
+
+    def _on_reengrave_clicked(self):
+        """Capture-phase button: discard the saved engrave offset and
+        return to engrave phase so the user can engrave a NEW card
+        on fresh basswood. Can't re-engrave the same wood — each
+        engrave is permanent.
+
+        Also clears any captures already taken in this session
+        (different engrave = different machine-coord reference, so
+        old captures would be tied to the wrong position).
+        """
+        if not messagebox.askyesno(
+                _("Engrave a New Card?"),
+                _("Discard the existing calibration session and start "
+                  "over with a fresh basswood blank?\n\n"
+                  "You CAN'T re-engrave the same wood — each engrave "
+                  "is permanent. Use a new piece of basswood.\n\n"
+                  "Current captures ({n}) will be discarded."
+                  ).format(n=len(self._captures)),
+                parent=self):
+            return
+        self._captures = []
+        self._reference_count = 0
+        self._capture_substate = 'reference'
+        self._captured_engrave_offset = None
+        # Force fresh framing for the new card — new wood / new
+        # position warrants re-positioning, so disable Engrave until
+        # they re-frame.
+        self._framing_done = False
+        # Clear the persisted offset so the next dialog open lands
+        # in engrave phase again (not auto-skipped to capture).
+        try:
+            self._settings.pop(
+                'camera_calibration_engrave_offset_mm', None)
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
+        self._enter_engrave_phase()
 
     # ------------------------------------------------------------------
     def _open_camera_and_start(self):
-        try:
-            self._cap = self._cam_mod.open_camera(self._camera_index)
-            ok, frame = self._cap.read()
-            if not ok or frame is None:
-                raise RuntimeError(_("Camera opened but returned no frame."))
-            h, w = frame.shape[:2]
-            self._image_size = (w, h)
-            self._last_frame_shape = (h, w)
-            self._status_var.set(
-                _("Camera live. Captured 0 / {n} good frames.").format(n=self.TARGET_FRAMES))
-            self._refresh_loop()
-        except Exception as e:
-            self._status_var.set(
-                _("Could not open camera index {i}: {e}").format(
-                    i=self._camera_index, e=e))
+        """Open the camera on a background thread so the dialog stays
+        responsive during the 1-3 second cv2.VideoCapture warm-up."""
+        import threading
+        self._status_var.set(
+            _("Opening camera..."))
+
+        def _worker():
+            try:
+                cap = self._cam_mod.open_camera(self._camera_index)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    cap.release()
+                    raise RuntimeError(_("Camera opened but returned no frame."))
+                self.after(0, self._camera_ready, cap, frame)
+            except Exception as e:
+                self.after(0, self._camera_failed, e)
+
+        threading.Thread(target=_worker, name='camcal-open',
+                          daemon=True).start()
+
+    def _camera_ready(self, cap, first_frame):
+        self._cap = cap
+        h, w = first_frame.shape[:2]
+        self._image_size = (w, h)
+        self._last_frame_shape = (h, w)
+        self._status_var.set(
+            _("Camera live. Captured 0 / {n} good frames.").format(n=self.TARGET_FRAMES))
+        self._refresh_loop()
+
+    def _camera_failed(self, err):
+        self._status_var.set(
+            _("Could not open camera index {i}: {e}").format(
+                i=self._camera_index, e=err))
 
     def _refresh_loop(self):
         if not self.winfo_exists() or self._cap is None:
             return
-        ok, frame = self._cap.read()
+        try:
+            ok, frame = self._cap.read()
+        except Exception:
+            ok, frame = False, None
         if ok and frame is not None:
+            self._failed_reads = 0
             self._latest_frame = frame
-            self._render_frame_with_overlay(frame)
+            try:
+                self._render_frame_with_overlay(frame)
+            except Exception:
+                pass  # don't kill the loop on a bad frame
+        else:
+            # Camera disconnect / USB hung. Surface it after a few
+            # consecutive failures so the user knows to click
+            # Reconnect rather than staring at a frozen preview.
+            self._failed_reads = getattr(self, '_failed_reads', 0) + 1
+            if self._failed_reads == 30:  # ~3s at 10fps
+                try:
+                    self._status_var.set(_(
+                        "Camera lost — click Reconnect Camera to recover."))
+                except tk.TclError:
+                    pass
         self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
                                               self._refresh_loop)
+
+    def _on_manual_offset_clicked(self):
+        """Engrave-phase escape hatch. If the user knows the machine-mm
+        coords where their engraved card sits (e.g. recovered from a
+        backup, or printed at engrave time), they can punch in the
+        offset and skip straight to capture phase. Avoids losing 2
+        hours of basswood to a state-persistence hiccup."""
+        from tkinter import simpledialog
+        prompt = _(
+            "Enter the engraved card's bottom-left machine-mm coords.\n\n"
+            "Format: X,Y (e.g. 66.025,99.025)\n\n"
+            "This is the offset that was persisted to settings after a "
+            "successful engrave. Use this if the persisted value got "
+            "lost but the card is still on the bed at known coords.")
+        val = simpledialog.askstring(
+            _("Manual Engrave Offset"), prompt, parent=self)
+        if not val:
+            return
+        try:
+            parts = val.replace(';', ',').split(',')
+            if len(parts) != 2:
+                raise ValueError("need two numbers separated by a comma")
+            ox = float(parts[0].strip())
+            oy = float(parts[1].strip())
+        except (ValueError, TypeError) as e:
+            messagebox.showerror(
+                _("Bad Offset"),
+                _("Couldn't parse '{v}' as X,Y mm:\n{e}").format(v=val, e=e),
+                parent=self)
+            return
+        self._captured_engrave_offset = (ox, oy)
+        try:
+            self._settings['camera_calibration_engrave_offset_mm'] = [ox, oy]
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            pass
+        # Re-enter engrave phase so Next becomes enabled (the offset
+        # check happens at phase-enter time), then user can click Next
+        # to advance to capture.
+        self._enter_engrave_phase()
+        self._status_var.set(
+            _("Offset set to ({x:.3f}, {y:.3f}). Click Next to capture.").format(
+                x=ox, y=oy))
+
+    def _on_reconnect_camera_clicked(self):
+        """Release the (likely-dead) cv2.VideoCapture handle and open
+        a fresh one. Used when the USB camera died mid-session and the
+        existing handle is stale. Doesn't touch captures already taken
+        so the user keeps their progress."""
+        self._stop_refresh()
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        self._failed_reads = 0
+        self._status_var.set(_("Reopening camera..."))
+        self.after(50, self._open_camera_and_start)
+
+    def _auto_recycle_camera(self):
+        """Called after every FalconRunDialog close. The cv2 frame
+        stream consistently stalls when a long-lived modal dialog
+        closes (preview shows the last good frame forever, with no
+        error from cap.read()). Reopen the camera to get fresh frames
+        flowing again. No-op if the camera wasn't open."""
+        if self._cap is None:
+            return
+        self._stop_refresh()
+        try:
+            self._cap.release()
+        except Exception:
+            pass
+        self._cap = None
+        self._failed_reads = 0
+        self.after(50, self._open_camera_and_start)
 
     def _render_frame_with_overlay(self, frame):
         import cv2
@@ -5822,16 +6807,95 @@ class CameraCalibrationDialog(tk.Toplevel):
         if corners is None or ids is None or len(corners) < 4:
             return
         self._captures.append((corners, ids))
+        is_ref = (self._capture_substate == 'reference')
+        if is_ref:
+            self._reference_count += 1
         n = len(self._captures)
         target = self.TARGET_FRAMES
         if n >= self._cam_mod.CALIB_MIN_FRAMES:
             self._calibrate_btn.config(state="normal")
+        if n >= 1:
+            self._retake_ref_btn.config(state="normal")
+            self._reset_btn.config(state="normal")
+            self._done_refs_btn.config(
+                state="normal" if is_ref else "disabled")
+        if is_ref:
+            hint = _("REFERENCE captured ({nref} of card untouched). "
+                      "Take more references for higher accuracy, "
+                      "Retake last if detection was bad, or click "
+                      "'Done with references' when ready to MOVE "
+                      "the card.").format(nref=self._reference_count)
+        elif n >= target:
+            hint = _("Click Calibrate & Save when ready.")
+        else:
+            hint = _("MOVE the card to a new position and capture again.")
         self._status_var.set(
             _("Captured {n} / {t} good frames. {hint}").format(
-                n=n, t=target,
-                hint=(_("Click Calibrate & Save when ready.")
-                       if n >= target else
-                       _("Reposition the card and capture again."))))
+                n=n, t=target, hint=hint))
+
+    def _on_done_refs_clicked(self):
+        """Switch from reference substate to intrinsics substate.
+        Subsequent captures will be 'card moved' poses for the
+        distortion solve."""
+        if self._reference_count < 1:
+            return
+        self._capture_substate = 'intrinsics'
+        self._capture_btn.config(text=_("Capture (card moved)"))
+        self._done_refs_btn.config(state="disabled")
+        self._status_var.set(
+            _("References done ({n} pooled). Now MOVE the card to "
+              "different positions / tilts and capture {m} more "
+              "frames for lens-distortion calibration.").format(
+                n=self._reference_count,
+                m=max(0, self.TARGET_FRAMES - len(self._captures))))
+
+    def _on_retake_last_clicked(self):
+        """Drop the most recent capture so the user can redo it."""
+        if not self._captures:
+            return
+        # Decrement reference count if the removed capture was a reference
+        if (self._capture_substate == 'reference'
+                and self._reference_count > 0):
+            self._reference_count -= 1
+        elif (self._capture_substate == 'intrinsics'
+              and len(self._captures) - 1 < self._reference_count):
+            # Defensive: shouldn't happen, but if it did, fix the count
+            self._reference_count = len(self._captures) - 1
+        self._captures.pop()
+        n = len(self._captures)
+        self._calibrate_btn.config(
+            state="normal" if n >= self._cam_mod.CALIB_MIN_FRAMES
+            else "disabled")
+        if n == 0:
+            self._retake_ref_btn.config(state="disabled")
+            self._reset_btn.config(state="disabled")
+            self._done_refs_btn.config(state="disabled")
+        self._status_var.set(
+            _("Removed last capture. {n} / {t} remaining.").format(
+                n=n, t=self.TARGET_FRAMES))
+
+    def _on_reset_captures_clicked(self):
+        """Discard all captures and restart. Card needs to be back at
+        the engraved position for the next first reference capture."""
+        if not messagebox.askyesno(
+                _("Reset all captures?"),
+                _("Discard all {n} captures and start over.\n\n"
+                  "If you've moved the card, move it BACK to its "
+                  "engraved position before retaking references.\n\n"
+                  "Continue?").format(n=len(self._captures)),
+                parent=self):
+            return
+        self._captures = []
+        self._reference_count = 0
+        self._capture_substate = 'reference'
+        self._capture_btn.config(text=_("Capture reference"))
+        self._retake_ref_btn.config(state="disabled")
+        self._reset_btn.config(state="disabled")
+        self._done_refs_btn.config(state="disabled")
+        self._calibrate_btn.config(state="disabled")
+        self._status_var.set(
+            _("Captures cleared. Place the card in its engraved "
+              "position and click Capture reference."))
 
     def _on_calibrate_clicked(self):
         if len(self._captures) < self._cam_mod.CALIB_MIN_FRAMES:
@@ -5840,9 +6904,32 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._status_var.set(_("Computing calibration ..."))
         self.update()
         try:
+            eng_off = getattr(self, '_captured_engrave_offset', None)
+            kwargs = {}
+            if eng_off:
+                kwargs['card_offset_x_mm'] = eng_off[0]
+                kwargs['card_offset_y_mm'] = eng_off[1]
+            # Pool ALL reference captures for the machine-mm homography.
+            # The first N captures (where N = _reference_count) were
+            # taken with the card untouched at its engraved position.
+            ref_count = max(1, getattr(self, '_reference_count', 1))
+            kwargs['reference_indices'] = tuple(range(ref_count))
             calib = self._cam_mod.calibrate_from_frames(
-                self._captures, self._image_size, self._board)
+                self._captures, self._image_size, self._board, **kwargs)
             self._cam_mod.save_calibration(calib, self._calibration_path)
+            # Calibration committed. Clear the in-progress recovery
+            # hint (engrave offset in settings) — it was useful for
+            # restoring state during the capture phase, but now the
+            # full calibration is on disk. Next dialog open should
+            # start in engrave phase for a FRESH recalibration, not
+            # auto-skip to capture against a stale offset.
+            try:
+                self._settings.pop(
+                    'camera_calibration_engrave_offset_mm', None)
+                from config import save_settings
+                save_settings(self._settings)
+            except Exception:
+                pass
             self.result = "saved"
             messagebox.showinfo(
                 _("Calibration Saved"),
@@ -5880,6 +6967,11 @@ class CameraCalibrationDialog(tk.Toplevel):
             except Exception:
                 pass
             self._cap = None
+        try:
+            import sleep_lock
+            sleep_lock.allow_sleep()
+        except Exception:
+            pass
         self.destroy()
 
 
@@ -5899,7 +6991,7 @@ class CameraCaptureDialog(tk.Toplevel):
     PREVIEW_W = 640
     PREVIEW_H = 480
 
-    def __init__(self, parent, camera_index, calibration_path):
+    def __init__(self, parent, camera_index, calibration_path, settings=None):
         super().__init__(parent)
         self.title(_("Capture Scrap Outline"))
         self.configure(bg=DIALOG_BG)
@@ -5915,6 +7007,19 @@ class CameraCaptureDialog(tk.Toplevel):
         self._latest_polygon_mm = None
         self._latest_photo = None
         self._refresh_after_id = None
+        # Optional settings dict — when present, the detection-bias
+        # slider persists its value across captures via
+        # 'camera_detection_threshold_bias'. When None (e.g. when the
+        # dialog was spawned from inside PolygonDrawWindow without a
+        # settings handle), the slider still works but its value is
+        # lost on close.
+        self._settings = settings
+        try:
+            self._initial_bias = int(
+                settings.get('camera_detection_threshold_bias', 0)
+                if settings else 0)
+        except (TypeError, ValueError):
+            self._initial_bias = 0
 
         # Dependency check + calibration load
         try:
@@ -5947,13 +7052,45 @@ class CameraCaptureDialog(tk.Toplevel):
             bg=DIALOG_BG, wraplength=620, justify="left",
             font=("Helvetica", 9)).pack(padx=15, pady=(0, 6))
 
+        # Preview label shows a prominent "loading" message until the
+        # first camera frame arrives, then displays live frames.
         self._preview_label = tk.Label(
-            self, bg="#000000", width=self.PREVIEW_W, height=self.PREVIEW_H)
+            self, bg="#222222", fg="#cccccc",
+            text=_("Waking camera..."),
+            font=("Helvetica", 14),
+            width=self.PREVIEW_W, height=self.PREVIEW_H)
         self._preview_label.pack(padx=15, pady=(0, 8))
 
         self._status_var = tk.StringVar(value=_("Opening camera ..."))
         tk.Label(self, textvariable=self._status_var, bg=DIALOG_BG,
                  font=("Helvetica", 10)).pack(pady=(0, 4))
+
+        # Detection sensitivity slider — biases the auto-threshold
+        # used to separate scrap from bed. Center = use OpenCV's Otsu
+        # auto-pick (works for most lighting). Slide LEFT (more
+        # sensitive) when the scrap barely contrasts with the bed,
+        # RIGHT (less sensitive) when honeycomb shadows are getting
+        # picked up as material. Updates the live overlay on every
+        # next frame.
+        bias_frame = tk.Frame(self, bg=DIALOG_BG)
+        bias_frame.pack(fill='x', padx=20, pady=(0, 6))
+        tk.Label(bias_frame, text=_("Detection sensitivity:"),
+                 bg=DIALOG_BG, font=("Helvetica", 9)
+                 ).pack(side='left', padx=(0, 6))
+        tk.Label(bias_frame, text=_("more"), bg=DIALOG_BG,
+                 fg='#666', font=("Helvetica", 8)).pack(side='left')
+        self._bias_var = tk.IntVar(value=self._initial_bias)
+        # Slider value maps directly to threshold_bias:
+        #   -80 (left)  = subtract 80 from Otsu → lower threshold →
+        #                 more pixels classified as scrap = MORE sensitive
+        #   +80 (right) = add 80 → fewer pixels = LESS sensitive
+        tk.Scale(bias_frame, from_=-80, to=80, orient='horizontal',
+                 variable=self._bias_var, bg=DIALOG_BG,
+                 length=300, showvalue=False,
+                 command=self._on_bias_changed).pack(
+                     side='left', padx=4, fill='x', expand=True)
+        tk.Label(bias_frame, text=_("less"), bg=DIALOG_BG,
+                 fg='#666', font=("Helvetica", 8)).pack(side='left')
 
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=(0, 12))
@@ -5973,14 +7110,32 @@ class CameraCaptureDialog(tk.Toplevel):
         self.wait_window(self)
 
     def _open_camera_and_start(self):
-        try:
-            self._cap = self._cam_mod.open_camera(self._camera_index)
-            ok, _frame = self._cap.read()
-            if not ok:
-                raise RuntimeError(_("Camera opened but returned no frame."))
-            self._refresh_loop()
-        except Exception as e:
-            self._status_var.set(_("Could not open camera: {e}").format(e=e))
+        """Background-thread camera open so the dialog stays responsive
+        during cv2.VideoCapture's 1-3 second initialization."""
+        import threading
+        self._status_var.set(
+            _("Opening camera..."))
+
+        def _worker():
+            try:
+                cap = self._cam_mod.open_camera(self._camera_index)
+                ok, _frame = cap.read()
+                if not ok:
+                    cap.release()
+                    raise RuntimeError(_("Camera opened but returned no frame."))
+                self.after(0, self._camera_ready, cap)
+            except Exception as e:
+                self.after(0, self._camera_failed, e)
+
+        threading.Thread(target=_worker, name='camcap-open',
+                          daemon=True).start()
+
+    def _camera_ready(self, cap):
+        self._cap = cap
+        self._refresh_loop()
+
+    def _camera_failed(self, err):
+        self._status_var.set(_("Could not open camera: {e}").format(e=err))
 
     def _refresh_loop(self):
         if not self.winfo_exists() or self._cap is None:
@@ -5991,11 +7146,29 @@ class CameraCaptureDialog(tk.Toplevel):
         self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
                                               self._refresh_loop)
 
+    def _on_bias_changed(self, _value):
+        """Persist the slider value to settings (if available). The
+        next live-refresh tick will use the new bias automatically —
+        no need to force a re-render here."""
+        if self._settings is not None:
+            try:
+                self._settings['camera_detection_threshold_bias'] = int(
+                    self._bias_var.get())
+                from config import save_settings
+                save_settings(self._settings)
+            except Exception:
+                pass  # never block the live preview on save failure
+
     def _render_frame_with_overlay(self, frame):
         import cv2
         # Undistort + detect contour
         undistorted = self._cam_mod.undistort_frame(frame, self._calibration)
-        polygon_px = self._cam_mod.detect_scrap_contour(undistorted)
+        try:
+            bias = int(self._bias_var.get())
+        except (AttributeError, tk.TclError, ValueError):
+            bias = 0
+        polygon_px = self._cam_mod.detect_scrap_contour(
+            undistorted, threshold_bias=bias)
         self._latest_undistorted = undistorted
         self._latest_polygon_px = polygon_px
         if polygon_px:
@@ -6035,13 +7208,13 @@ class CameraCaptureDialog(tk.Toplevel):
 
     def _on_use_clicked(self):
         if self._latest_polygon_mm:
-            # Translate so polygon min coords are at (0, 0), matching the
-            # convention used by PolygonDrawWindow (custom_polygon coords).
-            xs = [p[0] for p in self._latest_polygon_mm]
-            ys = [p[1] for p in self._latest_polygon_mm]
-            x_min, y_min = min(xs), min(ys)
-            self.result_polygon_mm = [(x - x_min, y - y_min)
-                                        for (x, y) in self._latest_polygon_mm]
+            # Return the polygon in ABSOLUTE machine-Y-up coords —
+            # do NOT normalize here. Caller (main.py) handles both the
+            # normalization and the Y-up→storage-convention conversion
+            # so it can also derive the polygon's machine-mm offset
+            # (needed for Frame & Cut auto mode). Pre-normalizing here
+            # would zero the offset and lose the scrap's bed position.
+            self.result_polygon_mm = list(self._latest_polygon_mm)
         self._on_close()
 
     def _on_close(self):
@@ -6060,6 +7233,50 @@ class CameraCaptureDialog(tk.Toplevel):
         self.destroy()
 
 
+# Grbl 1.1 error / alarm code translations — picked from the official
+# Grbl error/alarm tables. Not exhaustive; covers the codes a user is
+# most likely to hit in a Frame & Cut workflow. Returns None if we
+# don't have a translation (caller shows just the raw text).
+_GRBL_ERROR_TEXT = {
+    '1': "G-code letter missing or malformed",
+    '2': "Numeric value invalid",
+    '3': "'$' command not recognized",
+    '5': "Homing cycle is not enabled in Grbl ($22=0)",
+    '7': "EEPROM read failed — settings restored",
+    '8': "'$' command only valid when idle",
+    '9': "G-code locked out during alarm or jog",
+    '10': "Soft limits cannot be enabled without homing",
+    '15': "Travel exceeds machine soft limits",
+    '17': "Setting disabled",
+    '20': "Unsupported G-code command",
+    '22': "Feed rate has not been set",
+    '24': "Two G-code commands tried to use the same axis",
+    '33': "Motion target invalid",
+}
+_GRBL_ALARM_TEXT = {
+    '1': "Hard limit triggered — machine position lost",
+    '2': "G-code motion would exceed soft limits",
+    '3': "Reset while in motion — position lost",
+    '8': "Homing fail — pull-off didn't clear limit switch",
+    '9': "Homing fail — limit switch not contacted in cycle",
+}
+
+
+def _decode_grbl_error(msg):
+    """Translate 'error:N' or 'ALARM:N' to a plain-English description."""
+    if not msg:
+        return None
+    parts = msg.strip().split(':', 1)
+    if len(parts) != 2:
+        return None
+    tag, code = parts[0].lower(), parts[1].strip()
+    if tag == 'error':
+        return _GRBL_ERROR_TEXT.get(code)
+    if tag == 'alarm':
+        return _GRBL_ALARM_TEXT.get(code)
+    return None
+
+
 class FalconRunDialog(tk.Toplevel):
     """Live-progress dialog while G-code streams to the Falcon.
 
@@ -6071,21 +7288,65 @@ class FalconRunDialog(tk.Toplevel):
     """
 
     def __init__(self, parent, sender, gcode_lines, title=None,
-                  on_finished=None):
+                  on_finished=None, loop=False, gcode_provider=None,
+                  show_pause_resume=True, show_cut_button=True,
+                  stop_needs_confirm=True, done_button_label=None):
         super().__init__(parent)
         self.title(title or _("Sending to Falcon"))
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
-        self.resizable(False, False)
+        # Resizable so a long error message (Grbl code + decoded
+        # description + failing line) doesn't get clipped.
+        self.resizable(True, True)
 
         self._sender = sender
+        self._gcode_lines = gcode_lines  # for error context
         self._total = len(gcode_lines)
         self._sent = 0
         self._start_time = time.monotonic()
         self._finished = False
         self._on_finished = on_finished
         self._final_reason = None
+        self._last_error = None  # preserved across _on_done overwrite
+        # Loop mode: restart the stream after each successful completion
+        # until the user clicks "Looks Good — Cut!" or "Stop". Used
+        # for the framing pass so the user has time to verify
+        # alignment (or jog the head) across multiple traces.
+        #
+        # When ``gcode_provider`` is set, each loop iteration calls
+        # it to regenerate fresh G-code instead of re-streaming the
+        # same lines. Used by the calibration dialog's "Frame &
+        # Engrave Here" flow so the framing trace TRACKS the head as
+        # the user jogs between passes (provider re-reads MPos and
+        # generates framing centered on the new position).
+        self._loop = loop
+        self._gcode_provider = gcode_provider
+        self._cut_requested = False
+        self._pass_count = 0
+        # Hide pause/resume in contexts where pause-jog-resume can
+        # corrupt state (e.g. calibration framing — absolute coords
+        # mean the next G-code line after resume hops back to the
+        # pre-jog absolute position regardless of how the user jogged).
+        self._show_pause_resume = show_pause_resume
+        # The green "Looks Good — Cut!" button only makes sense when
+        # the run dialog is followed by a CUT in the same workflow.
+        # Calibration framing has Frame and Engrave as separate
+        # buttons in the parent dialog, so the in-run Cut button
+        # would be misleading there.
+        self._show_cut_button = show_cut_button
+        # Whether Stop should pop a "are you sure? this can ruin
+        # material" confirmation. False for low-power framing where
+        # stopping is harmless; True for actual cuts where mid-job
+        # abort can burn weird marks into the material.
+        self._stop_needs_confirm = stop_needs_confirm
+        # Label for the post-completion button (default "Close").
+        # Callers that hand off to a follow-up step (e.g. the seed
+        # dialog that drives the head to scrap position then yields
+        # to a framing loop) override this to "Start Frame →" so the
+        # button text describes what happens next, not just that this
+        # dialog goes away.
+        self._done_button_label = done_button_label or _("Close")
 
         # Hook up callbacks. Marshal each to the Tk thread.
         sender.on_status = lambda s: self.after(0, self._on_status, s)
@@ -6124,19 +7385,79 @@ class FalconRunDialog(tk.Toplevel):
 
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
-        btn_frame.pack(pady=(0, 14))
+        btn_frame.pack(pady=(0, 8))
         self._pause_btn = tk.Button(btn_frame, text=_("Pause"),
                                       command=self._on_pause_clicked,
                                       width=10)
-        self._pause_btn.pack(side="left", padx=4)
         self._resume_btn = tk.Button(btn_frame, text=_("Resume"),
                                        command=self._on_resume_clicked,
                                        width=10, state="disabled")
-        self._resume_btn.pack(side="left", padx=4)
-        self._stop_btn = tk.Button(btn_frame, text=_("Stop"),
+        if self._show_pause_resume:
+            self._pause_btn.pack(side="left", padx=4)
+            self._resume_btn.pack(side="left", padx=4)
+        # In framing context (loop=True, no cut button), the user's
+        # only exit is "Done" — graceful (let the current pass finish
+        # so the trailing G0 to bbox-center runs, then close the
+        # dialog). In all other contexts the button is "Stop" — abort
+        # via soft-reset.
+        stop_text = (_("Done") if (loop and not show_cut_button)
+                      else _("Stop"))
+        stop_bg = "#4caf50" if (loop and not show_cut_button) else None
+        stop_fg = "white" if stop_bg else None
+        stop_kwargs = {'bg': stop_bg, 'fg': stop_fg,
+                        'activebackground': '#388e3c'} if stop_bg else {}
+        self._stop_btn = tk.Button(btn_frame, text=stop_text,
                                      command=self._on_stop_clicked,
-                                     width=10, font=("Helvetica", 10, "bold"))
+                                     width=10,
+                                     font=("Helvetica", 10, "bold"),
+                                     **stop_kwargs)
         self._stop_btn.pack(side="left", padx=4)
+        # Loop mode shows a prominent "Looks Good — Cut!" button so
+        # the user can break out of the repeating framing pass once
+        # alignment looks right.
+        if self._loop and self._show_cut_button:
+            self._cut_btn = tk.Button(
+                btn_frame, text=_("Looks Good — Cut!"),
+                command=self._on_cut_clicked,
+                font=("Helvetica", 10, "bold"),
+                bg="#4caf50", fg="white", activebackground="#388e3c")
+            self._cut_btn.pack(side="left", padx=8)
+
+        # Jog cluster — useful in G92 mode (the jog moves the cut's
+        # reference point) and harmless in auto-framing mode (the cut
+        # uses absolute coords so jog only repositions the head for
+        # the user's convenience). Sends Grbl $J= via sender.jog(),
+        # which Grbl can process even mid-stream.
+        jog_frame = tk.LabelFrame(self, text=_("Nudge head"),
+                                    bg=DIALOG_BG, padx=8, pady=4)
+        jog_frame.pack(pady=(0, 14))
+        # Default to 5 mm: on a 400 mm bed, 1 mm is barely
+        # perceptible. Users start coarse-jogging into position then
+        # switch to 0.5/1 for fine adjustment.
+        self._jog_step_var = tk.DoubleVar(value=5.0)
+        step_row = tk.Frame(jog_frame, bg=DIALOG_BG)
+        step_row.pack(anchor='w')
+        tk.Label(step_row, text=_("Step (mm):"), bg=DIALOG_BG,
+                  font=("Helvetica", 9)).pack(side='left')
+        for step in (0.5, 1.0, 5.0, 25.0):
+            tk.Radiobutton(
+                step_row, text=str(step), variable=self._jog_step_var,
+                value=step, bg=DIALOG_BG, font=("Helvetica", 9),
+                highlightthickness=0).pack(side='left')
+        btn_grid = tk.Frame(jog_frame, bg=DIALOG_BG)
+        btn_grid.pack(pady=2)
+        tk.Button(btn_grid, text="↑", width=3,
+                   command=lambda: self._on_jog_clicked(0, 1)
+                   ).grid(row=0, column=1, padx=2, pady=1)
+        tk.Button(btn_grid, text="←", width=3,
+                   command=lambda: self._on_jog_clicked(-1, 0)
+                   ).grid(row=1, column=0, padx=2, pady=1)
+        tk.Button(btn_grid, text="→", width=3,
+                   command=lambda: self._on_jog_clicked(1, 0)
+                   ).grid(row=1, column=2, padx=2, pady=1)
+        tk.Button(btn_grid, text="↓", width=3,
+                   command=lambda: self._on_jog_clicked(0, -1)
+                   ).grid(row=2, column=1, padx=2, pady=1)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
@@ -6188,26 +7509,87 @@ class FalconRunDialog(tk.Toplevel):
             _("Line {s} / {t}  ({pct:.0f}%)").format(s=sent, t=total, pct=pct))
 
     def _on_error(self, msg):
+        self._last_error = msg
         self._state_var.set(_("Error: {m}").format(m=msg))
 
     def _on_alarm(self, msg):
+        self._last_error = msg
         self._state_var.set(_("ALARM: {m}").format(m=msg))
 
     def _on_done(self, reason):
+        # Loop mode: if the pass completed cleanly and the user hasn't
+        # clicked "Looks Good — Cut!" yet, restart the stream after
+        # making sure Grbl is back in Idle. If we restart while a
+        # jog is still finishing (Grbl in JOG state), the next
+        # iteration's M3 hits error:9 (G-code locked out during jog).
+        if (self._loop and reason == "complete"
+                and not self._cut_requested):
+            self._pass_count += 1
+            self._sent = 0
+            self._progress['value'] = 0
+            self._state_var.set(
+                _("Pass {n} complete — waiting for Idle...").format(
+                    n=self._pass_count))
+            self._wait_idle_retries = 0
+            self.after(300, self._wait_idle_then_restart)
+            return
         self._finished = True
         self._final_reason = reason
+        # If the user explicitly requested the loop end (clicked Cut
+        # or Done in framing context) AND the pass completed cleanly,
+        # auto-close the dialog so the caller's next step (the actual
+        # cut, or the calibration engrave) starts immediately. Without
+        # this, the user has to click Close manually to release
+        # wait_window — which looks like "Cut did nothing" because
+        # the cut doesn't kick off until this dialog destroys.
+        if self._loop and self._cut_requested and reason == "complete":
+            if self._on_finished:
+                try:
+                    self._on_finished(reason)
+                except Exception:
+                    pass
+            self.destroy()
+            return
         if reason == "complete":
             self._state_var.set(_("Complete ✓"))
         elif reason == "stopped":
             self._state_var.set(_("Stopped"))
         elif reason == "error":
-            self._state_var.set(_("Stopped on error"))
-        # Switch buttons: only "Close" remains active
-        self._pause_btn.config(state="disabled")
-        self._resume_btn.config(state="disabled")
-        self._stop_btn.config(text=_("Close"),
-                                command=self._on_close_window,
-                                state="normal")
+            # Keep the Grbl error/alarm visible — without this, the
+            # specific code (error:5, ALARM:9, etc.) flashes by and the
+            # user only sees a generic "Stopped on error".
+            err = self._last_error or _("unknown error")
+            decoded = _decode_grbl_error(err)
+            failing_line = (
+                self._gcode_lines[self._sent]
+                if 0 <= self._sent < len(self._gcode_lines) else "")
+            txt = _("Stopped on error: {e}").format(e=err)
+            if decoded:
+                txt += _("  — {d}").format(d=decoded)
+            if failing_line:
+                txt += _("\nFailing line {n}: {l}").format(
+                    n=self._sent + 1, l=failing_line)
+            self._state_var.set(txt)
+        # Switch buttons: only "Close" remains active. Wrap in
+        # TclError guards: the worker thread's on_done can fire after
+        # the dialog has been destroyed (user closed the window during
+        # the small window between stream end and dialog teardown),
+        # and configuring a destroyed widget raises "invalid command
+        # name" exceptions that surface as unhandled-exception popups.
+        try:
+            self._pause_btn.config(state="disabled")
+        except tk.TclError:
+            pass
+        try:
+            self._resume_btn.config(state="disabled")
+        except tk.TclError:
+            pass
+        try:
+            self._stop_btn.config(text=self._done_button_label,
+                                    command=self._on_close_window,
+                                    state="normal")
+        except tk.TclError:
+            pass
         if self._on_finished:
             try:
                 self._on_finished(reason)
@@ -6234,16 +7616,127 @@ class FalconRunDialog(tk.Toplevel):
         self._pause_btn.config(state="normal")
         self._resume_btn.config(state="disabled")
 
+    def _wait_idle_then_restart(self):
+        """Poll Grbl's state until it's Idle (any pending jog has
+        finished), then restart the stream. Sending the next iter's
+        M3 while Grbl is still in JOG state would trigger error:9
+        (G-code locked out during alarm or jog)."""
+        if self._finished or self._cut_requested:
+            return
+        # Guard against the dialog being destroyed while a deferred
+        # call is in flight — accessing tk widgets after destroy
+        # raises TclError.
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        try:
+            st = self._sender.get_status(timeout=0.2)
+        except Exception:
+            st = None
+        state = (st or {}).get('state')
+        if state in ('Idle', None):
+            self._restart_stream()
+            return
+        # Still busy (Jog / Run / Hold). Wait a bit and re-check.
+        self._wait_idle_retries += 1
+        if self._wait_idle_retries > 50:  # ~10 seconds
+            try:
+                self._state_var.set(
+                    _("Timed out waiting for Idle (state={s})").format(s=state))
+            except tk.TclError:
+                pass
+            self._finished = True
+            self._final_reason = "error"
+            return
+        try:
+            self.after(200, self._wait_idle_then_restart)
+        except tk.TclError:
+            pass
+
+    def _restart_stream(self):
+        """Re-stream gcode for the next loop iteration. If a
+        ``gcode_provider`` callback is set, calls it to get fresh
+        gcode (used by the calibration dialog so the framing trace
+        follows the head as the user jogs between passes). Bails
+        silently if the user has since stopped."""
+        if self._finished or self._cut_requested:
+            return
+        if self._gcode_provider is not None:
+            try:
+                self._gcode_lines = self._gcode_provider()
+                self._total = len(self._gcode_lines)
+                self._progress['maximum'] = max(1, self._total)
+            except Exception as e:
+                self._state_var.set(_("Regenerate failed: {e}").format(e=e))
+                self._finished = True
+                self._final_reason = "error"
+                return
+        try:
+            self._sender.start_stream(self._gcode_lines)
+        except Exception as e:
+            self._state_var.set(_("Restart failed: {e}").format(e=e))
+            self._finished = True
+            self._final_reason = "error"
+
+    def _on_cut_clicked(self):
+        """User clicked 'Looks Good — Cut!' during loop mode. Flag the
+        request; the current pass will be allowed to finish, then the
+        loop exits cleanly with reason='complete'."""
+        self._cut_requested = True
+        try:
+            self._cut_btn.config(state='disabled',
+                                  text=_("Finishing pass..."))
+        except Exception:
+            pass
+        self._state_var.set(
+            _("Cut requested — finishing current framing pass..."))
+
+    def _on_jog_clicked(self, dx_sign, dy_sign):
+        """Send a relative jog via Grbl's ``$J=`` real-time command.
+        Works during streaming — Grbl handles jog requests outside
+        the planner queue. Useful for nudging the head while a
+        framing pass is running so the user can fine-tune alignment.
+        """
+        try:
+            step = float(self._jog_step_var.get())
+        except Exception:
+            step = 1.0
+        try:
+            self._sender.jog(x=dx_sign * step, y=dy_sign * step,
+                              feed=2000, relative=True)
+        except Exception:
+            pass
+
     def _on_stop_clicked(self):
         if self._finished:
             self._on_close_window()
             return
-        if not messagebox.askyesno(
-                _("Stop?"),
-                _("Stop the job? This will soft-reset the laser and clear "
-                  "the planner buffer immediately. Material in progress "
-                  "may be ruined."), parent=self):
+        # Graceful "Done" path (framing context, no cut button): let
+        # the current pass finish — its trailing G0 moves the head
+        # to the bbox center — then exit the loop without a soft-
+        # reset. Same mechanism as the Cut button uses.
+        graceful = self._loop and not self._show_cut_button
+        if graceful:
+            self._cut_requested = True
+            try:
+                self._stop_btn.config(state='disabled',
+                                       text=_("Finishing pass..."))
+            except tk.TclError:
+                pass
+            self._state_var.set(
+                _("Finishing current pass + centering head..."))
             return
+        # Aggressive Stop path (cut context): confirm + soft-reset.
+        if self._stop_needs_confirm:
+            if not messagebox.askyesno(
+                    _("Stop?"),
+                    _("Stop the job? This will soft-reset the laser "
+                      "and clear the planner buffer immediately. "
+                      "Material in progress may be ruined."),
+                    parent=self):
+                return
         try:
             self._sender.stop()
         except Exception:
@@ -6289,3 +7782,125 @@ class FalconRunDialog(tk.Toplevel):
         else:
             # One last tick after done to settle the elapsed display
             self.after(1000, self._timing_tick)
+
+
+class LiveCameraWindow(tk.Toplevel):
+    """Non-modal live camera preview, intended to run ALONGSIDE another
+    dialog (typically FalconRunDialog while a Frame & Cut job is in flight)
+    so the user can watch the laser head moving on the bed.
+
+    Refresh rate is intentionally slow (5 fps) to keep CPU/disk overhead
+    minimal while a cut is happening.
+    """
+
+    REFRESH_MS = 200      # 5 fps
+    PREVIEW_W = 480
+    PREVIEW_H = 360
+
+    def __init__(self, parent, camera_index, title=None):
+        super().__init__(parent)
+        self.title(title or _("Live camera"))
+        self.configure(bg=DIALOG_BG)
+        # Non-modal — explicitly DON'T grab_set or transient-parent, so
+        # the FalconRunDialog stays interactive on top of us.
+        self._camera_index = camera_index
+        self._cap = None
+        self._latest_photo = None
+        self._refresh_after_id = None
+        self._closed = False
+
+        try:
+            import camera_capture
+            from PIL import Image, ImageTk
+            self._cam_mod = camera_capture
+            self._PIL_Image = Image
+            self._PIL_ImageTk = ImageTk
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV not loaded")
+        except ImportError:
+            tk.Label(self, text=_("Camera preview unavailable"),
+                     bg=DIALOG_BG, padx=15, pady=15).pack()
+            return
+
+        self._preview_label = tk.Label(
+            self, bg="#222222", fg="#cccccc",
+            text=_("Waking camera..."),
+            font=("Helvetica", 12),
+            width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label.pack(padx=8, pady=8)
+
+        self.geometry(f"{self.PREVIEW_W + 30}x{self.PREVIEW_H + 30}")
+        # Position to the right of the parent so it doesn't overlap the
+        # FalconRunDialog that will open after us.
+        try:
+            px = parent.winfo_x() + parent.winfo_width() + 20
+            py = parent.winfo_y()
+            self.geometry(f"+{px}+{py}")
+        except Exception:
+            pass
+
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.after(50, self._open_camera_async)
+
+    def _open_camera_async(self):
+        import threading
+
+        def _worker():
+            try:
+                cap = self._cam_mod.open_camera(self._camera_index)
+                self.after(0, self._camera_ready, cap)
+            except Exception:
+                pass
+
+        threading.Thread(target=_worker, name='livecam-open',
+                          daemon=True).start()
+
+    def _camera_ready(self, cap):
+        if self._closed:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            return
+        self._cap = cap
+        self._refresh_loop()
+
+    def _refresh_loop(self):
+        if self._closed or self._cap is None or not self.winfo_exists():
+            return
+        import cv2
+        try:
+            ok, frame = self._cap.read()
+        except Exception:
+            ok = False
+        if ok and frame is not None:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = self._PIL_Image.fromarray(rgb)
+            img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
+            self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
+            self._preview_label.config(
+                image=self._latest_photo,
+                width=img.width, height=img.height)
+        self._refresh_after_id = self.after(self.REFRESH_MS, self._refresh_loop)
+
+    def close(self):
+        """Programmatic close — called by the parent when the job is done."""
+        self._closed = True
+        if self._refresh_after_id is not None:
+            try:
+                self.after_cancel(self._refresh_after_id)
+            except Exception:
+                pass
+            self._refresh_after_id = None
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
+

@@ -275,6 +275,161 @@ check("status callbacks parse state correctly",
       all('state' in s for s in status_updates))
 
 
+# --- Jog during stream doesn't corrupt the character-counting protocol ---
+# Regression for the "error:8 — '$' command only valid when idle" case
+# where mid-stream jog writes interleaved with stream writes on the wire
+# AND jog acks got consumed as stream-line acks. With the fix, jog calls
+# serialize via the same lock as stream writes, and jog `ok`s are tracked
+# in _jogs_in_flight so they don't drain sent_lengths early.
+
+class MockSerialNoCollide(MockSerial):
+    """MockSerial that tracks atomicity: each write that touches in_buf
+    must NOT interleave another's bytes. We verify this by checking
+    that every newline-terminated line in in_buf is a complete G-code
+    or jog command (no partial lines starting mid-token)."""
+    def __init__(self):
+        super().__init__()
+        self.write_count = 0
+        self.write_bytes_log = []  # what got written, in call order
+
+    def write(self, data):
+        with self._lock:
+            self.write_count += 1
+            self.write_bytes_log.append(bytes(data))
+        return super().write(data)
+
+
+sender, mock = _new_sender_with_mock()
+# Promote mock to the tracking variant
+tracking_mock = MockSerialNoCollide()
+sender._serial = tracking_mock
+sender.status = {'state': 'Idle'}
+done_reasons = []
+sender.on_done = lambda reason: done_reasons.append(reason)
+
+# Fire off a stream + interleave jogs from "another thread" (simulated
+# by calling jog() between waiting for the stream to complete).
+import threading as _t
+stream_lines = [f'G0X{i}' for i in range(20)]
+sender.start_stream(stream_lines)
+
+# Interleave 10 jogs while the stream is running
+for _ in range(10):
+    sender.jog(x=1, y=0, feed=1000, relative=True)
+sender._worker.join(timeout=5.0)
+
+check("jog+stream worker exited", not sender._worker.is_alive())
+check(f"jog+stream completes successfully (got {done_reasons})",
+      done_reasons == ['complete'])
+# Every write should have been a complete line (no interleaving bytes).
+# A garbled write would show as a chunk lacking '\n' or merging two
+# commands.
+garbled = [b for b in tracking_mock.write_bytes_log
+           if b'\n' in b and b.count(b'\n') > 1
+           and not b.endswith(b'\n')]
+check("no garbled multi-line writes (interleaving)", len(garbled) == 0)
+# All 20 stream lines should have made it to the mock (plus the 10
+# interleaved jog commands also went through — filter those out).
+non_jog_lines = [ln for ln in tracking_mock.completed_lines
+                  if not ln.startswith('$J=')]
+jog_lines = [ln for ln in tracking_mock.completed_lines
+              if ln.startswith('$J=')]
+check(f"all 20 stream lines delivered despite jogs (got "
+      f"{len(non_jog_lines)} stream + {len(jog_lines)} jogs)",
+      len(non_jog_lines) == 20)
+check(f"all 10 jogs delivered (got {len(jog_lines)})",
+      len(jog_lines) == 10)
+
+
+# --- Stall watchdog: lost-ack USB hiccup is detected, not hung forever ---
+# Regression for the 79%-and-Idle deadlock that wasted hours of basswood.
+# Simulates Grbl silently dropping an `ok` byte on the USB link: the
+# streamer thinks lines are still in flight but Grbl says Idle. Without
+# the watchdog, this hangs the worker thread forever.
+
+class MockSerialDropAcks(MockSerial):
+    """Like MockSerial, but silently drops every ack after the Nth line.
+
+    Mimics a lost-`ok` over USB — the controller still processes the
+    G-code (Idle once done), but the host never sees the acks.
+    """
+    def __init__(self, drop_after):
+        super().__init__()
+        self.drop_after = drop_after
+
+    def _process_input(self):
+        while b'\n' in self.in_buf:
+            idx = self.in_buf.index(b'\n')
+            line = bytes(self.in_buf[:idx]).decode('ascii', 'replace').strip()
+            del self.in_buf[:idx + 1]
+            if not line:
+                self.out_buf.extend(b'ok\r\n')
+                continue
+            self.completed_lines.append(line)
+            if len(self.completed_lines) <= self.drop_after:
+                self.out_buf.extend(b'ok\r\n')
+            # else: silently swallow the ack — Grbl finished it but the byte was lost
+
+_orig_timeout = fs.STALL_TIMEOUT_S
+_orig_max = fs.MAX_STALL_RECOVERIES
+fs.STALL_TIMEOUT_S = 0.5  # speed the watchdog up for the test
+try:
+    # 1. Single lost-ack burst — watchdog should recover and complete.
+    sender = fs.FalconSender(port='MOCK', baud=115200)
+    mock = MockSerialDropAcks(drop_after=2)
+    sender._serial = mock
+    sender.status = {'state': 'Idle'}
+    errors = []
+    done_reasons = []
+    sender.on_error = lambda m: errors.append(m)
+    sender.on_done = lambda r: done_reasons.append(r)
+    # 20 short lines all fit in Grbl's 128-byte buffer so they all
+    # go out before the watchdog fires. The mock drops every ack
+    # after the 2nd, but since this is only ONE burst, the recovery
+    # path should kick in once and the stream should complete.
+    sender.start_stream([f'G0X{i}' for i in range(20)])
+    sender._worker.join(timeout=4.0)
+    check("recovery joined worker", not sender._worker.is_alive())
+    check(f"recovery message surfaced (errors={errors})",
+          any('recovered' in e.lower() for e in errors))
+    check(f"recovery ends with reason 'complete' (got {done_reasons})",
+          done_reasons == ['complete'])
+
+    # 2. USB link genuinely broken — every ack lost forever. After
+    # MAX_STALL_RECOVERIES the streamer should give up.
+    class MockSerialDropAllAcks(MockSerial):
+        def _process_input(self):
+            while b'\n' in self.in_buf:
+                idx = self.in_buf.index(b'\n')
+                line = bytes(self.in_buf[:idx]).decode('ascii', 'replace').strip()
+                del self.in_buf[:idx + 1]
+                if not line:
+                    self.out_buf.extend(b'ok\r\n')
+                    continue
+                self.completed_lines.append(line)
+                # swallow every ack
+
+    fs.MAX_STALL_RECOVERIES = 2  # speed up the "giving up" path
+    sender = fs.FalconSender(port='MOCK', baud=115200)
+    mock = MockSerialDropAllAcks()
+    sender._serial = mock
+    sender.status = {'state': 'Idle'}
+    errors = []
+    done_reasons = []
+    sender.on_error = lambda m: errors.append(m)
+    sender.on_done = lambda r: done_reasons.append(r)
+    sender.start_stream([f'G0X{i}' for i in range(60)])
+    sender._worker.join(timeout=10.0)
+    check("give-up joined worker", not sender._worker.is_alive())
+    check(f"give-up message surfaced (errors={errors})",
+          any('giving up' in e.lower() for e in errors))
+    check(f"give-up ends with reason 'error' (got {done_reasons})",
+          done_reasons == ['error'])
+finally:
+    fs.STALL_TIMEOUT_S = _orig_timeout
+    fs.MAX_STALL_RECOVERIES = _orig_max
+
+
 # --- Character-counting: many lines stream cleanly without buffer overflow ---
 sender, mock = _new_sender_with_mock()
 # 30 fairly long lines — char-counting protocol means the streamer

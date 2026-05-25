@@ -859,6 +859,23 @@ class ToolingTabMixin:
                   "    pip install opencv-python Pillow"))
             return
 
+        # If a pre-v3.0 calibration exists, warn the user that it's
+        # incompatible with the new integrated workflow and will be
+        # replaced by this run.
+        cal_path = camera_capture.default_calibration_path()
+        if camera_capture.is_legacy_calibration(cal_path):
+            if not messagebox.askyesno(
+                    _("Old Calibration Detected"),
+                    _("An older calibration file is on disk that uses "
+                      "the pre-v3.0 board-frame format. It will be "
+                      "OVERWRITTEN by this new calibration.\n\n"
+                      "Make sure you've engraved a fresh card via "
+                      "Tooling > Engrave Calibration Card (which now "
+                      "homes the laser and engraves at a known machine "
+                      "position).\n\n"
+                      "Continue?")):
+                return
+
         # Decide which camera index to use. Prefer the saved override; fall
         # back to find_falcon_camera_index; fall back to the last enumerated.
         cam_idx = self.settings.get("camera_index_override")
@@ -877,6 +894,8 @@ class ToolingTabMixin:
             self.root,
             camera_index=cam_idx,
             calibration_path=camera_capture.default_calibration_path(),
+            falcon_port=getattr(self, 'falcon_port', None),
+            settings=self.settings,
         )
 
     def _update_tooling_settings(self):

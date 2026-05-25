@@ -666,6 +666,23 @@ DEFAULT_SETTINGS = {
     "falcon_serial_port_override": None,
     "falcon_framing_power_s": 10,    # Grbl S value during framing (0-1000)
     "falcon_framing_feed": 2000,     # mm/min during framing
+    # Safety margin: shrink camera-captured polygons by this many mm
+    # on every edge before nesting. Camera measurement is least
+    # accurate at the edges of its view, so insetting prevents pads
+    # from being placed where a chunk of leather might actually be
+    # missing relative to what the camera reported.
+    "camera_polygon_inset_mm": 3.0,
+    # Bias applied to Otsu's auto-threshold in scrap-outline detection
+    # (CameraCaptureDialog slider). 0 = use Otsu as-is. Positive =
+    # less sensitive (raise threshold), negative = more sensitive.
+    # Persisted so the user's lighting preference survives restarts.
+    "camera_detection_threshold_bias": 0,
+    # Last successful calibration-card engrave offset (machine-mm,
+    # [X, Y]). Persisted so a closed/reopened calibration dialog skips
+    # straight to the capture phase against the existing engraved card
+    # instead of re-engraving. Cleared on Calibrate & Save (calibration
+    # done) or on "Engrave new card" (user starts fresh).
+    "camera_calibration_engrave_offset_mm": None,
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
