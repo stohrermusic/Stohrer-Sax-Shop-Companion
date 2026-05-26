@@ -146,42 +146,84 @@ def enumerate_cameras(max_index=6):
     return cams
 
 
-def find_falcon_camera_index():
-    """Best-effort identification of the Falcon camera on Windows.
+def _list_camera_names():
+    """Per-platform best-effort enumeration of camera device names.
 
-    Queries ``Get-PnpDevice`` for camera devices and matches "Falcon" by
-    name. Returns the FIRST OpenCV index that successfully opens after
-    seeing such a device in PnP. None if not found or off-Windows.
+    Returns a list of friendly-name strings. Empty list if the
+    platform-specific query fails or returns nothing — caller falls
+    back to "use last enumerated camera" + manual Switch in that case.
 
-    OpenCV's webcam indices don't expose device names, so we can't map
-    PnP name → OpenCV index directly. This function relies on the order
-    being stable: if the Falcon is present in PnP, the Falcon's index is
-    typically the LAST detected one (the integrated laptop cam being
-    index 0).
+    Windows: PowerShell Get-PnpDevice -Class Camera.
+    macOS:   system_profiler SPCameraDataType (textual output;
+             system camera entries appear as section headers).
+    Linux:   /sys/class/video4linux/videoN/name (V4L2 device names).
     """
-    if not HAS_OPENCV or platform.system() != 'Windows':
-        return None
+    system = platform.system()
     try:
         import subprocess
-        result = subprocess.run(
-            ['powershell', '-NoProfile', '-Command',
-             "Get-PnpDevice -Class Camera -PresentOnly | "
-             "Select-Object -ExpandProperty FriendlyName"],
-            capture_output=True, text=True, timeout=5,
-        )
-        names = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        if system == 'Windows':
+            result = subprocess.run(
+                ['powershell', '-NoProfile', '-Command',
+                 "Get-PnpDevice -Class Camera -PresentOnly | "
+                 "Select-Object -ExpandProperty FriendlyName"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return [ln.strip() for ln in result.stdout.splitlines()
+                    if ln.strip()]
+        if system == 'Darwin':
+            result = subprocess.run(
+                ['system_profiler', 'SPCameraDataType'],
+                capture_output=True, text=True, timeout=5,
+            )
+            # Camera entries appear as section headers (indented with
+            # a leading space, ending in ":"). Skip the top-level
+            # "Camera:" header and any nested property lines.
+            names = []
+            for ln in result.stdout.splitlines():
+                stripped = ln.strip()
+                if (stripped.endswith(':')
+                        and not stripped.startswith('Camera:')
+                        and ': ' not in stripped):
+                    names.append(stripped[:-1])
+            return names
+        if system == 'Linux':
+            import glob
+            names = []
+            for path in sorted(glob.glob(
+                    '/sys/class/video4linux/video*/name')):
+                try:
+                    with open(path, encoding='utf-8') as f:
+                        n = f.read().strip()
+                    if n:
+                        names.append(n)
+                except OSError:
+                    pass
+            return names
     except Exception:
-        return None
+        return []
+    return []
 
-    has_falcon = any('falcon' in n.lower() for n in names)
-    if not has_falcon:
-        return None
 
+def find_falcon_camera_index():
+    """Best-effort identification of the Falcon camera by name.
+
+    Looks up camera device names via the platform's native API
+    (PowerShell on Windows, system_profiler on macOS,
+    /sys/class/video4linux on Linux) and matches "Falcon" by substring.
+    Returns the LAST enumerated OpenCV index if a Falcon-named camera
+    is present (heuristic: laptop integrated cam is usually index 0,
+    Falcon is the higher one). Returns None if no Falcon-named camera
+    is detected or the platform query failed — callers fall back to
+    "pick last enumerated" + manual Switch camera.
+    """
+    if not HAS_OPENCV:
+        return None
+    names = _list_camera_names()
+    if not any('falcon' in n.lower() for n in names):
+        return None
     cams = enumerate_cameras()
     if not cams:
         return None
-    # If there are multiple cameras and the Falcon is present, assume it
-    # is the highest-indexed one (integrated laptop cam is usually 0).
     return cams[-1]['index']
 
 

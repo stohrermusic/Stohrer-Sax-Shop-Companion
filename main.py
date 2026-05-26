@@ -1722,15 +1722,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.root.after(10000, self._detect_falcon_async)
 
     def _machine_enabled(self):
-        """True iff the user has opted into machine integration AND the
-        current platform supports it. The Falcon/Grbl/LaserGRBL ecosystem
-        is Windows-only in practice; the cross-platform pyserial code
-        works, but the find_falcon_camera_index PnP heuristic, the
-        common Falcon owner's toolchain, and our testing are all
-        Windows-only — so on macOS/Linux we don't expose the feature
-        at all. Single source of truth used by every gating site."""
-        if sys.platform != 'win32':
-            return False
+        """True iff the user has opted into machine integration.
+
+        The underlying Falcon serial path (pyserial + Grbl 1.1
+        character-counting protocol) is cross-platform — Linux and
+        macOS users with a Falcon on USB can use it via `/dev/ttyUSB*`
+        or `/dev/tty.usbserial-*`. The Falcon-camera auto-detect
+        heuristic is per-platform (PowerShell on Windows,
+        system_profiler on macOS, /sys/class/video4linux on Linux);
+        wherever it fails, _resolve_camera_index falls through to the
+        last-enumerated camera and the user can Switch camera in any
+        dialog if that picks wrong.
+
+        Single source of truth used by every gating site. Tested on
+        Windows; the macOS/Linux paths are best-effort and the user
+        is opting in via the experimental toggle."""
         return bool(self.settings.get("experimental_machine_menu", False))
 
     def _camera_calibration_present(self):
@@ -3284,20 +3290,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         # Experimental MENU toggles (not tabs — stored as top-level
         # settings keys, not under visible_tabs). Restart-required.
-        # Machine integration is Windows-only — the Falcon owner's
-        # ecosystem (LightBurn, LaserGRBL, our find_falcon_camera_index
-        # PnP heuristic) all run on Windows, and we haven't tested the
-        # rest of the stack elsewhere. Hide the toggle on macOS/Linux
-        # rather than dangling an option the user couldn't actually
-        # use.
+        # Available on all platforms — the serial path is cross-
+        # platform (pyserial), and camera detection degrades gracefully
+        # to manual Switch-camera on platforms where we don't have a
+        # name-based auto-detect. Windows is the primary tested
+        # platform; the macOS/Linux paths are best-effort.
         machine_menu_var = tk.BooleanVar(
             value=self.settings.get("experimental_machine_menu", False))
-        if sys.platform == 'win32':
-            tk.Checkbutton(
-                frame,
-                text=_("Machine menu (direct Falcon serial control)"),
-                variable=machine_menu_var, bg=bg,
-                font=("Helvetica", 10)).pack(anchor="w")
+        tk.Checkbutton(
+            frame,
+            text=_("Machine menu (direct Falcon serial control)"),
+            variable=machine_menu_var, bg=bg,
+            font=("Helvetica", 10)).pack(anchor="w")
 
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
