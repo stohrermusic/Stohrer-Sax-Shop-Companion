@@ -16,7 +16,7 @@ Sax Shop Companion now talks to your laser directly. v2.5 adds an experimental m
   - Grid auto-grows to cover your laser bed (default 17 in / 43 cm).
   - "Draw / Capture Shape" button label tracks the machine-integration toggle — "Draw Shape" alone when machine integration is off.
 - **(new) Scrap mode — large-batch optimization** (secret-handshake popup at ≥ 75 pads remaining): multistart greedy nester that tries multiple disc orderings per scrap and keeps the best result. Opt-in per session. Adds ~5–30s of compute per scrap; typically fits 5–15% more pads on dense batches.
-- **Sizing Rules Presets** — save the entire Sizing Rules dialog as a named preset, load via dropdown, import/export to share with other techs.
+- Sizing Rules Presets — save the entire Sizing Rules dialog as a named preset, load via dropdown, import/export to share with other techs.
 - Nesting preview with per-material approval, edge bias d-pad (cardinal + corner directions, smallest pads first in corners), max fill mode (`size x max`).
 - Custom polygon shapes for irregular leather skins.
 - Scrap mode — place pads across multiple irregular pieces, tracking remaining between sheets, with preview, edge bias, and polygons all working together.
