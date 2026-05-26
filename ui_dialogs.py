@@ -3442,16 +3442,22 @@ class PolygonDrawWindow(tk.Toplevel):
         mm_per_unit = 25.4 if self.unit == "in" else 10.0
         scale = self.px_per_unit / mm_per_unit  # canvas-px per machine-mm
         # Anchor priority: explicit capture anchor wins; otherwise
-        # fall back to the camera image's own machine-coord bottom-
-        # left so the camera content fills the canvas at correct
-        # grid scale (lets the user hand-trace before doing any
-        # capture).
+        # fall back to machine (0, 0) — the bed front-left corner.
+        # Canvas BL then shows the bed origin, matching the captured-
+        # mode convention of "polygon BL at canvas BL" so the camera
+        # view is positioned consistently regardless of whether a
+        # polygon was captured first.
+        #
+        # An earlier fallback anchored at the camera image's own bbox
+        # bottom-left, which on Matt's calibrated rig (camera sees
+        # past the bed edges to ~-133mm in machine X) put the canvas
+        # BL way off the bed and made the visible bed content shift
+        # into the right half of the canvas — read as "scale off"
+        # since the bed appeared smaller than expected.
         if self._camera_anchor_mm is not None:
             ax, ay = self._camera_anchor_mm
         else:
-            mxs = [c[0] for c in machine_corners]
-            mys = [c[1] for c in machine_corners]
-            ax, ay = min(mxs), min(mys)
+            ax, ay = 0.0, 0.0
         dst_corners = []
         for mx, my in machine_corners:
             cx = (mx - ax) * scale
