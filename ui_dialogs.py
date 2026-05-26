@@ -3171,7 +3171,10 @@ class PolygonDrawWindow(tk.Toplevel):
     def _create_widgets(self):
         # Instructions
         unit_label = "inches" if self.unit == "in" else "cm"
-        instr_text = f"Click grid points to draw shape (max {self.MAX_POINTS} points).\nClick near first point to close. Click a point to remove it."
+        instr_text = (
+            f"Click anywhere to add a point (max {self.MAX_POINTS} points).\n"
+            f"Click near the first point to close. Click a point to remove it."
+        )
         tk.Label(self, text=instr_text, bg=DIALOG_BG, justify="center").pack(pady=(10, 5))
 
         # Grid info - each square = 1 unit (inch or cm)
@@ -3191,23 +3194,23 @@ class PolygonDrawWindow(tk.Toplevel):
         self.status_var = tk.StringVar(value="Click to add points...")
         tk.Label(self, textvariable=self.status_var, bg=DIALOG_BG, font=("Helvetica", 10)).pack(pady=5)
 
-        # Live-camera overlay toggle. Always created when a camera
-        # calibration exists, but starts DISABLED — the overlay needs
-        # a machine-coord anchor, which only exists after the user has
-        # captured a polygon from the camera. on_get_from_camera
-        # enables it. Lets the user adjust polygon vertices against
-        # the live camera image underneath the grid.
+        # Live-camera overlay toggle. Available as soon as a camera
+        # calibration is on disk — the user can either capture a
+        # polygon first and then refine its vertices against the live
+        # image, OR turn the overlay on with no capture and trace the
+        # scrap shape by hand. When there's no capture, the overlay
+        # uses the camera's image-bbox machine coords as a fallback
+        # anchor so the trace lands at correct grid scale.
         overlay_row = tk.Frame(self, bg=DIALOG_BG)
         overlay_row.pack(pady=(0, 5))
         if self._camera_capture_available():
             self._show_camera_var = tk.BooleanVar(value=False)
             self._show_camera_chk = tk.Checkbutton(
                 overlay_row,
-                text=_("Show live camera underneath (capture first)"),
+                text=_("Show live camera underneath"),
                 variable=self._show_camera_var, bg=DIALOG_BG,
                 font=("Helvetica", 9),
-                command=self._on_camera_overlay_toggle,
-                state="disabled")
+                command=self._on_camera_overlay_toggle)
             self._show_camera_chk.pack(side="left")
 
         # Buttons
@@ -3296,15 +3299,8 @@ class PolygonDrawWindow(tk.Toplevel):
                         for (x, y) in captured]
         self.polygon_closed = True
         self._redraw_polygon()
-        # The overlay needs an anchor — now that we have one, light up
-        # the checkbox so the user can switch on the live underlay.
-        if self._show_camera_chk is not None:
-            try:
-                self._show_camera_chk.config(
-                    state="normal",
-                    text=_("Show live camera underneath"))
-            except tk.TclError:
-                pass
+        # Checkbox is already enabled (overlay works pre- or post-
+        # capture); no state change needed here.
         self.status_var.set(
             _("Captured {n} points from camera").format(n=len(self.points)))
 
@@ -3344,11 +3340,10 @@ class PolygonDrawWindow(tk.Toplevel):
             self._stop_camera_overlay()
 
     def _start_camera_overlay(self):
-        if self._camera_anchor_mm is None:
-            # Shouldn't happen — checkbox is disabled until capture
-            # provides an anchor — but be defensive.
-            self._show_camera_var.set(False)
-            return
+        # No anchor required up front — when there isn't a capture
+        # anchor yet, _render_overlay falls back to the camera image's
+        # own machine-coord bounding box as an anchor (so the trace
+        # lands at correct grid scale even pre-capture).
         if self._cap is not None:
             return  # already running
         try:
@@ -3446,7 +3441,17 @@ class PolygonDrawWindow(tk.Toplevel):
             src_corners, self._calibration)
         mm_per_unit = 25.4 if self.unit == "in" else 10.0
         scale = self.px_per_unit / mm_per_unit  # canvas-px per machine-mm
-        ax, ay = self._camera_anchor_mm
+        # Anchor priority: explicit capture anchor wins; otherwise
+        # fall back to the camera image's own machine-coord bottom-
+        # left so the camera content fills the canvas at correct
+        # grid scale (lets the user hand-trace before doing any
+        # capture).
+        if self._camera_anchor_mm is not None:
+            ax, ay = self._camera_anchor_mm
+        else:
+            mxs = [c[0] for c in machine_corners]
+            mys = [c[1] for c in machine_corners]
+            ax, ay = min(mxs), min(mys)
         dst_corners = []
         for mx, my in machine_corners:
             cx = (mx - ax) * scale
@@ -3532,12 +3537,20 @@ class PolygonDrawWindow(tk.Toplevel):
         return cx, cy
 
     def _canvas_to_grid(self, cx, cy):
-        """Convert canvas pixels to grid coordinates, snapped to nearest grid point."""
-        gx = round(cx / self.px_per_unit)
-        gy = round((self.CANVAS_PX - cy) / self.px_per_unit)
-        # Clamp to grid bounds
-        gx = max(0, min(self.grid_size, gx))
-        gy = max(0, min(self.grid_size, gy))
+        """Convert canvas pixels to grid coordinates.
+
+        Returns float grid units (no longer snapped to integer
+        intersections — a 1-inch grid spacing is too coarse for
+        accurate scrap tracing). Camera-captured polygons also produce
+        floats, so downstream nesting + machine-coord round-trip
+        already handle non-integer points.
+
+        Bounds-clamped to [0, grid_size].
+        """
+        gx = cx / self.px_per_unit
+        gy = (self.CANVAS_PX - cy) / self.px_per_unit
+        gx = max(0.0, min(float(self.grid_size), gx))
+        gy = max(0.0, min(float(self.grid_size), gy))
         return gx, gy
 
     def _redraw_polygon(self):
@@ -3640,22 +3653,12 @@ class PolygonDrawWindow(tk.Toplevel):
         return None
 
     def on_clear(self):
-        """Clear all points AND the machine anchor — Clear is the
-        'starting fresh' button. The grid's machine reference frame
-        is gone too, so the camera overlay turns off."""
+        """Clear all points AND the captured anchor — Clear is the
+        'starting fresh' button. The overlay keeps working (with the
+        camera-FOV fallback anchor) since calibration is still on disk."""
         self.points = []
         self.polygon_closed = False
         self._camera_anchor_mm = None
-        if self._show_camera_var is not None and self._show_camera_var.get():
-            self._show_camera_var.set(False)
-            self._stop_camera_overlay()
-        if self._show_camera_chk is not None:
-            try:
-                self._show_camera_chk.config(
-                    state="disabled",
-                    text=_("Show live camera underneath (capture first)"))
-            except tk.TclError:
-                pass
         self._redraw_polygon()
         self._update_status()
 

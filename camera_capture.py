@@ -89,8 +89,11 @@ CALIB_DEFAULT_ENG_POWER = 25    # percent
 CALIB_DEFAULT_ENG_PASSES = 1
 
 # Camera probe range. The Falcon shows up at index 1 on Matt's machine
-# (integrated laptop camera is index 0); 6 covers most realistic setups.
-CAMERA_PROBE_INDICES = range(6)
+# (integrated laptop camera is index 0); 12 covers laptops with multiple
+# integrated cameras + USB hubs + virtual cameras (OBS, etc.) without
+# the probe getting prohibitively slow (each probe is a cv2.VideoCapture
+# open + 3 reads, ~50-200ms per failed slot).
+CAMERA_PROBE_INDICES = range(12)
 
 # Contour-detection defaults. Tuned for the Falcon's 640x480 image with
 # a leather scrap on the honeycomb bed.
@@ -116,7 +119,7 @@ def _require_opencv():
 # Camera enumeration & open
 # =============================================================================
 
-def enumerate_cameras(max_index=6):
+def enumerate_cameras(max_index=12):
     """Probe a range of camera indices and return what's available.
 
     Returns a list of dicts: ``[{'index': int, 'width': int, 'height': int}, ...]``.
