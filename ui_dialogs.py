@@ -6331,7 +6331,10 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._instructions_var.set(_(
             "Step 1 of 2 — engrave the calibration card.\n\n"
             "1. Place a 12×12-inch basswood blank in roughly the "
-            "middle of the bed.\n"
+            "middle of the bed AND SECURE IT (tape, magnets, "
+            "weights — whatever you have). The board CANNOT move "
+            "between the engrave and the camera captures in Step 2; "
+            "any shift breaks the math.\n"
             "2. Click Home Laser — head parks at the home corner.\n"
             "3. JOG THE HEAD TO ROUGHLY BED CENTER (X=200, Y=200, "
             "or X=~8\", Y=~8\"). The card is ~11\" square and "
@@ -6543,15 +6546,18 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._phase = 'capture'
         self._instructions_var.set(_(
             "Step 2 of 2 — calibration captures.\n\n"
-            "FIRST capture: leave the card untouched at its engraved "
-            "position. This is the position reference linking camera "
-            "coords to machine coords.\n\n"
-            "Next {n_more} captures: move the card to different "
-            "spots / tilt it slightly between each so the math can "
-            "solve lens distortion. Watch the green-corner overlay; "
-            "click Capture when the board's fully detected.\n\n"
-            "Target: {n} good captures total."
-        ).format(n=self.TARGET_FRAMES, n_more=self.TARGET_FRAMES - 1))
+            "FIRST capture(s): the board MUST still be where it was "
+            "engraved — don't move it, don't bump it, don't peel "
+            "the tape yet. This is the position reference linking "
+            "camera coords to machine coords; any shift here makes "
+            "every future scrap capture off by that amount.\n\n"
+            "Click 'Done with references' after 1+ reference shots, "
+            "THEN move the card to different spots / tilt it "
+            "slightly between each remaining capture so the math "
+            "can solve lens distortion. Watch the green-corner "
+            "overlay; click Capture when the board's fully "
+            "detected.\n\nTarget: {n} good captures total."
+        ).format(n=self.TARGET_FRAMES))
         # Stop MPos polling and hide engrave-phase controls.
         if hasattr(self, '_mpos_after_id') and self._mpos_after_id:
             self.after_cancel(self._mpos_after_id)
