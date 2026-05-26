@@ -306,23 +306,31 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_options_menu.add_command(label=_("G-code Settings..."), command=self.open_gcode_settings_window)
         pad_options_menu.add_separator()
 
-        # Machine submenu under Options: groups all the connected-
-        # hardware actions (Falcon control + camera-related settings).
-        machine_menu = tk.Menu(pad_options_menu, tearoff=0)
-        pad_options_menu.add_cascade(label=_("Machine"), menu=machine_menu)
-        machine_menu.add_command(label=_("Home Laser"),
-                                   command=self._on_machine_home_falcon)
-        machine_menu.add_command(label=_("Test Connection"),
-                                   command=self._on_machine_test_connection)
-        machine_menu.add_command(label=_("Clear Errors ($X)"),
-                                   command=self._on_machine_clear_errors)
-        machine_menu.add_command(label=_("Reset Falcon (soft-reset)"),
-                                   command=self._on_machine_reset_falcon)
-        machine_menu.add_separator()
-        machine_menu.add_command(label=_("Camera Calibration..."),
-                                   command=self._on_machine_recalibrate)
-        machine_menu.add_command(label=_("Camera-Polygon Inset Margin..."),
-                                   command=self._on_machine_inset_settings)
+        # Camera items live at the Options top level — they support
+        # scrap-shape capture which is a stable feature, NOT gated
+        # behind the experimental toggle below.
+        pad_options_menu.add_command(label=_("Camera Calibration..."),
+                                       command=self._on_machine_recalibrate)
+        pad_options_menu.add_command(
+            label=_("Camera-Polygon Inset Margin..."),
+            command=self._on_machine_inset_settings)
+        # Machine submenu — direct Falcon serial control (home, test,
+        # clear errors, soft-reset). Gated behind the Feature Set
+        # experimental toggle since these are still maturing and
+        # involve commands that can move the laser head. Off by default;
+        # user opts in via Feature Set > Experimental / In Progress.
+        if self.settings.get("experimental_machine_menu", False):
+            pad_options_menu.add_separator()
+            machine_menu = tk.Menu(pad_options_menu, tearoff=0)
+            pad_options_menu.add_cascade(label=_("Machine"), menu=machine_menu)
+            machine_menu.add_command(label=_("Home Laser"),
+                                       command=self._on_machine_home_falcon)
+            machine_menu.add_command(label=_("Test Connection"),
+                                       command=self._on_machine_test_connection)
+            machine_menu.add_command(label=_("Clear Errors ($X)"),
+                                       command=self._on_machine_clear_errors)
+            machine_menu.add_command(label=_("Reset Falcon (soft-reset)"),
+                                       command=self._on_machine_reset_falcon)
 
         # --- Key Height Library Menu ---
         self.key_menu = tk.Menu(self.root)
@@ -3142,6 +3150,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                            font=("Helvetica", 10)).pack(anchor="w")
             check_vars[key] = var
 
+        # Experimental MENU toggles (not tabs — stored as top-level
+        # settings keys, not under visible_tabs). Restart-required.
+        machine_menu_var = tk.BooleanVar(
+            value=self.settings.get("experimental_machine_menu", False))
+        tk.Checkbutton(
+            frame,
+            text=_("Machine menu (direct Falcon serial control)"),
+            variable=machine_menu_var, bg=bg,
+            font=("Helvetica", 10)).pack(anchor="w")
+
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
             terms = tk.Toplevel(parent_dlg)
@@ -3288,6 +3306,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             tabs_changed = (new_visible != self.settings.get("visible_tabs", {}))
 
+            # Experimental menu toggle (Machine cascade). Restart-required
+            # — the menu bar is built once at startup; rebuilding it
+            # live would require tearing down + recreating all menus.
+            new_machine = bool(machine_menu_var.get())
+            machine_changed = new_machine != self.settings.get(
+                "experimental_machine_menu", False)
+            self.settings["experimental_machine_menu"] = new_machine
+
             # Language change requires restart to take effect.
             selected_display = lang_var.get()
             try:
@@ -3308,9 +3334,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if lang_changed:
                 messagebox.showinfo(_("Feature Set"),
                     _("Restart the app for the language change to take effect."))
-            elif tabs_changed:
+            elif tabs_changed or machine_changed:
                 messagebox.showinfo(_("Feature Set"),
-                    _("Tab changes will take effect next time you open the app."))
+                    _("Changes will take effect next time you open the app."))
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x", pady=(10, 0))

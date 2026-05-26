@@ -744,6 +744,14 @@ DEFAULT_SETTINGS = {
     "toner_unlocked": False,
     "toner_sandbox_enabled": False,  # Show sandbox checkbox when creating presets
 
+    # EXPERIMENTAL FEATURES — opt-in via Feature Set dialog. Off by
+    # default since the underlying integrations (direct Falcon serial,
+    # auto-framing, etc) are still maturing.
+    # When True, Pad Maker > Options > Machine cascade appears with
+    # Home / Test Connection / Clear Errors / Reset Falcon / Camera
+    # Calibration / Inset Margin. Change requires app restart.
+    "experimental_machine_menu": False,
+
     # NESTING PREVIEW
     "show_preview": False,
     "seen_preview_tutorial": False,
