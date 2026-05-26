@@ -36,10 +36,13 @@ Threading model:
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import time
 from collections import deque
+
+log = logging.getLogger(__name__)
 
 try:
     import serial
@@ -576,6 +579,12 @@ class FalconSender:
                     self._serial.reset_input_buffer()
             except (serial.SerialException, OSError):
                 pass
+        # Log the first few lines of every stream so we have a trail
+        # if Grbl errors out mid-stream and the user closes the dialog
+        # before reading the failing-line label.
+        preview = gcode_lines[:8]
+        log.info("stream start: %d lines; preview=%s",
+                 len(gcode_lines), preview)
         self._worker = threading.Thread(
             target=self._stream_worker, args=(list(gcode_lines),),
             name='FalconSender-stream', daemon=True,
@@ -598,6 +607,51 @@ class FalconSender:
             self._notify_error(f"streamer crashed: {e}")
             self._notify_done("error")
 
+    def _wake_parser_sync(self, timeout_s=2.0):
+        """Send a no-op G-code line and wait for `ok` before the main
+        stream starts. Empirically the Falcon's parser can stay
+        dormant after an idle gap — the first stream line gets
+        swallowed and the head moves a fraction then stops, with the
+        controller still reporting Idle. A real (parser-bound) command
+        + ack wakes the pipeline reliably; once it's processed one
+        command it stays awake for the duration of the stream.
+
+        ``G4 P0.01`` is a 10 ms dwell — instant, no motion, always-
+        valid. Returns True if `ok` arrives within ``timeout_s``,
+        False if we timed out or saw an error.
+        """
+        ser = self._serial
+        if ser is None:
+            return False
+        try:
+            with self._lock:
+                ser.reset_input_buffer()
+                ser.write(b'G4 P0.01\n')
+        except (serial.SerialException, OSError) as e:
+            log.warning("wake-parser write failed: %s", e)
+            return False
+        deadline = time.monotonic() + timeout_s
+        buf = b''
+        while time.monotonic() < deadline:
+            try:
+                chunk = ser.read(ser.in_waiting or 1)
+            except (serial.SerialException, OSError) as e:
+                log.warning("wake-parser read failed: %s", e)
+                return False
+            if chunk:
+                buf += chunk
+                if b'ok' in buf:
+                    log.info("wake-parser: acked in %.0f ms",
+                             1000 * (time.monotonic() - (deadline - timeout_s)))
+                    return True
+                if b'error:' in buf or b'ALARM:' in buf:
+                    log.warning("wake-parser: bad response %r", buf)
+                    return False
+            else:
+                time.sleep(0.01)
+        log.warning("wake-parser: timed out (response so far: %r)", buf)
+        return False
+
     def _stream_loop(self, lines):
         ser = self._serial
         if ser is None:
@@ -605,13 +659,19 @@ class FalconSender:
             self._notify_done("error")
             return
 
-        # Wake-ping. Empirically the Falcon2 Pro 40W can sit unresponsive
-        # at the start of a stream if there's been an extended idle gap
-        # since the last command (e.g. between the auto-frame seed move
-        # closing and the user clicking "Start Frame →"). Sending `?`
-        # nudges the controller without affecting state — a no-op when
-        # it's already awake. The status response is harmlessly read
-        # by the loop below.
+        # Hard wake-up. Empirically the Falcon's command parser can
+        # stay dormant after an idle gap and swallow the first stream
+        # line, producing a partial-then-stalled run that the user
+        # has to abort and restart. The real-time `?` ping below
+        # alone isn't enough because `?` bypasses the parser. Sending
+        # a known-good G-code line (10 ms dwell, no motion) and
+        # waiting for `ok` GUARANTEES the parser has run a command
+        # before the main stream starts — once awake, it stays awake.
+        self._wake_parser_sync()
+
+        # Followup real-time ping — also gets us an initial status
+        # response so on_status fires before the stream is well
+        # underway. Cheap, leaves no state.
         self.send_realtime(RT_STATUS)
         time.sleep(0.05)
 
@@ -725,6 +785,15 @@ class FalconSender:
                         finished_sending = True
                         ack_count = line_idx
                         sent_lengths.clear()
+                        failing = (lines[line_idx - 1]
+                                   if 0 < line_idx <= len(lines)
+                                   else "<none>")
+                        log.warning(
+                            "stream error: %s ; failing line %d: %r ; "
+                            "state=%s mpos=%s",
+                            text, line_idx, failing,
+                            (self.status or {}).get('state'),
+                            (self.status or {}).get('mpos'))
                     elif text.startswith('ALARM:'):
                         self.latest_alarm = text
                         if self.on_alarm:
@@ -736,6 +805,15 @@ class FalconSender:
                         finished_sending = True
                         ack_count = line_idx
                         sent_lengths.clear()
+                        failing = (lines[line_idx - 1]
+                                   if 0 < line_idx <= len(lines)
+                                   else "<none>")
+                        log.warning(
+                            "stream ALARM: %s ; line %d: %r ; "
+                            "state=%s mpos=%s",
+                            text, line_idx, failing,
+                            (self.status or {}).get('state'),
+                            (self.status or {}).get('mpos'))
                     elif text.startswith('<'):
                         parsed = parse_status(text)
                         if parsed:

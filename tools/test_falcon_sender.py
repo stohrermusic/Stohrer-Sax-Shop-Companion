@@ -30,6 +30,12 @@ def check(name, condition):
         failed += 1
 
 
+def stream_lines_only(completed):
+    """Strip the streamer's wake-up dwell line so tests can compare
+    against the caller's intended stream lines."""
+    return [ln for ln in completed if ln != 'G4 P0.01']
+
+
 if not fs.HAS_PYSERIAL:
     print("\n!! pyserial not available - skipping falcon_sender tests")
     sys.exit(0)
@@ -153,6 +159,14 @@ class MockSerial:
                 self.out_buf.extend(b'ok\r\n')
                 continue
             self.completed_lines.append(line)
+            # FalconSender's stream prefix: a wake-up dwell that
+            # ensures Grbl's parser is awake. Always acked normally —
+            # it's an implementation detail, not a test-controlled
+            # stream line, so pending_error/pending_alarm are reserved
+            # for the caller's actual stream commands.
+            if line == 'G4 P0.01':
+                self.out_buf.extend(b'ok\r\n')
+                continue
             if self.pending_error:
                 self.out_buf.extend((self.pending_error + '\r\n').encode('ascii'))
                 self.pending_error = None
@@ -196,7 +210,7 @@ check("worker thread exited", not sender._worker.is_alive())
 check(f"reason was 'complete' (got {done_reasons})",
       done_reasons == ['complete'])
 check(f"all {len(lines)} lines made it to mock controller",
-      mock.completed_lines == lines)
+      stream_lines_only(mock.completed_lines) == lines)
 check("progress callbacks fired for each line",
       len(progress_calls) == len(lines)
       and progress_calls[-1] == (len(lines), len(lines)))
@@ -329,7 +343,7 @@ garbled = [b for b in tracking_mock.write_bytes_log
 check("no garbled multi-line writes (interleaving)", len(garbled) == 0)
 # All 20 stream lines should have made it to the mock (plus the 10
 # interleaved jog commands also went through — filter those out).
-non_jog_lines = [ln for ln in tracking_mock.completed_lines
+non_jog_lines = [ln for ln in stream_lines_only(tracking_mock.completed_lines)
                   if not ln.startswith('$J=')]
 jog_lines = [ln for ln in tracking_mock.completed_lines
               if ln.startswith('$J=')]
@@ -439,8 +453,8 @@ sender.start_stream(long_lines)
 worker_ref = sender._worker
 worker_ref.join(timeout=5.0)
 check("char-counting stream completes", not worker_ref.is_alive())
-check(f"all 30 long lines delivered (got {len(mock.completed_lines)})",
-      len(mock.completed_lines) == 30)
+check(f"all 30 long lines delivered (got {len(stream_lines_only(mock.completed_lines))})",
+      len(stream_lines_only(mock.completed_lines)) == 30)
 
 
 # ============================================================
