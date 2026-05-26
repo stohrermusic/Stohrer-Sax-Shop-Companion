@@ -7869,32 +7869,59 @@ class FalconRunDialog(tk.Toplevel):
         sender.on_done = lambda r: self.after(0, self._on_done, r)
 
         # ---- UI ----
-        tk.Label(self, text=title or _("Sending to Falcon"),
-                 bg=DIALOG_BG, font=("Helvetica", 12, "bold")
-                 ).pack(pady=(12, 4))
+        # Jog-only mode: caller passed an empty gcode list, meaning
+        # this dialog is purely a "position the head" step (no actual
+        # stream to run). Hide the progress bar / line counter /
+        # elapsed timer in that case — they all read 0 forever and
+        # confuse users into thinking the dialog is broken.
+        self._is_jog_only_mode = (self._total == 0)
 
-        self._state_var = tk.StringVar(value=_("Connecting ..."))
+        # Wrap long titles so the dialog doesn't stretch the full
+        # screen width to fit a one-line instructional sentence.
+        tk.Label(self, text=title or _("Sending to Falcon"),
+                 bg=DIALOG_BG, font=("Helvetica", 12, "bold"),
+                 wraplength=480, justify="center"
+                 ).pack(pady=(12, 4), padx=12)
+
+        # Initial state label. For jog-only mode, "Connecting…" is
+        # misleading (it transitions to "Complete ✓" the moment the
+        # empty stream returns, which Matt observed as confusing). Use
+        # a state that describes what the user should DO instead.
+        if self._is_jog_only_mode:
+            initial_state = _("Position the head, then click {label}.").format(
+                label=self._done_button_label)
+        else:
+            initial_state = _("Connecting ...")
+        self._state_var = tk.StringVar(value=initial_state)
         tk.Label(self, textvariable=self._state_var, bg=DIALOG_BG,
-                 font=("Helvetica", 11)).pack(pady=(0, 2))
+                 font=("Helvetica", 11), wraplength=480, justify="center"
+                 ).pack(pady=(0, 2), padx=12)
 
         self._pos_var = tk.StringVar(value="")
         tk.Label(self, textvariable=self._pos_var, bg=DIALOG_BG,
                  fg="#555555", font=("Courier", 10)).pack(pady=(0, 6))
 
-        # Progress bar
-        from tkinter import ttk
-        self._progress = ttk.Progressbar(self, length=400, mode='determinate',
-                                          maximum=self._total)
-        self._progress.pack(padx=20, pady=(0, 4))
+        if not self._is_jog_only_mode:
+            # Progress bar + line counter + elapsed time only when there's
+            # actually something streaming.
+            from tkinter import ttk
+            self._progress = ttk.Progressbar(self, length=400, mode='determinate',
+                                              maximum=self._total)
+            self._progress.pack(padx=20, pady=(0, 4))
 
-        self._progress_text_var = tk.StringVar(
-            value=_("Line 0 / {n}").format(n=self._total))
-        tk.Label(self, textvariable=self._progress_text_var, bg=DIALOG_BG,
-                 font=("Helvetica", 9)).pack(pady=(0, 4))
+            self._progress_text_var = tk.StringVar(
+                value=_("Line 0 / {n}").format(n=self._total))
+            tk.Label(self, textvariable=self._progress_text_var, bg=DIALOG_BG,
+                     font=("Helvetica", 9)).pack(pady=(0, 4))
 
-        self._timing_var = tk.StringVar(value=_("Elapsed 0:00"))
-        tk.Label(self, textvariable=self._timing_var, bg=DIALOG_BG,
-                 fg="#555555", font=("Helvetica", 9)).pack(pady=(0, 10))
+            self._timing_var = tk.StringVar(value=_("Elapsed 0:00"))
+            tk.Label(self, textvariable=self._timing_var, bg=DIALOG_BG,
+                     fg="#555555", font=("Helvetica", 9)).pack(pady=(0, 10))
+        else:
+            # Stubs so methods that touch these don't AttributeError.
+            self._progress = None
+            self._progress_text_var = None
+            self._timing_var = None
 
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
@@ -7925,6 +7952,18 @@ class FalconRunDialog(tk.Toplevel):
                                      font=("Helvetica", 10, "bold"),
                                      **stop_kwargs)
         self._stop_btn.pack(side="left", padx=4)
+        # In jog-only mode (position-the-head dialog), the user needs
+        # an explicit Cancel to bail out without proceeding to the
+        # next step. Without it, only the X-out (which we now treat
+        # as cancel) is available, and the "Start Frame →" button is
+        # the only visible action — Matt observed that X-ing out
+        # auto-started framing because there was no clearer escape.
+        if self._is_jog_only_mode:
+            self._cancel_btn = tk.Button(
+                btn_frame, text=_("Cancel"),
+                command=self._on_cancel_jog_clicked,
+                width=10, font=("Helvetica", 10))
+            self._cancel_btn.pack(side="left", padx=4)
         # Loop mode shows a prominent "Looks Good — Cut!" button so
         # the user can break out of the repeating framing pass once
         # alignment looks right.
@@ -8035,6 +8074,9 @@ class FalconRunDialog(tk.Toplevel):
 
     def _on_progress(self, sent, total):
         self._sent = sent
+        # Jog-only mode has no progress widgets — skip the updates.
+        if self._progress is None or self._progress_text_var is None:
+            return
         try:
             self._progress['value'] = sent
         except Exception:
@@ -8407,9 +8449,21 @@ class FalconRunDialog(tk.Toplevel):
                 except tk.TclError:
                     pass
 
+    def _on_cancel_jog_clicked(self):
+        """Cancel button in the jog-only dialog. Same effect as the
+        window X — sets _final_reason to "cancelled" and closes, so
+        main.py knows not to proceed to framing."""
+        self._final_reason = "cancelled"
+        self.destroy()
+
     def _on_stop_clicked(self):
         if self._finished:
-            self._on_close_window()
+            # Post-stream "Stop" button click is the "advance to next
+            # step" path (e.g. the "Start Frame →" button on the jog-
+            # to-position dialog). _final_reason is already "complete"
+            # from _on_done — leave it alone and just destroy so the
+            # caller proceeds to the next step.
+            self.destroy()
             return
         # Graceful "Done" path (framing context, no cut button): let
         # the current pass finish — its trailing G0 moves the head
@@ -8454,6 +8508,14 @@ class FalconRunDialog(tk.Toplevel):
                 self._sender.stop()
             except Exception:
                 pass
+        # In jog-only mode, the stream completed instantly (empty
+        # gcode list), which set _final_reason = "complete" via
+        # _on_done. If the user X's out NOW (or clicks Cancel), we
+        # want main.py to treat that as a cancellation, not as
+        # "Start Frame was clicked." Override the reason so the
+        # caller's `_final_reason != "complete"` check fires.
+        if self._is_jog_only_mode:
+            self._final_reason = "cancelled"
         self.destroy()
 
     # ------------------------------------------------------------------
@@ -8462,6 +8524,9 @@ class FalconRunDialog(tk.Toplevel):
 
     def _timing_tick(self):
         if not self.winfo_exists():
+            return
+        # Jog-only mode skips the timer widget entirely.
+        if self._timing_var is None:
             return
         elapsed = int(time.monotonic() - self._start_time)
         em, es = divmod(elapsed, 60)
