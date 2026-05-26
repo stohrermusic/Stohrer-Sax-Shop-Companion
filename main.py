@@ -142,6 +142,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         #   G-code (UP) → SVG (DOWN) — arc text only
         #     svg_engine die/holder renderers
         self.custom_polygon = None
+        # The polygon's FULL OUTLINE (un-insetted), normalized to share
+        # the same coordinate origin as custom_polygon. Used by Frame &
+        # Cut to trace the actual scrap edge for visual placement
+        # verification, while custom_polygon (the insetted shape) still
+        # governs pad nesting placement. None when no inset was applied
+        # (plain hand-drawn polygons) — Frame & Cut falls back to
+        # custom_polygon in that case.
+        self.custom_polygon_outline = None
         # The polygon's leftmost-lowest vertex in absolute machine coords
         # (Y-up), populated whenever the polygon has a machine reference
         # (camera-captured or hand-traced over the live camera overlay).
@@ -951,6 +959,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def on_unload_custom_shape(self):
         """Unload the custom shape and return to rectangle mode."""
         self.custom_polygon = None
+        self.custom_polygon_outline = None
         self._custom_polygon_lb_machine = None
         self._update_shape_status()
 
@@ -974,12 +983,22 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def _adopt_camera_polygon(self, machine_polygon):
         """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
-        pixel→machine homography) as the active scrap shape. Applies
-        the safety inset, then hands off to the shared adopter which
-        performs the Y-up→Y-down boundary flip and normalization.
+        pixel→machine homography) as the active scrap shape.
 
-        SHAPE is kept in custom_polygon (bbox-normalized to (0, 0));
-        the polygon's LB-vertex MACHINE COORDINATE is also stashed on
+        Stores BOTH:
+          - self.custom_polygon: the INSET shape (safety-shrunk),
+            used for pad nesting so cuts land safely inside the
+            actual scrap edges.
+          - self.custom_polygon_outline: the ORIGINAL un-insetted
+            shape, used for Frame & Cut's framing trace so the trace
+            visually matches the scrap edge.
+
+        Both are normalized to the OUTLINE's bbox-BL so they share a
+        coordinate origin — pad placements (in custom_polygon coords)
+        land at the right machine positions during cuts even though
+        the framing trace uses the outline.
+
+        Also captures the polygon's LB-vertex MACHINE COORDINATE on
         self._custom_polygon_lb_machine for Frame & Cut's "Try Auto
         Locate" button.
 
@@ -996,35 +1015,59 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # their material, not the inset corner.
         self._custom_polygon_lb_machine = min(
             machine_polygon, key=lambda p: (p[0], p[1]))
+        outline = list(machine_polygon)
+        inset_polygon = outline
         try:
             import camera_capture
+            inset_mm = float(
+                self.settings.get("camera_polygon_inset_mm", 3.0))
+            if inset_mm > 0:
+                try:
+                    inset_polygon = camera_capture.inset_polygon_mm(
+                        outline, inset_mm)
+                except Exception:
+                    pass  # fall back to uninsetted on failure
         except ImportError:
-            return
-        inset_mm = float(
-            self.settings.get("camera_polygon_inset_mm", 3.0))
-        if inset_mm > 0:
-            try:
-                machine_polygon = camera_capture.inset_polygon_mm(
-                    machine_polygon, inset_mm)
-            except Exception:
-                pass  # fall back to uninsetted on failure
-        self._set_custom_polygon_from_y_up(machine_polygon)
+            pass
+        # Pass BOTH to the shared adopter so the inset polygon (for
+        # nesting) and the outline (for framing) share an origin.
+        self._set_custom_polygon_from_y_up(
+            inset_polygon, outline_y_up_mm=outline)
 
-    def _set_custom_polygon_from_y_up(self, points_y_up_mm):
+    def _set_custom_polygon_from_y_up(self, points_y_up_mm,
+                                        outline_y_up_mm=None):
         """Single boundary crossing into custom_polygon storage.
 
-        Input: a polygon in Y-UP mm (either grid-mm for drawn polygons
-        or machine-mm for camera-captured ones — the Y direction is all
-        that matters).
-        Output: custom_polygon set to the SVG-Y-DOWN convention,
-        normalized so (0, 0) sits at the top-left of the polygon bbox.
+        Input:
+          - points_y_up_mm: the polygon used for NESTING (the inset
+            shape when there is one).
+          - outline_y_up_mm (optional): the polygon used for FRAMING
+            (the un-inset original). When None, frame and nest use
+            the same shape — appropriate for plain hand-drawn
+            polygons where no inset was applied.
+
+        Both polygons are normalized to the OUTLINE's bbox-BL so they
+        share a coordinate origin. The framing trace then matches the
+        scrap edge while pad placements still land inside the inset
+        boundary.
+
+        Output:
+          - self.custom_polygon: Y-DOWN, nesting boundary
+          - self.custom_polygon_outline: Y-DOWN, framing trace
+            (= self.custom_polygon when no separate outline)
         """
         if not points_y_up_mm:
             return
-        min_x = min(p[0] for p in points_y_up_mm)
-        max_y = max(p[1] for p in points_y_up_mm)
+        outline = (outline_y_up_mm if outline_y_up_mm is not None
+                    else points_y_up_mm)
+        min_x = min(p[0] for p in outline)
+        max_y = max(p[1] for p in outline)
+        # Both polygons get the same translation + Y-flip so they
+        # share an origin.
         self.custom_polygon = [(x - min_x, max_y - y)
                                for (x, y) in points_y_up_mm]
+        self.custom_polygon_outline = [(x - min_x, max_y - y)
+                                        for (x, y) in outline]
         self._update_shape_status()
 
     def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
@@ -1082,6 +1125,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Handle scrap continue dialog button press."""
         if unload:
             self.custom_polygon = None
+            self.custom_polygon_outline = None
             self._custom_polygon_lb_machine = None
             self._update_shape_status()
         dlg.destroy()
@@ -1091,6 +1135,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         this dialog, and immediately open the polygon dialog to
         capture a fresh shape for the next scrap."""
         self.custom_polygon = None
+        self.custom_polygon_outline = None
         self._custom_polygon_lb_machine = None
         self._update_shape_status()
         dlg.destroy()
@@ -2368,9 +2413,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             power_s = self.settings.get("laser_framing_power_s", 10)
             feed = self.settings.get("laser_framing_feed", 2000)
             framing_lines = []
-            if self.custom_polygon and len(self.custom_polygon) >= 3:
+            # Frame the OUTLINE polygon (un-insetted) so the trace
+            # matches the actual scrap edge. Cuts still use the inset
+            # polygon for placement — both share a coordinate origin
+            # so the G92 math below works either way. Fall back to
+            # custom_polygon for plain hand-drawn polygons that don't
+            # have a separate outline.
+            framing_polygon = (self.custom_polygon_outline
+                                or self.custom_polygon)
+            if framing_polygon and len(framing_polygon) >= 3:
                 framing_lines = generate_polygon_framing_gcode(
-                    self.custom_polygon, power_s=power_s, feed=feed,
+                    framing_polygon, power_s=power_s, feed=feed,
                 )
             else:
                 bbox = extract_gcode_bbox(gcode_text)
@@ -2452,21 +2505,22 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             # Compute the polygon's leftmost-lowest vertex in framing's
             # Y-UP frame. This is the corner the user intuitively jogs
-            # to ("BL of the scrap"). For axis-aligned scraps this is
-            # the bbox bottom-left — same as the polygon's bbox-BL —
-            # so the G92 offset is (0, 0) and behavior matches the
-            # pre-fix code. For tilted scraps the LB vertex sits ABOVE
-            # the bbox-BL (which is in empty space); the G92 offset
-            # bridges that gap so work (0, 0) lands on the polygon's
-            # bbox-BL when the head is physically at the LB vertex.
+            # to ("BL of the scrap"). Computed from the OUTLINE (not
+            # the inset) so the LB-vertex sits on an actual scrap
+            # edge — for axis-aligned scraps this is bbox-(0,0); for
+            # tilted scraps it's the visible bottom-left corner.
             #
-            # Both frame and cut emit G-code in bbox-relative Y-UP
-            # coords, so the same G92 prefix aligns both.
+            # The inset polygon shares the same coordinate origin
+            # (see _set_custom_polygon_from_y_up), so cut placements
+            # remain correctly anchored even though the G92 offset
+            # comes from the outline.
             g92_x, g92_y = 0.0, 0.0
-            if self.custom_polygon:
-                _y_max_storage = max(p[1] for p in self.custom_polygon)
+            offset_source = (self.custom_polygon_outline
+                              or self.custom_polygon)
+            if offset_source:
+                _y_max_storage = max(p[1] for p in offset_source)
                 _flipped = [(x, _y_max_storage - y)
-                             for (x, y) in self.custom_polygon]
+                             for (x, y) in offset_source]
                 _lb_idx = min(
                     range(len(_flipped)),
                     key=lambda i: _flipped[i][0] ** 2 + _flipped[i][1] ** 2)
