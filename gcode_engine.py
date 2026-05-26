@@ -1843,6 +1843,24 @@ def generate_calibration_card_gcode(filename, cols=8, rows=6,
         offset_y_mm = CARD_ENGRAVE_OFFSET_Y_MM
 
     settings = settings or {}
+    # Pull engrave settings from the basswood G-code preset if it
+    # exists — lets the user tune their machine's basswood feeds/power
+    # once (Tooling > Options) and have the calibration card use the
+    # same numbers. Falls back to the function's default kwargs if
+    # the preset isn't present (e.g., very old config or test calls).
+    basswood = settings.get("gcode_settings", {}).get("basswood", {})
+    if basswood:
+        engrave_speed = basswood.get("filled_engraving_speed",
+                                      basswood.get("engraving_speed",
+                                                    engrave_speed))
+        engrave_power = basswood.get("filled_engraving_power",
+                                      basswood.get("engraving_power",
+                                                    engrave_power))
+        engrave_passes = basswood.get("filled_engraving_passes",
+                                       basswood.get("engraving_passes",
+                                                     engrave_passes))
+        line_spacing_mm = basswood.get("filled_line_spacing",
+                                        line_spacing_mm)
     return_speed = settings.get("gcode_return_speed", 1000)
     overscan_mm = 0
     if settings.get("filled_overscan_enabled", False):

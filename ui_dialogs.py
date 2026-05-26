@@ -6331,7 +6331,8 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._instructions_var.set(_(
             "Step 1 of 2 — engrave the calibration card.\n\n"
             "(Dimensions below are for the Falcon2 Pro 40W. Adjust "
-            "for your machine.)\n\n"
+            "for your machine. The engrave uses your basswood G-code "
+            "preset — tune it under Tooling > Options.)\n\n"
             "1. Place a 12×12-inch basswood blank near the center "
             "of the bed and secure it. It cannot move between "
             "engraving and the Step 2 captures.\n"

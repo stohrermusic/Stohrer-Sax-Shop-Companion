@@ -429,7 +429,8 @@ class ToolingTabMixin:
         self.fs_material_var = tk.StringVar(value=fs_settings.get("material", "Felt"))
         fs_mat_combo = ttk.Combobox(
             fs_mat_row, textvariable=self.fs_material_var,
-            values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic")],
+            values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic"),
+                    _("Basswood")],
             state="readonly", width=12)
         fs_mat_combo.pack(side='left', padx=(5, 10))
         tk.Button(fs_mat_row, text=_("Apply material defaults"),
@@ -757,11 +758,20 @@ class ToolingTabMixin:
     # ========================================
 
     def _open_tooling_gcode_settings(self):
-        """Open settings dialog showing acrylic G-code settings + die engraving options."""
+        """Open settings dialog showing tooling G-code presets (acrylic
+        + basswood) and die engraving options. Acrylic is the typical
+        die-insert / die-holder material; basswood covers the camera-
+        calibration card engrave AND the die organizer SVG (when run
+        in LightBurn etc.) AND any future basswood prototyping. The
+        calibration-card engrave reads from gcode_settings.basswood,
+        so users can tune machine feeds here once."""
         from config import save_settings
-        acrylic_materials = [("acrylic", _("Acrylic"))]
+        tooling_materials = [
+            ("acrylic", _("Acrylic")),
+            ("basswood", _("Basswood")),
+        ]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
-                            materials=acrylic_materials, show_tooling_engraving=True)
+                            materials=tooling_materials, show_tooling_engraving=True)
 
     def _open_camera_calibration(self):
         """Open the one-time ChArUco camera-calibration wizard.

@@ -555,6 +555,33 @@ DEFAULT_SETTINGS = {
             "air_assist_hole": True,
             "air_assist_cut": True,
         },
+        # Basswood is the calibration-card material (ChArUco pattern
+        # engraved on a 12×12 blank) and a common tooling-prototype
+        # material for die organizers. Defaults below are tuned for
+        # the Falcon2 Pro 40W on 3mm basswood; the calibration-card
+        # engrave reads from this entry, so a user can tune their
+        # machine here once and the result carries to camera cal.
+        "basswood": {
+            "engraving_mode": "filled",
+            "engraving_speed": 6000,
+            "engraving_power": 25,
+            "engraving_passes": 1,
+            "filled_engraving_speed": 6000,
+            "filled_engraving_power": 25,
+            "filled_engraving_passes": 1,
+            "filled_line_spacing": 0.15,
+            "hole_speed": 300,
+            "hole_power": 80,
+            "hole_passes": 1,
+            "cut_speed": 300,
+            "cut_power": 80,
+            "cut_passes": 1,
+            "kerf_width": 0.2,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
+        },
     },
 
     # TUNER SETTINGS
