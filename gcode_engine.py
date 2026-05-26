@@ -1718,9 +1718,18 @@ def generate_polygon_framing_gcode(polygon, power_s=10, feed=2000, repeat=1):
             lines.append(f'G1 X{x:.3f} Y{y:.3f} F{int(feed)}')
         # Close the loop
         lines.append(f'G1 X{x0:.3f} Y{y0:.3f}')
+    # End with M5 only — leave the head at the LB vertex (where the
+    # closing G1 just put it). The PREVIOUS implementation returned
+    # to work (0, 0) after each pass; with the new G92-with-LB-offset
+    # prefix, work (0, 0) is the polygon's bbox-BL — which sits in
+    # empty space for tilted scraps. Returning there meant the
+    # next loop iteration's G92 zeroed at bbox-BL instead of LB,
+    # shifting the second pass's trace by the LB-to-bbox-BL offset
+    # (Matt observed this as "second pass offset downwards"). Keeping
+    # the head at LB means the next G92 finds the head where it
+    # expects it, and successive loop iterations stay aligned.
     lines.extend([
         'M5',
-        'G0 X0 Y0',
         '; --- End framing pass ---',
     ])
     return lines
