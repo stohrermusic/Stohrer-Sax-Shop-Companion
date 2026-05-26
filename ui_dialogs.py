@@ -7911,6 +7911,15 @@ class FalconRunDialog(tk.Toplevel):
         tk.Button(btn_grid, text="↓", width=3,
                    command=lambda: self._on_jog_clicked(0, -1)
                    ).grid(row=2, column=1, padx=2, pady=1)
+        # Home Laser button — handy when MPos has drifted (lid-open
+        # positioning, prior frame stopped mid-trace, etc.) so the user
+        # can re-zero without backing out of the dialog. Mid-stream
+        # homing aborts the run, so we confirm in that case.
+        self._home_btn = tk.Button(
+            jog_frame, text=_("Home Laser ($H)"),
+            command=self._on_home_clicked,
+            font=("Helvetica", 9))
+        self._home_btn.pack(pady=(6, 0))
 
         self.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
@@ -8227,6 +8236,65 @@ class FalconRunDialog(tk.Toplevel):
                             label=self._done_button_label))
                 except tk.TclError:
                     pass
+
+    def _on_home_clicked(self):
+        """Home Laser ($H). Reliable way to recover from drifted MPos —
+        lid-open positioning, prior frame aborted mid-trace, the head
+        bumped into a stop, etc. Runs the home on a worker thread so
+        the Tk loop stays responsive (Grbl's $H blocks until the cycle
+        finishes — typically 15-30 seconds on a Falcon)."""
+        if not self._finished:
+            if not messagebox.askyesno(
+                    _("Home Laser?"),
+                    _("Homing will abort the run in progress. Continue?"),
+                    parent=self):
+                return
+            try:
+                self._sender.stop()
+            except Exception:
+                pass
+        import threading
+        try:
+            self._home_btn.config(state="disabled", text=_("Homing..."))
+        except tk.TclError:
+            return
+        self._state_var.set(_("Homing — this takes 15-30 seconds..."))
+        result = {}
+
+        def worker():
+            try:
+                ok, msg = self._sender.home(timeout_s=60.0)
+                result['ok'] = ok
+                result['msg'] = msg
+            except Exception as exc:
+                result['ok'] = False
+                result['msg'] = str(exc)
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
+        def check():
+            if t.is_alive():
+                try:
+                    self.after(200, check)
+                except tk.TclError:
+                    pass
+                return
+            try:
+                self._home_btn.config(state="normal",
+                                       text=_("Home Laser ($H)"))
+                if result.get('ok'):
+                    self._state_var.set(_("Homing complete. MPos is now (0, 0)."))
+                else:
+                    self._state_var.set(_("Homing failed: {m}").format(
+                        m=result.get('msg', '?')))
+            except tk.TclError:
+                pass
+
+        try:
+            self.after(200, check)
+        except tk.TclError:
+            pass
 
     def _on_stop_clicked(self):
         if self._finished:

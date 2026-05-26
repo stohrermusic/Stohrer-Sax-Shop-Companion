@@ -1692,6 +1692,20 @@ def generate_polygon_framing_gcode(polygon, power_s=10, feed=2000, repeat=1):
         return []
     ymax = max(p[1] for p in polygon)
     polygon = [(x, ymax - y) for (x, y) in polygon]
+    # Rotate the vertex list so the vertex closest to (0, 0) — the
+    # polygon's bottom-left corner after normalization — is first.
+    # The framing G-code emits ``G0 X{polygon[0].x} Y{polygon[0].y}``
+    # before tracing, and a non-BL first vertex makes the head leap
+    # to a corner of the polygon before the trace begins. For a hand-
+    # traced polygon where the user clicks top-left first (natural
+    # reading order), that's a leap of the polygon's full height in
+    # +Y — which Matt observed as the trace "jumping up" before
+    # framing. Camera-captured polygons happened to dodge this because
+    # cv2.findContours returns CCW from near the leftmost-topmost
+    # vertex consistently, so polygon[0] landed near BL by luck.
+    bl_idx = min(range(len(polygon)),
+                  key=lambda i: polygon[i][0] ** 2 + polygon[i][1] ** 2)
+    polygon = polygon[bl_idx:] + polygon[:bl_idx]
     x0, y0 = polygon[0]
     lines = [
         '; --- Framing pass (polygon outline) ---',
