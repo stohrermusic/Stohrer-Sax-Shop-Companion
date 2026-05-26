@@ -765,10 +765,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         shape_btn_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
         shape_btn_frame.grid(row=3, column=0, columnspan=2, pady=(8, 0))
 
-        # Single entry point for both drawn-by-hand shapes and camera-
-        # captured shapes. The dialog handles both modes — keeps the
-        # main pane simpler and avoids duplicate UI for the camera path.
-        tk.Button(shape_btn_frame, text=_("Draw / Capture Shape..."),
+        # Single entry point for drawn-by-hand shapes (always) and
+        # camera-captured shapes (only when machine integration is
+        # enabled). Label reflects what the dialog can actually do:
+        # "Draw / Capture Shape" when camera path is available,
+        # "Draw Shape" when it isn't.
+        shape_btn_label = (_("Draw / Capture Shape...")
+                           if self.settings.get(
+                               "experimental_machine_menu", False)
+                           else _("Draw Shape..."))
+        tk.Button(shape_btn_frame, text=shape_btn_label,
                   command=self.on_draw_custom_shape).pack(side="left")
         self.shape_status_var = tk.StringVar(value="")
         self.shape_status_label = tk.Label(shape_btn_frame, textvariable=self.shape_status_var,

@@ -3146,7 +3146,14 @@ class PolygonDrawWindow(tk.Toplevel):
         self._overlay_after_id = None
         self._overlay_photo = None        # PhotoImage ref (prevent GC)
 
-        self.title(_("Draw / Capture Shape"))
+        # Title mirrors what the dialog can actually do: shows
+        # "Draw / Capture Shape" when camera capture is available,
+        # plain "Draw Shape" when only the draw path is wired up.
+        # _camera_capture_available() checks both the experimental
+        # toggle and calibration presence.
+        self.title(_("Draw / Capture Shape")
+                    if self._camera_capture_available()
+                    else _("Draw Shape"))
         self.geometry("520x680")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
