@@ -56,6 +56,7 @@ Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W t
 - **Get from Camera** in the polygon-draw dialog — auto-detect a scrap outline and use it as your custom shape.
 - **Live camera overlay** in the polygon-draw dialog — trace your scrap by eye on top of the live camera image at 1:1 scale.
 - **Frame & Cut** — a third button next to Generate SVG / Generate G-code. Generates the G-code in memory, positions the head (Home Laser, jog buttons, optional "Try Auto Locate"), low-power framing pass for verification, then streams the cut. Pause / Resume / Stop in real time.
+- **Inset Margin** — adds a safety margin to placement on scraps so you don't accidentally clip an edge. Frame still traces the actual scrap outline; cuts respect the safety boundary.
 - **Machine menu** (Options > Machine): Home Laser, Test Connection, Clear Errors, Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin.
 
 ### Key Height Library
