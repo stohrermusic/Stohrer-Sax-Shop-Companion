@@ -721,8 +721,8 @@ DEFAULT_SETTINGS = {
     # the grid will display at the chosen size and camera-captured
     # polygons larger than the grid would otherwise be silently
     # vertex-clamped to the grid bounds.
-    "polygon_draw_grid_size_in": 15,
-    "polygon_draw_grid_size_cm": 40,
+    "polygon_draw_grid_size_in": 17,
+    "polygon_draw_grid_size_cm": 43,
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,

@@ -3105,22 +3105,36 @@ class PolygonDrawWindow(tk.Toplevel):
         self.polygon_closed = False
         self.result = None  # Will hold the final polygon or None if cancelled
 
-        # Grid size — Falcon-bed defaults (15in / 40cm) with settings
-        # override for larger machines. Falling back to defaults keeps
-        # existing call sites that don't pass settings working unchanged.
+        # Grid size — pick the larger of the user's setting and what's
+        # needed to cover the laser bed at 1:1 scale. Absolute-position
+        # polygons (camera capture + hand-trace with overlay) extend
+        # across the bed, so a too-small grid would clip them. The bed-
+        # derived floor auto-upgrades users whose setting predates this
+        # change without forcing a migration write.
         self._settings = settings or {}
         if self.unit == "in":
             try:
                 self.grid_size = int(
-                    self._settings.get("polygon_draw_grid_size_in", 15))
+                    self._settings.get("polygon_draw_grid_size_in", 17))
             except (TypeError, ValueError):
-                self.grid_size = 15
+                self.grid_size = 17
+            mm_per_unit_for_grid = 25.4
         else:
             try:
                 self.grid_size = int(
-                    self._settings.get("polygon_draw_grid_size_cm", 40))
+                    self._settings.get("polygon_draw_grid_size_cm", 43))
             except (TypeError, ValueError):
-                self.grid_size = 40
+                self.grid_size = 43
+            mm_per_unit_for_grid = 10.0
+        try:
+            bed_max_mm = max(
+                float(self._settings.get("laser_bed_x_max", 400)),
+                float(self._settings.get("laser_bed_y_max", 415)))
+        except (TypeError, ValueError):
+            bed_max_mm = 415.0
+        self.grid_size = max(
+            self.grid_size,
+            int(math.ceil(bed_max_mm / mm_per_unit_for_grid)))
         self.grid_size = max(2, self.grid_size)  # sanity floor
 
         self.points = []  # List of (x, y) in grid units, 0..grid_size each
@@ -3271,24 +3285,18 @@ class PolygonDrawWindow(tk.Toplevel):
             return
 
         # CameraCaptureDialog returns the polygon in ABSOLUTE machine-mm
-        # (Y-up). Record the bottom-left as the grid's machine anchor —
-        # then the grid stores everything in unitless grid coords, but
-        # we can reconstruct absolute machine coords any time as
-        # (grid * mm_per_unit + anchor). Persistent across vertex
-        # edits, so adjusted polygons still round-trip to machine.
+        # (Y-up). Store the polygon at absolute machine grid coords so
+        # it appears in the grid view at the same place it sits on the
+        # bed (matching what the user saw on the camera screen, and
+        # matching where a hand-traced polygon with the live overlay
+        # would land). The overlay anchors at machine (0, 0) — grid
+        # origin = bed origin — so machine-mm divided by mm_per_unit
+        # lands directly on the grid.
         machine_polygon = list(dlg.result_polygon_mm)
-        ox = min(p[0] for p in machine_polygon)
-        oy = min(p[1] for p in machine_polygon)
-        self._camera_anchor_mm = (ox, oy)
-
-        # Build the grid display: subtract the anchor to normalize, then
-        # scale machine-mm → grid units. machine_polygon is Y-up, and
-        # the grid is also Y-up (high gy = top of canvas via
-        # _grid_to_canvas inversion), so no Y-flip needed here.
-        polygon_norm = [(p[0] - ox, p[1] - oy) for p in machine_polygon]
+        self._camera_anchor_mm = (0.0, 0.0)
         scale_to_unit = 1.0 / 25.4 if self.unit == "in" else 1.0 / 10.0
         captured = [(x * scale_to_unit, y * scale_to_unit)
-                     for (x, y) in polygon_norm]
+                     for (x, y) in machine_polygon]
         # Downsample to MAX_POINTS if the contour is denser. Picks every
         # k-th vertex (uniform sampling along the contour).
         if len(captured) > self.MAX_POINTS:
