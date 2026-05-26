@@ -2422,11 +2422,34 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if jog_dlg._final_reason != "complete":
                 return
 
+            # Compute the polygon's leftmost-lowest vertex in framing's
+            # Y-UP frame. This is the corner the user intuitively jogs
+            # to ("BL of the scrap"). For axis-aligned scraps this is
+            # the bbox bottom-left — same as the polygon's bbox-BL —
+            # so the G92 offset is (0, 0) and behavior matches the
+            # pre-fix code. For tilted scraps the LB vertex sits ABOVE
+            # the bbox-BL (which is in empty space); the G92 offset
+            # bridges that gap so work (0, 0) lands on the polygon's
+            # bbox-BL when the head is physically at the LB vertex.
+            #
+            # Both frame and cut emit G-code in bbox-relative Y-UP
+            # coords, so the same G92 prefix aligns both.
+            g92_x, g92_y = 0.0, 0.0
+            if self.custom_polygon:
+                _y_max_storage = max(p[1] for p in self.custom_polygon)
+                _flipped = [(x, _y_max_storage - y)
+                             for (x, y) in self.custom_polygon]
+                _lb_idx = min(
+                    range(len(_flipped)),
+                    key=lambda i: _flipped[i][0] ** 2 + _flipped[i][1] ** 2)
+                g92_x, g92_y = _flipped[_lb_idx]
+
             # Both modes share the same framing-loop recipe:
-            # G92 X0 Y0 re-anchors work coords at whatever the current
-            # head position is — so the framing trace tracks the head
-            # as the user jogs between (or during) loop iterations.
-            prefix = ['G92 X0 Y0']
+            # G92 X{lb_x} Y{lb_y} sets work coords such that the
+            # polygon's bbox-BL ends up at work (0, 0) when the head
+            # is physically at the polygon's LB vertex — what the
+            # user thinks of as "BL of the material."
+            prefix = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}']
             if framing_lines:
                 framing_lines = prefix + framing_lines
 
@@ -2449,11 +2472,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     # No "Frame Looks Good?" prompt — the user already
                     # confirmed by clicking Cut Now.
 
-                # Cut at the final user-confirmed head position. G92
-                # zeros work coords there — NOT a re-driven absolute
-                # position, so jogs during framing carry over to the
-                # actual cut.
-                cut_lines = ['G92 X0 Y0'] + gcode_text.splitlines()
+                # Cut uses the same G92 offset as framing so the cut
+                # placements align with the LB-vertex jog convention.
+                cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
                 FalconRunDialog(
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
