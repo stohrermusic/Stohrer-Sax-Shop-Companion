@@ -20,7 +20,8 @@ gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font
 ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 camera_capture.py       → OpenCV ChArUco calibration + scrap-polygon detection (optional dep; degrades gracefully if OpenCV missing)
-falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional)
+falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional). Includes a hard-wake-up via G4 P0.01 dwell at stream start.
+sleep_lock.py           → Cross-platform "keep the system awake during long operations" wrapper. Used by CameraCalibrationDialog so Windows / macOS don't suspend mid-engrave.
 build.py               → Cross-platform PyInstaller build script
 ```
 
@@ -79,3 +80,48 @@ Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in con
 ## Feature Set
 
 File > Feature Set lets users show/hide tabs. As of v2.0 the Tuner is default-on (no longer marked experimental); only the Toner remains hidden by default. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, three ways to use it, and setup steps: input device, recording folder, preset fields, required preset fields). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
+
+**Machine Integration (v2.5+, experimental, opt-in)** — File > Feature Set also exposes an `experimental_machine_menu` toggle (default False). When on, the Pad Maker tab gains an Options > Machine submenu, a Frame & Cut button, and the polygon-draw dialog grows its "Get from camera" + live overlay UI. When off, none of that surfaces — the app behaves like pre-v2.5. Helper `_machine_enabled()` in main.py is the single source of truth and is called by `_refresh_machine_ui_state()` whenever the toggle changes or the calibration file appears/disappears.
+
+The Machine submenu has TWO-LEVEL GATING: experimental toggle on AND a valid camera calibration on disk. Without the toggle: nothing shows. With the toggle but no calibration: only "Camera Calibration..." is enabled — everything else (Home Laser, Test Connection, etc.) greys out. With both: full menu live. This is enforced in `_refresh_machine_ui_state()`. Frame & Cut button visibility follows the same logic via `_camera_capture_ready()`.
+
+## v2.5 Machine Integration Architecture
+
+A condensed map of the new (v2.5) cross-cutting subsystem since it touches several modules:
+
+```
+File > Feature Set toggle (experimental_machine_menu)
+  ↓ (when on)
+main._machine_enabled() + _refresh_machine_ui_state()
+  ├─ Options > Machine submenu items
+  │   ├─ Home Laser → falcon_sender.FalconSender.home($H)
+  │   ├─ Test Connection → falcon_sender.FalconSender.get_status(?)
+  │   ├─ Clear Errors ($X) → falcon_sender.FalconSender.unlock
+  │   ├─ Reset Falcon → falcon_sender.FalconSender soft-reset (Ctrl-X)
+  │   ├─ Camera Calibration → ui_dialogs.CameraCalibrationDialog
+  │   │   ├─ Phase 1: engrave card (basswood preset → gcode_engine.generate_calibration_card_gcode)
+  │   │   └─ Phase 2: ChArUco captures → camera_capture.calibrate_from_frames
+  │   │       → saves homography_px_to_machine_mm JSON
+  │   └─ Camera-Polygon Inset Margin → settings.camera_polygon_inset_mm
+  ├─ Polygon-draw dialog (PolygonDrawWindow)
+  │   ├─ "Show live camera underneath" → _render_overlay (cv2.warpPerspective)
+  │   ├─ "Get from camera" → ui_dialogs.CameraCaptureDialog → detect_scrap_contour
+  │   └─ Submit → main._adopt_camera_polygon (inset + outline split, shared origin)
+  └─ Pad Maker > Frame & Cut button
+      ├─ jog-to-position dialog (FalconRunDialog jog-only mode)
+      │   ├─ Home Laser button
+      │   ├─ Jog cluster
+      │   ├─ Try Auto Locate (drives head to polygon LB-vertex)
+      │   └─ Start Frame →
+      ├─ Framing loop dialog (FalconRunDialog loop=True)
+      │   └─ generate_polygon_framing_gcode (outline, BL-first rotation, G92 with LB offset)
+      └─ Cut dialog (FalconRunDialog) — same G92 prefix as framing
+```
+
+Key invariants the subsystem keeps:
+- `custom_polygon` (inset, normalized to outline's origin) drives nesting placements.
+- `custom_polygon_outline` (un-inset, normalized to outline's origin) drives framing trace.
+- `_custom_polygon_lb_machine` (absolute machine coords of original polygon's LB-vertex) drives Try Auto Locate.
+- `_falcon_homed_this_session` (True after $H or after Machine > Reset Falcon) gates Try Auto Locate enabled state.
+- Frame G-code emits `G92 X{lb_x} Y{lb_y}` (LB-vertex in Y-flipped frame) so jogging to the visible scrap corner bridges to the polygon's bbox origin.
+- `falcon_sender._stream_loop` starts every stream with a G4 P0.01 wake-up dwell to prevent Grbl parser dormancy from eating the first command.
