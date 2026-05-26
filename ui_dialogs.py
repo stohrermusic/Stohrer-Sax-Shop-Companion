@@ -8163,9 +8163,17 @@ class FalconRunDialog(tk.Toplevel):
         except tk.TclError:
             pass
         try:
+            # Post-stream rewire: button now means "advance to the
+            # next step" (e.g. Start Frame →) — NOT the same as
+            # X-out / Cancel. Use a dedicated handler that destroys
+            # without clobbering _final_reason. Routing this through
+            # _on_close_window broke Start Frame because that handler
+            # marks the dialog as cancelled in jog-only mode (the
+            # X-out / Cancel path), which makes main.py return
+            # without proceeding to the framing dialog.
             self._stop_btn.config(
                 text=self._done_button_label,
-                command=self._on_close_window,
+                command=self._on_advance_clicked,
                 state="normal" if self._has_jogged else "disabled")
             if not self._has_jogged:
                 self._state_var.set(
@@ -8455,6 +8463,15 @@ class FalconRunDialog(tk.Toplevel):
         window X — sets _final_reason to "cancelled" and closes, so
         main.py knows not to proceed to framing."""
         self._final_reason = "cancelled"
+        self.destroy()
+
+    def _on_advance_clicked(self):
+        """Post-stream 'advance to next step' button (e.g.
+        'Start Frame →' on the jog-to-position dialog).
+        _final_reason is already 'complete' from _on_done — leave it
+        alone and just destroy so the caller proceeds. Routing this
+        through _on_close_window would cancel via the jog-only mode
+        path."""
         self.destroy()
 
     def _on_stop_clicked(self):
