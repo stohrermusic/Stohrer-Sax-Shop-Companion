@@ -314,7 +314,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Camera Calibration is the "initiation" entry point for
         # camera-based scrap capture and other Falcon features.
         self._machine_menu_indices = {}
-        if self.settings.get("experimental_machine_menu", False):
+        if self._machine_enabled():
             machine_menu = tk.Menu(pad_options_menu, tearoff=0)
             pad_options_menu.add_cascade(label=_("Machine"), menu=machine_menu)
             self._machine_menu = machine_menu
@@ -771,8 +771,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # "Draw / Capture Shape" when camera path is available,
         # "Draw Shape" when it isn't.
         shape_btn_label = (_("Draw / Capture Shape...")
-                           if self.settings.get(
-                               "experimental_machine_menu", False)
+                           if self._machine_enabled()
                            else _("Draw Shape..."))
         tk.Button(shape_btn_frame, text=shape_btn_label,
                   command=self.on_draw_custom_shape).pack(side="left")
@@ -819,16 +818,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                        command=lambda: self._save_checkbox("show_preview", self.preview_var)
                        ).pack(side="left", padx=(0, 15))
 
-        # Live camera preview during Frame & Cut. State persists; the
-        # window opens alongside the run dialog and closes automatically
-        # when the job ends.
+        # Live camera preview during Frame & Cut. Only relevant when
+        # machine integration is enabled AND camera calibration is on
+        # disk — created here but pack/unpack happens in
+        # _refresh_machine_ui_state so the checkbox appears/disappears
+        # alongside Frame & Cut as those gates resolve.
         self.live_camera_var = tk.BooleanVar(
             value=self.settings.get("show_live_camera", False))
-        tk.Checkbutton(options_frame, text=_("Live camera preview"),
-                       variable=self.live_camera_var, bg=self.root.cget('bg'),
-                       command=lambda: self._save_checkbox("show_live_camera",
-                                                             self.live_camera_var)
-                       ).pack(side="left", padx=(0, 15))
+        self._live_camera_chk = tk.Checkbutton(
+            options_frame, text=_("Live camera preview"),
+            variable=self.live_camera_var, bg=self.root.cget('bg'),
+            command=lambda: self._save_checkbox("show_live_camera",
+                                                  self.live_camera_var))
 
         self.eject_sd_var = tk.BooleanVar(value=self.settings.get("eject_sd_after_gcode", False))
         if sys.platform == 'win32':
@@ -945,8 +946,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         AND a camera calibration file exists. Toggle-off short-circuits
         so the 'Re-capture from camera' button in the scrap-continue
         dialog (and any other caller using this helper) hides when the
-        user has opted out of machine integration."""
-        if not self.settings.get("experimental_machine_menu", False):
+        user has opted out of machine integration or is on a platform
+        we don't support."""
+        if not self._machine_enabled():
             return False
         try:
             import camera_capture
@@ -1719,6 +1721,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self._falcon_detect_attempted = False
         self.root.after(10000, self._detect_falcon_async)
 
+    def _machine_enabled(self):
+        """True iff the user has opted into machine integration AND the
+        current platform supports it. The Falcon/Grbl/LaserGRBL ecosystem
+        is Windows-only in practice; the cross-platform pyserial code
+        works, but the find_falcon_camera_index PnP heuristic, the
+        common Falcon owner's toolchain, and our testing are all
+        Windows-only — so on macOS/Linux we don't expose the feature
+        at all. Single source of truth used by every gating site."""
+        if sys.platform != 'win32':
+            return False
+        return bool(self.settings.get("experimental_machine_menu", False))
+
     def _camera_calibration_present(self):
         """True iff a usable (non-legacy) camera calibration is on disk."""
         try:
@@ -1747,8 +1761,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
           - _on_falcon_detected (Falcon comes online)
           - after CameraCalibrationDialog returns saved (live un-grey)
         """
-        toggle_on = bool(self.settings.get(
-            "experimental_machine_menu", False))
+        toggle_on = self._machine_enabled()
         has_cal = self._camera_calibration_present()
 
         # Machine menu item states. Only meaningful if the cascade was
@@ -1788,6 +1801,29 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             elif not should_show and is_packed:
                 try:
                     btn.pack_forget()
+                except tk.TclError:
+                    pass
+
+        # Live camera preview checkbox: same gate as the camera-capture
+        # features (toggle + calibration). Falcon doesn't need to be
+        # detected — the checkbox is a setting consumed by Frame & Cut
+        # only when that button is also packed (which DOES need Falcon),
+        # but the user can preset it any time post-calibration.
+        chk = getattr(self, '_live_camera_chk', None)
+        if chk is not None:
+            should_show_chk = bool(toggle_on and has_cal)
+            try:
+                is_packed = bool(chk.winfo_manager())
+            except tk.TclError:
+                is_packed = False
+            if should_show_chk and not is_packed:
+                try:
+                    chk.pack(side="left", padx=(0, 15))
+                except tk.TclError:
+                    pass
+            elif not should_show_chk and is_packed:
+                try:
+                    chk.pack_forget()
                 except tk.TclError:
                     pass
 
@@ -3248,13 +3284,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         # Experimental MENU toggles (not tabs — stored as top-level
         # settings keys, not under visible_tabs). Restart-required.
+        # Machine integration is Windows-only — the Falcon owner's
+        # ecosystem (LightBurn, LaserGRBL, our find_falcon_camera_index
+        # PnP heuristic) all run on Windows, and we haven't tested the
+        # rest of the stack elsewhere. Hide the toggle on macOS/Linux
+        # rather than dangling an option the user couldn't actually
+        # use.
         machine_menu_var = tk.BooleanVar(
             value=self.settings.get("experimental_machine_menu", False))
-        tk.Checkbutton(
-            frame,
-            text=_("Machine menu (direct Falcon serial control)"),
-            variable=machine_menu_var, bg=bg,
-            font=("Helvetica", 10)).pack(anchor="w")
+        if sys.platform == 'win32':
+            tk.Checkbutton(
+                frame,
+                text=_("Machine menu (direct Falcon serial control)"),
+                variable=machine_menu_var, bg=bg,
+                font=("Helvetica", 10)).pack(anchor="w")
 
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
@@ -3563,6 +3606,6 @@ if __name__ == '__main__':
     # the user has opted into the experimental Machine menu — there's
     # no point probing USB serial ports for a user who never plans to
     # use direct Falcon control.
-    if app.settings.get("experimental_machine_menu", False):
+    if app._machine_enabled():
         root.after(500, app._detect_falcon_async)
     root.mainloop()

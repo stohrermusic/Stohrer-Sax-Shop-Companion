@@ -3227,10 +3227,15 @@ class PolygonDrawWindow(tk.Toplevel):
 
     def _camera_capture_available(self):
         """Return True if camera capture is wired up AND calibrated AND
-        the user has opted into machine integration. Gating mirrors the
-        Pad Maker tab: 'Get from camera' button hides entirely when the
-        experimental machine toggle is off, even if a stale calibration
-        file is on disk."""
+        the user has opted into machine integration AND the platform
+        supports it. Gating mirrors the Pad Maker tab: 'Get from camera'
+        hides entirely when the experimental machine toggle is off,
+        even if a stale calibration file is on disk, and the whole
+        machine integration is Windows-only (see PadSVGGeneratorApp.
+        _machine_enabled)."""
+        import sys
+        if sys.platform != 'win32':
+            return False
         if not self._settings or not self._settings.get(
                 "experimental_machine_menu", False):
             return False
