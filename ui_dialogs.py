@@ -4679,27 +4679,32 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2(_("Custom Shapes"))
-        self._body(_("\"Draw Custom Shape\" lets you define an irregular polygon (up to 8 points) for "
-                    "leather skins or scrap pieces. Click points on the grid to define the outline, "
-                    "then click Done. The nesting algorithm fits circles inside the polygon instead "
-                    "of the rectangular sheet."))
-        self._bullet(_("The grid is 15\u00d715 inches (1\" squares) or 40\u00d740 cm (1cm squares) "
-                      "depending on your unit setting"))
-        self._bullet(_("Click \"Unload\" to clear the shape and return to rectangle mode"))
-        self._bullet(_("The shape stays loaded until you unload it or draw a new one"))
+        self._body(_("\"Draw / Capture Shape\" defines an irregular polygon for leather skins "
+                    "or scrap pieces. The nesting algorithm fits circles inside the polygon "
+                    "instead of the rectangular sheet."))
+        self._bullet(_("Click points on the grid to define the outline. Vertex placement is "
+                      "free \u2014 not snapped to grid intersections."))
+        self._bullet(_("Grid sized to cover the laser bed (default 17 in / 43 cm; auto-grown "
+                      "if your bed is larger)."))
+        self._bullet(_("\"Show live camera underneath\" overlays the camera feed at 1:1 scale "
+                      "so you can trace your scrap by eye. Requires a saved camera calibration."))
+        self._bullet(_("\"Get from camera\" auto-detects the scrap outline. A safety inset "
+                      "(default 3 mm, Options > Machine) shrinks the polygon to absorb minor "
+                      "camera measurement error at the edges."))
+        self._bullet(_("Unload clears the shape and returns to rectangle mode."))
         self._blank()
 
         self._h2(_("Scrap Mode"))
-        self._body(_("Check \"Scrap Mode\" to place pads across multiple irregular pieces "
-                    "instead of requiring one large sheet:"))
-        self._bullet(_("Select exactly one material"))
-        self._bullet(_("Set dimensions (or draw a shape) for the first scrap piece"))
-        self._bullet(_("Generate \u2014 placed pads are saved, remaining are tracked"))
-        self._bullet(_("Adjust dimensions for the next scrap and generate again"))
-        self._bullet(_("If a custom shape is loaded, you'll be asked whether to keep it "
-                      "or unload it for the next piece"))
-        self._bullet(_("Repeat until all pads are placed, or click \"Done!\" to finish early"))
-        self._bullet(_("Files are named with _scrap1, _scrap2, etc. suffixes"))
+        self._body(_("Place pads across multiple irregular pieces instead of one sheet."))
+        self._bullet(_("One material at a time."))
+        self._bullet(_("Set dimensions or draw / capture a shape for each scrap. Generate "
+                      "fits what it can and tracks the remainder."))
+        self._bullet(_("Between scraps: keep the loaded shape, unload it, or re-capture "
+                      "from camera (when calibrated)."))
+        self._bullet(_("Files named _scrap1, _scrap2, etc."))
+        self._bullet(_("With 75+ pads, an opt-in popup offers \"large-batch optimization\": "
+                      "the nester tries multiple disc orderings per scrap and keeps the best "
+                      "result. Costs extra compute, fits more pads."))
         self._blank()
 
         self._h2(_("Edge Bias"))
@@ -4735,6 +4740,48 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Works in scrap mode too \u2014 preview each scrap piece before "
                       "committing. Combine with edge bias and custom polygon shapes "
                       "to optimize irregular scrap pieces."))
+        self._blank()
+
+        self._h2(_("Machine Integration (experimental, opt-in)"))
+        self._body(_("File > Feature Set > \"Experimental: machine integration\" enables "
+                    "direct USB serial control of a Grbl-compatible laser (Creality "
+                    "Falcon2 Pro 40W and similar). Off by default; toggle on to use any "
+                    "of the machine features below."))
+        self._bullet(_("Options > Machine: Home Laser, Test Connection, Clear Errors, "
+                      "Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin."))
+        self._bullet(_("Camera features (overlay, Get from camera, Frame & Cut auto-locate) "
+                      "stay greyed until you've run the one-time camera calibration."))
+        self._blank()
+
+        self._h2(_("Camera Calibration (one-time)"))
+        self._body(_("Establishes the camera-to-bed mapping so the app can convert what the "
+                    "camera sees into machine coords. Two steps:"))
+        self._bullet(_("Engrave a ChArUco card on basswood. Place + secure the basswood; "
+                      "home the laser; jog to roughly bed center; click Frame to verify "
+                      "placement; click Engrave."))
+        self._bullet(_("Capture 12 frames with the camera. The first capture(s) MUST be "
+                      "with the card still at its engraved position — that anchors camera "
+                      "to machine coords. Then move the card around for the remaining "
+                      "captures so the math solves lens distortion."))
+        self._body(_("Saved to a JSON file in the config directory; reused across sessions. "
+                    "Engrave reads your basswood preset (Tooling > Options)."))
+        self._blank()
+
+        self._h2(_("Frame & Cut"))
+        self._body(_("When a Falcon is connected, a Frame & Cut button appears next to "
+                    "Generate SVG / Generate G-code. It generates the G-code in memory, "
+                    "lets you position the head, traces the cut outline at low power for "
+                    "verification, then streams the cut to the laser."))
+        self._bullet(_("Position dialog: Home Laser button (re-home if MPos has drifted); "
+                      "jog arrows; Try Auto Locate (drives head to the polygon's bottom-"
+                      "left vertex when available and the laser is homed)."))
+        self._bullet(_("Framing loops at low power until you click \"Looks Good — Cut!\" — "
+                      "lets you jog between passes to fine-tune alignment."))
+        self._bullet(_("For tilted scraps: jog to the visible bottom-left corner of the "
+                      "material. The G92 work-origin offset bridges the gap between that "
+                      "corner and the polygon's bbox origin so both framing and cutting "
+                      "land where you expect."))
+        self._bullet(_("Pause / Resume / Stop act in real time. Stop is a soft-reset."))
         self._blank()
 
         self._h2(_("SD Card & Eject"))
@@ -4871,77 +4918,16 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("Save the .stl files to disk and slice them in your 3D printer software."))
         self._blank()
 
-        self._h2(_("Tooling \u2014 Calibration Card"))
-        self._body(_("Beta. Engraves a ChArUco pattern on basswood to "
-                    "calibrate the laser-bed camera. The Pad Maker's "
-                    "polygon-draw dialog grows a 'Get from camera' button "
-                    "once you've engraved the card and run the calibration "
-                    "wizard \u2014 then you can snap a photo of a scrap piece "
-                    "on the bed and the app will trace its outline as a "
-                    "custom polygon instead of you tracing it by hand."))
-        self._bullet(_("Defaults produce a 220 \u00d7 170 mm card (8 \u00d7 6 grid of 25 mm squares "
-                      "with a 10 mm border). Fits 12 \u00d7 12 or 12 \u00d7 16 basswood with room "
-                      "for handling."))
-        self._bullet(_("Default engraving recipe: 6000 mm/min @ 25% on basswood, "
-                      "single pass. Override in the form to suit your machine."))
-        self._bullet(_("No cutting required; the basswood stays whole. Place the "
-                      "engraved card flat on the bed, close the cover, and run "
-                      "Options > Camera Calibration."))
-        self._bullet(_("Requires opencv-python and Pillow (bundled with the "
-                      "installer; install separately if running from source)."))
-        self._blank()
-
-        self._h2(_("Tooling \u2014 Camera Calibration"))
-        self._body(_("Options > Camera Calibration opens a one-time wizard "
-                    "for the laser-bed camera. Place the engraved calibration "
-                    "card on the bed at several positions (and slight tilts), "
-                    "capture 12+ good frames, and click Calibrate & Save."))
-        self._bullet(_("RMS reprojection error under 1 px is excellent; under "
-                      "3 px is fine. Higher means recapture."))
-        self._bullet(_("The calibration is saved to a JSON file in the platform "
-                      "config dir and reused across sessions \u2014 you only "
-                      "calibrate once per camera mounting."))
-        self._bullet(_("Use Pad Maker's polygon-draw dialog with the "
-                      "'Get from camera' button to capture scrap outlines."))
-        self._blank()
-
-        self._h2(_("Pad Maker \u2014 Frame & Cut (Falcon direct)"))
-        self._body(_("Beta. When a Grbl-compatible laser controller "
-                    "(e.g. Creality Falcon2 Pro 40W) is connected over "
-                    "USB, a third button appears next to Generate SVG / "
-                    "Generate G-code: Frame & Cut. It generates the G-code "
-                    "in memory, optionally jogs the head around the cut "
-                    "bounding box at low power so you can verify "
-                    "placement, then streams the actual cut to the laser "
-                    "while showing live progress (line, % done, elapsed, "
-                    "ETA). Pause / Resume / Stop buttons act in real time."))
-        self._bullet(_("Auto-detects the controller by handshaking with each "
-                      "USB serial port at 115200 baud and watching for the "
-                      "Grbl banner. Override the port in settings.json "
-                      "(falcon_serial_port_override) if auto-detection "
-                      "picks the wrong device."))
-        self._bullet(_("Framing power and feed are configurable in "
-                      "settings.json (laser_framing_power_s, "
-                      "laser_framing_feed). Defaults \u2014 S=10 (1% of full), "
-                      "2000 mm/min \u2014 show a visible beam on most "
-                      "materials without burning."))
-        self._bullet(_("Stop is an immediate soft-reset: laser power off, "
-                      "motion halts, planner buffer cleared. Use it for "
-                      "anything unexpected."))
-        self._bullet(_("If the Falcon throws an alarm (hard limit, soft "
-                      "limit, etc.) the streamer stops and surfaces it. "
-                      "Unlock via the controller or via $X (a future "
-                      "release will add an Unlock button)."))
-        self._bullet(_("Requires pyserial (bundled with the installer)."))
-        self._blank()
-
         self._h2(_("Tooling \u2014 Settings"))
-        self._body(_("Options > Settings opens the Tooling Settings dialog with:"))
-        self._bullet(_("Acrylic G-code parameters: speed, power, kerf, and air assist "
-                      "(defaults tuned for the Creality Falcon2 Pro 40W cutting 3mm black acrylic)"))
-        self._bullet(_("Die Engraving: filled vs. line mode, font sizes for ring and cutout "
-                      "engravings, and ring engraving placement (centered in the ring annulus, "
-                      "or offset from the outer edge)"))
+        self._body(_("Options > Tooling Settings: per-material G-code (acrylic, basswood) "
+                    "and die-engraving options."))
+        self._bullet(_("Acrylic / basswood G-code: speed, power, passes, kerf, air assist. "
+                      "Defaults tuned for the Falcon2 Pro 40W (3 mm acrylic; 3 mm basswood). "
+                      "Adjust to your machine."))
+        self._bullet(_("Basswood preset feeds the camera-calibration card engrave AND the die "
+                      "organizer (when you cut it in LightBurn)."))
+        self._bullet(_("Die engraving: filled vs. line mode, font sizes for ring + cutout "
+                      "engraving, ring engraving placement."))
         self._blank()
 
     def _section_tuner(self):
