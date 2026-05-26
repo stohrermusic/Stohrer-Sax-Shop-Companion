@@ -6551,11 +6551,12 @@ class CameraCalibrationDialog(tk.Toplevel):
             "position. This anchors camera to machine coords; any "
             "shift here offsets every future scrap capture by that "
             "amount.\n\n"
-            "Click 'Done with references' after 1+ reference shots, "
-            "then move the card to different spots between the "
-            "remaining captures so the math can solve lens "
-            "distortion. Watch the green-corner overlay; click "
-            "Capture when the board is fully detected.\n\n"
+            "Click 'Done with references' after 1+ high quality "
+            "reference shots, then move the card to different spots "
+            "between the remaining captures so the math can solve "
+            "lens distortion. Watch the green-corner overlay; click "
+            "Capture when the board is fully or mostly detected. "
+            "Play with lighting if necessary.\n\n"
             "Target: {n} good captures total."
         ).format(n=self.TARGET_FRAMES))
         # Stop MPos polling and hide engrave-phase controls.
