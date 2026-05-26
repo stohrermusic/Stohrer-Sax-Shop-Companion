@@ -47,6 +47,9 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Import/export for sharing with colleagues
 
 #### Machine Integration (experimental, opt-in)
+
+![Draw / Capture Shape with live camera overlay, scrap traced with 16 free vertices](img/polygon_camera_overlay.png)
+
 Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W tested; other Grbl machines should work — opt in via **File > Feature Set > "Experimental: machine integration"**).
 
 - **Camera Calibration** — one-time ChArUco-card workflow. Engrave the card on basswood, capture 12 frames; the app then knows where the camera sees vs. where the laser cuts.
