@@ -1114,6 +1114,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Handle scrap continue dialog button press."""
         if unload:
             self.custom_polygon = None
+            self._custom_polygon_lb_machine = None
             self._update_shape_status()
         dlg.destroy()
 
