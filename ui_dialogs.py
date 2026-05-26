@@ -6343,7 +6343,7 @@ class CameraCalibrationDialog(tk.Toplevel):
             "your jog buttons in real time. Adjust until the trace "
             "sits comfortably on the basswood (~½\" margin all "
             "around). Click Stop on the framing window.\n"
-            "5. Click Engrave to commit. Takes ~45-60 minutes."))
+            "5. Click Engrave to commit. (Takes a while.)"))
         self._status_var.set(_("Ready. Home the laser and jog into position."))
         self._preview_label.config(image="", text=_("Camera opening..."),
                                     fg="#888888", bg="#000000")
@@ -6849,7 +6849,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 _("Are you sure? Card will engrave centered on machine "
                   "(X={x:.0f}, Y={y:.0f}), covering ({ox:.0f}, "
                   "{oy:.0f}) to ({fx:.0f}, {fy:.0f}).\n\n"
-                  "Takes ~45-60 minutes. The cover must stay closed "
+                  "Takes a while. The cover must stay closed "
                   "for the laser to fire.\n\n"
                   "If you haven't framed yet to verify placement, "
                   "click No and run Frame first.").format(
