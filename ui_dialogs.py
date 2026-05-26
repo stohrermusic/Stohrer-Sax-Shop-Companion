@@ -8258,7 +8258,7 @@ class FalconRunDialog(tk.Toplevel):
             self._home_btn.config(state="disabled", text=_("Homing..."))
         except tk.TclError:
             return
-        self._state_var.set(_("Homing — this takes 15-30 seconds..."))
+        self._state_var.set(_("Homing..."))
         result = {}
 
         def worker():
