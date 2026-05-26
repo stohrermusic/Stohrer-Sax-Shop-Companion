@@ -33,7 +33,7 @@ Sax Shop Companion now talks to your laser directly. v2.5 adds an experimental m
 - Pad Press Spacers — bundled 3D-printable STL files for setting pad press depth.
 - Kerf Test pattern generator for calibrating your laser.
 - Speed & Power Test (beta) — generate a sheet of small test discs at different speed / power / passes combinations to dial in laser settings on a new material.
-- **(new) G-code presets** — Options > Tooling Settings now exposes per-material G-code for **Acrylic AND Basswood**. The basswood preset feeds the die organizer (when you cut it in LightBurn) AND the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
+- **(new) G-code presets** — Options > Tooling Settings now exposes per-material G-code for Acrylic and Basswood. Acrylic for die holders and inserts, basswood preset feeds the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
 
 ## Chromatic Strobe Tuner
 
