@@ -3367,8 +3367,18 @@ class PolygonDrawWindow(tk.Toplevel):
             return  # already running
         # Mark the polygon as machine-coord-anchored. The overlay
         # always renders at machine (0, 0), so any clicks the user
-        # makes correspond to absolute machine positions.
+        # makes correspond to absolute machine positions. Setting
+        # _camera_anchor_mm here (in addition to _overlay_used)
+        # routes the polygon through main.py's _adopt_camera_polygon
+        # path on submit — same path camera-captured polygons take —
+        # so the camera-polygon safety inset is applied to traced
+        # polygons too. A skip-the-anchor implementation would mean
+        # only camera captures got the inset; hand-traced shapes
+        # would cut right up to the user's click points, which is
+        # less safe for irregular leather edges.
         self._overlay_used = True
+        if self._camera_anchor_mm is None:
+            self._camera_anchor_mm = (0.0, 0.0)
         try:
             import camera_capture
             from PIL import Image, ImageTk
