@@ -95,7 +95,79 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.sizing_presets["Default"] = settings_to_sizing_preset(self.settings)
             save_presets(self.sizing_presets, SIZING_PRESET_FILE)
 
-        self.custom_polygon = None  # For custom shape nesting
+        # --- Custom polygon state ---
+        # custom_polygon holds the active scrap outline used for
+        # nesting + framing. ALWAYS stored in SVG-Y-DOWN convention
+        # (origin (0, 0) at top-left of polygon bbox). Both drawn and
+        # camera-captured polygons go through the same Y-flip-then-
+        # normalize path (see _adopt_camera_polygon and the drawn
+        # path in on_draw_custom_shape) so downstream code never has
+        # to care which source produced it.
+        #
+        # ---- Y-axis conventions across the codebase ----
+        # The flip sites below cross EXACTLY one boundary each.
+        # Adding a new flip without crossing a boundary is a bug.
+        #
+        #   Layer                                  | Y direction
+        #   ---------------------------------------|------------
+        #   Tk canvas (PolygonDrawWindow display)  | DOWN (Tk native)
+        #   Grid storage (PolygonDrawWindow.points)| UP   (graph-paper)
+        #   OpenCV pixel coords                    | DOWN (image native)
+        #   OpenCV ChArUco board frame             | DOWN (matches image)
+        #   Machine coords (Grbl/Falcon)           | UP   (Y=0 at front)
+        #   custom_polygon (this attribute)        | DOWN (SVG-style)
+        #   SVG output                             | DOWN (SVG native)
+        #   G-code emission                        | UP   (matches Grbl)
+        #
+        # Boundary flip sites (one per boundary, no redundancy):
+        #   board (DOWN) → machine (UP)
+        #     camera_capture._board_corner_to_machine_mm
+        #   legacy schema-1 pixels_to_mm output → corrected machine
+        #     camera_capture.pixels_to_mm (compat shim)
+        #   grid (UP) ↔ canvas (DOWN)
+        #     ui_dialogs.PolygonDrawWindow._{grid,canvas}_to_{canvas,grid}
+        #   grid storage (UP) → custom_polygon (DOWN)
+        #     on_draw_custom_shape (drawn path)
+        #   machine-mm (UP) → custom_polygon (DOWN)
+        #     _adopt_camera_polygon (camera path) — only the SHAPE is
+        #     kept; the machine-coord offset isn't tracked since the
+        #     auto-frame feature was removed. The polygon gets nested
+        #     in local coords and cut at the user's manually-jogged
+        #     work origin via G92.
+        #   custom_polygon (DOWN) → G-code (UP)
+        #     gcode_engine.generate_polygon_framing_gcode
+        #     gcode_engine.generate_gcode_from_placed (and die variant)
+        #   calibration-card strokes (DOWN) → G-code (UP)
+        #     gcode_engine.generate_calibration_card_gcode
+        #   G-code (UP) → SVG (DOWN) — arc text only
+        #     svg_engine die/holder renderers
+        self.custom_polygon = None
+        # The polygon's FULL OUTLINE (un-insetted), normalized to share
+        # the same coordinate origin as custom_polygon. Used by Frame &
+        # Cut to trace the actual scrap edge for visual placement
+        # verification, while custom_polygon (the insetted shape) still
+        # governs pad nesting placement. None when no inset was applied
+        # (plain hand-drawn polygons) — Frame & Cut falls back to
+        # custom_polygon in that case.
+        self.custom_polygon_outline = None
+        # The polygon's leftmost-lowest vertex in absolute machine coords
+        # (Y-up), populated whenever the polygon has a machine reference
+        # (camera-captured or hand-traced over the live camera overlay).
+        # Drives Frame & Cut's "Try Auto Locate" button. None for plain
+        # hand-drawn polygons (no machine reference exists, so the button
+        # hides).
+        self._custom_polygon_lb_machine = None
+
+        # --- Falcon (direct serial) state ---
+        # Detected on startup; the "Frame & Cut" button only appears when
+        # a Grbl controller answered the handshake on some serial port.
+        self.falcon_port = None
+        self._falcon_detect_attempted = False
+        # Tracks whether the laser has been homed in this SSC session.
+        # Frame & Cut and the calibration dialog both check this to
+        # decide whether to auto-home or skip. Reset on Machine > Reset
+        # (soft-reset loses position).
+        self._falcon_homed_this_session = False
 
         # --- Scrap Mode Session State ---
         self.scrap_session = {
@@ -247,6 +319,49 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_options_menu.add_command(label=_("Layer Colors..."), command=self.open_color_window)
         pad_options_menu.add_separator()
         pad_options_menu.add_command(label=_("G-code Settings..."), command=self.open_gcode_settings_window)
+        pad_options_menu.add_separator()
+
+        # Machine submenu — direct Falcon serial control + camera
+        # setup. Gated behind the Feature Set experimental toggle;
+        # off by default. Within the cascade, Camera Calibration is
+        # the only item enabled until calibration has been done
+        # (after which the rest un-greys via _refresh_machine_ui_state).
+        # Camera Calibration is the "initiation" entry point for
+        # camera-based scrap capture and other Falcon features.
+        self._machine_menu_indices = {}
+        if self._machine_enabled():
+            machine_menu = tk.Menu(pad_options_menu, tearoff=0)
+            pad_options_menu.add_cascade(label=_("Machine"), menu=machine_menu)
+            self._machine_menu = machine_menu
+            # Order: Camera Calibration first (always enabled when
+            # toggle is on — it's the gateway). Then the Falcon-direct
+            # items below, which require a working calibration.
+            machine_menu.add_command(label=_("Camera Calibration..."),
+                                       command=self._on_machine_recalibrate)
+            self._machine_menu_indices['camera_cal'] = (
+                machine_menu.index('end'))
+            machine_menu.add_command(
+                label=_("Camera-Polygon Inset Margin..."),
+                command=self._on_machine_inset_settings)
+            self._machine_menu_indices['inset'] = (
+                machine_menu.index('end'))
+            machine_menu.add_separator()
+            machine_menu.add_command(label=_("Home Laser"),
+                                       command=self._on_machine_home_falcon)
+            self._machine_menu_indices['home'] = (
+                machine_menu.index('end'))
+            machine_menu.add_command(label=_("Test Connection"),
+                                       command=self._on_machine_test_connection)
+            self._machine_menu_indices['test'] = (
+                machine_menu.index('end'))
+            machine_menu.add_command(label=_("Clear Errors ($X)"),
+                                       command=self._on_machine_clear_errors)
+            self._machine_menu_indices['clear'] = (
+                machine_menu.index('end'))
+            machine_menu.add_command(label=_("Reset Falcon (soft-reset)"),
+                                       command=self._on_machine_reset_falcon)
+            self._machine_menu_indices['reset'] = (
+                machine_menu.index('end'))
 
         # --- Key Height Library Menu ---
         self.key_menu = tk.Menu(self.root)
@@ -287,6 +402,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tooling_options_menu = tk.Menu(self.tooling_menu, tearoff=0)
         self.tooling_menu.add_cascade(label=_("Options"), menu=tooling_options_menu)
         tooling_options_menu.add_command(label=_("Settings..."), command=self._open_tooling_gcode_settings)
+        # Camera Calibration lives in Pad Maker > Options > Machine —
+        # it's a calibration workflow that produces a card as a
+        # byproduct of running it, not a standalone tool, so it doesn't
+        # belong in the tools selector.
 
         # --- Tuner Menu ---
         self.tuner_menu = tk.Menu(self.root)
@@ -661,7 +780,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         shape_btn_frame = tk.Frame(sheet_frame, bg=self.root.cget('bg'))
         shape_btn_frame.grid(row=3, column=0, columnspan=2, pady=(8, 0))
 
-        tk.Button(shape_btn_frame, text=_("Draw Custom Shape..."), command=self.on_draw_custom_shape).pack(side="left")
+        # Single entry point for drawn-by-hand shapes (always) and
+        # camera-captured shapes (only when machine integration is
+        # enabled). Label reflects what the dialog can actually do:
+        # "Draw / Capture Shape" when camera path is available,
+        # "Draw Shape" when it isn't.
+        shape_btn_label = (_("Draw / Capture Shape...")
+                           if self._machine_enabled()
+                           else _("Draw Shape..."))
+        tk.Button(shape_btn_frame, text=shape_btn_label,
+                  command=self.on_draw_custom_shape).pack(side="left")
         self.shape_status_var = tk.StringVar(value="")
         self.shape_status_label = tk.Label(shape_btn_frame, textvariable=self.shape_status_var,
                                            bg=self.root.cget('bg'), fg="gray", font=("Helvetica", 9))
@@ -676,11 +804,24 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.filename_entry.insert(0, "my_pad_job")
         self.filename_entry.pack(padx=10)
 
-        # Two generate buttons side by side
+        # Generate buttons. The "Frame & Cut" button is created here but
+        # only packed when a Falcon (Grbl) controller is detected on USB.
+        # The check happens after the UI is built — see _detect_falcon_async.
         generate_frame = tk.Frame(parent, bg=self.root.cget('bg'))
         generate_frame.pack(pady=(15, 5))
         tk.Button(generate_frame, text=_("Generate SVG"), command=self.on_generate_svg, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
         tk.Button(generate_frame, text=_("Generate G-code"), command=self.on_generate_gcode, font=('Helvetica', 10, 'bold')).pack(side="left", padx=5)
+        self._frame_cut_btn = tk.Button(
+            generate_frame, text=_("Frame & Cut"),
+            command=self.on_frame_and_cut,
+            font=('Helvetica', 10, 'bold'))
+        # Not packed yet — _detect_falcon_async packs it when a
+        # Grbl controller answers the handshake. Frame & Cut is
+        # manual-mode only: user jogs the head to their material's
+        # bottom-left corner, then framing + cutting use G92 to
+        # zero work coords at that position. (An earlier camera-
+        # offset AUTO mode was removed — calibration accuracy was
+        # never tight enough to make it worth the surprise factor.)
 
         # Options below generate buttons
         options_frame = tk.Frame(parent, bg=self.root.cget('bg'))
@@ -691,6 +832,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                        variable=self.preview_var, bg=self.root.cget('bg'),
                        command=lambda: self._save_checkbox("show_preview", self.preview_var)
                        ).pack(side="left", padx=(0, 15))
+
+        # Live camera preview during Frame & Cut. Only relevant when
+        # machine integration is enabled AND camera calibration is on
+        # disk — created here but pack/unpack happens in
+        # _refresh_machine_ui_state so the checkbox appears/disappears
+        # alongside Frame & Cut as those gates resolve.
+        self.live_camera_var = tk.BooleanVar(
+            value=self.settings.get("show_live_camera", False))
+        self._live_camera_chk = tk.Checkbutton(
+            options_frame, text=_("Live camera preview"),
+            variable=self.live_camera_var, bg=self.root.cget('bg'),
+            command=lambda: self._save_checkbox("show_live_camera",
+                                                  self.live_camera_var))
 
         self.eject_sd_var = tk.BooleanVar(value=self.settings.get("eject_sd_after_gcode", False))
         if sys.platform == 'win32':
@@ -736,7 +890,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _update_shape_status(self):
         """Update the custom shape status indicator."""
         if self.custom_polygon:
-            self.shape_status_var.set(_("Drawn shape loaded ({n} pts)").format(n=len(self.custom_polygon)))
+            n = len(self.custom_polygon)
+            self.shape_status_var.set(
+                _("Shape loaded ({n} pts)").format(n=n))
             self.shape_status_label.config(fg="green")
             self.unload_shape_btn.pack(side="left", padx=2)
         else:
@@ -777,30 +933,141 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if unit == "mm":
             unit = "cm"  # Use cm for the grid when mm is selected
 
-        dialog = PolygonDrawWindow(self.root, unit=unit)
-        polygon = dialog.get_polygon()
+        dialog = PolygonDrawWindow(self.root, unit=unit,
+                                     settings=self.settings)
+        # Camera-captured / overlay-traced polygons come back in
+        # absolute machine-mm; adopt those (inset + LB-machine
+        # tracking applied inside _adopt_camera_polygon).
+        machine_polygon = dialog.get_machine_polygon_mm()
+        if machine_polygon:
+            self._adopt_camera_polygon(machine_polygon)
+            return
 
+        polygon = dialog.get_polygon()
         if polygon:
-            # Convert to mm for internal use
-            # Flip Y axis: drawing uses Y=0 at bottom, SVG uses Y=0 at top
-            # Grid size depends on unit: 15x15 inches or 40x40 cm
-            if unit == "in":
-                grid_size = 15  # 15x15 inches
-                # Convert inches to mm
-                raw = [(x * 25.4, (grid_size - y) * 25.4) for (x, y) in polygon]
-            else:
-                grid_size = 40  # 40x40 cm
-                # Convert cm to mm
-                raw = [(x * 10, (grid_size - y) * 10) for (x, y) in polygon]
-            # Normalize so bounding box starts at (0, 0)
-            min_x = min(p[0] for p in raw)
-            min_y = min(p[1] for p in raw)
-            self.custom_polygon = [(x - min_x, y - min_y) for (x, y) in raw]
-            self._update_shape_status()
+            # Plain hand-drawn (no overlay, no capture) — no machine
+            # reference. Clear any LB-machine tracking from a previous
+            # polygon so the stale value doesn't leak into Frame & Cut.
+            self._custom_polygon_lb_machine = None
+            # Grid stores Y-UP (graph-paper); custom_polygon stores
+            # Y-DOWN (SVG). Scale to mm in Y-UP, then hand off to
+            # the shared adopter which applies the boundary flip.
+            mm_per_unit = 25.4 if unit == "in" else 10.0
+            y_up_mm = [(x * mm_per_unit, y * mm_per_unit) for (x, y) in polygon]
+            self._set_custom_polygon_from_y_up(y_up_mm)
 
     def on_unload_custom_shape(self):
         """Unload the custom shape and return to rectangle mode."""
         self.custom_polygon = None
+        self.custom_polygon_outline = None
+        self._custom_polygon_lb_machine = None
+        self._update_shape_status()
+
+    def _camera_capture_ready(self):
+        """True iff the experimental toggle is on AND OpenCV is installed
+        AND a camera calibration file exists. Toggle-off short-circuits
+        so the 'Re-capture from camera' button in the scrap-continue
+        dialog (and any other caller using this helper) hides when the
+        user has opted out of machine integration or is on a platform
+        we don't support."""
+        if not self._machine_enabled():
+            return False
+        try:
+            import camera_capture
+        except ImportError:
+            return False
+        if not camera_capture.HAS_OPENCV:
+            return False
+        return camera_capture.load_calibration(
+            camera_capture.default_calibration_path()) is not None
+
+    def _adopt_camera_polygon(self, machine_polygon):
+        """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
+        pixel→machine homography) as the active scrap shape.
+
+        Stores BOTH:
+          - self.custom_polygon: the INSET shape (safety-shrunk),
+            used for pad nesting so cuts land safely inside the
+            actual scrap edges.
+          - self.custom_polygon_outline: the ORIGINAL un-insetted
+            shape, used for Frame & Cut's framing trace so the trace
+            visually matches the scrap edge.
+
+        Both are normalized to the OUTLINE's bbox-BL so they share a
+        coordinate origin — pad placements (in custom_polygon coords)
+        land at the right machine positions during cuts even though
+        the framing trace uses the outline.
+
+        Also captures the polygon's LB-vertex MACHINE COORDINATE on
+        self._custom_polygon_lb_machine for Frame & Cut's "Try Auto
+        Locate" button.
+
+        Used by:
+          - File menu / standalone "Get from camera" flow
+          - The polygon dialog's "Capture from camera" sub-action
+          - The polygon dialog's overlay-traced path (via
+            get_machine_polygon_mm)
+        """
+        if not machine_polygon:
+            return
+        # Capture the LB-vertex BEFORE inset shrinks the polygon — the
+        # user is going to jog to the visible bottom-left corner of
+        # their material, not the inset corner.
+        self._custom_polygon_lb_machine = min(
+            machine_polygon, key=lambda p: (p[0], p[1]))
+        outline = list(machine_polygon)
+        inset_polygon = outline
+        try:
+            import camera_capture
+            inset_mm = float(
+                self.settings.get("camera_polygon_inset_mm", 3.0))
+            if inset_mm > 0:
+                try:
+                    inset_polygon = camera_capture.inset_polygon_mm(
+                        outline, inset_mm)
+                except Exception:
+                    pass  # fall back to uninsetted on failure
+        except ImportError:
+            pass
+        # Pass BOTH to the shared adopter so the inset polygon (for
+        # nesting) and the outline (for framing) share an origin.
+        self._set_custom_polygon_from_y_up(
+            inset_polygon, outline_y_up_mm=outline)
+
+    def _set_custom_polygon_from_y_up(self, points_y_up_mm,
+                                        outline_y_up_mm=None):
+        """Single boundary crossing into custom_polygon storage.
+
+        Input:
+          - points_y_up_mm: the polygon used for NESTING (the inset
+            shape when there is one).
+          - outline_y_up_mm (optional): the polygon used for FRAMING
+            (the un-inset original). When None, frame and nest use
+            the same shape — appropriate for plain hand-drawn
+            polygons where no inset was applied.
+
+        Both polygons are normalized to the OUTLINE's bbox-BL so they
+        share a coordinate origin. The framing trace then matches the
+        scrap edge while pad placements still land inside the inset
+        boundary.
+
+        Output:
+          - self.custom_polygon: Y-DOWN, nesting boundary
+          - self.custom_polygon_outline: Y-DOWN, framing trace
+            (= self.custom_polygon when no separate outline)
+        """
+        if not points_y_up_mm:
+            return
+        outline = (outline_y_up_mm if outline_y_up_mm is not None
+                    else points_y_up_mm)
+        min_x = min(p[0] for p in outline)
+        max_y = max(p[1] for p in outline)
+        # Both polygons get the same translation + Y-flip so they
+        # share an origin.
+        self.custom_polygon = [(x - min_x, max_y - y)
+                               for (x, y) in points_y_up_mm]
+        self.custom_polygon_outline = [(x - min_x, max_y - y)
+                                        for (x, y) in outline]
         self._update_shape_status()
 
     def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
@@ -831,12 +1098,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         btn_frame = tk.Frame(dlg, bg=bg)
         btn_frame.pack(pady=15)
-        tk.Button(btn_frame, text=_("Unload Shape"), width=16,
+        # Re-capture from camera: shortcut for the per-scrap workflow.
+        # Most users with camera calibration will swap scraps between
+        # cuts, so they want a new polygon each time without unloading
+        # + opening the polygon dialog manually.
+        if self._camera_capture_ready():
+            tk.Button(btn_frame, text=_("Re-capture from camera"),
+                       width=20,
+                       command=lambda: self._scrap_dialog_recapture(dlg)
+                       ).pack(side="left", padx=4)
+        tk.Button(btn_frame, text=_("Unload Shape"), width=14,
                   command=lambda: self._scrap_dialog_close(dlg, unload=True)
-                  ).pack(side="left", padx=8)
-        tk.Button(btn_frame, text=_("Keep Shape"), width=16,
+                  ).pack(side="left", padx=4)
+        tk.Button(btn_frame, text=_("Keep Shape"), width=14,
                   command=lambda: self._scrap_dialog_close(dlg, unload=False)
-                  ).pack(side="left", padx=8)
+                  ).pack(side="left", padx=4)
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: self._scrap_dialog_close(dlg, unload=False))
         dlg.update_idletasks()
@@ -849,8 +1125,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Handle scrap continue dialog button press."""
         if unload:
             self.custom_polygon = None
+            self.custom_polygon_outline = None
+            self._custom_polygon_lb_machine = None
             self._update_shape_status()
         dlg.destroy()
+
+    def _scrap_dialog_recapture(self, dlg):
+        """Scrap-continue shortcut: clear the current polygon, close
+        this dialog, and immediately open the polygon dialog to
+        capture a fresh shape for the next scrap."""
+        self.custom_polygon = None
+        self.custom_polygon_outline = None
+        self._custom_polygon_lb_machine = None
+        self._update_shape_status()
+        dlg.destroy()
+        self.on_draw_custom_shape()
 
     # --- Edge Bias Methods ---
 
@@ -940,6 +1229,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': None,
             'save_dir': '',
             'hole_dia': 0,
+            'optimize': None,
         }
         self._unlock_material_selection()
         self._close_remaining_pads_window()
@@ -1001,9 +1291,39 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': material,
             'save_dir': save_dir,
             'hole_dia': hole_dia,
+            # Large-batch optimization opt-in. None = not yet asked
+            # (prompt on first scrap with ≥ LARGE_BATCH_THRESHOLD pads
+            # remaining), True/False = user's session-level answer.
+            'optimize': None,
         }
         self._lock_material_selection(material)
         self._open_remaining_pads_window()
+
+    LARGE_BATCH_THRESHOLD = 75  # remaining-pad count above which the
+                                # optimization opt-in popup appears
+
+    def _maybe_prompt_large_batch_optimization(self, pads):
+        """If this scrap qualifies (≥ threshold pads remaining) AND the
+        user hasn't been asked yet this session, ask once. Mutates
+        scrap_session['optimize'] with the answer. Subsequent scraps
+        in the same session use the same answer with no further prompt.
+        """
+        if self.scrap_session.get('optimize') is not None:
+            return  # already asked + answered
+        total = sum(p.get('qty', 0) for p in pads
+                    if isinstance(p.get('qty'), int))
+        if total < self.LARGE_BATCH_THRESHOLD:
+            return  # not enough pads to bother
+        answer = messagebox.askyesno(
+            _("Large Batch Optimization"),
+            _("You have {n} pads remaining in this scrap session.\n\n"
+              "Use large-batch optimization for this session?\n\n"
+              "The nester will try several pad orderings per scrap and "
+              "keep the best result. Typically fits 5-15% more pads per "
+              "scrap on large batches, but adds ~5-30 seconds of compute "
+              "per scrap.\n\nApplies to every remaining scrap in this "
+              "session.").format(n=total))
+        self.scrap_session['optimize'] = bool(answer)
 
     def _open_remaining_pads_window(self):
         """Open or update the floating window showing remaining and done pads."""
@@ -1364,9 +1684,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
                 return
 
+            # Large-batch optimization opt-in (prompted once per session,
+            # only on scraps with ≥ LARGE_BATCH_THRESHOLD pads remaining).
+            self._maybe_prompt_large_batch_optimization(pads)
+            _optimize = bool(self.scrap_session.get('optimize'))
+
             # Attempt partial placement
             placed, remaining, any_placed = try_nest_partial(
-                pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                pads, material, mat_w, mat_h, self.settings,
+                polygon=mat_polygon, optimize=_optimize)
 
             if not any_placed:
                 min_pad_size = min(p['size'] for p in pads)
@@ -1415,6 +1741,844 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except Exception as e:
             print(f"An error occurred during scrap mode SVG generation: {e}")
             messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
+
+    def _detect_falcon_async(self):
+        """Probe USB serial ports for a Grbl controller; show the button if found.
+
+        Runs in a background thread (Probe takes ~1-2 seconds per port) and
+        marshals the result back to the Tk main thread. Safe to call any
+        time the user wants to re-scan.
+        """
+        if self._falcon_detect_attempted:
+            return
+        self._falcon_detect_attempted = True
+        try:
+            import falcon_sender
+            if not falcon_sender.HAS_PYSERIAL:
+                return
+        except ImportError:
+            return
+
+        import threading
+
+        def _worker():
+            try:
+                port = falcon_sender.auto_detect_falcon()
+            except Exception:
+                port = None
+            self.root.after(0, self._on_falcon_detected, port)
+
+        threading.Thread(target=_worker, name='falcon-detect', daemon=True).start()
+
+    def _on_falcon_detected(self, port):
+        """Called on the Tk main thread once detection finishes."""
+        if port:
+            self.falcon_port = port
+            # Frame & Cut button is gated on calibration as well as
+            # Falcon detection — _refresh_machine_ui_state checks both.
+            self._refresh_machine_ui_state()
+            return
+        # Not found this round. Auto-retry in 10s so users who started
+        # SSC before powering on the Falcon get the button as soon as
+        # the controller comes online — without having to restart the
+        # app or click a Machine menu item to manually retrigger
+        # detection. Stops retrying once a port is found.
+        self._falcon_detect_attempted = False
+        self.root.after(10000, self._detect_falcon_async)
+
+    def _machine_enabled(self):
+        """True iff the user has opted into machine integration.
+
+        The underlying Falcon serial path (pyserial + Grbl 1.1
+        character-counting protocol) is cross-platform — Linux and
+        macOS users with a Falcon on USB can use it via `/dev/ttyUSB*`
+        or `/dev/tty.usbserial-*`. The Falcon-camera auto-detect
+        heuristic is per-platform (PowerShell on Windows,
+        system_profiler on macOS, /sys/class/video4linux on Linux);
+        wherever it fails, _resolve_camera_index falls through to the
+        last-enumerated camera and the user can Switch camera in any
+        dialog if that picks wrong.
+
+        Single source of truth used by every gating site. Tested on
+        Windows; the macOS/Linux paths are best-effort and the user
+        is opting in via the experimental toggle."""
+        return bool(self.settings.get("experimental_machine_menu", False))
+
+    def _camera_calibration_present(self):
+        """True iff a usable (non-legacy) camera calibration is on disk."""
+        try:
+            import camera_capture
+        except ImportError:
+            return False
+        if not camera_capture.HAS_OPENCV:
+            return False
+        return camera_capture.load_calibration(
+            camera_capture.default_calibration_path()) is not None
+
+    def _refresh_machine_ui_state(self):
+        """Single source of truth for which machine UI is enabled.
+
+        Two levels of gating:
+          - experimental_machine_menu OFF → nothing machine-related
+            visible (Machine menu wasn't built at all)
+          - experimental_machine_menu ON + no calibration → Machine
+            menu visible with only Camera Calibration enabled; rest
+            disabled, Frame & Cut hidden
+          - experimental_machine_menu ON + calibration → all Machine
+            items enabled; Frame & Cut shown when Falcon detected
+
+        Safe to call any time; idempotent. Wired into:
+          - app startup (after menu construction)
+          - _on_falcon_detected (Falcon comes online)
+          - after CameraCalibrationDialog returns saved (live un-grey)
+        """
+        toggle_on = self._machine_enabled()
+        has_cal = self._camera_calibration_present()
+
+        # Machine menu item states. Only meaningful if the cascade was
+        # actually built (toggle was on at startup).
+        if (toggle_on and hasattr(self, '_machine_menu')
+                and self._machine_menu_indices):
+            # Camera Calibration is ALWAYS enabled when the cascade
+            # exists — it's the gateway. Everything else depends on
+            # whether a calibration is on disk.
+            other_state = "normal" if has_cal else "disabled"
+            menu = self._machine_menu
+            indices = self._machine_menu_indices
+            try:
+                menu.entryconfig(indices['camera_cal'], state="normal")
+                for key in ('inset', 'home', 'test', 'clear', 'reset'):
+                    if key in indices:
+                        menu.entryconfig(indices[key], state=other_state)
+            except tk.TclError:
+                pass
+
+        # Frame & Cut button visibility: needs toggle ON + calibration
+        # AND a Falcon detected on USB. The packing happens here so
+        # all three gates resolve through one helper.
+        btn = getattr(self, '_frame_cut_btn', None)
+        if btn is not None:
+            should_show = bool(
+                toggle_on and has_cal and self.falcon_port)
+            try:
+                is_packed = bool(btn.winfo_manager())
+            except tk.TclError:
+                is_packed = False
+            if should_show and not is_packed:
+                try:
+                    btn.pack(side="left", padx=5)
+                except tk.TclError:
+                    pass
+            elif not should_show and is_packed:
+                try:
+                    btn.pack_forget()
+                except tk.TclError:
+                    pass
+
+        # Live camera preview checkbox: same gate as the camera-capture
+        # features (toggle + calibration). Falcon doesn't need to be
+        # detected — the checkbox is a setting consumed by Frame & Cut
+        # only when that button is also packed (which DOES need Falcon),
+        # but the user can preset it any time post-calibration.
+        chk = getattr(self, '_live_camera_chk', None)
+        if chk is not None:
+            should_show_chk = bool(toggle_on and has_cal)
+            try:
+                is_packed = bool(chk.winfo_manager())
+            except tk.TclError:
+                is_packed = False
+            if should_show_chk and not is_packed:
+                try:
+                    chk.pack(side="left", padx=(0, 15))
+                except tk.TclError:
+                    pass
+            elif not should_show_chk and is_packed:
+                try:
+                    chk.pack_forget()
+                except tk.TclError:
+                    pass
+
+    # ==================================================================
+    # Machine menu handlers (Pad Maker > Machine cascade)
+    # ==================================================================
+
+    def _machine_require_falcon(self):
+        """Common pre-flight: ensure Falcon is detected. Returns True
+        if good, False (with an error popup) if not."""
+        if not self.falcon_port:
+            messagebox.showerror(
+                _("Falcon Not Detected"),
+                _("No Grbl controller detected. Plug in the Falcon "
+                  "over USB and try again."))
+            self._falcon_detect_attempted = False
+            self._detect_falcon_async()
+            return False
+        return True
+
+    def _resolve_camera_index(self):
+        """Pick a camera index for the camera dialogs.
+
+        Order: persisted override → Falcon-name heuristic → highest
+        enumerated index. Returns None if no camera is available or
+        OpenCV isn't installed.
+
+        Persist a working index after a successful calibration save (via
+        _persist_camera_index) so subsequent runs skip the guess.
+        """
+        try:
+            import camera_capture
+        except ImportError:
+            return None
+        if not camera_capture.HAS_OPENCV:
+            return None
+        override = self.settings.get("camera_index_override")
+        if override is not None:
+            try:
+                return int(override)
+            except (TypeError, ValueError):
+                pass
+        idx = camera_capture.find_falcon_camera_index()
+        if idx is not None:
+            return idx
+        cams = camera_capture.enumerate_cameras()
+        if cams:
+            return cams[-1]['index']
+        return None
+
+    def _persist_camera_index(self, index):
+        """Save a known-working camera index to settings so future
+        camera dialogs open it directly without re-guessing. Called
+        from the calibration dialog after a successful save."""
+        if index is None:
+            return
+        try:
+            current = self.settings.get("camera_index_override")
+            if current == int(index):
+                return
+            self.settings["camera_index_override"] = int(index)
+            from config import save_settings
+            save_settings(self.settings)
+        except Exception:
+            pass  # never block on settings save
+
+    def _run_blocking_home(self, sender):
+        """Send $H on a worker thread, show the homing-status modal,
+        block the caller until homing completes (or fails). Returns
+        True on success, False on failure (with an error popup
+        already shown).
+
+        Uses an after()-poll loop on the Tk thread instead of the
+        older `while t.is_alive(): root.update()` pattern — root.update()
+        pumps the full Tk event loop including WM_DELETE_WINDOW, which
+        could destroy root mid-loop during the 60s home and produce a
+        TclError on the next iteration.
+        """
+        import threading
+        result = {}
+
+        def _worker():
+            try:
+                ok, m = sender.home(timeout_s=60.0)
+                result['ok'] = ok
+                result['msg'] = m
+            except Exception as exc:
+                result['ok'] = False
+                result['msg'] = str(exc)
+
+        self._show_homing_status()
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        # after()-poll until the worker finishes. wait_variable lets
+        # the Tk event loop keep running (status modal stays painted,
+        # other dialogs respond) without burning CPU in a tight loop.
+        done_var = tk.BooleanVar(value=False)
+
+        def _check():
+            if t.is_alive():
+                self.root.after(50, _check)
+            else:
+                done_var.set(True)
+
+        self.root.after(50, _check)
+        self.root.wait_variable(done_var)
+        self._hide_homing_status()
+        if result.get('ok'):
+            self._falcon_homed_this_session = True
+            return True
+        messagebox.showerror(
+            _("Homing Failed"),
+            _("Falcon returned: {m}").format(
+                m=result.get('msg', 'no response')))
+        return False
+
+    def _on_machine_home_falcon(self):
+        """Standalone $H. Same flow as Frame & Cut's home prompt."""
+        if not self._machine_require_falcon():
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Home needs pyserial: {e}").format(e=e))
+            return
+        if not messagebox.askyesno(
+                _("Home Laser?"),
+                _("Send the laser home? The head will travel to the "
+                  "home corner at full speed. Make sure nothing is "
+                  "in its path.")):
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  _("Couldn't connect: {e}").format(e=e))
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        success = self._run_blocking_home(sender)
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if success:
+            messagebox.showinfo(_("Homed"),
+                                 _("Laser homed. Head is parked at "
+                                   "the home corner."))
+
+    def _on_machine_test_connection(self):
+        """Quick Falcon ping: connect, read status, disconnect, report."""
+        if not self._machine_require_falcon():
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Test needs pyserial: {e}").format(e=e))
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            status = sender.get_status(timeout=0.5)
+        except Exception as e:
+            messagebox.showerror(
+                _("Connection Failed"),
+                _("Couldn't connect to the Falcon at {p}: {e}").format(
+                    p=self.falcon_port, e=e))
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        finally:
+            pass
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        if not status:
+            messagebox.showwarning(
+                _("Connected, no response"),
+                _("Port opened at {p}, but Grbl didn't reply to a "
+                  "status query. Try the Reset Falcon menu item, "
+                  "then test again.").format(p=self.falcon_port))
+            return
+        mpos = status.get('mpos') or [0, 0, 0]
+        messagebox.showinfo(
+            _("Connection OK"),
+            _("Falcon connected on {p}.\n\n"
+              "State: {s}\n"
+              "MPos: X={x:.2f}  Y={y:.2f}  Z={z:.2f}").format(
+                p=self.falcon_port, s=status.get('state', '?'),
+                x=mpos[0], y=mpos[1], z=mpos[2]))
+
+    def _on_machine_clear_errors(self):
+        """Send $X to unlock motion after an alarm. Doesn't reset
+        position info, just clears the alarm state."""
+        if not self._machine_require_falcon():
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Clear needs pyserial: {e}").format(e=e))
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            sender.unlock()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  _("Couldn't connect: {e}").format(e=e))
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
+            return
+        finally:
+            pass
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        messagebox.showinfo(
+            _("Errors Cleared"),
+            _("Sent $X unlock. Motion is allowed again. If the "
+              "Falcon was in an alarm state, it should now be Idle "
+              "— check with Test Connection."))
+
+    def _on_machine_reset_falcon(self):
+        """Send Ctrl-X (RT_SOFT_RESET) to reboot the controller's
+        firmware state. Stops any in-progress motion immediately,
+        clears alarms, resets the planner buffer."""
+        if not self._machine_require_falcon():
+            return
+        if not messagebox.askyesno(
+                _("Reset Falcon?"),
+                _("Send a soft-reset (Ctrl-X) to the Falcon. This:\n"
+                  "  • Immediately stops any motion in progress\n"
+                  "  • Clears alarm + error states\n"
+                  "  • Resets the planner buffer\n"
+                  "  • Loses the machine's known position (you'll "
+                  "need to home again)\n\n"
+                  "Only use this when the Falcon is stuck in a bad "
+                  "state and Clear Errors didn't help.\n\n"
+                  "Continue?")):
+            return
+        try:
+            import falcon_sender
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Reset needs pyserial: {e}").format(e=e))
+            return
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+            sender.send_realtime(falcon_sender.RT_SOFT_RESET)
+            time.sleep(1.0)  # let firmware reboot
+        except Exception as e:
+            messagebox.showerror(_("Reset Failed"),
+                                  _("Couldn't reset: {e}").format(e=e))
+        try:
+            sender.disconnect()
+        except Exception:
+            pass
+        # Soft-reset loses machine position — clear the homed flag so
+        # the next Frame & Cut auto-homes again.
+        self._falcon_homed_this_session = False
+        messagebox.showinfo(
+            _("Falcon Reset"),
+            _("Soft-reset sent. The Falcon is now in alarm state — "
+              "use Home Laser to recover, then jog as needed."))
+
+    def _on_machine_recalibrate(self):
+        """Open Camera Calibration with a strong warning since the
+        engrave + capture flow takes the better part of an hour."""
+        try:
+            import camera_capture
+        except ImportError:
+            messagebox.showerror(
+                _("OpenCV Required"),
+                _("Camera calibration needs OpenCV:\n\n"
+                  "    pip install opencv-python Pillow"))
+            return
+        cal_path = camera_capture.default_calibration_path()
+        existing = camera_capture.load_calibration(cal_path) is not None
+        if existing:
+            if not messagebox.askyesno(
+                    _("Recalibrate Camera?"),
+                    _("⚠ This will REPLACE your existing calibration. "
+                      "⚠\n\n"
+                      "The full calibration takes ~60 minutes — the "
+                      "calibration card has to be engraved on fresh "
+                      "basswood, then you take 12+ photos.\n\n"
+                      "Only recalibrate if:\n"
+                      "  • The camera was bumped / re-mounted\n"
+                      "  • Cuts are landing in the wrong spot\n"
+                      "  • You're sure the existing one is wrong\n\n"
+                      "Proceed?")):
+                return
+        # Delegate to the existing handler (inherited from
+        # ToolingTabMixin) — same dialog, same flow.
+        self._open_camera_calibration()
+
+    def _on_machine_inset_settings(self):
+        """Small dialog: edit camera_polygon_inset_mm."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Camera-Polygon Inset Margin"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+        bg = self._get_theme_color() if hasattr(
+            self, '_get_theme_color') else None
+        if bg:
+            dlg.configure(bg=bg)
+
+        tk.Label(dlg, justify='left', wraplength=420,
+                  text=_("Camera-captured polygons are shrunk by this "
+                          "many millimeters on every edge before "
+                          "nesting. This safety margin compensates "
+                          "for camera measurement error near the "
+                          "edges of its view — keeps pads from "
+                          "landing where a chunk of leather might "
+                          "actually be missing.\n\n"
+                          "Typical: 2-5mm. Set to 0 to disable.")
+                  ).pack(padx=20, pady=(15, 10))
+
+        row = tk.Frame(dlg)
+        row.pack(pady=(0, 15))
+        tk.Label(row, text=_("Inset margin (mm):")).pack(side='left',
+                                                            padx=5)
+        var = tk.StringVar(
+            value=str(self.settings.get("camera_polygon_inset_mm", 3.0)))
+        entry = tk.Entry(row, textvariable=var, width=8,
+                          font=("Helvetica", 11))
+        entry.pack(side='left', padx=5)
+        entry.focus_set()
+
+        def _ok():
+            try:
+                v = float(var.get())
+                if v < 0 or v > 50:
+                    raise ValueError("out of range")
+            except (ValueError, TypeError):
+                messagebox.showerror(_("Invalid"),
+                                      _("Inset must be a number 0-50."),
+                                      parent=dlg)
+                return
+            self.settings["camera_polygon_inset_mm"] = v
+            from config import save_settings
+            try:
+                save_settings(self.settings)
+            except Exception as e:
+                messagebox.showerror(_("Save Failed"),
+                                      str(e), parent=dlg)
+                return
+            dlg.destroy()
+
+        btn_row = tk.Frame(dlg)
+        btn_row.pack(pady=(0, 15))
+        tk.Button(btn_row, text=_("Save"), command=_ok,
+                   width=10, font=("Helvetica", 10, "bold")
+                   ).pack(side='left', padx=5)
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy,
+                   width=10).pack(side='left', padx=5)
+
+    def _show_homing_status(self):
+        """Modal 'Homing...' window held open while $H blocks.
+
+        Created as a Toplevel rather than a messagebox so we can dismiss
+        it programmatically when homing returns. Lives in
+        self._homing_status_win.
+        """
+        win = tk.Toplevel(self.root)
+        win.title(_("Homing"))
+        win.transient(self.root)
+        win.resizable(False, False)
+        try:
+            win.grab_set()
+        except Exception:
+            pass
+        tk.Label(win, text=_("Homing the laser...\n\n"
+                              "Head is moving to the home corner."),
+                 padx=30, pady=20,
+                 font=("Helvetica", 11), justify='left').pack()
+        win.update_idletasks()
+        # Center on root window
+        try:
+            x = (self.root.winfo_x()
+                 + (self.root.winfo_width() // 2)
+                 - (win.winfo_width() // 2))
+            y = (self.root.winfo_y()
+                 + (self.root.winfo_height() // 2)
+                 - (win.winfo_height() // 2))
+            win.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
+        self._homing_status_win = win
+        win.update()
+
+    def _hide_homing_status(self):
+        win = getattr(self, '_homing_status_win', None)
+        if win is not None:
+            try:
+                win.destroy()
+            except Exception:
+                pass
+            self._homing_status_win = None
+
+    def on_frame_and_cut(self):
+        """Generate G-code in memory, frame the bbox, then stream to Falcon."""
+        try:
+            import falcon_sender
+            from gcode_engine import (
+                extract_gcode_bbox,
+                generate_framing_gcode,
+                generate_polygon_framing_gcode,
+            )
+            from ui_dialogs import FalconRunDialog
+        except ImportError as e:
+            messagebox.showerror(_("Missing Dependency"),
+                                  _("Frame & Cut needs pyserial:\n\n{e}").format(e=e))
+            return
+
+        # Long cuts can run for tens of minutes; block sleep so the
+        # USB serial doesn't get killed mid-job. Released in the
+        # finally block below.
+        try:
+            import sleep_lock
+            sleep_lock.prevent_sleep()
+        except Exception:
+            pass
+
+        if not self.falcon_port:
+            messagebox.showerror(_("Falcon Not Detected"),
+                                  _("No Grbl controller detected. Plug in "
+                                    "the Falcon over USB and try again."))
+            self._falcon_detect_attempted = False
+            self._detect_falcon_async()
+            return
+
+        # No "would you like to recapture from camera?" prompt here —
+        # the Draw / Capture Shape dialog already offered both paths
+        # before the user picked one. If they drew a polygon, that's
+        # their choice; proceeding in manual mode is the right
+        # default. (An earlier two-button layout had Draw and Capture
+        # as separate top-level buttons, and this prompt was the
+        # bridge between them; with the consolidated dialog it just
+        # makes users repeat work they already chose against.)
+
+        # --- Mirror on_generate_gcode's input-validation up through nesting ---
+        if self.scrap_mode_var.get():
+            messagebox.showinfo(_("Scrap Mode"),
+                                 _("Frame & Cut isn't wired up for scrap "
+                                   "mode yet — please uncheck Scrap Mode."))
+            return
+        try:
+            params = self._prepare_generation()
+            if not params:
+                return
+            pads, hole_dia = params['pads'], params['hole_dia']
+            width_mm, height_mm = params['width_mm'], params['height_mm']
+            card_paper_dims = params['card_paper_dims']
+
+            supported_materials = [m for m, v in self.material_vars.items()
+                                     if v.get() and m != "exact_size"]
+            if len(supported_materials) != 1:
+                messagebox.showerror(
+                    _("Pick One Material"),
+                    _("Frame & Cut works with one material at a time. "
+                      "Please select exactly one material (not Exact Size)."))
+                return
+            material = supported_materials[0]
+            mat_w, mat_h, mat_polygon = self._get_material_dimensions(
+                material, width_mm, height_mm, card_paper_dims)
+
+            placed = nest_pads(pads, material, mat_w, mat_h, self.settings,
+                                polygon=mat_polygon)
+            if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings,
+                                       polygon=mat_polygon):
+                messagebox.showerror(
+                    _("Nesting Error"),
+                    _("Could not fit all '{m}' pieces in the available "
+                      "area.").format(m=material.replace('_', ' ')))
+                return
+
+            # Generate G-code to a temp file then read it back into memory.
+            import tempfile
+            import os as _os
+            with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
+                                              mode='w') as tmp:
+                tmp_path = tmp.name
+            try:
+                generate_gcode_from_placed(
+                    placed, material, mat_w, mat_h, tmp_path, hole_dia,
+                    self.settings, polygon=mat_polygon)
+                with open(tmp_path, 'r') as f:
+                    gcode_text = f.read()
+            finally:
+                try:
+                    _os.remove(tmp_path)
+                except Exception:
+                    pass
+
+            # Framing pass. If a custom polygon is loaded (drawn or camera-
+            # captured), trace the polygon outline — on irregular scrap a
+            # bbox rectangle overhangs every concave edge and tells the user
+            # nothing about whether the cuts land on material. Fall back to
+            # the bbox rectangle for rectangular jobs (no polygon loaded).
+            power_s = self.settings.get("laser_framing_power_s", 10)
+            feed = self.settings.get("laser_framing_feed", 2000)
+            framing_lines = []
+            # Frame the OUTLINE polygon (un-insetted) so the trace
+            # matches the actual scrap edge. Cuts still use the inset
+            # polygon for placement — both share a coordinate origin
+            # so the G92 math below works either way. Fall back to
+            # custom_polygon for plain hand-drawn polygons that don't
+            # have a separate outline.
+            framing_polygon = (self.custom_polygon_outline
+                                or self.custom_polygon)
+            if framing_polygon and len(framing_polygon) >= 3:
+                framing_lines = generate_polygon_framing_gcode(
+                    framing_polygon, power_s=power_s, feed=feed,
+                )
+            else:
+                bbox = extract_gcode_bbox(gcode_text)
+                if bbox:
+                    xmin, xmax, ymin, ymax = bbox
+                    framing_lines = generate_framing_gcode(
+                        xmin, ymin, xmax, ymax, power_s=power_s, feed=feed,
+                    )
+
+            sender = falcon_sender.FalconSender(port=self.falcon_port)
+            try:
+                sender.connect()
+            except Exception as e:
+                messagebox.showerror(_("Connection Failed"),
+                                      _("Could not connect to the Falcon at "
+                                        "{p}: {e}").format(p=self.falcon_port, e=e))
+                return
+
+            # Optional live camera window — opens alongside the run dialog
+            # so the user can watch the laser head while it works, and stays
+            # open after the cut so the user can see the finished result.
+            # Stored on self so the reference persists past this function.
+            # Only ONE window at a time: if a previous Frame & Cut left
+            # a live cam open (it intentionally outlives the cut), focus
+            # that one instead of opening a duplicate.
+            if self.live_camera_var.get():
+                try:
+                    import camera_capture
+                    from ui_dialogs import LiveCameraWindow
+                    existing = getattr(self, '_live_cam_window', None)
+                    if existing is not None and existing.winfo_exists():
+                        try:
+                            existing.lift()
+                            existing.focus_force()
+                        except Exception:
+                            pass
+                    elif camera_capture.HAS_OPENCV:
+                        cam_idx = self._resolve_camera_index()
+                        if cam_idx is not None:
+                            self._live_cam_window = LiveCameraWindow(
+                                self.root, camera_index=cam_idx,
+                                settings=self.settings)
+                except Exception:
+                    pass  # never block the cut on preview failure
+
+            # After our connect+soft-reset, Grbl is in alarm state
+            # (homing required). $X clears that so motion is allowed.
+            # We don't $H here — that would fly the head to the homing
+            # switches and override whatever position the user manually
+            # set as their material origin.
+            sender.unlock()
+
+            # Manual positioning step: jog dialog stays open so the
+            # user can fine-tune with the arrow buttons. They can ALSO
+            # have positioned the head physically (open lid → push head
+            # to material's lower-left → close lid → click Start Frame),
+            # so the Start Frame button is enabled immediately — no
+            # forced jog click. If the head's already where they want,
+            # they just click Start Frame straight through.
+            # If the polygon has a known machine LB-vertex, offer
+            # "Try Auto Locate" — drives the head directly there so
+            # the user doesn't have to jog manually. Only enabled once
+            # the laser is homed (otherwise MPos drift could put the
+            # auto-drive somewhere wrong).
+            auto_locate_target = self._custom_polygon_lb_machine
+            jog_dlg = FalconRunDialog(
+                self.root, sender, [],  # nothing to stream
+                title=_("Position the head at your material's "
+                         "bottom-left corner (jog here OR open the "
+                         "lid and physically move it), then click "
+                         "Start Frame"),
+                show_pause_resume=False, show_cut_button=False,
+                stop_needs_confirm=False,
+                done_button_label=_("Start Frame →"),
+                auto_locate_target=auto_locate_target,
+                is_homed=self._falcon_homed_this_session)
+            if jog_dlg._final_reason != "complete":
+                return
+
+            # Compute the polygon's leftmost-lowest vertex in framing's
+            # Y-UP frame. This is the corner the user intuitively jogs
+            # to ("BL of the scrap"). Computed from the OUTLINE (not
+            # the inset) so the LB-vertex sits on an actual scrap
+            # edge — for axis-aligned scraps this is bbox-(0,0); for
+            # tilted scraps it's the visible bottom-left corner.
+            #
+            # The inset polygon shares the same coordinate origin
+            # (see _set_custom_polygon_from_y_up), so cut placements
+            # remain correctly anchored even though the G92 offset
+            # comes from the outline.
+            g92_x, g92_y = 0.0, 0.0
+            offset_source = (self.custom_polygon_outline
+                              or self.custom_polygon)
+            if offset_source:
+                _y_max_storage = max(p[1] for p in offset_source)
+                _flipped = [(x, _y_max_storage - y)
+                             for (x, y) in offset_source]
+                _lb_idx = min(
+                    range(len(_flipped)),
+                    key=lambda i: _flipped[i][0] ** 2 + _flipped[i][1] ** 2)
+                g92_x, g92_y = _flipped[_lb_idx]
+
+            # Both modes share the same framing-loop recipe:
+            # G92 X{lb_x} Y{lb_y} sets work coords such that the
+            # polygon's bbox-BL ends up at work (0, 0) when the head
+            # is physically at the polygon's LB vertex — what the
+            # user thinks of as "BL of the material."
+            prefix = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}']
+            if framing_lines:
+                framing_lines = prefix + framing_lines
+
+            try:
+                if framing_lines:
+                    # Framing always runs when there's something to
+                    # frame — the user's escape hatch is clicking
+                    # "Looks Good — Cut!" immediately in the loop
+                    # dialog to skip to the cut. Loop mode lets them
+                    # take their time verifying alignment and nudge
+                    # the head with the jog buttons between/during
+                    # passes.
+                    fdlg = FalconRunDialog(
+                        self.root, sender, framing_lines,
+                        title=_("Framing — verify cut area, jog if "
+                                 "needed, click Cut when ready"),
+                        loop=True)
+                    if fdlg._final_reason != "complete":
+                        return  # user stopped or error during framing
+                    # No "Frame Looks Good?" prompt — the user already
+                    # confirmed by clicking Cut Now.
+
+                # Cut uses the same G92 offset as framing so the cut
+                # placements align with the LB-vertex jog convention.
+                cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
+                FalconRunDialog(
+                    self.root, sender, cut_lines,
+                    title=_("Cutting — {m}").format(m=material))
+            finally:
+                # Intentionally don't auto-close live_cam — users want
+                # to see the finished result. They close it manually,
+                # or it dies with the app when SSC exits.
+                try:
+                    sender.disconnect()
+                except Exception:
+                    pass
+
+        except Exception as e:
+            messagebox.showerror(_("An Error Occurred"),
+                                  _("Something went wrong during Frame & Cut:\n\n"
+                                    "{error}").format(error=e))
+        finally:
+            try:
+                import sleep_lock
+                sleep_lock.allow_sleep()
+            except Exception:
+                pass
 
     def on_generate_gcode(self):
         """Generate G-code files."""
@@ -1566,9 +2730,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
                 return
 
+            # Large-batch optimization opt-in (prompted once per session,
+            # only on scraps with ≥ LARGE_BATCH_THRESHOLD pads remaining).
+            self._maybe_prompt_large_batch_optimization(pads)
+            _optimize = bool(self.scrap_session.get('optimize'))
+
             # Attempt partial placement
             placed, remaining, any_placed = try_nest_partial(
-                pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                pads, material, mat_w, mat_h, self.settings,
+                polygon=mat_polygon, optimize=_optimize)
 
             if not any_placed:
                 min_pad_size = min(p['size'] for p in pads)
@@ -2227,6 +3397,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                            font=("Helvetica", 10)).pack(anchor="w")
             check_vars[key] = var
 
+        # Experimental MENU toggles (not tabs — stored as top-level
+        # settings keys, not under visible_tabs). Restart-required.
+        # Available on all platforms — the serial path is cross-
+        # platform (pyserial), and camera detection degrades gracefully
+        # to manual Switch-camera on platforms where we don't have a
+        # name-based auto-detect. Windows is the primary tested
+        # platform; the macOS/Linux paths are best-effort.
+        machine_menu_var = tk.BooleanVar(
+            value=self.settings.get("experimental_machine_menu", False))
+        tk.Checkbutton(
+            frame,
+            text=_("Machine menu (direct Falcon serial control)"),
+            variable=machine_menu_var, bg=bg,
+            font=("Helvetica", 10)).pack(anchor="w")
+
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
             terms = tk.Toplevel(parent_dlg)
@@ -2373,6 +3558,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             tabs_changed = (new_visible != self.settings.get("visible_tabs", {}))
 
+            # Experimental menu toggle (Machine cascade). Restart-required
+            # — the menu bar is built once at startup; rebuilding it
+            # live would require tearing down + recreating all menus.
+            new_machine = bool(machine_menu_var.get())
+            machine_changed = new_machine != self.settings.get(
+                "experimental_machine_menu", False)
+            self.settings["experimental_machine_menu"] = new_machine
+
             # Language change requires restart to take effect.
             selected_display = lang_var.get()
             try:
@@ -2393,9 +3586,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if lang_changed:
                 messagebox.showinfo(_("Feature Set"),
                     _("Restart the app for the language change to take effect."))
-            elif tabs_changed:
+            elif tabs_changed or machine_changed:
                 messagebox.showinfo(_("Feature Set"),
-                    _("Tab changes will take effect next time you open the app."))
+                    _("Changes will take effect next time you open the app."))
 
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x", pady=(10, 0))
@@ -2515,4 +3708,17 @@ if __name__ == '__main__':
     root.report_callback_exception = _handle_tk_exception
 
     app = PadSVGGeneratorApp(root)
+    # Run the initial machine-UI refresh so menu items + Frame & Cut
+    # button start in the correct state (disabled / hidden when no
+    # calibration is on disk yet, even though the toggle is on).
+    try:
+        app._refresh_machine_ui_state()
+    except Exception:
+        pass
+    # Detect the Falcon (Grbl) controller in the background only if
+    # the user has opted into the experimental Machine menu — there's
+    # no point probing USB serial ports for a user who never plans to
+    # use direct Falcon control.
+    if app._machine_enabled():
+        root.after(500, app._detect_falcon_async)
     root.mainloop()

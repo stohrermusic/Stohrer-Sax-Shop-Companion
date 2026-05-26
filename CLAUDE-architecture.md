@@ -17,8 +17,10 @@ tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindin
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow)
+ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
+camera_capture.py       → OpenCV ChArUco calibration + scrap-polygon detection (optional dep; degrades gracefully if OpenCV missing)
+falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional)
 build.py               → Cross-platform PyInstaller build script
 ```
 

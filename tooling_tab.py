@@ -94,6 +94,12 @@ class ToolingTabMixin:
             ("feeds_speeds_tester", _("Speed & Power Test")),
             ("pad_press_spacers", _("Pad Press Spacers")),
         ]
+        # Calibration Card was deliberately removed from this list —
+        # it's a workflow step in Pad Maker > Options > Machine >
+        # Camera Calibration (which engraves the card AND captures
+        # frames in one wizard), not a standalone tool. The engine
+        # entry point `generate_calibration_card_gcode` lives on in
+        # gcode_engine.py and is invoked by the calibration dialog.
         row_frames = [tk.Frame(selector_frame, bg=bg), tk.Frame(selector_frame, bg=bg)]
         row_frames[0].pack(fill='x')
         row_frames[1].pack(fill='x', pady=(4, 0))
@@ -423,7 +429,8 @@ class ToolingTabMixin:
         self.fs_material_var = tk.StringVar(value=fs_settings.get("material", "Felt"))
         fs_mat_combo = ttk.Combobox(
             fs_mat_row, textvariable=self.fs_material_var,
-            values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic")],
+            values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic"),
+                    _("Basswood")],
             state="readonly", width=12)
         fs_mat_combo.pack(side='left', padx=(5, 10))
         tk.Button(fs_mat_row, text=_("Apply material defaults"),
@@ -639,6 +646,11 @@ class ToolingTabMixin:
 
         self._tooling_sections['pad_press_spacers'] = spacers_frame
 
+        # Calibration Card UI was removed from the Tooling tab —
+        # see the comment on the tool_names list. The integrated
+        # Camera Calibration wizard (Pad Maker > Options > Machine)
+        # owns the full engrave+capture workflow.
+
         # Nothing shown initially — user clicks a button
         self._active_tooling_section = None
 
@@ -746,11 +758,81 @@ class ToolingTabMixin:
     # ========================================
 
     def _open_tooling_gcode_settings(self):
-        """Open settings dialog showing acrylic G-code settings + die engraving options."""
+        """Open settings dialog showing tooling G-code presets (acrylic
+        + basswood) and die engraving options. Acrylic is the typical
+        die-insert / die-holder material; basswood covers the camera-
+        calibration card engrave AND the die organizer SVG (when run
+        in LightBurn etc.) AND any future basswood prototyping. The
+        calibration-card engrave reads from gcode_settings.basswood,
+        so users can tune machine feeds here once."""
         from config import save_settings
-        acrylic_materials = [("acrylic", _("Acrylic"))]
+        tooling_materials = [
+            ("acrylic", _("Acrylic")),
+            ("basswood", _("Basswood")),
+        ]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
-                            materials=acrylic_materials, show_tooling_engraving=True)
+                            materials=tooling_materials, show_tooling_engraving=True)
+
+    def _open_camera_calibration(self):
+        """Open the one-time ChArUco camera-calibration wizard.
+
+        Requires opencv-python and an engraved calibration card on the bed.
+        Saves the resulting calibration JSON to the platform config dir;
+        the "Get from camera" buttons (Pad Maker scrap mode / polygon draw)
+        become available once the calibration file exists.
+        """
+        from ui_dialogs import CameraCalibrationDialog
+        try:
+            import camera_capture
+            if not camera_capture.HAS_OPENCV:
+                raise ImportError("OpenCV not loaded")
+        except ImportError:
+            messagebox.showerror(
+                _("OpenCV Required"),
+                _("Camera calibration needs OpenCV (opencv-python):\n\n"
+                  "    pip install opencv-python Pillow"))
+            return
+
+        # If a pre-v3.0 calibration exists, warn the user that it's
+        # incompatible with the new integrated workflow and will be
+        # replaced by this run.
+        cal_path = camera_capture.default_calibration_path()
+        if camera_capture.is_legacy_calibration(cal_path):
+            if not messagebox.askyesno(
+                    _("Old Calibration Detected"),
+                    _("An older calibration file is on disk that uses "
+                      "the pre-v3.0 board-frame format. It will be "
+                      "OVERWRITTEN by this new calibration.\n\n"
+                      "Make sure you've engraved a fresh card via "
+                      "Tooling > Engrave Calibration Card (which now "
+                      "homes the laser and engraves at a known machine "
+                      "position).\n\n"
+                      "Continue?")):
+                return
+
+        # Camera index via the shared resolver (override → Falcon
+        # heuristic → last enumerated); see PadSVGGeneratorApp.
+        cam_idx = self._resolve_camera_index()
+        if cam_idx is None:
+            messagebox.showerror(_("No Camera"),
+                                  _("No cameras were detected. Plug in "
+                                    "the laser camera and try again."))
+            return
+
+        CameraCalibrationDialog(
+            self.root,
+            camera_index=cam_idx,
+            calibration_path=camera_capture.default_calibration_path(),
+            falcon_port=getattr(self, 'falcon_port', None),
+            settings=self.settings,
+        )
+        # Live-update the machine UI: if this was the user's first
+        # successful calibration, the other Machine menu items un-grey
+        # and Frame & Cut becomes packable. No restart required.
+        try:
+            self._refresh_machine_ui_state()
+        except (AttributeError, Exception):
+            pass
 
     def _update_tooling_settings(self):
         """Sync tooling UI state back to settings dict."""

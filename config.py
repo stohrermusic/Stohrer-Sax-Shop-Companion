@@ -177,7 +177,7 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.40"
+APP_VERSION = "2.5"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
@@ -555,6 +555,33 @@ DEFAULT_SETTINGS = {
             "air_assist_hole": True,
             "air_assist_cut": True,
         },
+        # Basswood is the calibration-card material (ChArUco pattern
+        # engraved on a 12×12 blank) and a common tooling-prototype
+        # material for die organizers. Defaults below are tuned for
+        # the Falcon2 Pro 40W on 3mm basswood; the calibration-card
+        # engrave reads from this entry, so a user can tune their
+        # machine here once and the result carries to camera cal.
+        "basswood": {
+            "engraving_mode": "filled",
+            "engraving_speed": 6000,
+            "engraving_power": 25,
+            "engraving_passes": 1,
+            "filled_engraving_speed": 6000,
+            "filled_engraving_power": 25,
+            "filled_engraving_passes": 1,
+            "filled_line_spacing": 0.15,
+            "hole_speed": 850,
+            "hole_power": 100,
+            "hole_passes": 1,
+            "cut_speed": 850,
+            "cut_power": 100,
+            "cut_passes": 1,
+            "kerf_width": 0.2,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
+        },
     },
 
     # TUNER SETTINGS
@@ -660,6 +687,70 @@ DEFAULT_SETTINGS = {
     "sd_card_path": "",  # Last used SD card path for "Send to SD Card" feature
     "eject_sd_after_gcode": False,  # Auto-eject removable drive after G-code export
 
+    # LASER DIRECT-CUT SETTINGS (v3.0+)
+    # Streamed directly to a Grbl controller over USB. Falcon-specific
+    # bits (auto-detect heuristics, ChArUco card defaults) live in
+    # falcon_sender.py / camera_capture.py; the settings below are
+    # generic to any Grbl-compatible laser.
+    #
+    # Serial-port override is still "falcon_*" — auto-detection targets
+    # the Falcon's VID/PID; if a future user runs another Grbl laser,
+    # they'll set the port directly here and bypass detection.
+    "falcon_serial_port_override": None,
+    "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
+    "laser_framing_feed": 2000,     # mm/min during framing
+    # Bed dimensions in machine-mm — defaults match the Creality Falcon2
+    # Pro 40W. Override here for other Grbl-compatible lasers.
+    "laser_bed_x_max": 400.0,
+    "laser_bed_y_max": 415.0,
+    # Seed-move feedrate for AUTO Frame & Cut (drives head from home
+    # corner to scrap's known machine position). G1 at this rate
+    # instead of G0 rapid so a stray object in the path doesn't crash
+    # at full speed. 4000 mm/min ≈ 67 mm/s — fast enough not to feel
+    # sluggish, slow enough to stop on contact.
+    "laser_seed_feed": 4000,
+    # Safety margin: shrink camera-captured polygons by this many mm
+    # on every edge before nesting. Camera measurement is least
+    # accurate at the edges of its view, so insetting prevents pads
+    # from being placed where a chunk of leather might actually be
+    # missing relative to what the camera reported.
+    "camera_polygon_inset_mm": 3.0,
+    # Bias applied to Otsu's auto-threshold in scrap-outline detection
+    # (CameraCaptureDialog slider). 0 = use Otsu as-is. Positive =
+    # less sensitive (raise threshold), negative = more sensitive.
+    # Persisted so the user's lighting preference survives restarts.
+    "camera_detection_threshold_bias": 0,
+    # Invert-colors flag for scrap detection. False (default) assumes
+    # scrap is brighter than the bed (leather on honeycomb). True
+    # selects THRESH_BINARY_INV — for dark scrap on a light surface.
+    "camera_detection_invert": False,
+    # Last successful calibration-card engrave offset (machine-mm,
+    # [X, Y]). Persisted so a closed/reopened calibration dialog skips
+    # straight to the capture phase against the existing engraved card
+    # instead of re-engraving. Cleared on Calibrate & Save (calibration
+    # done) or on "Engrave new card" (user starts fresh).
+    "camera_calibration_engrave_offset_mm": None,
+    # (dot_calibration_engrave_offset_mm removed along with the dot-cal
+    # feature — load_settings silently ignores it if your old settings
+    # file still has it.)
+    # (frame_cut_try_auto removed when the AUTO-frame mode was stripped —
+    # if your settings file still has the key, load_settings silently
+    # ignores it.)
+    # Persisted camera index — set after a successful camera
+    # calibration so future runs skip the enumeration / find-Falcon
+    # heuristic and open the known-working camera directly. None =
+    # auto-detect on each open (find_falcon_camera_index → fall back
+    # to last enumerated).
+    "camera_index_override": None,
+    # Draw / Capture Shape grid size, in the corresponding unit.
+    # Defaults match a Falcon2 Pro 40W's 15.75 × 15.75 in / 400 × 415
+    # mm bed with a small margin. Override here for larger machines —
+    # the grid will display at the chosen size and camera-captured
+    # polygons larger than the grid would otherwise be silently
+    # vertex-clamped to the grid bounds.
+    "polygon_draw_grid_size_in": 17,
+    "polygon_draw_grid_size_cm": 43,
+
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
     "seen_kerf_test_tutorial": False,
@@ -679,6 +770,14 @@ DEFAULT_SETTINGS = {
     # TONER ACCESS
     "toner_unlocked": False,
     "toner_sandbox_enabled": False,  # Show sandbox checkbox when creating presets
+
+    # EXPERIMENTAL FEATURES — opt-in via Feature Set dialog. Off by
+    # default since the underlying integrations (direct Falcon serial,
+    # auto-framing, etc) are still maturing.
+    # When True, Pad Maker > Options > Machine cascade appears with
+    # Home / Test Connection / Clear Errors / Reset Falcon / Camera
+    # Calibration / Inset Margin. Change requires app restart.
+    "experimental_machine_menu": False,
 
     # NESTING PREVIEW
     "show_preview": False,
@@ -762,7 +861,7 @@ def load_settings():
             with open(SETTINGS_FILE, 'r') as f:
                 loaded_settings = json.load(f)
                 settings = copy.deepcopy(DEFAULT_SETTINGS)
-                
+
                 # Deep copy key_layout to avoid shared references
                 if "key_layout" not in loaded_settings:
                     loaded_settings["key_layout"] = settings["key_layout"].copy()
