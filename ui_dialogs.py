@@ -3147,6 +3147,17 @@ class PolygonDrawWindow(tk.Toplevel):
         # when you tweak a polygon point. Cleared only on Clear or
         # Cancel.
         self._camera_anchor_mm = None
+        # Sticky "this polygon has a meaningful machine-coord anchor"
+        # flag. Set the first time the camera overlay turns on (overlay
+        # always anchors at machine (0, 0), so any clicks the user
+        # makes correspond to absolute machine positions in grid units).
+        # Once True, never cleared mid-session — even if the user
+        # disables the overlay, the polygon they've already traced
+        # still carries machine meaning. Used by Frame & Cut to enable
+        # the "Try Auto Locate" button (drives the head to the
+        # polygon's LB vertex). Plain hand-drawn polygons (never enabled
+        # overlay, never captured) keep this False — the button hides.
+        self._overlay_used = False
 
         # Camera-overlay state (populated when the user toggles "Show
         # live camera"). None until enabled.
@@ -3354,6 +3365,10 @@ class PolygonDrawWindow(tk.Toplevel):
         # lands at correct grid scale even pre-capture).
         if self._cap is not None:
             return  # already running
+        # Mark the polygon as machine-coord-anchored. The overlay
+        # always renders at machine (0, 0), so any clicks the user
+        # makes correspond to absolute machine positions.
+        self._overlay_used = True
         try:
             import camera_capture
             from PIL import Image, ImageTk
@@ -3686,6 +3701,30 @@ class PolygonDrawWindow(tk.Toplevel):
         ax, ay = self._camera_anchor_mm
         return [(gx * mm_per_unit + ax, gy * mm_per_unit + ay)
                 for (gx, gy) in self.points]
+
+    def get_polygon_lb_machine_mm(self):
+        """Return the polygon's leftmost-lowest vertex in absolute
+        machine coords (Y-up), or None if no machine reference exists.
+
+        Used by Frame & Cut's "Try Auto Locate" — drives the laser
+        head to this exact point so the user doesn't have to jog
+        manually. Available whenever the polygon was either captured
+        from the camera (anchor set) or hand-traced with the live
+        overlay on (overlay_used set; the overlay anchors at machine
+        (0, 0) so grid coords map 1:1 to machine coords). For purely
+        hand-drawn polygons (no overlay, no capture) the grid coords
+        are arbitrary — no machine reference — so None is returned
+        and the auto-locate button hides.
+        """
+        if not self.points:
+            return None
+        if self._camera_anchor_mm is None and not self._overlay_used:
+            return None
+        mm_per_unit = 25.4 if self.unit == "in" else 10.0
+        ax, ay = self._camera_anchor_mm or (0.0, 0.0)
+        machine = [(gx * mm_per_unit + ax, gy * mm_per_unit + ay)
+                    for (gx, gy) in self.points]
+        return min(machine, key=lambda p: (p[0], p[1]))
 
     def on_submit(self):
         """Submit the polygon."""
@@ -7734,7 +7773,8 @@ class FalconRunDialog(tk.Toplevel):
                   on_finished=None, loop=False, gcode_provider=None,
                   show_pause_resume=True, show_cut_button=True,
                   stop_needs_confirm=True, done_button_label=None,
-                  require_jog_first=False):
+                  require_jog_first=False,
+                  auto_locate_target=None, is_homed=False):
         super().__init__(parent)
         self.title(title or _("Sending to Falcon"))
         self.configure(bg=DIALOG_BG)
@@ -7800,6 +7840,16 @@ class FalconRunDialog(tk.Toplevel):
         # stream completion.
         self._require_jog_first = require_jog_first
         self._has_jogged = not require_jog_first
+        # Auto-locate target: if set, show a "Try Auto Locate" button
+        # next to Home Laser that drives the head to this machine coord
+        # (the polygon's LB vertex). Locked until the laser has been
+        # homed in this session — relying on absolute machine coords
+        # before homing means MPos drift could send the head to the
+        # wrong place. is_homed reflects the parent app's "homed in this
+        # session" tracking; the dialog's own Home button updates it
+        # when homing succeeds.
+        self._auto_locate_target = auto_locate_target
+        self._is_homed = is_homed
 
         # Hook up callbacks. Marshal each to the Tk thread.
         sender.on_status = lambda s: self.after(0, self._on_status, s)
@@ -7915,11 +7965,24 @@ class FalconRunDialog(tk.Toplevel):
         # positioning, prior frame stopped mid-trace, etc.) so the user
         # can re-zero without backing out of the dialog. Mid-stream
         # homing aborts the run, so we confirm in that case.
+        action_row = tk.Frame(jog_frame, bg=DIALOG_BG)
+        action_row.pack(pady=(6, 0))
         self._home_btn = tk.Button(
-            jog_frame, text=_("Home Laser ($H)"),
+            action_row, text=_("Home Laser ($H)"),
             command=self._on_home_clicked,
             font=("Helvetica", 9))
-        self._home_btn.pack(pady=(6, 0))
+        self._home_btn.pack(side='left', padx=2)
+        # Try Auto Locate — only shown when caller passed an auto-locate
+        # target (a polygon machine coord). Disabled until the laser
+        # has been homed in this session.
+        self._auto_locate_btn = None
+        if self._auto_locate_target is not None:
+            self._auto_locate_btn = tk.Button(
+                action_row, text=_("Try Auto Locate"),
+                command=self._on_auto_locate_clicked,
+                font=("Helvetica", 9),
+                state=("normal" if self._is_homed else "disabled"))
+            self._auto_locate_btn.pack(side='left', padx=2)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
@@ -8284,6 +8347,14 @@ class FalconRunDialog(tk.Toplevel):
                 self._home_btn.config(state="normal",
                                        text=_("Home Laser ($H)"))
                 if result.get('ok'):
+                    self._is_homed = True
+                    # Tell the parent app so other dialogs in this
+                    # session can also see "homed."
+                    parent = self.master
+                    if hasattr(parent, '_falcon_homed_this_session'):
+                        parent._falcon_homed_this_session = True
+                    if self._auto_locate_btn is not None:
+                        self._auto_locate_btn.config(state="normal")
                     self._state_var.set(_("Homing complete. MPos is now (0, 0)."))
                 else:
                     self._state_var.set(_("Homing failed: {m}").format(
@@ -8295,6 +8366,36 @@ class FalconRunDialog(tk.Toplevel):
             self.after(200, check)
         except tk.TclError:
             pass
+
+    def _on_auto_locate_clicked(self):
+        """Drive the head to the polygon's LB vertex via an absolute
+        G0. Available only after the laser has been homed in this
+        session — without homing, MPos drift could put the head far
+        from the actual target. Counts as a jog for the require-jog
+        gate so users can auto-locate and immediately click Start
+        Frame without manually nudging."""
+        if self._auto_locate_target is None:
+            return
+        target_x, target_y = self._auto_locate_target
+        # Send via the same channel as jog so it serializes with any
+        # in-flight stream activity. Use $J for absolute jog — it's
+        # cancellable + tracked separately from stream lines.
+        try:
+            self._sender.jog(x=target_x, y=target_y,
+                              feed=3000, relative=False)
+        except Exception as e:
+            self._state_var.set(_("Auto-locate failed: {e}").format(e=e))
+            return
+        self._state_var.set(_("Driving to polygon BL at MPos "
+                              "({x:.1f}, {y:.1f}) …").format(
+                                x=target_x, y=target_y))
+        if not self._has_jogged:
+            self._has_jogged = True
+            if self._finished:
+                try:
+                    self._stop_btn.config(state="normal")
+                except tk.TclError:
+                    pass
 
     def _on_stop_clicked(self):
         if self._finished:

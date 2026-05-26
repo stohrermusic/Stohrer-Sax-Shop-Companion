@@ -142,6 +142,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         #   G-code (UP) → SVG (DOWN) — arc text only
         #     svg_engine die/holder renderers
         self.custom_polygon = None
+        # The polygon's leftmost-lowest vertex in absolute machine coords
+        # (Y-up), populated whenever the polygon has a machine reference
+        # (camera-captured or hand-traced over the live camera overlay).
+        # Drives Frame & Cut's "Try Auto Locate" button. None for plain
+        # hand-drawn polygons (no machine reference exists, so the button
+        # hides).
+        self._custom_polygon_lb_machine = None
 
         # --- Falcon (direct serial) state ---
         # Detected on startup; the "Frame & Cut" button only appears when
@@ -920,6 +927,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         dialog = PolygonDrawWindow(self.root, unit=unit,
                                      settings=self.settings)
+        # Grab the polygon's LB-vertex in absolute machine coords (if
+        # the polygon has a machine reference at all) so Frame & Cut's
+        # "Try Auto Locate" can drive the head straight to it. Plain
+        # hand-drawn polygons return None here and the button hides.
+        self._custom_polygon_lb_machine = dialog.get_polygon_lb_machine_mm()
         # Camera-captured polygons come back in absolute machine-mm;
         # adopt those (the inset gets applied along the way).
         machine_polygon = dialog.get_machine_polygon_mm()
@@ -939,6 +951,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def on_unload_custom_shape(self):
         """Unload the custom shape and return to rectangle mode."""
         self.custom_polygon = None
+        self._custom_polygon_lb_machine = None
         self._update_shape_status()
 
     def _camera_capture_ready(self):
@@ -1109,6 +1122,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         this dialog, and immediately open the polygon dialog to
         capture a fresh shape for the next scrap."""
         self.custom_polygon = None
+        self._custom_polygon_lb_machine = None
         self._update_shape_status()
         dlg.destroy()
         self.on_draw_custom_shape()
@@ -2410,6 +2424,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # so the Start Frame button is enabled immediately — no
             # forced jog click. If the head's already where they want,
             # they just click Start Frame straight through.
+            # If the polygon has a known machine LB-vertex, offer
+            # "Try Auto Locate" — drives the head directly there so
+            # the user doesn't have to jog manually. Only enabled once
+            # the laser is homed (otherwise MPos drift could put the
+            # auto-drive somewhere wrong).
+            auto_locate_target = self._custom_polygon_lb_machine
             jog_dlg = FalconRunDialog(
                 self.root, sender, [],  # nothing to stream
                 title=_("Position the head at your material's "
@@ -2418,7 +2438,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                          "Start Frame"),
                 show_pause_resume=False, show_cut_button=False,
                 stop_needs_confirm=False,
-                done_button_label=_("Start Frame →"))
+                done_button_label=_("Start Frame →"),
+                auto_locate_target=auto_locate_target,
+                is_homed=self._falcon_homed_this_session)
             if jog_dlg._final_reason != "complete":
                 return
 
