@@ -9,7 +9,6 @@ Sax Shop Companion now talks to your laser directly. v2.5 adds an experimental m
   - **Get from Camera** (polygon-draw dialog) — snap a photo of a scrap piece on the bed, the app traces its outline. Camera-polygon inset margin (Options > Machine) shrinks the polygon a few millimeters to absorb edge-measurement noise.
   - **Live camera overlay** in the polygon-draw dialog — overlays the camera feed at 1:1 scale so you can trace your scrap by eye, even before a capture.
   - **Frame & Cut** — third button next to Generate SVG / Generate G-code. Generates in memory, opens the position-the-head dialog (Home Laser, jog cluster, Try Auto Locate when a camera-referenced polygon is loaded), runs a low-power framing loop until you click "Looks Good — Cut!", then streams the cut. Pause / Resume / Stop in real time.
-  - **Tilted-scrap alignment** — the framing G-code emits a work-origin offset (G92 with the polygon's LB-vertex offset) so the trace lands on the material even when the scrap is rotated on the bed.
   - **Machine menu** (Options > Machine): Home Laser, Test Connection, Clear Errors ($X), Reset Falcon (soft-reset), Camera Calibration, Camera-Polygon Inset Margin.
 - **(new) Polygon draw improvements**:
   - Free vertex placement (no grid snap) for precise tracing.
