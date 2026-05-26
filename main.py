@@ -306,31 +306,47 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_options_menu.add_command(label=_("G-code Settings..."), command=self.open_gcode_settings_window)
         pad_options_menu.add_separator()
 
-        # Camera items live at the Options top level — they support
-        # scrap-shape capture which is a stable feature, NOT gated
-        # behind the experimental toggle below.
-        pad_options_menu.add_command(label=_("Camera Calibration..."),
-                                       command=self._on_machine_recalibrate)
-        pad_options_menu.add_command(
-            label=_("Camera-Polygon Inset Margin..."),
-            command=self._on_machine_inset_settings)
-        # Machine submenu — direct Falcon serial control (home, test,
-        # clear errors, soft-reset). Gated behind the Feature Set
-        # experimental toggle since these are still maturing and
-        # involve commands that can move the laser head. Off by default;
-        # user opts in via Feature Set > Experimental / In Progress.
+        # Machine submenu — direct Falcon serial control + camera
+        # setup. Gated behind the Feature Set experimental toggle;
+        # off by default. Within the cascade, Camera Calibration is
+        # the only item enabled until calibration has been done
+        # (after which the rest un-greys via _refresh_machine_ui_state).
+        # Camera Calibration is the "initiation" entry point for
+        # camera-based scrap capture and other Falcon features.
+        self._machine_menu_indices = {}
         if self.settings.get("experimental_machine_menu", False):
-            pad_options_menu.add_separator()
             machine_menu = tk.Menu(pad_options_menu, tearoff=0)
             pad_options_menu.add_cascade(label=_("Machine"), menu=machine_menu)
+            self._machine_menu = machine_menu
+            # Order: Camera Calibration first (always enabled when
+            # toggle is on — it's the gateway). Then the Falcon-direct
+            # items below, which require a working calibration.
+            machine_menu.add_command(label=_("Camera Calibration..."),
+                                       command=self._on_machine_recalibrate)
+            self._machine_menu_indices['camera_cal'] = (
+                machine_menu.index('end'))
+            machine_menu.add_command(
+                label=_("Camera-Polygon Inset Margin..."),
+                command=self._on_machine_inset_settings)
+            self._machine_menu_indices['inset'] = (
+                machine_menu.index('end'))
+            machine_menu.add_separator()
             machine_menu.add_command(label=_("Home Laser"),
                                        command=self._on_machine_home_falcon)
+            self._machine_menu_indices['home'] = (
+                machine_menu.index('end'))
             machine_menu.add_command(label=_("Test Connection"),
                                        command=self._on_machine_test_connection)
+            self._machine_menu_indices['test'] = (
+                machine_menu.index('end'))
             machine_menu.add_command(label=_("Clear Errors ($X)"),
                                        command=self._on_machine_clear_errors)
+            self._machine_menu_indices['clear'] = (
+                machine_menu.index('end'))
             machine_menu.add_command(label=_("Reset Falcon (soft-reset)"),
                                        command=self._on_machine_reset_falcon)
+            self._machine_menu_indices['reset'] = (
+                machine_menu.index('end'))
 
         # --- Key Height Library Menu ---
         self.key_menu = tk.Menu(self.root)
@@ -918,9 +934,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.custom_polygon = None
         self._update_shape_status()
 
-    @staticmethod
-    def _camera_capture_ready():
-        """True iff OpenCV is installed AND a camera calibration file exists."""
+    def _camera_capture_ready(self):
+        """True iff the experimental toggle is on AND OpenCV is installed
+        AND a camera calibration file exists. Toggle-off short-circuits
+        so the 'Re-capture from camera' button in the scrap-continue
+        dialog (and any other caller using this helper) hides when the
+        user has opted out of machine integration."""
+        if not self.settings.get("experimental_machine_menu", False):
+            return False
         try:
             import camera_capture
         except ImportError:
@@ -1680,12 +1701,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Called on the Tk main thread once detection finishes."""
         if port:
             self.falcon_port = port
-            # Show Frame & Cut whenever a Falcon is detected. The flow
-            # is manual-mode only — user jogs the head to their
-            # material's bottom-left and G92 zeroes work coords there
-            # before framing + cutting.
-            if hasattr(self, '_frame_cut_btn'):
-                self._frame_cut_btn.pack(side="left", padx=5)
+            # Frame & Cut button is gated on calibration as well as
+            # Falcon detection — _refresh_machine_ui_state checks both.
+            self._refresh_machine_ui_state()
             return
         # Not found this round. Auto-retry in 10s so users who started
         # SSC before powering on the Falcon get the button as soon as
@@ -1694,6 +1712,78 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # detection. Stops retrying once a port is found.
         self._falcon_detect_attempted = False
         self.root.after(10000, self._detect_falcon_async)
+
+    def _camera_calibration_present(self):
+        """True iff a usable (non-legacy) camera calibration is on disk."""
+        try:
+            import camera_capture
+        except ImportError:
+            return False
+        if not camera_capture.HAS_OPENCV:
+            return False
+        return camera_capture.load_calibration(
+            camera_capture.default_calibration_path()) is not None
+
+    def _refresh_machine_ui_state(self):
+        """Single source of truth for which machine UI is enabled.
+
+        Two levels of gating:
+          - experimental_machine_menu OFF → nothing machine-related
+            visible (Machine menu wasn't built at all)
+          - experimental_machine_menu ON + no calibration → Machine
+            menu visible with only Camera Calibration enabled; rest
+            disabled, Frame & Cut hidden
+          - experimental_machine_menu ON + calibration → all Machine
+            items enabled; Frame & Cut shown when Falcon detected
+
+        Safe to call any time; idempotent. Wired into:
+          - app startup (after menu construction)
+          - _on_falcon_detected (Falcon comes online)
+          - after CameraCalibrationDialog returns saved (live un-grey)
+        """
+        toggle_on = bool(self.settings.get(
+            "experimental_machine_menu", False))
+        has_cal = self._camera_calibration_present()
+
+        # Machine menu item states. Only meaningful if the cascade was
+        # actually built (toggle was on at startup).
+        if (toggle_on and hasattr(self, '_machine_menu')
+                and self._machine_menu_indices):
+            # Camera Calibration is ALWAYS enabled when the cascade
+            # exists — it's the gateway. Everything else depends on
+            # whether a calibration is on disk.
+            other_state = "normal" if has_cal else "disabled"
+            menu = self._machine_menu
+            indices = self._machine_menu_indices
+            try:
+                menu.entryconfig(indices['camera_cal'], state="normal")
+                for key in ('inset', 'home', 'test', 'clear', 'reset'):
+                    if key in indices:
+                        menu.entryconfig(indices[key], state=other_state)
+            except tk.TclError:
+                pass
+
+        # Frame & Cut button visibility: needs toggle ON + calibration
+        # AND a Falcon detected on USB. The packing happens here so
+        # all three gates resolve through one helper.
+        btn = getattr(self, '_frame_cut_btn', None)
+        if btn is not None:
+            should_show = bool(
+                toggle_on and has_cal and self.falcon_port)
+            try:
+                is_packed = bool(btn.winfo_manager())
+            except tk.TclError:
+                is_packed = False
+            if should_show and not is_packed:
+                try:
+                    btn.pack(side="left", padx=5)
+                except tk.TclError:
+                    pass
+            elif not should_show and is_packed:
+                try:
+                    btn.pack_forget()
+                except tk.TclError:
+                    pass
 
     # ==================================================================
     # Machine menu handlers (Pad Maker > Machine cascade)
@@ -3456,7 +3546,17 @@ if __name__ == '__main__':
     root.report_callback_exception = _handle_tk_exception
 
     app = PadSVGGeneratorApp(root)
-    # Detect the Falcon (Grbl) controller in the background so the
-    # "Frame & Cut" button appears as soon as detection succeeds.
-    root.after(500, app._detect_falcon_async)
+    # Run the initial machine-UI refresh so menu items + Frame & Cut
+    # button start in the correct state (disabled / hidden when no
+    # calibration is on disk yet, even though the toggle is on).
+    try:
+        app._refresh_machine_ui_state()
+    except Exception:
+        pass
+    # Detect the Falcon (Grbl) controller in the background only if
+    # the user has opted into the experimental Machine menu — there's
+    # no point probing USB serial ports for a user who never plans to
+    # use direct Falcon control.
+    if app.settings.get("experimental_machine_menu", False):
+        root.after(500, app._detect_falcon_async)
     root.mainloop()

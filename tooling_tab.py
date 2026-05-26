@@ -816,6 +816,13 @@ class ToolingTabMixin:
             falcon_port=getattr(self, 'falcon_port', None),
             settings=self.settings,
         )
+        # Live-update the machine UI: if this was the user's first
+        # successful calibration, the other Machine menu items un-grey
+        # and Frame & Cut becomes packable. No restart required.
+        try:
+            self._refresh_machine_ui_state()
+        except (AttributeError, Exception):
+            pass
 
     def _update_tooling_settings(self):
         """Sync tooling UI state back to settings dict."""

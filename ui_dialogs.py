@@ -3218,9 +3218,15 @@ class PolygonDrawWindow(tk.Toplevel):
                   font=("Helvetica", 10, "bold")).pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Cancel"), command=self.on_cancel, width=10).pack(side="left", padx=5)
 
-    @staticmethod
-    def _camera_capture_available():
-        """Return True if camera capture is wired up and calibrated."""
+    def _camera_capture_available(self):
+        """Return True if camera capture is wired up AND calibrated AND
+        the user has opted into machine integration. Gating mirrors the
+        Pad Maker tab: 'Get from camera' button hides entirely when the
+        experimental machine toggle is off, even if a stale calibration
+        file is on disk."""
+        if not self._settings or not self._settings.get(
+                "experimental_machine_menu", False):
+            return False
         try:
             import camera_capture
         except ImportError:
