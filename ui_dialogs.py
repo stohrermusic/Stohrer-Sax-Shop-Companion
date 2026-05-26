@@ -3692,12 +3692,20 @@ class PolygonDrawWindow(tk.Toplevel):
         return None
 
     def on_clear(self):
-        """Clear all points AND the captured anchor — Clear is the
-        'starting fresh' button. The overlay keeps working (with the
-        camera-FOV fallback anchor) since calibration is still on disk."""
+        """Clear all points AND (if overlay is OFF) the machine
+        anchor. If overlay is currently running, preserve the anchor
+        so a retrace still has machine reference — the user is
+        clearing the polygon but the same camera context still
+        applies to the next set of clicks."""
         self.points = []
         self.polygon_closed = False
-        self._camera_anchor_mm = None
+        if self._cap is None:
+            # Overlay isn't running — no machine context applies to
+            # the next polygon. Clear both signals.
+            self._camera_anchor_mm = None
+            self._overlay_used = False
+        # Else: overlay is still showing camera content, leave
+        # _camera_anchor_mm and _overlay_used as they are.
         self._redraw_polygon()
         self._update_status()
 

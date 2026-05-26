@@ -927,13 +927,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         dialog = PolygonDrawWindow(self.root, unit=unit,
                                      settings=self.settings)
-        # Grab the polygon's LB-vertex in absolute machine coords (if
-        # the polygon has a machine reference at all) so Frame & Cut's
-        # "Try Auto Locate" can drive the head straight to it. Plain
-        # hand-drawn polygons return None here and the button hides.
-        self._custom_polygon_lb_machine = dialog.get_polygon_lb_machine_mm()
-        # Camera-captured polygons come back in absolute machine-mm;
-        # adopt those (the inset gets applied along the way).
+        # Camera-captured / overlay-traced polygons come back in
+        # absolute machine-mm; adopt those (inset + LB-machine
+        # tracking applied inside _adopt_camera_polygon).
         machine_polygon = dialog.get_machine_polygon_mm()
         if machine_polygon:
             self._adopt_camera_polygon(machine_polygon)
@@ -941,6 +937,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         polygon = dialog.get_polygon()
         if polygon:
+            # Plain hand-drawn (no overlay, no capture) — no machine
+            # reference. Clear any LB-machine tracking from a previous
+            # polygon so the stale value doesn't leak into Frame & Cut.
+            self._custom_polygon_lb_machine = None
             # Grid stores Y-UP (graph-paper); custom_polygon stores
             # Y-DOWN (SVG). Scale to mm in Y-UP, then hand off to
             # the shared adopter which applies the boundary flip.
@@ -1019,15 +1019,24 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         the safety inset, then hands off to the shared adopter which
         performs the Y-up→Y-down boundary flip and normalization.
 
-        Only the SHAPE is kept — the polygon's machine-coord offset
-        isn't tracked, since cuts are placed via G92 at the user's
-        manually-jogged work origin (Frame & Cut is manual-only).
+        SHAPE is kept in custom_polygon (bbox-normalized to (0, 0));
+        the polygon's LB-vertex MACHINE COORDINATE is also stashed on
+        self._custom_polygon_lb_machine for Frame & Cut's "Try Auto
+        Locate" button.
+
         Used by:
           - File menu / standalone "Get from camera" flow
           - The polygon dialog's "Capture from camera" sub-action
+          - The polygon dialog's overlay-traced path (via
+            get_machine_polygon_mm)
         """
         if not machine_polygon:
             return
+        # Capture the LB-vertex BEFORE inset shrinks the polygon — the
+        # user is going to jog to the visible bottom-left corner of
+        # their material, not the inset corner.
+        self._custom_polygon_lb_machine = min(
+            machine_polygon, key=lambda p: (p[0], p[1]))
         try:
             import camera_capture
         except ImportError:
