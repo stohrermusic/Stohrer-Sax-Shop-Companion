@@ -972,47 +972,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         return camera_capture.load_calibration(
             camera_capture.default_calibration_path()) is not None
 
-    def on_get_shape_from_camera(self):
-        """Open CameraCaptureDialog and adopt the detected polygon as the
-        active custom shape. Works for irregular AND rectangular material —
-        even on square stock the camera-detected outline beats measuring."""
-        try:
-            import camera_capture
-            from ui_dialogs import CameraCaptureDialog
-        except ImportError as e:
-            messagebox.showerror(_("Missing Dependency"),
-                                  _("Get from camera needs OpenCV + Pillow:\n\n{e}").format(e=e))
-            return
-
-        if camera_capture.load_calibration(
-                camera_capture.default_calibration_path()) is None:
-            messagebox.showinfo(
-                _("Calibration Required"),
-                _("Camera capture needs a one-time calibration first.\n\n"
-                  "On the Tooling tab: generate the Calibration Card, "
-                  "engrave it on basswood, then run "
-                  "Options > Camera Calibration."))
-            return
-
-        cam_idx = self._resolve_camera_index()
-        if cam_idx is None:
-            messagebox.showerror(_("No Camera"),
-                                  _("No cameras detected."))
-            return
-
-        cal_path = camera_capture.default_calibration_path()
-        dlg = CameraCaptureDialog(
-            self.root, camera_index=cam_idx, calibration_path=cal_path,
-            settings=self.settings)
-        if not dlg.result_polygon_mm:
-            return
-
-        # CameraCaptureDialog returns the polygon in ABSOLUTE machine-mm.
-        # Hand off to the shared adopter so this path and the
-        # polygon-dialog's "Capture from camera" path apply the same
-        # safety inset + normalization.
-        self._adopt_camera_polygon(list(dlg.result_polygon_mm))
-
     def _adopt_camera_polygon(self, machine_polygon):
         """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
         pixel→machine homography) as the active scrap shape. Applies
