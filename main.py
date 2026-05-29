@@ -10,10 +10,11 @@ import time
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
+    GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
     setup_logging, get_log_file,
-    settings_to_sizing_preset,
+    settings_to_sizing_preset, settings_to_gcode_presets,
 )
 
 # Initialize translations BEFORE importing UI modules. Any module-level
@@ -94,6 +95,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if not self.sizing_presets:
             self.sizing_presets["Default"] = settings_to_sizing_preset(self.settings)
             save_presets(self.sizing_presets, SIZING_PRESET_FILE)
+
+        # G-code presets: shape is {material: {preset_name: data}}. Bootstrap
+        # a Default per material on first run so every material always has
+        # at least one preset to load. Backfill any new materials added later.
+        self.gcode_presets = load_presets(GCODE_PRESET_FILE, preset_type_name="G-code Preset")
+        bootstrap = settings_to_gcode_presets(self.settings)
+        gcode_presets_dirty = False
+        for mat in GCODE_PRESET_MATERIALS:
+            if mat not in self.gcode_presets or not self.gcode_presets[mat]:
+                self.gcode_presets[mat] = bootstrap.get(mat, {})
+                gcode_presets_dirty = True
+        if gcode_presets_dirty:
+            save_presets(self.gcode_presets, GCODE_PRESET_FILE)
 
         # --- Custom polygon state ---
         # custom_polygon holds the active scrap outline used for
@@ -3129,7 +3143,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Show only pad materials (felt/card/leather) from the pad generator tab
         pad_materials = [("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
-                            materials=pad_materials)
+                            materials=pad_materials,
+                            gcode_presets=self.gcode_presets,
+                            gcode_presets_save_callback=lambda: save_presets(self.gcode_presets, GCODE_PRESET_FILE))
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)

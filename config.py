@@ -329,6 +329,7 @@ SETTINGS_FILE = os.path.join(_CONFIG_DIR, "app_settings.json")
 SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
 TONER_DATA_FILE = os.path.join(_CONFIG_DIR, "toner_data.json")
 SIZING_PRESET_FILE = os.path.join(_CONFIG_DIR, "sizing_presets.json")
+GCODE_PRESET_FILE = os.path.join(_CONFIG_DIR, "gcode_presets.json")
 
 # Settings keys captured by a sizing-rules preset (everything in the
 # Options > Sizing Rules dialog).
@@ -361,6 +362,49 @@ def settings_to_sizing_preset(settings):
     for key in SIZING_PRESET_KEYS:
         if key in settings:
             out[key] = copy.deepcopy(settings[key])
+    return out
+
+
+# Settings keys captured by a per-material G-code preset (one material's
+# block inside settings["gcode_settings"]).
+GCODE_PRESET_KEYS = (
+    "engraving_mode",
+    "engraving_speed", "engraving_power", "engraving_passes",
+    "filled_engraving_speed", "filled_engraving_power", "filled_engraving_passes",
+    "filled_line_spacing",
+    "hole_speed", "hole_power", "hole_passes",
+    "cut_speed", "cut_power", "cut_passes",
+    "kerf_width",
+    "air_assist_engraving", "air_assist_filled_engraving",
+    "air_assist_hole", "air_assist_cut",
+)
+
+# All materials a G-code preset can be saved/loaded for. Top-level keys
+# in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
+GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood")
+
+
+def material_settings_to_gcode_preset(mat_settings):
+    """Pull just the G-code preset keys out of one material's settings block."""
+    out = {}
+    for key in GCODE_PRESET_KEYS:
+        if key in mat_settings:
+            out[key] = copy.deepcopy(mat_settings[key])
+    return out
+
+
+def settings_to_gcode_presets(settings):
+    """Bootstrap a 'Default' preset per material from current gcode_settings.
+
+    Returns the nested {material: {"Default": data}} shape expected by
+    load_presets / save_presets. Used on first run when gcode_presets.json
+    is empty so every material always has at least one preset.
+    """
+    gcode = settings.get("gcode_settings", {})
+    out = {}
+    for mat in GCODE_PRESET_MATERIALS:
+        if mat in gcode:
+            out[mat] = {"Default": material_settings_to_gcode_preset(gcode[mat])}
     return out
 
 # Auto-migrate old filename → new
