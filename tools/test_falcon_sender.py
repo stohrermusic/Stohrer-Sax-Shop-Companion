@@ -31,9 +31,10 @@ def check(name, condition):
 
 
 def stream_lines_only(completed):
-    """Strip the streamer's wake-up dwell line so tests can compare
-    against the caller's intended stream lines."""
-    return [ln for ln in completed if ln != 'G4 P0.01']
+    """Strip the streamer's pre-stream safety lines (wake-up dwell and
+    $X unlock) so tests can compare against the caller's intended
+    stream lines."""
+    return [ln for ln in completed if ln not in ('G4 P0.01', '$X')]
 
 
 if not fs.HAS_PYSERIAL:
@@ -159,12 +160,12 @@ class MockSerial:
                 self.out_buf.extend(b'ok\r\n')
                 continue
             self.completed_lines.append(line)
-            # FalconSender's stream prefix: a wake-up dwell that
-            # ensures Grbl's parser is awake. Always acked normally —
-            # it's an implementation detail, not a test-controlled
-            # stream line, so pending_error/pending_alarm are reserved
-            # for the caller's actual stream commands.
-            if line == 'G4 P0.01':
+            # FalconSender's stream prefix: a wake-up dwell + a $X
+            # safety unlock. Both are implementation details (not
+            # test-controlled stream lines), so always ack them and
+            # reserve pending_error/pending_alarm for the caller's
+            # actual stream commands.
+            if line in ('G4 P0.01', '$X'):
                 self.out_buf.extend(b'ok\r\n')
                 continue
             if self.pending_error:
@@ -214,6 +215,16 @@ check(f"all {len(lines)} lines made it to mock controller",
 check("progress callbacks fired for each line",
       len(progress_calls) == len(lines)
       and progress_calls[-1] == (len(lines), len(lines)))
+# Every stream sends a wake-up dwell and a $X unlock before the caller's
+# G-code, so a sticky Alarm from a previous run doesn't force a Falcon
+# restart. Verify both prefix lines were sent (in that order) ahead of
+# the user's first G-code line.
+check("wake-up dwell sent before user G-code",
+      'G4 P0.01' in mock.completed_lines
+      and mock.completed_lines.index('G4 P0.01') < mock.completed_lines.index('G90'))
+check("$X unlock sent before user G-code",
+      '$X' in mock.completed_lines
+      and mock.completed_lines.index('$X') < mock.completed_lines.index('G90'))
 
 
 # --- error mid-stream stops cleanly ---

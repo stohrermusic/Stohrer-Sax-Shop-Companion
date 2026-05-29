@@ -696,6 +696,45 @@ class FalconSender:
         log.warning("wake-parser: timed out (response so far: %r)", buf)
         return False
 
+    def _unlock_sync(self, timeout_s=1.0):
+        """Send `$X` and wait for `ok`. Idempotent unlock — safe to call
+        before every stream so a sticky Alarm from the previous job
+        (e.g. soft-limit triggered by a jog-shifted cut) doesn't force
+        the user to restart the Falcon. No-op when Grbl is already Idle.
+
+        Returns True on `ok`, False on timeout / error.
+        """
+        ser = self._serial
+        if ser is None:
+            return False
+        try:
+            with self._lock:
+                ser.write(b'$X\n')
+        except (serial.SerialException, OSError) as e:
+            log.warning("unlock write failed: %s", e)
+            return False
+        deadline = time.monotonic() + timeout_s
+        buf = b''
+        while time.monotonic() < deadline:
+            try:
+                chunk = ser.read(ser.in_waiting or 1)
+            except (serial.SerialException, OSError) as e:
+                log.warning("unlock read failed: %s", e)
+                return False
+            if chunk:
+                buf += chunk
+                if b'ok' in buf:
+                    log.info("unlock ($X): acked in %.0f ms",
+                             1000 * (time.monotonic() - (deadline - timeout_s)))
+                    return True
+                if b'error:' in buf:
+                    log.warning("unlock ($X): error response %r", buf)
+                    return False
+            else:
+                time.sleep(0.01)
+        log.warning("unlock ($X): timed out (response so far: %r)", buf)
+        return False
+
     def _stream_loop(self, lines):
         ser = self._serial
         if ser is None:
@@ -712,6 +751,13 @@ class FalconSender:
         # waiting for `ok` GUARANTEES the parser has run a command
         # before the main stream starts — once awake, it stays awake.
         self._wake_parser_sync()
+
+        # Safety unlock. If a previous stream left Grbl in Alarm (Frame
+        # & Cut's known cut-stops-before-cutting bug is the recurring
+        # example — a jog-shifted cut bbox can trip a soft limit), $X
+        # clears it without requiring a Falcon power cycle. No-op when
+        # Grbl is Idle, so safe to fire unconditionally.
+        self._unlock_sync()
 
         # We used to do an in-line MPos snapshot here, but that consumed
         # status bytes in ways the mock tests didn't expect. The normal
