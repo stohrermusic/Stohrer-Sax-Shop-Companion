@@ -3845,10 +3845,16 @@ class GcodeSettingsWindow:
 
         self._create_widgets()
         # Baselines snapshot the form right after construction, so the
-        # initial state of each material is treated as "clean."
+        # initial state of each material is treated as "clean." Also
+        # detect whether the current form values match a saved preset
+        # so the dropdown shows what's loaded instead of looking empty.
         if self.gcode_presets is not None:
             for mat_key, _label in self.active_materials:
                 self.material_baseline[mat_key] = self._capture_material_to_dict(mat_key)
+                match = self._detect_active_preset(mat_key)
+                if match is not None:
+                    self.active_preset_name[mat_key] = match
+                    self._refresh_gcode_preset_combo(mat_key, select=match)
 
     def _create_widgets(self):
         # Header
@@ -4439,6 +4445,21 @@ class GcodeSettingsWindow:
         if baseline is None:
             return False
         return self._capture_material_to_dict(mat_key) != baseline
+
+    def _detect_active_preset(self, mat_key):
+        """Find a saved preset whose data matches this material's current
+        form snapshot, so users can see which preset is loaded when the
+        dialog opens. Returns the preset name or None."""
+        presets = self.gcode_presets.get(mat_key, {})
+        if not presets:
+            return None
+        snapshot = self._capture_material_to_dict(mat_key)
+        if snapshot.get("_invalid"):
+            return None
+        for name, data in presets.items():
+            if data == snapshot:
+                return name
+        return None
 
     def _dirty_materials(self):
         """List of material keys whose form differs from their baseline."""

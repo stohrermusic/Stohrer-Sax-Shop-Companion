@@ -197,6 +197,35 @@ def main():
             w.top.destroy()
     check("Per-material baselines are independent (cross-material isolation)", cross_material_isolation)
 
+    def active_preset_detected_on_open():
+        # Default preset matches current settings -> dropdown should
+        # show "Default" and active_preset_name should be set.
+        presets = settings_to_gcode_presets(settings)
+        w = make_window(presets)
+        try:
+            for mat, _label in pad_materials:
+                assert w.active_preset_name.get(mat) == "Default", \
+                    f"{mat} active preset should be detected as 'Default'"
+                assert w.preset_combos[mat].get() == "Default", \
+                    f"{mat} combobox should show 'Default'"
+        finally:
+            w.top.destroy()
+    check("Active preset is detected and shown in dropdown on dialog open", active_preset_detected_on_open)
+
+    def no_match_leaves_active_unset():
+        # Mutate the Default preset so it no longer matches current
+        # settings; active_preset_name should be None for that material.
+        presets = settings_to_gcode_presets(settings)
+        presets["felt"]["Default"]["cut_speed"] = 9999
+        w = make_window(presets)
+        try:
+            assert w.active_preset_name.get("felt") is None
+            # Other materials still match.
+            assert w.active_preset_name.get("card") == "Default"
+        finally:
+            w.top.destroy()
+    check("No matching preset leaves active_preset_name unset", no_match_leaves_active_unset)
+
     def presets_none_disables_ui():
         # When the caller passes gcode_presets=None, the dialog should
         # behave like the legacy Save-only flow: no preset bar, no dirty
