@@ -129,7 +129,7 @@ with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
     main_source = f.read()
 
 test("Tab text is 'Tuner' not 'Strobe Tuner'",
-     "text='Tuner'" in main_source and "text='Strobe Tuner'" not in main_source)
+     "text=_('Tuner')" in main_source and "text=_('Strobe Tuner')" not in main_source)
 
 # ============================================================
 # 10. Settings save method includes new keys (no tuner_mode)
@@ -148,7 +148,7 @@ print("\n--- User Guide ---")
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui_dialogs.py"), encoding="utf-8") as f:
     guide_source = f.read()
 
-test("User guide has 'Tuner' heading", 'self._h2("Tuner")' in guide_source)
+test("User guide has 'Tuner' heading", 'self._h2(_("Tuner"))' in guide_source)
 test("User guide does NOT mention Simple Mode", "Simple Mode" not in guide_source)
 test("User guide mentions VU meter", "VU meter" in guide_source or "analog" in guide_source.lower())
 test("User guide mentions per-wheel BIAS NOTE control",
