@@ -765,13 +765,15 @@ class ToolingTabMixin:
         in LightBurn etc.) AND any future basswood prototyping. The
         calibration-card engrave reads from gcode_settings.basswood,
         so users can tune machine feeds here once."""
-        from config import save_settings
+        from config import save_settings, save_presets, GCODE_PRESET_FILE
         tooling_materials = [
             ("acrylic", _("Acrylic")),
             ("basswood", _("Basswood")),
         ]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
-                            materials=tooling_materials, show_tooling_engraving=True)
+                            materials=tooling_materials, show_tooling_engraving=True,
+                            gcode_presets=self.gcode_presets,
+                            gcode_presets_save_callback=lambda: save_presets(self.gcode_presets, GCODE_PRESET_FILE))
 
     def _open_camera_calibration(self):
         """Open the one-time ChArUco camera-calibration wizard.

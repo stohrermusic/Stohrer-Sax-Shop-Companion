@@ -20,7 +20,7 @@ gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font
 ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 camera_capture.py       → OpenCV ChArUco calibration + scrap-polygon detection (optional dep; degrades gracefully if OpenCV missing)
-falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional). Includes a hard-wake-up via G4 P0.01 dwell at stream start.
+falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional). Includes a hard-wake-up via G4 P0.01 dwell + `$X` safety-unlock at stream start.
 sleep_lock.py           → Cross-platform "keep the system awake during long operations" wrapper. Used by CameraCalibrationDialog so Windows / macOS don't suspend mid-engrave.
 build.py               → Cross-platform PyInstaller build script
 ```
@@ -57,6 +57,7 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 - `app_settings.json` - User preferences
 - `pad_presets.json` - Saved pad size lists
 - `sizing_presets.json` - Saved Sizing Rules dialog presets (added v2.0; schema in config.py `SIZING_PRESET_KEYS`)
+- `gcode_presets.json` - Per-material G-code laser presets (added v2.6; nested `{material: {preset_name: data}}`; schema in config.py `GCODE_PRESET_KEYS` / `GCODE_PRESET_MATERIALS`)
 - `key_height_library.json` - Saxophone key height measurements
 - `screw_specs.json` - OEM screw/rod specifications
 - `toner_data.json` - Tone analyzer presets and sessions (nested library format; auto-migrated from old `tone_profiles.json`)
@@ -124,4 +125,4 @@ Key invariants the subsystem keeps:
 - `_custom_polygon_lb_machine` (absolute machine coords of original polygon's LB-vertex) drives Try Auto Locate.
 - `_falcon_homed_this_session` (True after $H or after Machine > Reset Falcon) gates Try Auto Locate enabled state.
 - Frame G-code emits `G92 X{lb_x} Y{lb_y}` (LB-vertex in Y-flipped frame) so jogging to the visible scrap corner bridges to the polygon's bbox origin.
-- `falcon_sender._stream_loop` starts every stream with a G4 P0.01 wake-up dwell to prevent Grbl parser dormancy from eating the first command.
+- `falcon_sender._stream_loop` starts every stream with two safety lines BEFORE the caller's G-code: (1) `G4 P0.01` wake-up dwell to prevent Grbl parser dormancy from eating the first command, and (2) `$X` unlock so a sticky Alarm from the previous stream (e.g. soft-limit triggered by a jog-shifted cut bbox in Frame & Cut) doesn't force a Falcon power cycle. `$X` is a no-op when Grbl is already Idle.

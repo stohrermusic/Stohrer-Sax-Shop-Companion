@@ -247,6 +247,26 @@ def parse_status(line):
     return out
 
 
+def _classify_stream(gcode_lines):
+    """Tag a stream as framing / cut / jog-only / wake / other for logs.
+
+    Strictly heuristic — looks for distinguishing comments and M-codes
+    in the first ~30 lines. Wrong answer just produces a confusing tag
+    in the log; never affects behavior.
+    """
+    if not gcode_lines:
+        return "jog-only"
+    head = [ln.strip() for ln in gcode_lines[:30]]
+    blob = "\n".join(head).lower()
+    if "framing pass" in blob or "framing rectangle" in blob:
+        return "framing"
+    if "m8" in blob or "engraving" in blob or "outer cut" in blob or "center hole" in blob:
+        return "cut"
+    if any(ln.startswith("g4 ") or ln == "g4" for ln in head):
+        return "wake"
+    return "other"
+
+
 # =============================================================================
 # Sender
 # =============================================================================
@@ -290,6 +310,17 @@ class FalconSender:
         self.latest_alarm = None
         self._total_lines = 0
         self._sent_lines = 0
+
+        # Diagnostics. Bug under investigation: after Frame & Cut framing,
+        # the cut sometimes alarms before any material is touched. To
+        # capture the timing and physical state at each stream boundary
+        # we tag every stream with a session id, classify it (framing /
+        # cut / jog-only / other), and log MPos + state at start, every
+        # M-code, and the end. See app.log when reproducing.
+        self._stream_session = 0
+        self._stream_start_time = 0.0
+        self._last_stream_end_time = 0.0
+        self._last_stream_type = None
 
     # ------------------------------------------------------------------
     # Connection
@@ -583,8 +614,21 @@ class FalconSender:
         # if Grbl errors out mid-stream and the user closes the dialog
         # before reading the failing-line label.
         preview = gcode_lines[:8]
-        log.info("stream start: %d lines; preview=%s",
-                 len(gcode_lines), preview)
+        self._stream_session += 1
+        self._stream_start_time = time.monotonic()
+        stream_type = _classify_stream(gcode_lines)
+        gap = (self._stream_start_time - self._last_stream_end_time
+               if self._last_stream_end_time else 0.0)
+        log.info(
+            "stream #%d start: type=%s, lines=%d, gap_since_last=%.2fs, "
+            "prev_type=%s, prev_state=%s, prev_mpos=%s; preview=%s",
+            self._stream_session, stream_type, len(gcode_lines), gap,
+            self._last_stream_type,
+            (self.status or {}).get('state'),
+            (self.status or {}).get('mpos'),
+            preview,
+        )
+        self._last_stream_type = stream_type
         self._worker = threading.Thread(
             target=self._stream_worker, args=(list(gcode_lines),),
             name='FalconSender-stream', daemon=True,
@@ -652,6 +696,45 @@ class FalconSender:
         log.warning("wake-parser: timed out (response so far: %r)", buf)
         return False
 
+    def _unlock_sync(self, timeout_s=1.0):
+        """Send `$X` and wait for `ok`. Idempotent unlock — safe to call
+        before every stream so a sticky Alarm from the previous job
+        (e.g. soft-limit triggered by a jog-shifted cut) doesn't force
+        the user to restart the Falcon. No-op when Grbl is already Idle.
+
+        Returns True on `ok`, False on timeout / error.
+        """
+        ser = self._serial
+        if ser is None:
+            return False
+        try:
+            with self._lock:
+                ser.write(b'$X\n')
+        except (serial.SerialException, OSError) as e:
+            log.warning("unlock write failed: %s", e)
+            return False
+        deadline = time.monotonic() + timeout_s
+        buf = b''
+        while time.monotonic() < deadline:
+            try:
+                chunk = ser.read(ser.in_waiting or 1)
+            except (serial.SerialException, OSError) as e:
+                log.warning("unlock read failed: %s", e)
+                return False
+            if chunk:
+                buf += chunk
+                if b'ok' in buf:
+                    log.info("unlock ($X): acked in %.0f ms",
+                             1000 * (time.monotonic() - (deadline - timeout_s)))
+                    return True
+                if b'error:' in buf:
+                    log.warning("unlock ($X): error response %r", buf)
+                    return False
+            else:
+                time.sleep(0.01)
+        log.warning("unlock ($X): timed out (response so far: %r)", buf)
+        return False
+
     def _stream_loop(self, lines):
         ser = self._serial
         if ser is None:
@@ -668,6 +751,23 @@ class FalconSender:
         # waiting for `ok` GUARANTEES the parser has run a command
         # before the main stream starts — once awake, it stays awake.
         self._wake_parser_sync()
+
+        # Safety unlock. If a previous stream left Grbl in Alarm (Frame
+        # & Cut's known cut-stops-before-cutting bug is the recurring
+        # example — a jog-shifted cut bbox can trip a soft limit), $X
+        # clears it without requiring a Falcon power cycle. No-op when
+        # Grbl is Idle, so safe to fire unconditionally.
+        self._unlock_sync()
+
+        # We used to do an in-line MPos snapshot here, but that consumed
+        # status bytes in ways the mock tests didn't expect. The normal
+        # status poll a few lines down does the same job within the first
+        # poll interval (~50ms) and updates self.status on the on_status
+        # path, which the M-code trace below picks up.
+        log.info("stream #%d ready: jogs_in_flight=%d, prev_state=%s, prev_mpos=%s",
+                 self._stream_session, self._jogs_in_flight,
+                 (self.status or {}).get('state'),
+                 (self.status or {}).get('mpos'))
 
         # Followup real-time ping — also gets us an initial status
         # response so on_status fires before the stream is well
@@ -727,6 +827,18 @@ class FalconSender:
                     line_idx += 1
                     self._sent_lines = line_idx
                     self._notify_progress(line_idx, self._total_lines)
+                    # Trace spindle/coolant M-codes + G92/G10 frame
+                    # changes — these are the lines whose timing is
+                    # most likely to interact with the cut-alarm bug
+                    # we're investigating.
+                    upper = raw.upper()
+                    if (upper.startswith(('M3', 'M4', 'M5', 'M7', 'M8', 'M9',
+                                          'G92', 'G10'))):
+                        log.info(
+                            "stream #%d line %d: %s (state=%s, mpos=%s)",
+                            self._stream_session, line_idx, raw,
+                            (self.status or {}).get('state'),
+                            (self.status or {}).get('mpos'))
                 else:
                     pass  # buffer is full, wait for an ack
 
@@ -890,6 +1002,15 @@ class FalconSender:
         # the UI reflects the user's intent.
         if self._stop_flag.is_set() and reason == "complete":
             reason = "stopped"
+        self._last_stream_end_time = time.monotonic()
+        duration = self._last_stream_end_time - self._stream_start_time
+        log.info(
+            "stream #%d done: reason=%s, lines_sent=%d/%d, duration=%.2fs, "
+            "final_state=%s, final_mpos=%s",
+            self._stream_session, reason, self._sent_lines,
+            self._total_lines, duration,
+            (self.status or {}).get('state'),
+            (self.status or {}).get('mpos'))
         self._notify_done(reason)
 
     def _wait_for_idle(self, timeout_s=120.0):

@@ -17,6 +17,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# ui_dialogs evaluates _() at class-definition time (UserGuideWindow.
+# SECTION_TITLES), so the gettext _ must be installed before importing it.
+from i18n import init_translation  # noqa: E402
+init_translation("en")
+
 results = []
 
 

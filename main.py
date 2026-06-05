@@ -10,10 +10,11 @@ import time
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
+    GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
     setup_logging, get_log_file,
-    settings_to_sizing_preset,
+    settings_to_sizing_preset, settings_to_gcode_presets,
 )
 
 # Initialize translations BEFORE importing UI modules. Any module-level
@@ -94,6 +95,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if not self.sizing_presets:
             self.sizing_presets["Default"] = settings_to_sizing_preset(self.settings)
             save_presets(self.sizing_presets, SIZING_PRESET_FILE)
+
+        # G-code presets: shape is {material: {preset_name: data}}. Bootstrap
+        # a Default per material on first run so every material always has
+        # at least one preset to load. Backfill any new materials added later.
+        self.gcode_presets = load_presets(GCODE_PRESET_FILE, preset_type_name="G-code Preset")
+        bootstrap = settings_to_gcode_presets(self.settings)
+        gcode_presets_dirty = False
+        for mat in GCODE_PRESET_MATERIALS:
+            if mat not in self.gcode_presets or not self.gcode_presets[mat]:
+                self.gcode_presets[mat] = bootstrap.get(mat, {})
+                gcode_presets_dirty = True
+        if gcode_presets_dirty:
+            save_presets(self.gcode_presets, GCODE_PRESET_FILE)
 
         # --- Custom polygon state ---
         # custom_polygon holds the active scrap outline used for
@@ -1325,6 +1339,102 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
               "session.").format(n=total))
         self.scrap_session['optimize'] = bool(answer)
 
+    def _scrap_begin_partial(self, pads, hole_dia, material, mat_w, mat_h,
+                             mat_polygon, ask_save_dir):
+        """Shared scrap-mode front half: start or continue the session,
+        then run the partial nest for the current scrap.
+
+        Used by both the file-export path (_generate_gcode_scrap_mode,
+        ask_save_dir=True) and the Frame & Cut path (ask_save_dir=False)
+        so the session bookkeeping can't drift between them.
+
+        ask_save_dir: True prompts for an output folder when STARTING a
+        new session (file export writes .gcode there). False starts the
+        session with an empty save_dir — Frame & Cut streams to the
+        laser and never writes files.
+
+        Returns (placed, remaining) on success, or None if the caller
+        should abort: folder prompt cancelled (silent), material
+        mismatch, session already complete, or nothing fit (each shows
+        its own message). On a successful return self.scrap_session is
+        active and its 'hole_dia' is authoritative for generation.
+        """
+        if not self.scrap_session['active']:
+            save_dir = ''
+            if ask_save_dir:
+                save_dir = filedialog.askdirectory(
+                    title=_("Select Folder to Save G-code"),
+                    initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
+                    return None
+                self.settings["last_output_dir"] = save_dir
+            self._start_scrap_session(pads, material, save_dir, hole_dia)
+        else:
+            if self.scrap_session['material'] != material:
+                messagebox.showerror(_("Material Mismatch"),
+                    _("Current session is for {material}.\n"
+                    "Clear session to switch materials.").format(material=self.scrap_session['material']))
+                return None
+            # A session started by Frame & Cut carries no save_dir. If
+            # we're now exporting files into it, ask for a folder once
+            # and remember it on the session for later file exports.
+            if ask_save_dir and not self.scrap_session.get('save_dir'):
+                save_dir = filedialog.askdirectory(
+                    title=_("Select Folder to Save G-code"),
+                    initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
+                    return None
+                self.settings["last_output_dir"] = save_dir
+                self.scrap_session['save_dir'] = save_dir
+            pads = self.scrap_session['remaining_pads']
+
+        if not pads:
+            messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
+            return None
+
+        # Large-batch optimization opt-in (prompted once per session,
+        # only on scraps with >= LARGE_BATCH_THRESHOLD pads remaining).
+        self._maybe_prompt_large_batch_optimization(pads)
+        _optimize = bool(self.scrap_session.get('optimize'))
+
+        placed, remaining, any_placed = try_nest_partial(
+            pads, material, mat_w, mat_h, self.settings,
+            polygon=mat_polygon, optimize=_optimize)
+
+        if not any_placed:
+            min_pad_size = min(p['size'] for p in pads)
+            messagebox.showwarning(_("No Pads Fit"),
+                _("No pads could be placed on this scrap.\n\n"
+                "Smallest remaining pad: {min_pad_size}mm\n"
+                "Try a larger scrap piece.").format(min_pad_size=min_pad_size))
+            return None
+
+        return placed, remaining
+
+    def _frame_cut_scrap_advance(self, placed_count, remaining):
+        """Post-cut scrap bookkeeping for Frame & Cut, mirroring the tail
+        of _generate_gcode_scrap_mode: bump the scrap count, record what's
+        left for the next scrap, refresh the status UI, and either
+        announce session completion or show the continue/recapture dialog.
+
+        Called only after a cut has streamed to completion — if the user
+        stopped the cut or it errored, the session is left untouched so
+        the scrap can be re-cut.
+        """
+        self.scrap_session['scrap_count'] += 1
+        scrap_num = self.scrap_session['scrap_count']
+        self.scrap_session['remaining_pads'] = remaining
+        self._update_scrap_status_display()
+        self._update_remaining_pads_window()
+
+        remaining_count = self._count_remaining_pads()
+        if remaining_count == 0:
+            messagebox.showinfo(_("Session Complete!"),
+                                _("All pads have been placed!"))
+        else:
+            self._show_scrap_continue_dialog(
+                placed_count, scrap_num, remaining_count)
+
     def _open_remaining_pads_window(self):
         """Open or update the floating window showing remaining and done pads."""
         if self.scrap_remaining_window is not None:
@@ -2351,12 +2461,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # bridge between them; with the consolidated dialog it just
         # makes users repeat work they already chose against.)
 
-        # --- Mirror on_generate_gcode's input-validation up through nesting ---
-        if self.scrap_mode_var.get():
-            messagebox.showinfo(_("Scrap Mode"),
-                                 _("Frame & Cut isn't wired up for scrap "
-                                   "mode yet — please uncheck Scrap Mode."))
-            return
+        # --- Input validation up through nesting (mirrors on_generate_gcode) ---
         try:
             params = self._prepare_generation()
             if not params:
@@ -2377,15 +2482,31 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             mat_w, mat_h, mat_polygon = self._get_material_dimensions(
                 material, width_mm, height_mm, card_paper_dims)
 
-            placed = nest_pads(pads, material, mat_w, mat_h, self.settings,
-                                polygon=mat_polygon)
-            if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings,
-                                       polygon=mat_polygon):
-                messagebox.showerror(
-                    _("Nesting Error"),
-                    _("Could not fit all '{m}' pieces in the available "
-                      "area.").format(m=material.replace('_', ' ')))
-                return
+            # Scrap mode places a partial batch on this scrap (one scrap
+            # per click, mirroring _generate_gcode_scrap_mode); standard
+            # mode nests the whole batch and requires it all to fit.
+            # scrap_remaining is handed to _frame_cut_scrap_advance once
+            # the cut completes; it stays None in standard mode.
+            scrap_mode = self.scrap_mode_var.get()
+            scrap_remaining = None
+            if scrap_mode:
+                result = self._scrap_begin_partial(
+                    pads, hole_dia, material, mat_w, mat_h, mat_polygon,
+                    ask_save_dir=False)
+                if result is None:
+                    return
+                placed, scrap_remaining = result
+                hole_dia = self.scrap_session['hole_dia']
+            else:
+                placed = nest_pads(pads, material, mat_w, mat_h, self.settings,
+                                    polygon=mat_polygon)
+                if not can_all_pads_fit(pads, material, mat_w, mat_h,
+                                        self.settings, polygon=mat_polygon):
+                    messagebox.showerror(
+                        _("Nesting Error"),
+                        _("Could not fit all '{m}' pieces in the available "
+                          "area.").format(m=material.replace('_', ' ')))
+                    return
 
             # Generate G-code to a temp file then read it back into memory.
             import tempfile
@@ -2557,9 +2678,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # Cut uses the same G92 offset as framing so the cut
                 # placements align with the LB-vertex jog convention.
                 cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
-                FalconRunDialog(
+                cut_dlg = FalconRunDialog(
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
+
+                # Scrap mode: commit this scrap (decrement remaining,
+                # offer continue/recapture) only once the cut has
+                # streamed to completion. A stopped or errored cut
+                # leaves the session untouched so it can be re-cut.
+                if scrap_mode and cut_dlg._final_reason == "complete":
+                    self._frame_cut_scrap_advance(len(placed), scrap_remaining)
             finally:
                 # Intentionally don't auto-close live_cam — users want
                 # to see the finished result. They close it manually,
@@ -2704,49 +2832,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             mat_w, mat_h, mat_polygon = self._get_material_dimensions(
                 material, width_mm, height_mm, card_paper_dims)
 
-            # Initialize or validate session
-            if not self.scrap_session['active']:
-                # Starting new session - ask for save directory
-                save_dir = filedialog.askdirectory(
-                    title=_("Select Folder to Save G-code"),
-                    initialdir=self.settings.get("last_output_dir", ""))
-                if not save_dir:
-                    return
-                self.settings["last_output_dir"] = save_dir
-
-                self._start_scrap_session(pads, material, save_dir, hole_dia)
-            else:
-                # Continuing existing session - validate material matches
-                if self.scrap_session['material'] != material:
-                    messagebox.showerror(_("Material Mismatch"),
-                        _("Current session is for {material}.\n"
-                        "Clear session to switch materials.").format(material=self.scrap_session['material']))
-                    return
-                # Use remaining pads from session
-                pads = self.scrap_session['remaining_pads']
-                hole_dia = self.scrap_session['hole_dia']
-
-            if not pads:
-                messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
+            # Start or continue the session and place this scrap's pads.
+            # ask_save_dir=True: file export needs an output folder.
+            result = self._scrap_begin_partial(
+                pads, hole_dia, material, mat_w, mat_h, mat_polygon,
+                ask_save_dir=True)
+            if result is None:
                 return
-
-            # Large-batch optimization opt-in (prompted once per session,
-            # only on scraps with ≥ LARGE_BATCH_THRESHOLD pads remaining).
-            self._maybe_prompt_large_batch_optimization(pads)
-            _optimize = bool(self.scrap_session.get('optimize'))
-
-            # Attempt partial placement
-            placed, remaining, any_placed = try_nest_partial(
-                pads, material, mat_w, mat_h, self.settings,
-                polygon=mat_polygon, optimize=_optimize)
-
-            if not any_placed:
-                min_pad_size = min(p['size'] for p in pads)
-                messagebox.showwarning(_("No Pads Fit"),
-                    _("No pads could be placed on this scrap.\n\n"
-                    "Smallest remaining pad: {min_pad_size}mm\n"
-                    "Try a larger scrap piece.").format(min_pad_size=min_pad_size))
-                return
+            placed, remaining = result
+            hole_dia = self.scrap_session['hole_dia']
 
             # Preview before saving
             if self.preview_var.get():
@@ -3129,7 +3223,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Show only pad materials (felt/card/leather) from the pad generator tab
         pad_materials = [("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
-                            materials=pad_materials)
+                            materials=pad_materials,
+                            gcode_presets=self.gcode_presets,
+                            gcode_presets_save_callback=lambda: save_presets(self.gcode_presets, GCODE_PRESET_FILE))
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)

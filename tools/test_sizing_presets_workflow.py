@@ -19,6 +19,9 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from i18n import init_translation  # noqa: E402
+init_translation("en")
+
 results = []
 
 

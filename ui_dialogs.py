@@ -2288,9 +2288,10 @@ class SaveSizingPresetDialog(tk.Toplevel):
     On close, sets `self.result` to None (cancelled) or {"name": str}.
     """
 
-    def __init__(self, parent, existing_names, default_existing=None):
+    def __init__(self, parent, existing_names, default_existing=None,
+                 title=None, intro=None):
         super().__init__(parent)
-        self.title(_("Save Sizing Preset"))
+        self.title(title or _("Save Sizing Preset"))
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
@@ -2315,7 +2316,7 @@ class SaveSizingPresetDialog(tk.Toplevel):
 
         tk.Label(
             frame,
-            text=_("Save the current sizing-rules form as a preset."),
+            text=intro or _("Save the current sizing-rules form as a preset."),
             bg=DIALOG_BG, justify="left",
         ).pack(anchor="w", pady=(0, 8))
 
@@ -3808,12 +3809,25 @@ class GcodeSettingsWindow:
     ]
 
     def __init__(self, parent, settings, save_callback, materials=None,
-                 show_tooling_engraving=False):
+                 show_tooling_engraving=False,
+                 gcode_presets=None, gcode_presets_save_callback=None):
         self.settings = settings
         self.save_callback = save_callback
         # Allow filtering which materials to show
         self.active_materials = materials if materials else self.MATERIALS
         self.show_tooling_engraving = show_tooling_engraving
+
+        # Per-material preset library: {material: {preset_name: data}}.
+        # Mutated in place; persisted via gcode_presets_save_callback. None
+        # disables the preset UI entirely (for callers that opt out / tests).
+        self.gcode_presets = gcode_presets
+        self.gcode_presets_save_callback = gcode_presets_save_callback or (lambda: None)
+        # Per-material: name of the preset currently loaded (or None),
+        # tk widget references for the preset bar, and the baseline snapshot
+        # used by dirty-tracking. Populated as material sections are built.
+        self.active_preset_name = {}
+        self.preset_combos = {}
+        self.material_baseline = {}
 
         self.top = tk.Toplevel(parent)
         title = "Tooling Settings" if show_tooling_engraving else "G-code Laser Settings"
@@ -3830,6 +3844,17 @@ class GcodeSettingsWindow:
         self.vars = {}  # vars[material][operation]['speed'|'power']
 
         self._create_widgets()
+        # Baselines snapshot the form right after construction, so the
+        # initial state of each material is treated as "clean." Also
+        # detect whether the current form values match a saved preset
+        # so the dropdown shows what's loaded instead of looking empty.
+        if self.gcode_presets is not None:
+            for mat_key, _label in self.active_materials:
+                self.material_baseline[mat_key] = self._capture_material_to_dict(mat_key)
+                match = self._detect_active_preset(mat_key)
+                if match is not None:
+                    self.active_preset_name[mat_key] = match
+                    self._refresh_gcode_preset_combo(mat_key, select=match)
 
     def _create_widgets(self):
         # Header
@@ -3939,17 +3964,21 @@ class GcodeSettingsWindow:
         button_frame = tk.Frame(self.top, bg=DIALOG_BG)
         button_frame.pack(fill="x", padx=10, pady=10)
 
-        save_btn = tk.Button(button_frame, text=_("Save"), command=self._on_save)
-        save_btn.pack(side="left", padx=5)
-        cancel_btn = tk.Button(button_frame, text=_("Cancel"), command=self.top.destroy)
+        apply_btn = tk.Button(button_frame, text=_("Apply"), command=self._on_apply_clicked)
+        apply_btn.pack(side="left", padx=5)
+        cancel_btn = tk.Button(button_frame, text=_("Cancel"), command=self._on_cancel_clicked)
         cancel_btn.pack(side="left", padx=5)
         reset_btn = tk.Button(button_frame, text=_("Reset to Defaults"), command=self._reset_defaults)
         reset_btn.pack(side="right", padx=5)
-        add_tooltip(save_btn, _("Apply the values in this dialog and close."))
+        add_tooltip(apply_btn, _("Apply the values in this dialog and close."))
         add_tooltip(cancel_btn, _("Close without applying any changes."))
         add_tooltip(reset_btn,
                     _("Reset every value in this dialog back to factory "
                     "defaults (tuned for the Creality Falcon2 Pro 40W)."))
+
+        # Intercept the window-close X so it goes through the same dirty
+        # prompt as Cancel.
+        self.top.protocol("WM_DELETE_WINDOW", self._on_cancel_clicked)
 
     def _on_engraving_mode_changed(self, mat_key, mode):
         """Handle engraving mode checkbox toggle - ensure exactly one is checked."""
@@ -3960,13 +3989,25 @@ class GcodeSettingsWindow:
 
     def _create_material_section(self, parent, mat_key, mat_label):
         """Create a settings section for one material."""
-        frame = tk.LabelFrame(parent, text=mat_label, bg=DIALOG_BG, padx=10, pady=10)
-        frame.pack(fill="x", pady=5, padx=5)
+        mat_frame = tk.LabelFrame(parent, text=mat_label, bg=DIALOG_BG, padx=10, pady=10)
+        mat_frame.pack(fill="x", pady=5, padx=5)
 
         self.vars[mat_key] = {}
 
         # Get current settings for this material
         mat_settings = self.gcode_settings.get(mat_key, {})
+
+        # Preset bar (only when the library was passed in). Packed at the
+        # top of the LabelFrame; the actual settings grid lives in a sub-
+        # frame below so we can mix pack here with grid in `frame`.
+        if self.gcode_presets is not None:
+            self._create_material_preset_bar(mat_frame, mat_key, mat_label)
+
+        # Sub-frame that owns the grid layout for the material's settings.
+        # Named `frame` (not `grid_frame`) so the existing rows below grid
+        # into it without renaming dozens of references.
+        frame = tk.Frame(mat_frame, bg=DIALOG_BG)
+        frame.pack(fill="x")
 
         # Header row
         op_hdr = tk.Label(frame, text=_("Operation"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
@@ -4272,6 +4313,342 @@ class GcodeSettingsWindow:
         """Get default value from DEFAULT_SETTINGS."""
         defaults = DEFAULT_SETTINGS.get("gcode_settings", {}).get(material, {})
         return defaults.get(setting_key, fallback)
+
+    # ----- Per-material preset bar -----
+
+    def _create_material_preset_bar(self, parent, mat_key, mat_label):
+        """Build the preset dropdown + Load/Save/Rename/Delete row for one material."""
+        bar = tk.Frame(parent, bg=DIALOG_BG)
+        bar.pack(fill="x", pady=(0, 6))
+
+        tk.Label(bar, text=_("Preset:"), bg=DIALOG_BG).pack(side="left")
+        combo = ttk.Combobox(bar, state="readonly", width=22)
+        combo.pack(side="left", padx=5, fill="x", expand=True)
+        self.preset_combos[mat_key] = combo
+
+        load_btn = tk.Button(bar, text=_("Load"),
+                             command=lambda mk=mat_key: self._on_load_gcode_preset(mk))
+        load_btn.pack(side="left", padx=2)
+        save_btn = tk.Button(bar, text=_("Save"),
+                             command=lambda mk=mat_key: self._on_save_gcode_preset(mk))
+        save_btn.pack(side="left", padx=2)
+        rename_btn = tk.Button(bar, text=_("Rename"),
+                               command=lambda mk=mat_key: self._on_rename_gcode_preset(mk))
+        rename_btn.pack(side="left", padx=2)
+        del_btn = tk.Button(bar, text=_("Delete"),
+                            command=lambda mk=mat_key: self._on_delete_gcode_preset(mk))
+        del_btn.pack(side="left", padx=2)
+
+        add_tooltip(combo, _("Saved laser settings for {label}. Pick one and click Load.").format(label=mat_label))
+        add_tooltip(load_btn,
+                    _("Fill the {label} fields below from the selected preset. "
+                    "Click Apply at the bottom to commit it to the app.").format(label=mat_label))
+        add_tooltip(save_btn,
+                    _("Save the current {label} fields as a preset — overwrite "
+                    "an existing one or create a new one.").format(label=mat_label))
+        add_tooltip(rename_btn, _("Rename the selected {label} preset.").format(label=mat_label))
+        add_tooltip(del_btn,
+                    _("Delete the selected {label} preset (cannot be undone). "
+                    "At least one preset must remain.").format(label=mat_label))
+
+        self.active_preset_name[mat_key] = None
+        self._refresh_gcode_preset_combo(mat_key)
+
+    def _refresh_gcode_preset_combo(self, mat_key, select=None):
+        """Sync the combobox values from self.gcode_presets[mat_key]."""
+        names = sorted(self.gcode_presets.get(mat_key, {}).keys())
+        self.preset_combos[mat_key]['values'] = names
+        if select and select in names:
+            self.preset_combos[mat_key].set(select)
+        elif self.active_preset_name.get(mat_key) in names:
+            self.preset_combos[mat_key].set(self.active_preset_name[mat_key])
+        elif not names:
+            self.preset_combos[mat_key].set("")
+
+    # ----- Snapshot helpers -----
+
+    def _capture_material_to_dict(self, mat_key):
+        """Read every preset-tracked field for one material from its tk vars.
+
+        Returns a dict with the same shape as a single material entry in
+        DEFAULT_SETTINGS["gcode_settings"]. Used for dirty tracking AND
+        for save-as-preset.
+        """
+        v = self.vars[mat_key]
+        # Fill density slider maps to filled_line_spacing (same formula as _on_save).
+        density_val = v['fill_density'].get()
+        line_spacing = round(0.3 - (density_val / 100) * 0.22, 3)
+        try:
+            data = {
+                "engraving_mode": v['engraving_mode'].get(),
+                "engraving_speed": int(v['engraving']['speed'].get()),
+                "engraving_power": float(v['engraving']['power'].get()),
+                "engraving_passes": max(1, int(v['engraving']['passes'].get())),
+                "filled_engraving_speed": int(v['filled_engraving']['speed'].get()),
+                "filled_engraving_power": float(v['filled_engraving']['power'].get()),
+                "filled_engraving_passes": max(1, int(v['filled_engraving']['passes'].get())),
+                "filled_line_spacing": line_spacing,
+                "hole_speed": int(v['hole']['speed'].get()),
+                "hole_power": float(v['hole']['power'].get()),
+                "hole_passes": max(1, int(v['hole']['passes'].get())),
+                "cut_speed": int(v['cut']['speed'].get()),
+                "cut_power": float(v['cut']['power'].get()),
+                "cut_passes": max(1, int(v['cut']['passes'].get())),
+                "kerf_width": float(v['kerf_width'].get()),
+                "air_assist_engraving": bool(v['air_assist_engraving'].get()),
+                "air_assist_filled_engraving": bool(v['air_assist_filled_engraving'].get()),
+                "air_assist_hole": bool(v['air_assist_hole'].get()),
+                "air_assist_cut": bool(v['air_assist_cut'].get()),
+            }
+        except (tk.TclError, ValueError):
+            # Mid-edit invalid state. Return a sentinel that won't equal any
+            # real snapshot so dirty-tracking treats this as "still dirty"
+            # rather than crashing.
+            return {"_invalid": True}
+        return data
+
+    def _apply_dict_to_material(self, mat_key, data):
+        """Populate this material's tk vars from a preset dict."""
+        v = self.vars[mat_key]
+        defaults = DEFAULT_SETTINGS.get("gcode_settings", {}).get(mat_key, {})
+
+        def g(key, fallback):
+            return data.get(key, defaults.get(key, fallback))
+
+        v['engraving_mode'].set(g("engraving_mode", "line"))
+        v['engraving']['speed'].set(int(g("engraving_speed", 1200)))
+        v['engraving']['power'].set(g("engraving_power", 8))
+        v['engraving']['passes'].set(int(g("engraving_passes", 1)))
+        v['filled_engraving']['speed'].set(int(g("filled_engraving_speed", 1200)))
+        v['filled_engraving']['power'].set(g("filled_engraving_power", 8))
+        v['filled_engraving']['passes'].set(int(g("filled_engraving_passes", 1)))
+
+        spacing = g("filled_line_spacing", 0.15)
+        density_val = int((0.3 - spacing) / 0.22 * 100)
+        v['fill_density'].set(max(0, min(100, density_val)))
+
+        v['hole']['speed'].set(int(g("hole_speed", 300)))
+        v['hole']['power'].set(g("hole_power", 30))
+        v['hole']['passes'].set(int(g("hole_passes", 1)))
+        v['cut']['speed'].set(int(g("cut_speed", 600)))
+        v['cut']['power'].set(g("cut_power", 60))
+        v['cut']['passes'].set(int(g("cut_passes", 1)))
+
+        v['kerf_width'].set(g("kerf_width", 0.0))
+        v['air_assist_engraving'].set(bool(g("air_assist_engraving", True)))
+        v['air_assist_filled_engraving'].set(bool(g("air_assist_filled_engraving", True)))
+        v['air_assist_hole'].set(bool(g("air_assist_hole", True)))
+        v['air_assist_cut'].set(bool(g("air_assist_cut", True)))
+
+    def _material_is_dirty(self, mat_key):
+        baseline = self.material_baseline.get(mat_key)
+        if baseline is None:
+            return False
+        return self._capture_material_to_dict(mat_key) != baseline
+
+    def _detect_active_preset(self, mat_key):
+        """Find a saved preset whose data matches this material's current
+        form snapshot, so users can see which preset is loaded when the
+        dialog opens. Returns the preset name or None."""
+        presets = self.gcode_presets.get(mat_key, {})
+        if not presets:
+            return None
+        snapshot = self._capture_material_to_dict(mat_key)
+        if snapshot.get("_invalid"):
+            return None
+        for name, data in presets.items():
+            if data == snapshot:
+                return name
+        return None
+
+    def _dirty_materials(self):
+        """List of material keys whose form differs from their baseline."""
+        if self.gcode_presets is None:
+            return []
+        return [mk for mk, _label in self.active_materials if self._material_is_dirty(mk)]
+
+    def _set_material_baseline(self, mat_key):
+        self.material_baseline[mat_key] = self._capture_material_to_dict(mat_key)
+
+    # ----- Preset action handlers -----
+
+    def _on_load_gcode_preset(self, mat_key):
+        combo = self.preset_combos[mat_key]
+        name = combo.get().strip()
+        presets = self.gcode_presets.get(mat_key, {})
+        if not name:
+            messagebox.showinfo(_("Load Preset"),
+                                _("Pick a preset from the dropdown first."),
+                                parent=self.top)
+            return
+        if name not in presets:
+            messagebox.showerror(_("Load Preset"),
+                                 _("Preset '{name}' not found.").format(name=name),
+                                 parent=self.top)
+            return
+        if self._material_is_dirty(mat_key):
+            label = self.active_preset_name.get(mat_key) or _("the current values")
+            if not messagebox.askyesno(
+                _("Discard unsaved changes?"),
+                _("You have unsaved edits to {label}.\n\nLoading '{name}' will discard them. Continue?")
+                    .format(label=label, name=name),
+                parent=self.top,
+            ):
+                return
+        self._apply_dict_to_material(mat_key, presets[name])
+        self.active_preset_name[mat_key] = name
+        self._set_material_baseline(mat_key)
+
+    def _on_save_gcode_preset(self, mat_key):
+        mat_label = dict(self.active_materials).get(mat_key, mat_key)
+        existing = sorted(self.gcode_presets.get(mat_key, {}).keys())
+        dlg = SaveSizingPresetDialog(
+            self.top,
+            existing_names=existing,
+            default_existing=self.active_preset_name.get(mat_key),
+            title=_("Save {label} Preset").format(label=mat_label),
+            intro=_("Save the current {label} fields as a preset.").format(label=mat_label),
+        )
+        result = dlg.result
+        if result is None:
+            return
+        target = result["name"]
+        snapshot = self._capture_material_to_dict(mat_key)
+        if snapshot.get("_invalid"):
+            messagebox.showerror(_("Save Preset"),
+                                 _("One or more {label} fields has an invalid value. "
+                                   "Fix it before saving as a preset.").format(label=mat_label),
+                                 parent=self.top)
+            return
+        self.gcode_presets.setdefault(mat_key, {})[target] = snapshot
+        self.gcode_presets_save_callback()
+        self.active_preset_name[mat_key] = target
+        self._set_material_baseline(mat_key)
+        self._refresh_gcode_preset_combo(mat_key, select=target)
+
+    def _on_rename_gcode_preset(self, mat_key):
+        combo = self.preset_combos[mat_key]
+        old = combo.get().strip()
+        presets = self.gcode_presets.get(mat_key, {})
+        if not old or old not in presets:
+            messagebox.showinfo(_("Rename Preset"),
+                                _("Pick a preset from the dropdown first."),
+                                parent=self.top)
+            return
+        new = simpledialog.askstring(
+            _("Rename Preset"),
+            _("New name for '{old}':").format(old=old),
+            initialvalue=old,
+            parent=self.top,
+        )
+        if new is None:
+            return
+        new = new.strip()
+        if not new:
+            messagebox.showwarning(_("Rename Preset"),
+                                   _("Preset name cannot be empty."),
+                                   parent=self.top)
+            return
+        if new == old:
+            return
+        if new in presets:
+            messagebox.showerror(_("Rename Preset"),
+                                 _("A preset named '{new}' already exists.").format(new=new),
+                                 parent=self.top)
+            return
+        presets[new] = presets.pop(old)
+        if self.active_preset_name.get(mat_key) == old:
+            self.active_preset_name[mat_key] = new
+        self.gcode_presets_save_callback()
+        self._refresh_gcode_preset_combo(mat_key, select=new)
+
+    def _on_delete_gcode_preset(self, mat_key):
+        combo = self.preset_combos[mat_key]
+        name = combo.get().strip()
+        presets = self.gcode_presets.get(mat_key, {})
+        mat_label = dict(self.active_materials).get(mat_key, mat_key)
+        if not name or name not in presets:
+            messagebox.showinfo(_("Delete Preset"),
+                                _("Pick a preset from the dropdown first."),
+                                parent=self.top)
+            return
+        if len(presets) <= 1:
+            messagebox.showinfo(
+                _("Delete Preset"),
+                _("At least one {label} preset must remain. Save another "
+                  "preset before deleting this one.").format(label=mat_label),
+                parent=self.top,
+            )
+            return
+        if not messagebox.askyesno(_("Delete Preset"),
+                                   _("Delete preset '{name}'?").format(name=name),
+                                   parent=self.top):
+            return
+        del presets[name]
+        if self.active_preset_name.get(mat_key) == name:
+            self.active_preset_name[mat_key] = None
+        self.gcode_presets_save_callback()
+        self._refresh_gcode_preset_combo(mat_key)
+
+    def _on_apply_clicked(self):
+        """Apply button: warn about dirty materials, then commit + close."""
+        if not self._prompt_dirty(context="apply"):
+            return
+        self._on_save()
+
+    def _on_cancel_clicked(self):
+        """Cancel button / window X: warn about dirty materials, then close."""
+        if not self._prompt_dirty(context="cancel"):
+            return
+        self.top.destroy()
+
+    def _prompt_dirty(self, context):
+        """Three-way prompt for unsaved per-material edits.
+
+        context="apply" or "cancel". Returns True if the caller should
+        proceed (apply settings, or close window). Returns False if the
+        user picked "keep editing" or a save-as-preset round-trip was
+        cancelled.
+        """
+        if self.gcode_presets is None:
+            return True
+        dirty = self._dirty_materials()
+        if not dirty:
+            return True
+
+        labels = ", ".join(dict(self.active_materials).get(mk, mk) for mk in dirty)
+        if context == "apply":
+            title = _("Unsaved changes")
+            msg = _(
+                "You have edits to {labels} that aren't saved as a preset.\n\n"
+                "Save them as preset(s)?\n\n"
+                "• Yes — save each as a preset, then apply.\n"
+                "• No — apply anyway (edits stay in settings but aren't a preset).\n"
+                "• Cancel — keep editing."
+            ).format(labels=labels)
+        else:
+            title = _("Unsaved changes")
+            msg = _(
+                "You have edits to {labels} that aren't saved as a preset.\n\n"
+                "Save them as preset(s) before closing?\n\n"
+                "• Yes — save each as a preset, then close (changes won't apply).\n"
+                "• No — discard edits and close.\n"
+                "• Cancel — keep editing."
+            ).format(labels=labels)
+
+        choice = messagebox.askyesnocancel(title, msg, parent=self.top)
+        if choice is None:
+            return False  # keep editing
+        if choice is False:
+            return True  # proceed without saving as preset
+        # Yes: walk each dirty material through the save-preset flow.
+        for mk in dirty:
+            self._on_save_gcode_preset(mk)
+            # If the user cancelled the save dialog the material is still
+            # dirty. Re-prompt? Simpler: bail out so they can fix it.
+            if self._material_is_dirty(mk):
+                return False
+        return True
 
     def _on_save(self):
         """Save settings and close."""

@@ -30,7 +30,7 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (40 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (41 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
@@ -74,6 +74,23 @@ The Sizing Rules dialog (`OptionsWindow`) is preset-first — the preset section
 Dirty detection is a `_capture_form_to_dict()` snapshot vs `self._baseline`; the baseline resets on dialog open, after Load, and after a successful Save Preset. `active_preset_name` tracks which preset's values currently sit in the form (used for the Save Preset overwrite default).
 
 **Bootstrap**: `main.py` auto-creates a `Default` preset from current settings on first run if `sizing_presets` is empty (via `config.settings_to_sizing_preset`). The app guarantees at least one preset always exists.
+
+## G-code Settings Presets Workflow
+
+`GcodeSettingsWindow` (Options > G-code Settings on Pad Maker, Options > G-code Settings on Tooling) is preset-aware **per material**. Each material section (felt / card / leather / acrylic / basswood) has its own preset bar at the top with Load / Save / Rename / Delete, and its own active-preset name + dirty baseline. Editing felt does not dirty card. The preset library is shared across the two dialogs — saving a felt preset from Pad Maker shows up in any future dialog that includes felt.
+
+- **Per-material storage**: `gcode_presets.json` shape is `{material: {preset_name: data}}`. Top-level keys are the 5 materials in `config.GCODE_PRESET_MATERIALS`. Inner data captures only `config.GCODE_PRESET_KEYS` (the 19 keys per material — engraving mode, line/filled speed+power+passes, fill density, hole/cut speed+power+passes, kerf, four air toggles).
+- **Cross-material isolation by design**: a felt preset will not load into the acrylic slot. Materials have characteristic settings ranges and mixing them silently is dangerous; users who want to cross-apply must Save As under the target material.
+- **Apply (bottom button)**: if any material is dirty, a three-way prompt (Yes / No / Cancel) — save dirty materials as preset(s) before applying, apply anyway, or keep editing.
+- **Cancel / window-close X**: same three-way prompt, but the "apply anyway" branch becomes "discard and close."
+- **Save**: opens `SaveSizingPresetDialog` (generalized — accepts `title`/`intro` kwargs) with material-specific copy ("Save Felt Preset" etc.). Overwrite defaults to the active preset when one is loaded.
+- **Delete refuses to wipe the last preset** for that material. **Rename refuses empty / duplicate names.**
+
+Dirty tracking uses per-material `_capture_material_to_dict(mat)` snapshots compared against `self.material_baseline[mat]`. Baselines reset on dialog open, after Load, and after a successful Save Preset. `active_preset_name[mat]` tracks which preset's values currently sit in each material's fields.
+
+**Bootstrap**: `main.py` loads `gcode_presets.json` and, on first run *or* if any material is missing, backfills a `Default` preset for that material from the current `gcode_settings[material]` (via `config.settings_to_gcode_presets`). The app guarantees at least one preset per material always exists.
+
+**Backward compatibility**: `GcodeSettingsWindow(..., gcode_presets=None)` (the default) disables the preset bar entirely — used by `test_smoke_ui` and any future caller that wants the bare settings dialog.
 
 ## Settings-Dialog Tooltips
 
