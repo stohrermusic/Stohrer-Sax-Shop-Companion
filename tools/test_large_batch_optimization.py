@@ -122,6 +122,100 @@ check("empty pads with optimize=True returns no remaining",
 check("empty pads with optimize=True any_placed is False",
        any_empty is False)
 
+# ---------------------------------------------------------------------
+# Variable-shape scrap safety.
+#
+# In scrap mode the polygon is re-captured per scrap, so the shape is
+# different on every Generate / Frame & Cut click, while the session's
+# large-batch `optimize` flag stays on for the whole run. The optimizer
+# must therefore be fully stateless across calls — each scrap has to nest
+# into ONLY its own current shape, with nothing leaking from the prior
+# scrap. These prove it.
+# ---------------------------------------------------------------------
+
+def _point_in_polygon(x, y, poly):
+    """Ray-casting point-in-polygon (matches the nester's own test)."""
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        if ((yi > y) != (yj > y)) and \
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _round_placed(placed):
+    return [(round(s, 6), round(cx, 6), round(cy, 6), round(r, 6))
+            for (s, cx, cy, r) in placed]
+
+
+def _all_inside(placed, poly):
+    return all(_point_in_polygon(cx, cy, poly) for (_s, cx, cy, _r) in placed)
+
+
+shape_square = [(0.0, 0.0), (200.0, 0.0), (200.0, 200.0), (0.0, 200.0)]
+shape_tri = [(0.0, 0.0), (260.0, 0.0), (0.0, 260.0)]
+shape_pent = [(0.0, 40.0), (120.0, 0.0), (240.0, 60.0),
+              (200.0, 220.0), (30.0, 200.0)]
+scrap_pads = [{'size': float(s), 'qty': 12}
+              for s in (10.0, 14.0, 18.0, 22.0)]  # 48 pads
+
+# (a) Order independence: nest the pentagon standalone, then nest it
+# again AFTER running a square and a triangle through the optimizer.
+# Identical placements prove no state carried over between scraps.
+pent_standalone, _, _ = try_nest_partial(
+    scrap_pads, 'felt', 240.0, 220.0, settings, polygon=shape_pent, optimize=True)
+sq_placed, _, _ = try_nest_partial(
+    scrap_pads, 'felt', 200.0, 200.0, settings, polygon=shape_square, optimize=True)
+tri_placed, _, _ = try_nest_partial(
+    scrap_pads, 'felt', 260.0, 260.0, settings, polygon=shape_tri, optimize=True)
+pent_after_others, _, _ = try_nest_partial(
+    scrap_pads, 'felt', 240.0, 220.0, settings, polygon=shape_pent, optimize=True)
+
+check("optimizer stateless across scraps (pentagon order-independent)",
+      _round_placed(pent_standalone) == _round_placed(pent_after_others))
+
+# (b) Every placed disc lands inside the shape it was nested into, across
+# three distinct shapes. A leaked placement from a prior shape would fall
+# outside.
+check("square scrap: all pads inside the square", _all_inside(sq_placed, shape_square))
+check("triangle scrap: all pads inside the triangle", _all_inside(tri_placed, shape_tri))
+check("pentagon scrap: all pads inside the pentagon",
+      _all_inside(pent_standalone, shape_pent))
+
+# (c) Full variable-shape session: 100 pads, optimize on, three different
+# scraps in sequence (feeding each scrap's remainder to the next, exactly
+# like a real session). Pads are conserved and nothing lands off-shape.
+session_pads = [{'size': float(s), 'qty': 10}
+                for s in (8.0, 10.0, 12.0, 14.0, 16.0,
+                          18.0, 20.0, 22.0, 24.0, 26.0)]  # 100 pads
+total_start = sum(p['qty'] for p in session_pads)
+scrap_shapes = [
+    (shape_square, 200.0, 200.0),
+    (shape_tri, 260.0, 260.0),
+    (shape_pent, 240.0, 220.0),
+]
+session_remaining = session_pads
+session_total_placed = 0
+session_off_shape = 0
+for poly, w, h in scrap_shapes:
+    s_placed, session_remaining, _ = try_nest_partial(
+        session_remaining, 'felt', w, h, settings, polygon=poly, optimize=True)
+    session_total_placed += len(s_placed)
+    if not _all_inside(s_placed, poly):
+        session_off_shape += 1
+session_remaining_total = sum(p['qty'] for p in session_remaining)
+print(f"\nVariable-shape session: placed {session_total_placed}, "
+      f"{session_remaining_total} remaining of {total_start}")
+check("variable-shape session conserves pads (placed + remaining == start)",
+      session_total_placed + session_remaining_total == total_start)
+check("variable-shape session: no pad placed off its scrap shape",
+      session_off_shape == 0)
+
 print(f"\n=== Summary: {passed} passed, {failed} failed ===")
 assert all([try_nest_partial, _multistart_nest])  # silence ruff
 sys.exit(0 if failed == 0 else 1)
