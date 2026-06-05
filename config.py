@@ -177,13 +177,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.5"
+APP_VERSION = "2.6"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-05-10"
+    manual = "2026-06-05"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
