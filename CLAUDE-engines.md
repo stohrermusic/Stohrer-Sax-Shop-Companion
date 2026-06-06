@@ -105,6 +105,8 @@ Accordion-style UI with die insert and die holder SVG/G-code generation. Small d
 4. Framing runs in `FalconRunDialog` loop mode (`loop=True`) at low power until user clicks "Looks Good — Cut!" — that sets `_cut_requested=True`, last pass completes naturally, dialog closes.
 5. Cut runs with the SAME `G92 X{lb_x} Y{lb_y}` prefix as framing so both passes share work-origin.
 
+**Scrap-mode Frame & Cut (v2.6)**: when Scrap Mode is on, Frame & Cut runs one scrap per click — it routes through the shared `_scrap_begin_partial()` helper (same partial-nest + session bookkeeping as the file-export `_generate_gcode_scrap_mode` path) instead of a full nest, then `_frame_cut_scrap_advance()` bumps the scrap count, decrements remaining, and shows the continue/recapture dialog — but only after the cut streams to completion (`cut_dlg._final_reason == "complete"`), so a stopped or errored cut leaves the scrap re-cuttable. The G92/outline logic above is unchanged, so each re-captured scrap aligns on its own jogged origin. The session can start without a save folder (Frame & Cut streams, never writes files); if the user later switches to file-export Generate mid-session, `_scrap_begin_partial` prompts for a folder then. Covered by `tools/test_frame_cut_scrap.py`.
+
 **Outline vs Inset (v2.5)**: camera-captured polygons get split into TWO storage representations sharing one coordinate origin:
 - `self.custom_polygon` — the INSET shape (camera_capture.inset_polygon_mm applied, default 3mm), used for pad nesting placement so cuts land safely inside the visible scrap edge.
 - `self.custom_polygon_outline` — the ORIGINAL un-inset shape, used for the framing trace so the visible trace matches the actual scrap edge.
