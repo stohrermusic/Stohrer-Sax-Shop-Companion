@@ -26,12 +26,21 @@ except ImportError:
     AUDIO_AVAILABLE = False
     PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-# GPU-accelerated renderer (Rust/wgpu) — falls back to canvas if unavailable
-try:
-    import tuner_render
-    _HAS_GPU_RENDERER = True
-except ImportError:
+# GPU-accelerated renderer (Rust/wgpu) — falls back to canvas if unavailable.
+# Never on macOS: Tk Aqua draws all widgets into a single NSView per window,
+# and winfo_id() returns an internal MacDrawable pointer, not an NSView
+# ("the value has no meaning outside Tk" — Tk docs). Handing it to wgpu's
+# Metal backend segfaults in objc_msgSend before Python can catch anything,
+# so the init-failure fallback in _tuner_build_wheels_gpu never gets a
+# chance. Macs use the canvas renderer unconditionally.
+if IS_MACOS:
     _HAS_GPU_RENDERER = False
+else:
+    try:
+        import tuner_render
+        _HAS_GPU_RENDERER = True
+    except ImportError:
+        _HAS_GPU_RENDERER = False
 
 
 # ============================================
@@ -444,12 +453,15 @@ class TunerTabMixin:
             )
             self._tuner_canvas._dark_canvas = True  # Skip theme walker
             self._tuner_canvas.pack(fill="both", expand=True, padx=5, pady=(5, 0))
-            # Persistent CPU mode notice
-            self._cpu_mode_lbl = tk.Label(
-                self._tuner_main_frame,
-                text=_("CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration"),
-                bg=bg, fg="#555555", font=("Helvetica", 8))
-            self._cpu_mode_lbl.place(relx=0.5, y=6, anchor="n")
+            # Persistent CPU mode notice. Not shown on macOS \u2014 canvas is
+            # the only renderer there, so "install tuner_render" would be
+            # advice to install your way into a native crash.
+            if not IS_MACOS:
+                self._cpu_mode_lbl = tk.Label(
+                    self._tuner_main_frame,
+                    text=_("CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration"),
+                    bg=bg, fg="#555555", font=("Helvetica", 8))
+                self._cpu_mode_lbl.place(relx=0.5, y=6, anchor="n")
 
         # --- Control panel (EQ sliders | flat/pilot/sharp | VU meter) ---
         ctrl_bg = "systemWindowBackgroundColor" if IS_MACOS else "#2A2A2A"

@@ -217,6 +217,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.root.config(menu=self.pad_menu) 
         
         self.root.protocol("WM_DELETE_WINDOW", self.on_exit)
+        # WM_DELETE_WINDOW only covers the window close button. On macOS,
+        # Cmd-Q and the app menu's Quit go through Tk's ::tk::mac::Quit
+        # handler, whose default exits the process without running on_exit
+        # — settings would silently never save on the standard mac quit
+        # path. Route it through the same close handler.
+        if IS_MACOS:
+            self.root.createcommand("::tk::mac::Quit", self.on_exit)
 
     def on_exit(self):
         # Warn if scrap session is active with remaining pads

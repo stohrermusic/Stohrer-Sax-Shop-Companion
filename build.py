@@ -200,15 +200,23 @@ def build():
     except ImportError:
         print("  Pillow not found — tuner will fall back to polygon rendering")
 
-    # GPU-accelerated tuner renderer (Rust/wgpu via pyo3)
-    try:
-        import tuner_render  # noqa: F401  (capability check)
-        cmd.extend([
-            '--hidden-import', 'tuner_render',
-        ])
-        print("  tuner_render found — including GPU strobe renderer")
-    except ImportError:
-        print("  tuner_render not found — tuner will use CPU canvas rendering")
+    # GPU-accelerated tuner renderer (Rust/wgpu via pyo3).
+    #
+    # Never bundled on macOS: Tk Aqua's winfo_id() is not an NSView, so
+    # wgpu can't create a surface from it (native segfault in objc_msgSend).
+    # tuner_tab.py refuses to import it on darwin; bundling it would just
+    # be dead weight in the .app.
+    if sys.platform == 'darwin':
+        print("  macOS: skipping tuner_render — tuner uses CPU canvas rendering")
+    else:
+        try:
+            import tuner_render  # noqa: F401  (capability check)
+            cmd.extend([
+                '--hidden-import', 'tuner_render',
+            ])
+            print("  tuner_render found — including GPU strobe renderer")
+        except ImportError:
+            print("  tuner_render not found — tuner will use CPU canvas rendering")
 
     # OpenCV — powers the camera-capture feature (Calibration Card,
     # Camera Calibration wizard, Get-from-camera button).

@@ -12,7 +12,7 @@ tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no
 toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, preset system, comparison)
 toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, preset storage, no tkinter)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
-tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings, optional fallback to canvas)
+tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting

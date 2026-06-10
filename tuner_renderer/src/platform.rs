@@ -2,7 +2,9 @@
 //!
 //! tkinter's `winfo_id()` returns:
 //!   - Windows: HWND (isize)
-//!   - macOS:   NSView pointer (isize)
+//!   - macOS:   a pointer to Tk's internal MacDrawable struct — NOT an
+//!     NSView ("the value has no meaning outside Tk" — Tk docs). See the
+//!     warning on the macos cfg below.
 //!   - Linux:   X11 window ID (isize, but really u32)
 
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
@@ -23,6 +25,14 @@ pub fn raw_handles_from_winfo_id(handle: isize) -> (RawWindowHandle, RawDisplayH
     (RawWindowHandle::Win32(wh), RawDisplayHandle::Windows(dh))
 }
 
+/// WARNING: this branch is unsound with tkinter and must never be reached.
+/// Tk Aqua draws all widgets into one NSView per toplevel; `winfo_id()`
+/// returns a MacDrawable pointer, not an NSView. Wrapping it in an
+/// AppKitWindowHandle makes wgpu's Metal backend send Objective-C messages
+/// to a non-ObjC struct — a native segfault in objc_msgSend that Python
+/// cannot catch. SSC therefore never imports tuner_render on macOS
+/// (tuner_tab.py), never bundles it (build.py), and never builds it in CI.
+/// The branch is kept only so the crate still compiles on a Mac.
 #[cfg(target_os = "macos")]
 pub fn raw_handles_from_winfo_id(handle: isize) -> (RawWindowHandle, RawDisplayHandle) {
     use raw_window_handle::{AppKitWindowHandle, AppKitDisplayHandle};

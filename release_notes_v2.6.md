@@ -38,7 +38,7 @@ Sax Shop Companion v2.6 refines the v2.5 machine-integration layer and adds a pe
 ## Chromatic Strobe Tuner
 
 - 12-wheel stroboscopic chromatic tuner.
-- GPU-accelerated rendering via Rust/wgpu — 60–120 fps; automatic CPU fallback if GPU unavailable.
+- GPU-accelerated rendering via Rust/wgpu on Windows and Linux — 60–120 fps; automatic CPU fallback if GPU unavailable. macOS uses the canvas renderer.
 - Per-ring octave brightness from real spectral data.
 - Grouped slider panel (display, pitch, bias) and vintage backlit VU meter.
 - Per-pitch-class phase tracking with temporal smoothing.

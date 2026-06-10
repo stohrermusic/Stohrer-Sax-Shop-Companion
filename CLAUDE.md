@@ -134,16 +134,19 @@ python build.py --dmg
 
 ### GPU Tuner Renderer (Rust/wgpu)
 
-The strobe tuner has an optional GPU-accelerated renderer in `tuner_renderer/` (Rust crate using pyo3 + wgpu). CI builds this on full-build platforms, but a local checkout of `python main.py` will silently fall back to the slower canvas renderer unless you build the extension yourself:
+The strobe tuner has an optional GPU-accelerated renderer in `tuner_renderer/` (Rust crate using pyo3 + wgpu) — **Windows and Linux only**. CI builds this on the Windows and Linux runners, but a local checkout of `python main.py` will silently fall back to the slower canvas renderer unless you build the extension yourself:
 
 ```bash
-# Requires Rust toolchain (rustup)
+# Requires Rust toolchain (rustup). Windows/Linux only — do NOT do this on
+# a Mac (see the macOS warning below).
 pip install maturin
 python -m maturin build --release --manifest-path tuner_renderer/Cargo.toml
 pip install --find-links tuner_renderer/target/wheels tuner_render
 ```
 
-After this, `import tuner_render` succeeds and the tuner uses GPU rendering at 60-120 fps. If the import fails for any reason the tuner transparently falls back to canvas rendering — the app still runs, just slower. See the `_skip_theme` / `_dark_canvas` flag notes in the Strobe Tuner architecture section for integration details, and the GPU/Canvas constant alignment warning (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) for what has to stay in sync between the Python path and the shader.
+After this, `import tuner_render` succeeds and the tuner uses GPU rendering at 60-120 fps. If the import fails for any reason the tuner falls back to canvas rendering on Windows/Linux — the app still runs, just slower. See the `_skip_theme` / `_dark_canvas` flag notes in the Strobe Tuner architecture section for integration details, and the GPU/Canvas constant alignment warning (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) for what has to stay in sync between the Python path and the shader.
+
+**macOS is canvas-only — never load `tuner_render` on darwin.** Tk Aqua draws all widgets into a single NSView per toplevel, and `winfo_id()` returns a pointer to Tk's internal `MacDrawable` struct, not an NSView ("the value has no meaning outside Tk" — Tk docs). `tuner_renderer/src/platform.rs` would wrap that handle as an NSView, so wgpu's Metal backend segfaults in `objc_msgSend` during surface creation — a native crash the Python init-failure `except` in `tuner_tab.py` can never catch. Three layers enforce the gate: `tuner_tab.py` skips the `tuner_render` import on darwin, `build.py` skips the `--hidden-import` on darwin, and CI skips the Rust/maturin steps on macOS runners. Even a real NSView wouldn't fix it — a CAMetalLayer on the shared per-window view would paint over the entire UI (and would still need Retina scale handling), so macOS GPU rendering is off the table by design. **History**: the macOS Apple Silicon zips for v1.95 through v2.6 shipped with the renderer bundled — on those builds, opening the Tuner tab crashes the app outright.
 
 On Windows, Rust needs the MSVC linker. The one-time machine setup is `winget install Rustlang.Rustup` followed by `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`.
 
@@ -229,7 +232,7 @@ The `.github/workflows/build.yml` workflow has two jobs:
 Triggers on push to `main` or `beta`, on release creation, or manually.
 
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
-- `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer
+- `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer; the macOS runners additionally skip the Rust steps unconditionally — macOS is canvas-only (see GPU Tuner Renderer section)
 - The Windows job also installs Inno Setup 6 via Chocolatey and builds the installer; version is extracted from `config.py`'s `APP_VERSION` via PowerShell regex
 - Uploads artifacts to the workflow run; on Windows that's the installer only (`SaxShopCompanion-Windows-Setup-*.exe`). All published artifacts also attach to GitHub Releases on release events.
 
