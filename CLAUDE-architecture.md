@@ -70,6 +70,10 @@ Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in con
 
 `load_settings()` defends against old/corrupted config files: null values are rejected (defaults used instead), dict-type keys that load as non-dicts are skipped, layer_colors with old LightBurn codes (e.g. "C10") are replaced with hex defaults, and `KeyError`/`AttributeError`/`ValueError` during merge fall back to full defaults. Users upgrading from very old versions (tested back to v1.0) should never crash on settings load.
 
+## Data Safety on Write (v2.6+)
+
+All JSON saves route through `_write_json_atomic()` in config.py — write to a sibling `.tmp` file, then `os.replace()` over the target — so a crash or power loss mid-save leaves either the old file or the complete new one, never a truncated half-write. Both `save_settings()` and `save_presets()` use it. On the read side, when a config file fails to parse, `_preserve_corrupt_file()` copies it to `<name>.corrupt.bak` before defaults take over (first corruption wins — an existing backup is never overwritten), so hand-recoverable data isn't destroyed by the next save. Both `load_settings()` and `load_presets()` call it.
+
 ## Error Logging
 
 `setup_logging()` in config.py creates a rotating log file (`app.log`) in the config directory. `main.py` hooks both `sys.excepthook` and tkinter's `report_callback_exception` so any unhandled exception gets a full traceback written to the log and a dialog shown to the user pointing them to Help > Open Log File. The log rotates at 500KB with 1 backup.

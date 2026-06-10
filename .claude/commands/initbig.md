@@ -6,7 +6,7 @@ Audit whether the project documentation accurately reflects the current
 codebase. Scope: `CLAUDE.md`, every `CLAUDE-*.md` companion file at the
 repo root (`CLAUDE-architecture.md`, `CLAUDE-engines.md`, `CLAUDE-toner.md`,
 `CLAUDE-web.md`), `README.md`, and the canonical memory index
-`~/.claude/projects/C--code-saxshopcompanion/memory/MEMORY.md`.
+`~/.claude/projects/C--code-Stohrer-Sax-Shop-Companion/memory/MEMORY.md`.
 
 **Do NOT restructure** by default. The split into per-subsystem
 `CLAUDE-*.md` files imported via `@`-statements at the bottom of
@@ -23,7 +23,7 @@ before touching the structure.
      `CLAUDE-web.md` (loaded via `@imports` at the bottom of CLAUDE.md).
    - `README.md` at repo root (user-facing; check version stamp + status
      paragraph + any test-count or msgid claims).
-   - `~/.claude/projects/C--code-saxshopcompanion/memory/MEMORY.md`
+   - `~/.claude/projects/C--code-Stohrer-Sax-Shop-Companion/memory/MEMORY.md`
      (canonical auto-memory index).
 
 2. **Check claimed facts against reality.** Common drift sources for

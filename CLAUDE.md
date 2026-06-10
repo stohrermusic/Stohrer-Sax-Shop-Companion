@@ -79,7 +79,7 @@ Dirty detection is a `_capture_form_to_dict()` snapshot vs `self._baseline`; the
 
 ## G-code Settings Presets Workflow
 
-`GcodeSettingsWindow` (Options > G-code Settings on Pad Maker, Options > G-code Settings on Tooling) is preset-aware **per material**. Each material section (felt / card / leather / acrylic / basswood) has its own preset bar at the top with Load / Save / Rename / Delete, and its own active-preset name + dirty baseline. Editing felt does not dirty card. The preset library is shared across the two dialogs — saving a felt preset from Pad Maker shows up in any future dialog that includes felt.
+`GcodeSettingsWindow` (Options > G-code Settings... on Pad Maker, Options > Settings... on Tooling) is preset-aware **per material**. Each material section (felt / card / leather / acrylic / basswood) has its own preset bar at the top with Load / Save / Rename / Delete, and its own active-preset name + dirty baseline. Editing felt does not dirty card. The preset library is shared across the two dialogs — saving a felt preset from Pad Maker shows up in any future dialog that includes felt.
 
 - **Per-material storage**: `gcode_presets.json` shape is `{material: {preset_name: data}}`. Top-level keys are the 5 materials in `config.GCODE_PRESET_MATERIALS`. Inner data captures only `config.GCODE_PRESET_KEYS` (the 19 keys per material — engraving mode, line/filled speed+power+passes, fill density, hole/cut speed+power+passes, kerf, four air toggles).
 - **Cross-material isolation by design**: a felt preset will not load into the acrylic slot. Materials have characteristic settings ranges and mixing them silently is dangerous; users who want to cross-apply must Save As under the target material.
@@ -208,7 +208,7 @@ python tools/test_i18n.py              # verify
 
 - **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
 - **`beta`**: Active development branch. New features land here first (e.g. filled engraving, air assist toggles, cut grouping). Always work on `beta` unless told otherwise.
-- CI builds trigger on push to `main`, `beta`, or `gamma`.
+- CI builds trigger on push to `main` or `beta`. (The workflow trigger also lists `gamma`, a retired experiment branch that no longer exists — harmless, but don't expect a `gamma` to be there.)
 
 ## Versioning
 
@@ -226,7 +226,7 @@ The `.github/workflows/build.yml` workflow has two jobs:
 - **`lint`** (ubuntu-latest, ~10s): runs `ruff check .` — fails the workflow on any violation
 - **`build`** (4-platform matrix): Windows Inno Setup installer (the bare PyInstaller .exe is built but not published — only the installer ships), macOS Apple Silicon .app, macOS Intel .app, and Linux binary
 
-Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually.
+Triggers on push to `main` or `beta` (plus a vestigial `gamma` entry — that branch was deleted), on release creation, or manually.
 
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
 - `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer

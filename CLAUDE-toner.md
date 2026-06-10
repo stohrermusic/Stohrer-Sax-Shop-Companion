@@ -33,7 +33,7 @@ Options > Settings opens a tabbed dialog (General: input device, recording, pitc
 
 ## Capture Performance
 
-During free-mode capture, JSON saves are deferred to every 10 seconds (`_toner_schedule_save`) instead of after every micro-capture. A cached `_toner_captured_notes` set avoids per-frame iteration over captures for the note counter. Both prevent progressive lag during long sessions. `_toner_flush_save()` is called on capture stop to ensure data is persisted.
+During free-mode capture, JSON saves are deferred to every 10 seconds (`_toner_schedule_save`) instead of after every micro-capture. A cached `_toner_captured_notes` set avoids per-frame iteration over captures for the note counter. Both prevent progressive lag during long sessions. `_toner_flush_save()` is called on capture stop to ensure data is persisted. The app-exit path (`_toner_save_settings()`, called from `on_exit`) also flushes any in-flight free-mode micro-capture and persists the active session, so exiting mid-capture loses nothing — and it merge-updates `toner_settings` rather than replacing it, so keys owned by the Settings dialog (like `analysis_descriptors`) survive exit.
 
 ## Capture Modes
 
