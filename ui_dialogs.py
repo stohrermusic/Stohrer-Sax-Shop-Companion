@@ -425,7 +425,7 @@ class OptionsWindow:
             # A numeric field is blank or mid-edit; that's an edit.
             return True
 
-    def _form_is_valid(self, action="continue"):
+    def _form_is_valid(self, action=None):
         """Check every numeric field parses; if not, tell the user nicely.
 
         Without this, a blanked entry makes DoubleVar.get() raise TclError
@@ -437,9 +437,9 @@ class OptionsWindow:
             return True
         except tk.TclError:
             messagebox.showerror(
-                "Invalid value",
-                f"One of the numeric fields is empty or not a number.\n\n"
-                f"Please fix it before you {action}.",
+                _("Invalid value"),
+                _("One of the numeric fields is empty or not a number.\n\n"
+                  "Please fix it before you {action}.").format(action=action or _("continue")),
                 parent=self.top,
             )
             return False
@@ -1519,7 +1519,7 @@ class OptionsWindow:
         as a preset first — they can either run the save flow (then commit
         and close) or back out to keep editing.
         """
-        if not self._form_is_valid("apply"):
+        if not self._form_is_valid(_("apply")):
             return
         if not self._is_dirty():
             self.save_options()
@@ -1799,7 +1799,7 @@ class OptionsWindow:
 
     def on_save_sizing_preset(self):
         """Open the Save Preset dialog (overwrite existing or save as new)."""
-        if not self._form_is_valid("save it as a preset"):
+        if not self._form_is_valid(_("save it as a preset")):
             return
         dlg = SaveSizingPresetDialog(
             self.top,

@@ -13,6 +13,9 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from i18n import init_translation  # noqa: E402
+init_translation("en")
+
 from library_features import lookup_serial_year, _split_serial_series
 from serials import SERIAL_DATA
 
