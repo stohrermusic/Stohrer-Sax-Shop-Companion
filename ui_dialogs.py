@@ -34,8 +34,13 @@ def bind_mousewheel(widget, canvas):
             # macOS: delta is usually 1 or -1
             canvas.yview_scroll(int(-1 * event.delta), "units")
         else:
-            # Windows: delta is usually 120 or -120
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            # Windows: delta is 120 per wheel notch, but precision
+            # touchpads send smaller deltas (e.g. ±30) that would
+            # truncate to zero — guarantee at least one scroll unit.
+            steps = int(-1 * (event.delta / 120))
+            if steps == 0 and event.delta != 0:
+                steps = -1 if event.delta > 0 else 1
+            canvas.yview_scroll(steps, "units")
 
     def _on_mousewheel_linux(event):
         if event.num == 4:
@@ -336,7 +341,7 @@ class OptionsWindow:
         self.dart_overwrap_var = tk.DoubleVar(value=self.settings.get("dart_overwrap", 0.5))
         self.dart_wrap_bonus_var = tk.DoubleVar(value=self.settings.get("dart_wrap_bonus", 0.75))
         self.dart_frequency_multiplier_var = tk.DoubleVar(value=self.settings.get("dart_frequency_multiplier", 1.0))
-        self.dart_shape_factor_var = tk.DoubleVar(value=self.settings.get("dart_shape_factor", 0.0))
+        self.dart_shape_factor_var = tk.DoubleVar(value=self.settings.get("dart_shape_factor", 0.5))
 
         # Dart range mode vars
         self.dart_range_mode_var = tk.StringVar(value=self.settings.get("dart_range_mode", "universal"))
@@ -349,7 +354,7 @@ class OptionsWindow:
         self.range_overwrap_var = tk.DoubleVar(value=0.5)
         self.range_wrap_bonus_var = tk.DoubleVar(value=0.75)
         self.range_freq_mult_var = tk.DoubleVar(value=1.0)
-        self.range_shape_factor_var = tk.DoubleVar(value=0.0)
+        self.range_shape_factor_var = tk.DoubleVar(value=0.5)
         self.range_engraving_on_var = tk.BooleanVar(value=True)
 
         self.engraving_on_var = tk.BooleanVar(value=self.settings["engraving_on"])
@@ -414,7 +419,30 @@ class OptionsWindow:
 
     def _is_dirty(self):
         """True if the form has unsaved edits relative to the baseline."""
-        return self._capture_form_to_dict() != self._baseline
+        try:
+            return self._capture_form_to_dict() != self._baseline
+        except tk.TclError:
+            # A numeric field is blank or mid-edit; that's an edit.
+            return True
+
+    def _form_is_valid(self, action="continue"):
+        """Check every numeric field parses; if not, tell the user nicely.
+
+        Without this, a blanked entry makes DoubleVar.get() raise TclError
+        from Apply/Save/close paths — surfacing as the scary global
+        'Unexpected Error' dialog and a window that won't respond.
+        """
+        try:
+            self._capture_form_to_dict()
+            return True
+        except tk.TclError:
+            messagebox.showerror(
+                "Invalid value",
+                f"One of the numeric fields is empty or not a number.\n\n"
+                f"Please fix it before you {action}.",
+                parent=self.top,
+            )
+            return False
 
     def _set_baseline_to_current(self):
         """Mark the current form state as the new clean baseline."""
@@ -1116,7 +1144,8 @@ class OptionsWindow:
         self.range_overwrap_var.set(r.get("overwrap", 0.5))
         self.range_wrap_bonus_var.set(r.get("wrap_bonus", 0.75))
         self.range_freq_mult_var.set(r.get("frequency_multiplier", 1.0))
-        self.range_shape_factor_var.set(r.get("shape_factor", 0.0))
+        # 0.5 = Sine, the scale's neutral default (0.0 would be Triangle)
+        self.range_shape_factor_var.set(r.get("shape_factor", 0.5))
         self.range_engraving_on_var.set(r.get("engraving_on", True))
 
     def _read_range_fields(self):
@@ -1490,6 +1519,8 @@ class OptionsWindow:
         as a preset first — they can either run the save flow (then commit
         and close) or back out to keep editing.
         """
+        if not self._form_is_valid("apply"):
+            return
         if not self._is_dirty():
             self.save_options()
             return
@@ -1608,7 +1639,7 @@ class OptionsWindow:
             self.dart_overwrap_var.set(DEFAULT_SETTINGS.get("dart_overwrap", 0.5))
             self.dart_wrap_bonus_var.set(DEFAULT_SETTINGS.get("dart_wrap_bonus", 0.75))
             self.dart_frequency_multiplier_var.set(DEFAULT_SETTINGS.get("dart_frequency_multiplier", 1.0))
-            self.dart_shape_factor_var.set(DEFAULT_SETTINGS.get("dart_shape_factor", 0.0))
+            self.dart_shape_factor_var.set(DEFAULT_SETTINGS.get("dart_shape_factor", 0.5))
             self.dart_ranges = []
             self._refresh_range_combo()
             self._toggle_dart_mode()
@@ -1705,7 +1736,7 @@ class OptionsWindow:
         self.dart_overwrap_var.set(source.get("dart_overwrap", d.get("dart_overwrap", 0.5)))
         self.dart_wrap_bonus_var.set(source.get("dart_wrap_bonus", d.get("dart_wrap_bonus", 0.75)))
         self.dart_frequency_multiplier_var.set(source.get("dart_frequency_multiplier", d.get("dart_frequency_multiplier", 1.0)))
-        self.dart_shape_factor_var.set(source.get("dart_shape_factor", d.get("dart_shape_factor", 0.0)))
+        self.dart_shape_factor_var.set(source.get("dart_shape_factor", d.get("dart_shape_factor", 0.5)))
         self.dart_ranges = copy.deepcopy(list(source.get("dart_ranges", [])))
         self._refresh_range_combo()
         self._toggle_dart_mode()
@@ -1741,6 +1772,9 @@ class OptionsWindow:
             self.preset_combo.set(select)
         elif not names:
             self.preset_combo.set("")
+        elif self.preset_combo.get() not in names:
+            # e.g. after a delete: don't leave a vanished name displayed
+            self.preset_combo.set("")
 
     def on_load_sizing_preset(self):
         name = self.preset_combo.get().strip()
@@ -1765,12 +1799,18 @@ class OptionsWindow:
 
     def on_save_sizing_preset(self):
         """Open the Save Preset dialog (overwrite existing or save as new)."""
+        if not self._form_is_valid("save it as a preset"):
+            return
         dlg = SaveSizingPresetDialog(
             self.top,
             existing_names=sorted(self.sizing_presets.keys()),
             default_existing=self.active_preset_name,
         )
         result = dlg.result
+        # The child dialog's grab released ours when it closed (Tk has a
+        # single global grab) — re-grab so this dialog stays modal.
+        if self.top.winfo_exists():
+            self.top.grab_set()
         if result is None:
             return  # user cancelled
         target = result["name"]
@@ -1791,6 +1831,9 @@ class OptionsWindow:
             initialvalue=old,
             parent=self.top,
         )
+        # askstring's grab released ours when it closed — re-grab.
+        if self.top.winfo_exists():
+            self.top.grab_set()
         if new is None:
             return
         new = new.strip()
@@ -2621,13 +2664,17 @@ class ResonanceProgressDialog(tk.Toplevel):
         self.update_progress(0)
 
     def update_progress(self, val):
+        if not self.winfo_exists():
+            return  # closed mid-animation — stop the after() chain
         self.progress['value'] = val
         if val < 100:
             self.after(70, self.update_progress, val + 1)
         else:
             self.after(200, self.finish_resonance)
-            
+
     def finish_resonance(self):
+        if not self.winfo_exists():
+            return
         clicks = self.settings.get("resonance_clicks", 0) + 1
         self.settings["resonance_clicks"] = clicks
         
@@ -2660,6 +2707,8 @@ class UninstallResonanceDialog(tk.Toplevel):
         self.update_progress(0)
 
     def update_progress(self, val):
+        if not self.winfo_exists():
+            return  # closed mid-animation — stop the after() chain
         self.progress['value'] = val
         if val < 100:
             self.after(20, self.update_progress, val + 1)
@@ -2667,6 +2716,8 @@ class UninstallResonanceDialog(tk.Toplevel):
             self.after(200, self.finish_uninstall)
 
     def finish_uninstall(self):
+        if not self.winfo_exists():
+            return
         self.settings["resonance_clicks"] = 0
         self.save_callback()
         self.theme_callback()
@@ -2675,7 +2726,8 @@ class UninstallResonanceDialog(tk.Toplevel):
 class ExportPresetsWindow(tk.Toplevel):
     def __init__(self, parent, presets, title, default_filename, ask_provenance=False):
         super().__init__(parent)
-        self.presets = presets 
+        self.presets = presets
+        self._title_text = title  # self.title is the Wm method, not a str
         self.title(title)
         self.default_filename = default_filename
         self.ask_provenance = ask_provenance
@@ -2782,7 +2834,7 @@ class ExportPresetsWindow(tk.Toplevel):
                 initialfile = f"key_height_export_{user_name}.json"
 
         filepath = filedialog.asksaveasfilename(
-            title=_("Save {title} As...").format(title=self.title),
+            title=_("Save {title} As...").format(title=self._title_text),
             defaultextension=".json",
             filetypes=((_("JSON files"), "*.json"), (_("All files"), "*.*")),
             initialfile=initialfile
@@ -5027,11 +5079,12 @@ class UserGuideWindow(tk.Toplevel):
                     "felt. Overwrap, wrap bonus, frequency multiplier, and "
                     "shape (triangle / sine / square) are all adjustable."))
         self._blank()
-        self._body(_("Sizing-rules presets: at the bottom of the Sizing Rules dialog you can "
+        self._body(_("Sizing-rules presets: at the top of the Sizing Rules dialog you can "
                     "save the entire configuration as a named preset, load presets from the "
                     "dropdown, and export/import preset files to share with other techs."))
-        self._bullet(_("Save As: snapshots every value in the dialog (sizing, darts, engraving, placement)"))
-        self._bullet(_("Load: fills the dialog from the selected preset \u2014 click Save to apply"))
+        self._bullet(_("Save Preset: snapshots every value in the dialog (sizing, darts, engraving, placement) "
+                      "\u2014 overwrite an existing preset or save as a new one"))
+        self._bullet(_("Load: fills the dialog from the selected preset \u2014 click Apply to commit"))
         self._bullet(_("Import/Export: JSON files containing one or more presets"))
         self._blank()
 
@@ -5208,8 +5261,9 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("When a die ring is laser-cut, the inner cutout falls out as a solid disc "
                     "(pad cup diameter minus kerf). These work as pad cup stiffeners, rim "
                     "rounders, leveling helpers, bending braces. For precise diameter control, "
-                    "use the Pad Maker tab's \"Exact Size\" material instead \u2014 and adjust the "
-                    "exact_size G-code settings to match acrylic if cutting in acrylic."))
+                    "use the Pad Maker tab's \"Exact Size\" material instead \u2014 note that "
+                    "Exact Size outputs SVG only, so import the SVG into your laser software "
+                    "and set acrylic speeds and powers there."))
         self._blank()
 
         self._h2(_("Tooling \u2014 Die Holders"))

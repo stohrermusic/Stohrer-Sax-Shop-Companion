@@ -350,24 +350,15 @@ class StrobeWheel:
         self._last_ring_phases = list(ring_phases)
         self._phase_offset = phase_offset  # Keep for compatibility
 
-        # Only update segments that are visible through the wedge cutout.
-        # The wedge shows WEDGE_ANGLE degrees centered on 90° (top).
-        # Segments outside this arc are hidden behind the mask — skip them.
-        wedge_half = WEDGE_ANGLE / 2.0
-        vis_lo = 90.0 - wedge_half
-        vis_hi = 90.0 + wedge_half
-
+        # NOTE: an earlier version tried to cull segments hidden behind the
+        # wedge mask here, but its wrap-around test was a no-op (every
+        # segment always passed), so it was removed. If culling is ever
+        # reintroduced, it must use self._wedge_center — bottom-row wheels
+        # have their wedge at 270°, not 90°.
         for ring_idx in range(NUM_RINGS):
             ring_phase = ring_phases[ring_idx]
             r_inner, r_outer = self._ring_radii[ring_idx]
             for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
-                start = (base_start + ring_phase) % 360.0
-                end = start + seg_span
-                if not (end > vis_lo and start < vis_hi):
-                    if not (end + 360.0 > vis_lo and start < vis_hi) and \
-                       not (end > vis_lo and start - 360.0 < vis_hi):
-                        continue
-
                 points = _annular_sector_points(
                     self.cx, self.cy, r_inner, r_outer,
                     base_start + ring_phase,
@@ -686,7 +677,10 @@ class TunerTabMixin:
         bg = DEFAULT_FACEPLATE
         frame = tk.Frame(parent, bg=bg)
         frame.pack(fill="both", expand=True)
-        frame._dark_canvas = True
+        # _skip_theme keeps the resonance theme walker out of this subtree
+        # (_dark_canvas only applies to Canvas widgets — on a Frame it did
+        # nothing, and theming recolored the dark bg under light-gray text)
+        frame._skip_theme = True
 
         import sys
         if sys.platform == 'linux':
@@ -1150,13 +1144,15 @@ class TunerTabMixin:
                     sel = mic_combo.current()
                     dev_idx = dev_indices[sel] if sel >= 0 else None
                     self.settings["audio_input_device"] = dev_idx
-                    # Restart engine with new device
+                    # Restart engine with new device. Route through
+                    # _tuner_start() rather than engine.start() directly:
+                    # it checks the success flag and shows the error
+                    # overlay + retry link if the device fails to open
+                    # (a raw start() failure left frozen wheels with the
+                    # pilot lamp lit and no explanation).
                     if self._tuner_engine and self._tuner_engine.is_running:
                         self._tuner_stop()
-                        self._tuner_engine.start(device=dev_idx)
-                        self._tuner_running = True
-                        self._tuner_set_pilot(True)
-                        self._tuner_animate()
+                        self._tuner_start()
 
                 mic_combo.bind("<<ComboboxSelected>>", on_mic_changed)
 
