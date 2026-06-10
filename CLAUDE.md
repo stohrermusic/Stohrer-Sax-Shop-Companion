@@ -30,7 +30,9 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (42 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (44 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_engine_parity`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_serial_lookup`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+
+**SVG↔G-code parity**: `test_engine_parity` pins the contract that the SVG/preview output and the G-code output describe the same physical object (dart wave shape, engraving label placement, engine purity). The two engines render independently and have drifted before — when touching shared geometry (wave math, placement formulas, Y-flip), run this suite and extend it for any new shared shape.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
@@ -101,9 +103,9 @@ Dirty tracking uses per-material `_capture_material_to_dict(mat)` snapshots comp
 The dart wave shape (formerly "Star/Dart"; now just "Darts" in the UI) is a single 0.0–1.0 slider that smoothly interpolates between three primitive shapes:
 - 0.0 = Triangle (linear ramps between peaks/valleys)
 - 0.5 = Sine (raw cosine)
-- 1.0 = Square (saturating sign function via `|c|^0.05`)
+- 1.0 = Square (saturating sign function via `|c|^p`, `p = _SQUARE_POWER = 0.01`)
 
-Math lives in `_wave_value` in `svg_engine.py`; `calculate_star_path` calls it per sample. The default value is now `0.5` (sine). Legacy configs used a 0.0=sine, 1.0=square scale; `load_settings` migrates them once via `0.5 + 0.5 * old` and sets `dart_shape_v2: True` so the migration doesn't run again. `dart_ranges[*].shape_factor` is migrated alongside the universal value. When changing dart-shape behavior, update `tools/test_dart_shapes.py` (anchor + smoothness + migration coverage).
+Math lives in `_wave_value` in `svg_engine.py`; `calculate_star_path` (SVG) and `_generate_star_points` (G-code) both call it per sample — `tools/test_engine_parity.py` pins them together. The default value is now `0.5` (sine). Legacy configs used a 0.0=sine, 1.0=square scale; `load_settings` migrates them once via `0.5 + 0.5 * old` and sets `dart_shape_v2: True` so the migration doesn't run again. `dart_ranges[*].shape_factor` is migrated alongside the universal value. When changing dart-shape behavior, update `tools/test_dart_shapes.py` (anchor + smoothness + migration coverage).
 
 Internal variable names retain the `dart_` prefix (`dart_shape_factor`, `dart_threshold`, etc.); only the user-facing labels were renamed to "Darts".
 

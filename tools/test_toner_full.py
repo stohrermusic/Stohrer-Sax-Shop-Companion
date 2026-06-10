@@ -628,3 +628,5 @@ if failed == 0:
 else:
     print(f"{failed} TESTS FAILED")
 print("=" * 60)
+
+sys.exit(0 if failed == 0 else 1)

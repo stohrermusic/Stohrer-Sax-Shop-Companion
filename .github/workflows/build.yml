@@ -144,7 +144,7 @@ jobs:
       # Attach to release if this is a release event
       - name: Upload to Release
         if: matrix.os != 'windows-latest' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/${{ matrix.asset_name }}
@@ -153,7 +153,7 @@ jobs:
 
       - name: Upload Windows installer to Release
         if: matrix.os == 'windows-latest' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/SaxShopCompanion-Windows-Setup-*.exe

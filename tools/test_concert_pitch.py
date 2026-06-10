@@ -76,9 +76,13 @@ test("Bari: concert D#2 -> written C4",
 test("Sopranino: concert D#4 -> written C4",
      transpose_note("D#4", "Sopranino") == "C4")
 
-# C Melody: no transposition
-test("C Melody: concert C4 = written C4",
-     transpose_note("C4", "C Melody") == "C4")
+# C Melody: concert pitch class but sounds an octave below written
+# (a "C tenor" reading standard sax notation) — concert C3 = written C4.
+# Matches SAX_NOTE_RANGES, whose C Melody floor is concert Bb2 = written Bb3.
+test("C Melody: concert C3 -> written C4",
+     transpose_note("C3", "C Melody") == "C4")
+test("C Melody: round-trip written C4 -> concert C3",
+     reverse_transpose_note("C4", "C Melody") == "C3")
 
 # ============================================================
 section("note_to_freq")

@@ -249,3 +249,5 @@ print("height in dB mode — mathematically correct but visually")
 print("compressed at the loud end. The Analyze tool's Scale toggle")
 print("(dB / Linear) lets users switch to linear amplitude when they")
 print("want a closer match to perceived loudness.")
+
+sys.exit(0 if failed == 0 else 1)
