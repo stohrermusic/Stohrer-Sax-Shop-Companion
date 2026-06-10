@@ -1,7 +1,12 @@
 # serials.py
 # Database of saxophone serial numbers for the Stohrer Sax Shop Companion.
 # Format: "Manufacturer": [(Start_Serial, Year), (Start_Serial, Year), ...]
-# Lists must be sorted by serial number (ascending).
+# Lists must be sorted by serial number (ascending) WITHIN a series.
+# A drop in start_serial marks a numbering restart — a new series (Buffet
+# restarted at 1 in 1950, LeBlanc/Vito at 1 in 1970, Yanagisawa switched
+# formats in 1980). lookup_serial_year splits on those drops and reports
+# every series a serial could belong to, so keep each maker's series in
+# chronological order.
 
 SERIAL_DATA = {
     "Adolphe Sax": [

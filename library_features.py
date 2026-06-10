@@ -22,10 +22,47 @@ except ImportError:
 # HELPER LOGIC
 # ==========================================
 
+def _split_serial_series(data):
+    """Split a maker's (start_serial, year) list into ascending runs.
+
+    Some manufacturers restarted their serial numbering (Buffet at 1 in
+    1950, LeBlanc/Vito at 1 in 1970, Yanagisawa's 1980 format change),
+    so a maker's data can hold several ascending series back to back.
+    Each run is one numbering series.
+    """
+    series_list = []
+    current = []
+    prev_start = None
+    for entry in data:
+        if prev_start is not None and entry[0] < prev_start:
+            series_list.append(current)
+            current = []
+        current.append(entry)
+        prev_start = entry[0]
+    if current:
+        series_list.append(current)
+    return series_list
+
+
 def lookup_serial_year(maker, serial_str):
+    """Date a serial number, handling makers with restarted numbering.
+
+    A serial can be valid in more than one series — most Buffet serials
+    under 30000 exist in both the 1866-1930 and the 1950-1985 numbering.
+    The number alone can't say which, so every candidate is reported
+    with its series' year span and the tech disambiguates by the horn
+    in front of them.
+
+    Match rules per series: a serial at or below the series' last known
+    range-start is an "inside" match. Serials beyond it still match
+    (production continued past the chart), but those extrapolated
+    matches are only shown when NO series contains the serial properly
+    — and then only from the most recent series, since that's the one
+    that kept producing.
+    """
     if not maker or not serial_str:
         return ""
-    
+
     if maker not in SERIAL_DATA:
         return "Manufacturer data not found."
 
@@ -33,29 +70,45 @@ def lookup_serial_year(maker, serial_str):
     clean_serial = "".join(filter(str.isdigit, serial_str))
     if not clean_serial:
         return "Invalid Serial Number"
-    
+
     try:
         serial_num = int(clean_serial)
     except ValueError:
         return "Invalid Serial Number"
 
-    data = SERIAL_DATA[maker]
-    # Data is list of tuples: (Start_Serial, Year)
-    # We want to find the largest Start_Serial <= serial_num
+    inside = []        # (year, first_year, last_year)
+    extrapolated = []  # same, beyond the series' last known start
 
-    found_year = None
-    best_start = -1
+    for series in _split_serial_series(SERIAL_DATA[maker]):
+        found_year = None
+        best_start = -1
+        for start_serial, year in series:
+            if start_serial <= serial_num and start_serial > best_start:
+                best_start = start_serial
+                found_year = year
+        if found_year is None:
+            continue
+        hit = (found_year, series[0][1], series[-1][1])
+        if serial_num <= series[-1][0]:
+            inside.append(hit)
+        else:
+            extrapolated.append(hit)
 
-    # Find the largest start_serial that doesn't exceed serial_num
-    for start_serial, year in data:
-        if start_serial <= serial_num and start_serial > best_start:
-            best_start = start_serial
-            found_year = year
-
-    if found_year:
-        return str(found_year)
+    if inside:
+        matches = inside
+    elif extrapolated:
+        # Series appear in chronological order; the last one is the
+        # numbering that continued past the chart's end.
+        matches = [extrapolated[-1]]
     else:
         return "Too old / Unknown"
+
+    if len(matches) == 1:
+        return str(matches[0][0])
+    return "\nor ".join(
+        f"{year} ({first}–{last} series)"
+        for year, first, last in matches
+    )
 
 
 # ==========================================
@@ -509,7 +562,7 @@ class LibraryFeaturesMixin:
         entry.grid(row=1, column=1, sticky='w', padx=10, pady=10)
         
         # Result Display
-        self.serial_result_label = tk.Label(frame, text=_("Enter a serial number..."), font=("Helvetica", 24, "bold"), bg=self.root.cget('bg'), fg="#0000A0")
+        self.serial_result_label = tk.Label(frame, text=_("Enter a serial number..."), font=("Helvetica", 24, "bold"), bg=self.root.cget('bg'), fg="#0000A0", wraplength=580, justify="center")
         self.serial_result_label.pack(pady=40)
         
         # Disclaimer
