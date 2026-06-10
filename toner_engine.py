@@ -258,6 +258,7 @@ class TonerEngine:
         self._stale_count = 0  # Consecutive stale reads
         self.last_error = None     # Set when stream restart fails
         self._break_freq = DEFAULT_BREAK_FREQ  # Benade spectral break frequency
+        self.sax_type = None  # set via set_sax_type()
         self._mic_quality_warned = False  # Only warn once per session
         self._spectral_check_frames = 0  # Count frames for spectral quality check
         self._low_energy_frames = 0  # Frames where low freqs are suspiciously weak
@@ -281,6 +282,9 @@ class TonerEngine:
 
     def set_sax_type(self, sax_type):
         """Set break frequency from saxophone type name."""
+        # Stored so callers (e.g. the live rolloff warning) can read back
+        # which sax the engine is configured for.
+        self.sax_type = sax_type
         self._break_freq = BREAK_FREQUENCIES.get(sax_type, DEFAULT_BREAK_FREQ)
 
     @property
@@ -935,7 +939,7 @@ SAX_TRANSPOSITIONS = {
     "Soprano": 2,      # Bb (sounds major 2nd below)
     "F Mezzo": 7,      # F (sounds perfect 5th below)
     "Alto": 9,         # Eb (sounds major 6th below)
-    "C Melody": 0,     # C (concert pitch)
+    "C Melody": 12,    # C (concert pitch class, sounds an octave below written)
     "Tenor": 14,       # Bb (sounds major 9th below)
     "Baritone": 21,    # Eb (sounds major 13th below)
     "Bass": 26,        # Bb (sounds 2 octaves + major 2nd below)
@@ -1176,11 +1180,13 @@ def _capture_is_plausible(cap, sax_type):
             return False
 
     h = cap.get('harmonics_db', [])
-    if len(h) > 1:
-        # Filter NaN/inf and the impossible-positive sentinel
-        for v in h[1:]:
-            if v != v or v > 20.0:  # NaN check + plausibility ceiling
-                return False
+    # Filter NaN/±inf (json round-trips -Infinity happily, and one -inf
+    # poisons every average it touches) and the impossible-positive
+    # sentinel. Index 0 included: it's 0.0 by construction today, but this
+    # filter is the last line of defense for historical/imported data.
+    for v in h:
+        if not math.isfinite(v) or v > 20.0:
+            return False
     return True
 
 
@@ -1726,8 +1732,10 @@ def load_tone_presets(filepath):
                 return {DEFAULT_LIBRARY: {}}
 
             # Check if this is the old flat format (preset names at top level
-            # with 'sessions' key inside — libraries wouldn't have that)
-            if data and any(isinstance(v, dict) and 'sessions' in v
+            # with a 'sessions' LIST inside — in nested format the values
+            # are libraries, where 'sessions' could only appear as a
+            # preset *named* "sessions", which is a dict, not a list).
+            if data and any(isinstance(v, dict) and isinstance(v.get('sessions'), list)
                            for v in data.values()):
                 # Migrate flat → nested
                 migrated = {DEFAULT_LIBRARY: data}
@@ -1741,10 +1749,13 @@ def load_tone_presets(filepath):
 
 
 def save_tone_presets(presets, filepath):
-    """Save tone presets to JSON file."""
+    """Save tone presets to JSON file (atomic: temp file + replace,
+    so a crash mid-write can't truncate the library)."""
     try:
-        with open(filepath, 'w') as f:
+        tmp_path = filepath + ".tmp"
+        with open(tmp_path, 'w') as f:
             json.dump(presets, f, indent=2)
+        os.replace(tmp_path, filepath)
         return True
     except Exception:
         return False

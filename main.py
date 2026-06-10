@@ -1609,10 +1609,23 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if hole_dia is None:
             return None
 
-        pads = self.parse_pad_list(self.pad_entry.get("1.0", tk.END))
+        rejected = []
+        pads = self.parse_pad_list(self.pad_entry.get("1.0", tk.END), rejected)
         if not pads:
             messagebox.showerror(_("Error"), _("No valid pad sizes entered."))
             return None
+
+        if rejected:
+            shown = "\n".join(f"  • {ln}" for ln in rejected[:10])
+            if len(rejected) > 10:
+                shown += "\n" + _("  … and {n} more").format(n=len(rejected) - 10)
+            if not messagebox.askyesno(
+                _("Some lines skipped"),
+                _("These lines couldn't be read as \"size x quantity\" and "
+                  "won't be cut:\n\n"
+                  "{lines}\n\n"
+                  "Continue without them?").format(lines=shown)):
+                return None
 
         max_pads = [p for p in pads if p['qty'] == 'max']
         if len(max_pads) > 1:
@@ -2882,34 +2895,41 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             print(f"An error occurred during scrap mode G-code generation: {e}")
             messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
 
-    def parse_pad_list(self, pad_input):
+    def parse_pad_list(self, pad_input, rejected=None):
         """
         Parse pad input. Supports:
         - Regular: "18.0 x 5" (size x quantity)
         - Max fill: "18.0 x max" (fill remaining space with this size)
         Only one pad size can use "max" at a time.
+
+        If `rejected` is a list, lines that can't be parsed are appended
+        to it so the caller can warn — a typo'd line silently vanishing
+        from a cut job means missing pads discovered after the sheet is cut.
         """
         pad_list = []
         for line in pad_input.strip().splitlines():
             line = line.strip().lower()
             if not line:
                 continue
+            ok = False
             try:
                 parts = line.split('x', 1)  # Split only on first 'x' (so 'max' doesn't get split)
-                if len(parts) != 2:
-                    continue
-                size = float(parts[0].strip())
-                if size <= 0:
-                    continue
-                qty_str = parts[1].strip()
-                if qty_str == 'max':
-                    pad_list.append({'size': size, 'qty': 'max'})
-                else:
-                    qty = int(float(qty_str))
-                    if qty > 0:
-                        pad_list.append({'size': size, 'qty': qty})
+                if len(parts) == 2:
+                    size = float(parts[0].strip())
+                    if size > 0:
+                        qty_str = parts[1].strip()
+                        if qty_str == 'max':
+                            pad_list.append({'size': size, 'qty': 'max'})
+                            ok = True
+                        else:
+                            qty = int(float(qty_str))
+                            if qty > 0:
+                                pad_list.append({'size': size, 'qty': qty})
+                                ok = True
             except ValueError:
-                continue
+                pass
+            if not ok and rejected is not None:
+                rejected.append(line)
         return pad_list
 
     # --- Pad Presets Wrappers ---
@@ -3167,7 +3187,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if not found_files:
             messagebox.showinfo(_("No Settings Found"),
                 _("No config files found in the selected folder.\n\n"
-                "Looking for: app_settings.json, pad_presets.json, key_height_library.json, screw_specs.json"))
+                "Looking for: app_settings.json, pad_presets.json, sizing_presets.json, "
+                "key_height_library.json, screw_specs.json, toner_data.json"))
             return
 
         file_list = "\n".join(f"  • {f}" for f in found_files)
@@ -3186,6 +3207,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
             self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
             self.screw_data = load_presets(SCREW_SPECS_FILE, preset_type_name="Screw Specs")
+            self.sizing_presets = load_presets(SIZING_PRESET_FILE, preset_type_name="Sizing Preset")
+            # The app guarantees at least one sizing preset exists
+            if not self.sizing_presets:
+                self.sizing_presets["Default"] = settings_to_sizing_preset(self.settings)
+                save_presets(self.sizing_presets, SIZING_PRESET_FILE)
 
             # Refresh UI dropdowns
             self.update_pad_library_dropdown()
@@ -3193,7 +3219,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.update_screw_maker_list()
 
             # Update UI elements that depend on settings
-            self.update_ui_from_settings()
+            self.refresh_widgets_from_settings()
             self.apply_resonance_theme()
 
             messagebox.showinfo(_("Import Complete"),
@@ -3774,6 +3800,32 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
     def update_ui_from_settings(self):
         self.unit_label.config(text=_("Width ({units}):").format(units=self.settings['units']))
         self.height_label.config(text=_("Height ({units}):").format(units=self.settings['units']))
+
+    def refresh_widgets_from_settings(self):
+        """Repopulate main-tab widgets from self.settings after an import.
+
+        on_exit() writes these widgets' state BACK into settings, so if
+        they aren't refreshed after Import Settings from Folder, the stale
+        pre-import values silently clobber the imported config at exit.
+        Kept separate from update_ui_from_settings(), which also runs on
+        Options-Apply where resetting mid-session sheet edits would be rude.
+        """
+        self.update_ui_from_settings()
+        self.width_entry.delete(0, tk.END)
+        self.width_entry.insert(0, self.settings["sheet_width"])
+        self.height_entry.delete(0, tk.END)
+        self.height_entry.insert(0, self.settings["sheet_height"])
+        self.hole_var.set(self.settings["hole_option"])
+        self.custom_hole_entry.config(state='normal')
+        self.custom_hole_entry.delete(0, tk.END)
+        self.custom_hole_entry.insert(0, self.settings.get("custom_hole_size", "4.0"))
+        self.toggle_custom_hole_entry()
+        self.card_paper_var.set(self.settings.get("card_use_paper_size", False))
+        if self.settings.get("card_paper_size", "letter") == "a4":
+            self.card_paper_dropdown.set("a4 (210×297 mm)")
+        else:
+            self.card_paper_dropdown.set("letter (8.5×11 in)")
+        self._toggle_card_paper_dropdown()
 
 if __name__ == '__main__':
     setup_logging()
