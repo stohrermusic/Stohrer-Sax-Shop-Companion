@@ -2,7 +2,7 @@ name: Build Releases
 
 on:
   push:
-    branches: [main, beta, gamma]
+    branches: [main, beta]
   release:
     types: [created]
   workflow_dispatch:
@@ -70,13 +70,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install svgwrite pyinstaller
 
-      # GPU strobe tuner renderer (Rust/wgpu) — only for full builds
+      # GPU strobe tuner renderer (Rust/wgpu) — only for full builds, and
+      # never on macOS: Tk Aqua's winfo_id() is not an NSView, so wgpu
+      # can't attach a surface there. Macs are canvas-only by design
+      # (see the tuner_render import gate in tuner_tab.py).
       - name: Install Rust toolchain
-        if: matrix.full_build
+        if: matrix.full_build && !startsWith(matrix.os, 'macos')
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build GPU tuner renderer
-        if: matrix.full_build
+        if: matrix.full_build && !startsWith(matrix.os, 'macos')
         run: |
           pip install maturin
           python -m maturin build --release --manifest-path tuner_renderer/Cargo.toml
@@ -144,7 +147,7 @@ jobs:
       # Attach to release if this is a release event
       - name: Upload to Release
         if: matrix.os != 'windows-latest' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/${{ matrix.asset_name }}
@@ -153,7 +156,7 @@ jobs:
 
       - name: Upload Windows installer to Release
         if: matrix.os == 'windows-latest' && github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/SaxShopCompanion-Windows-Setup-*.exe

@@ -2,9 +2,11 @@
 Toner tab mixin for Stohrer Sax Shop Companion.
 
 Harmonic tone analyzer for saxophone. Shows a live spectrum analyzer
-(full FFT or harmonic-only bars) on the left and VU-style tone
-descriptor gauges on the right. Auto-detects fundamental pitch and
-analyzes harmonic content for real-time tone quality feedback.
+(full FFT or harmonic-only bars) on the left and an intonation gauge
+with note display on the right. Auto-detects fundamental pitch and
+analyzes harmonic content in real time. (The live VU-style descriptor
+gauges were removed 2026-04-06 — descriptors now appear only in the
+Analyze tool, where averaged comparisons cancel mic/setup confounders.)
 
 Includes a tone preset system: guided capture sessions build up
 harmonic fingerprints of individual horns over time, with comparison
@@ -152,7 +154,8 @@ def _format_preset_info(p):
         info += " \u2713"
     if method_counts:
         method_parts = []
-        for m in ['structured', 'free', 'file']:
+        # 'structured' is the legacy name for calibration captures
+        for m in ['calibration', 'structured', 'free', 'file']:
             if m in method_counts:
                 method_parts.append(f"{method_counts[m]} {m}")
         info += f"\nCaptures by method: {', '.join(method_parts)}"
@@ -1349,6 +1352,14 @@ class TonerTabMixin:
              "Lower values = smooth, even rolloff.\n\n"
              "This is a signal processing metric, not an established "
              "measurement in saxophone acoustics. Treat it as experimental."),
+            ("evenness", "Evenness", "beta",
+             "How uniform the harmonic complexity stays across the "
+             "horn's register, note to note.\n\n"
+             "Higher values = the horn's character stays consistent "
+             "from low notes to high.\n"
+             "Lower values = the character changes a lot by register.\n\n"
+             "Needs captures on at least 5 different notes to mean "
+             "anything; shows 50% until then."),
         ]
 
         desc_vars = {}
@@ -1411,7 +1422,9 @@ class TonerTabMixin:
         btn_frame.pack(fill="x", padx=10, pady=(5, 10))
 
         def save():
-            # Input device
+            # Input device (remember the old one to detect a change below —
+            # nothing else persists it, so compare before overwriting)
+            old_dev = self.settings.get("audio_input_device")
             if devices and sys.platform != 'linux':
                 sel = listbox.curselection()
                 if sel:
@@ -1456,7 +1469,7 @@ class TonerTabMixin:
                 sel = listbox.curselection()
                 if sel:
                     new_dev = dev_indices[sel[0]]
-                    if new_dev != self.settings.get("_prev_audio_device"):
+                    if new_dev != old_dev:
                         if hasattr(self, '_toner_engine') and self._toner_engine and self._toner_engine.is_running:
                             self._toner_stop()
                             self._toner_start()
@@ -2436,11 +2449,12 @@ class TonerTabMixin:
 
     def _toner_stop_capture(self):
         """Stop capture mode. Saves pending data, shows coverage summary."""
-        # Flush any deferred save
-        self._toner_flush_save()
-        # Save any accumulated free-mode frames before stopping
+        # Save any accumulated free-mode frames FIRST, then flush — the
+        # other way around, the final micro-capture re-arms a 10s deferred
+        # save that fires after the session is already closed.
         if self._toner_capture_mode == 'free' and self._toner_free_accumulator:
             self._toner_free_save_micro_capture()
+        self._toner_flush_save()
 
         # Save WAV recording if active
         wav_filepath = None
@@ -3134,6 +3148,11 @@ class TonerTabMixin:
         import copy
         lib = self._toner_active_library
         preset_name = self._toner_active_preset
+        if not self._toner_active_session:
+            # A deferred-save timer can fire after the session was closed
+            # (e.g. coverage dialog dismissed within the 10s window).
+            self._toner_save_pending = False
+            return
         if not lib or not preset_name:
             return
         if lib not in self._toner_presets:
@@ -5329,7 +5348,7 @@ class TonerTabMixin:
 
                 # Create a file import session
                 self._toner_active_session = {
-                    'date': time.strftime("%Y-%m-%d %H:%M"),
+                    'date': time.strftime("%Y-%m-%d %H:%M:%S"),
                     'captures': [],
                     'source_notes': source_notes,
                     'method': 'file',
@@ -5469,7 +5488,7 @@ class TonerTabMixin:
                 filepath, source_notes = self._toner_pending_file_import
                 del self._toner_pending_file_import
                 self._toner_active_session = {
-                    'date': time.strftime("%Y-%m-%d %H:%M"),
+                    'date': time.strftime("%Y-%m-%d %H:%M:%S"),
                     'captures': [],
                     'source_notes': source_notes,
                     'method': 'file',
@@ -5700,8 +5719,13 @@ class TonerTabMixin:
             _("Imported {count} new presets/sessions.").format(count=count))
 
     def _toner_save_settings(self):
-        """Save toner settings to the settings dict."""
-        self.settings["toner_settings"] = {
+        """Save toner settings to the settings dict.
+
+        Update (don't replace) the dict: keys this method doesn't own —
+        like analysis_descriptors, set from the Settings dialog — must
+        survive, or the user's choices silently reset on every app exit.
+        """
+        self.settings.setdefault("toner_settings", {}).update({
             "reference_pitch": float(self._toner_pitch_var.get()) if hasattr(self, '_toner_pitch_var') else 440.0,
             "sensitivity": self._toner_sens_var.get() if hasattr(self, '_toner_sens_var') else 50,
             "fps": self._toner_fps_var.get() if hasattr(self, '_toner_fps_var') else "30",
@@ -5709,7 +5733,16 @@ class TonerTabMixin:
             "scale_mode": self._toner_scale_var.get() if hasattr(self, '_toner_scale_var') else "linear",
             "sax_type": self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else "Alto",
             "concert_pitch": self._toner_concert_pitch.get() if hasattr(self, '_toner_concert_pitch') else False,
-        }
-        # Also save any pending session
+        })
+        # Flush any in-flight capture data so exiting mid-capture doesn't
+        # lose the most recent micro-captures (deferred saves batch 10s).
+        if (getattr(self, '_toner_capture_state', None) is not None
+                and getattr(self, '_toner_capture_mode', None) == 'free'
+                and getattr(self, '_toner_free_accumulator', None)):
+            try:
+                self._toner_free_save_micro_capture()
+            except Exception:
+                pass  # exiting — never block shutdown on a capture flush
         if self._toner_active_session and self._toner_active_preset:
+            self._toner_save_active_session()
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)

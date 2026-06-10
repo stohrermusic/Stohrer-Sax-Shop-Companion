@@ -8,3 +8,4 @@ sounddevice>=0.4
 Pillow>=10.0
 opencv-python>=4.7
 pyserial>=3.5
+certifi>=2024.0

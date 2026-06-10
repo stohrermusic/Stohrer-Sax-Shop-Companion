@@ -12,7 +12,7 @@ tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no
 toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, preset system, comparison)
 toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, preset storage, no tkinter)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
-tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings, optional fallback to canvas)
+tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
@@ -69,6 +69,10 @@ Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in con
 ## Settings Loading Hardening
 
 `load_settings()` defends against old/corrupted config files: null values are rejected (defaults used instead), dict-type keys that load as non-dicts are skipped, layer_colors with old LightBurn codes (e.g. "C10") are replaced with hex defaults, and `KeyError`/`AttributeError`/`ValueError` during merge fall back to full defaults. Users upgrading from very old versions (tested back to v1.0) should never crash on settings load.
+
+## Data Safety on Write (v2.6+)
+
+All JSON saves route through `_write_json_atomic()` in config.py — write to a sibling `.tmp` file, then `os.replace()` over the target — so a crash or power loss mid-save leaves either the old file or the complete new one, never a truncated half-write. Both `save_settings()` and `save_presets()` use it. On the read side, when a config file fails to parse, `_preserve_corrupt_file()` copies it to `<name>.corrupt.bak` before defaults take over (first corruption wins — an existing backup is never overwritten), so hand-recoverable data isn't destroyed by the next save. Both `load_settings()` and `load_presets()` call it.
 
 ## Error Logging
 

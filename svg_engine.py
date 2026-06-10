@@ -985,7 +985,7 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
             if num_points % 2 != 0:
                 num_points += 1
 
-            shape_factor = dart_cfg.get("shape_factor", 0.0)
+            shape_factor = dart_cfg.get("shape_factor", 0.5)
             path_d = calculate_star_path(cx, cy, outer_r, inner_r, num_points=num_points, shape_factor=shape_factor)
 
             dwg.add(dwg.path(d=path_d, stroke=layer_colors[f'{material}_outline'], fill='none', stroke_width=stroke_w))

@@ -26,12 +26,21 @@ except ImportError:
     AUDIO_AVAILABLE = False
     PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-# GPU-accelerated renderer (Rust/wgpu) — falls back to canvas if unavailable
-try:
-    import tuner_render
-    _HAS_GPU_RENDERER = True
-except ImportError:
+# GPU-accelerated renderer (Rust/wgpu) — falls back to canvas if unavailable.
+# Never on macOS: Tk Aqua draws all widgets into a single NSView per window,
+# and winfo_id() returns an internal MacDrawable pointer, not an NSView
+# ("the value has no meaning outside Tk" — Tk docs). Handing it to wgpu's
+# Metal backend segfaults in objc_msgSend before Python can catch anything,
+# so the init-failure fallback in _tuner_build_wheels_gpu never gets a
+# chance. Macs use the canvas renderer unconditionally.
+if IS_MACOS:
     _HAS_GPU_RENDERER = False
+else:
+    try:
+        import tuner_render
+        _HAS_GPU_RENDERER = True
+    except ImportError:
+        _HAS_GPU_RENDERER = False
 
 
 # ============================================
@@ -350,24 +359,15 @@ class StrobeWheel:
         self._last_ring_phases = list(ring_phases)
         self._phase_offset = phase_offset  # Keep for compatibility
 
-        # Only update segments that are visible through the wedge cutout.
-        # The wedge shows WEDGE_ANGLE degrees centered on 90° (top).
-        # Segments outside this arc are hidden behind the mask — skip them.
-        wedge_half = WEDGE_ANGLE / 2.0
-        vis_lo = 90.0 - wedge_half
-        vis_hi = 90.0 + wedge_half
-
+        # NOTE: an earlier version tried to cull segments hidden behind the
+        # wedge mask here, but its wrap-around test was a no-op (every
+        # segment always passed), so it was removed. If culling is ever
+        # reintroduced, it must use self._wedge_center — bottom-row wheels
+        # have their wedge at 270°, not 90°.
         for ring_idx in range(NUM_RINGS):
             ring_phase = ring_phases[ring_idx]
             r_inner, r_outer = self._ring_radii[ring_idx]
             for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
-                start = (base_start + ring_phase) % 360.0
-                end = start + seg_span
-                if not (end > vis_lo and start < vis_hi):
-                    if not (end + 360.0 > vis_lo and start < vis_hi) and \
-                       not (end > vis_lo and start - 360.0 < vis_hi):
-                        continue
-
                 points = _annular_sector_points(
                     self.cx, self.cy, r_inner, r_outer,
                     base_start + ring_phase,
@@ -453,12 +453,15 @@ class TunerTabMixin:
             )
             self._tuner_canvas._dark_canvas = True  # Skip theme walker
             self._tuner_canvas.pack(fill="both", expand=True, padx=5, pady=(5, 0))
-            # Persistent CPU mode notice
-            self._cpu_mode_lbl = tk.Label(
-                self._tuner_main_frame,
-                text=_("CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration"),
-                bg=bg, fg="#555555", font=("Helvetica", 8))
-            self._cpu_mode_lbl.place(relx=0.5, y=6, anchor="n")
+            # Persistent CPU mode notice. Not shown on macOS \u2014 canvas is
+            # the only renderer there, so "install tuner_render" would be
+            # advice to install your way into a native crash.
+            if not IS_MACOS:
+                self._cpu_mode_lbl = tk.Label(
+                    self._tuner_main_frame,
+                    text=_("CPU mode (low FPS) \u2014 install tuner_render for GPU acceleration"),
+                    bg=bg, fg="#555555", font=("Helvetica", 8))
+                self._cpu_mode_lbl.place(relx=0.5, y=6, anchor="n")
 
         # --- Control panel (EQ sliders | flat/pilot/sharp | VU meter) ---
         ctrl_bg = "systemWindowBackgroundColor" if IS_MACOS else "#2A2A2A"
@@ -686,7 +689,10 @@ class TunerTabMixin:
         bg = DEFAULT_FACEPLATE
         frame = tk.Frame(parent, bg=bg)
         frame.pack(fill="both", expand=True)
-        frame._dark_canvas = True
+        # _skip_theme keeps the resonance theme walker out of this subtree
+        # (_dark_canvas only applies to Canvas widgets — on a Frame it did
+        # nothing, and theming recolored the dark bg under light-gray text)
+        frame._skip_theme = True
 
         import sys
         if sys.platform == 'linux':
@@ -1150,13 +1156,15 @@ class TunerTabMixin:
                     sel = mic_combo.current()
                     dev_idx = dev_indices[sel] if sel >= 0 else None
                     self.settings["audio_input_device"] = dev_idx
-                    # Restart engine with new device
+                    # Restart engine with new device. Route through
+                    # _tuner_start() rather than engine.start() directly:
+                    # it checks the success flag and shows the error
+                    # overlay + retry link if the device fails to open
+                    # (a raw start() failure left frozen wheels with the
+                    # pilot lamp lit and no explanation).
                     if self._tuner_engine and self._tuner_engine.is_running:
                         self._tuner_stop()
-                        self._tuner_engine.start(device=dev_idx)
-                        self._tuner_running = True
-                        self._tuner_set_pilot(True)
-                        self._tuner_animate()
+                        self._tuner_start()
 
                 mic_combo.bind("<<ComboboxSelected>>", on_mic_changed)
 

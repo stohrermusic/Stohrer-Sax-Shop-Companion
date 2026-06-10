@@ -212,3 +212,5 @@ if failed == 0:
     print("ALL TESTS PASSED")
 else:
     print(f"{failed} TESTS FAILED")
+
+sys.exit(0 if failed == 0 else 1)

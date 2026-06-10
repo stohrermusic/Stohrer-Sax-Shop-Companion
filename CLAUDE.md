@@ -30,7 +30,9 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (41 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (44 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_engine_parity`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_serial_lookup`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+
+**SVG↔G-code parity**: `test_engine_parity` pins the contract that the SVG/preview output and the G-code output describe the same physical object (dart wave shape, engraving label placement, engine purity). The two engines render independently and have drifted before — when touching shared geometry (wave math, placement formulas, Y-flip), run this suite and extend it for any new shared shape.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
@@ -77,7 +79,7 @@ Dirty detection is a `_capture_form_to_dict()` snapshot vs `self._baseline`; the
 
 ## G-code Settings Presets Workflow
 
-`GcodeSettingsWindow` (Options > G-code Settings on Pad Maker, Options > G-code Settings on Tooling) is preset-aware **per material**. Each material section (felt / card / leather / acrylic / basswood) has its own preset bar at the top with Load / Save / Rename / Delete, and its own active-preset name + dirty baseline. Editing felt does not dirty card. The preset library is shared across the two dialogs — saving a felt preset from Pad Maker shows up in any future dialog that includes felt.
+`GcodeSettingsWindow` (Options > G-code Settings... on Pad Maker, Options > Settings... on Tooling) is preset-aware **per material**. Each material section (felt / card / leather / acrylic / basswood) has its own preset bar at the top with Load / Save / Rename / Delete, and its own active-preset name + dirty baseline. Editing felt does not dirty card. The preset library is shared across the two dialogs — saving a felt preset from Pad Maker shows up in any future dialog that includes felt.
 
 - **Per-material storage**: `gcode_presets.json` shape is `{material: {preset_name: data}}`. Top-level keys are the 5 materials in `config.GCODE_PRESET_MATERIALS`. Inner data captures only `config.GCODE_PRESET_KEYS` (the 19 keys per material — engraving mode, line/filled speed+power+passes, fill density, hole/cut speed+power+passes, kerf, four air toggles).
 - **Cross-material isolation by design**: a felt preset will not load into the acrylic slot. Materials have characteristic settings ranges and mixing them silently is dangerous; users who want to cross-apply must Save As under the target material.
@@ -101,9 +103,9 @@ Dirty tracking uses per-material `_capture_material_to_dict(mat)` snapshots comp
 The dart wave shape (formerly "Star/Dart"; now just "Darts" in the UI) is a single 0.0–1.0 slider that smoothly interpolates between three primitive shapes:
 - 0.0 = Triangle (linear ramps between peaks/valleys)
 - 0.5 = Sine (raw cosine)
-- 1.0 = Square (saturating sign function via `|c|^0.05`)
+- 1.0 = Square (saturating sign function via `|c|^p`, `p = _SQUARE_POWER = 0.01`)
 
-Math lives in `_wave_value` in `svg_engine.py`; `calculate_star_path` calls it per sample. The default value is now `0.5` (sine). Legacy configs used a 0.0=sine, 1.0=square scale; `load_settings` migrates them once via `0.5 + 0.5 * old` and sets `dart_shape_v2: True` so the migration doesn't run again. `dart_ranges[*].shape_factor` is migrated alongside the universal value. When changing dart-shape behavior, update `tools/test_dart_shapes.py` (anchor + smoothness + migration coverage).
+Math lives in `_wave_value` in `svg_engine.py`; `calculate_star_path` (SVG) and `_generate_star_points` (G-code) both call it per sample — `tools/test_engine_parity.py` pins them together. The default value is now `0.5` (sine). Legacy configs used a 0.0=sine, 1.0=square scale; `load_settings` migrates them once via `0.5 + 0.5 * old` and sets `dart_shape_v2: True` so the migration doesn't run again. `dart_ranges[*].shape_factor` is migrated alongside the universal value. When changing dart-shape behavior, update `tools/test_dart_shapes.py` (anchor + smoothness + migration coverage).
 
 Internal variable names retain the `dart_` prefix (`dart_shape_factor`, `dart_threshold`, etc.); only the user-facing labels were renamed to "Darts".
 
@@ -132,16 +134,19 @@ python build.py --dmg
 
 ### GPU Tuner Renderer (Rust/wgpu)
 
-The strobe tuner has an optional GPU-accelerated renderer in `tuner_renderer/` (Rust crate using pyo3 + wgpu). CI builds this on full-build platforms, but a local checkout of `python main.py` will silently fall back to the slower canvas renderer unless you build the extension yourself:
+The strobe tuner has an optional GPU-accelerated renderer in `tuner_renderer/` (Rust crate using pyo3 + wgpu) — **Windows and Linux only**. CI builds this on the Windows and Linux runners, but a local checkout of `python main.py` will silently fall back to the slower canvas renderer unless you build the extension yourself:
 
 ```bash
-# Requires Rust toolchain (rustup)
+# Requires Rust toolchain (rustup). Windows/Linux only — do NOT do this on
+# a Mac (see the macOS warning below).
 pip install maturin
 python -m maturin build --release --manifest-path tuner_renderer/Cargo.toml
 pip install --find-links tuner_renderer/target/wheels tuner_render
 ```
 
-After this, `import tuner_render` succeeds and the tuner uses GPU rendering at 60-120 fps. If the import fails for any reason the tuner transparently falls back to canvas rendering — the app still runs, just slower. See the `_skip_theme` / `_dark_canvas` flag notes in the Strobe Tuner architecture section for integration details, and the GPU/Canvas constant alignment warning (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) for what has to stay in sync between the Python path and the shader.
+After this, `import tuner_render` succeeds and the tuner uses GPU rendering at 60-120 fps. If the import fails for any reason the tuner falls back to canvas rendering on Windows/Linux — the app still runs, just slower. See the `_skip_theme` / `_dark_canvas` flag notes in the Strobe Tuner architecture section for integration details, and the GPU/Canvas constant alignment warning (`DIM_MULTIPLIER`, `BRIGHTNESS_GAMMA`) for what has to stay in sync between the Python path and the shader.
+
+**macOS is canvas-only — never load `tuner_render` on darwin.** Tk Aqua draws all widgets into a single NSView per toplevel, and `winfo_id()` returns a pointer to Tk's internal `MacDrawable` struct, not an NSView ("the value has no meaning outside Tk" — Tk docs). `tuner_renderer/src/platform.rs` would wrap that handle as an NSView, so wgpu's Metal backend segfaults in `objc_msgSend` during surface creation — a native crash the Python init-failure `except` in `tuner_tab.py` can never catch. Three layers enforce the gate: `tuner_tab.py` skips the `tuner_render` import on darwin, `build.py` skips the `--hidden-import` on darwin, and CI skips the Rust/maturin steps on macOS runners. Even a real NSView wouldn't fix it — a CAMetalLayer on the shared per-window view would paint over the entire UI (and would still need Retina scale handling), so macOS GPU rendering is off the table by design. **History**: the macOS Apple Silicon zips for v1.95 through v2.6 shipped with the renderer bundled — on those builds, opening the Tuner tab crashes the app outright.
 
 On Windows, Rust needs the MSVC linker. The one-time machine setup is `winget install Rustlang.Rustup` followed by `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`.
 
@@ -151,7 +156,7 @@ CI wraps `dist\SaxShopCompanion.exe` into a versioned `SaxShopCompanion-Windows-
 
 ```bash
 python build.py
-iscc /DAppVersion=3.0 installer.iss     # requires Inno Setup 6
+iscc /DAppVersion=2.6 installer.iss     # requires Inno Setup 6
 ```
 
 **Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
@@ -206,7 +211,7 @@ python tools/test_i18n.py              # verify
 
 - **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
 - **`beta`**: Active development branch. New features land here first (e.g. filled engraving, air assist toggles, cut grouping). Always work on `beta` unless told otherwise.
-- CI builds trigger on push to `main`, `beta`, or `gamma`.
+- CI builds trigger on push to `main` or `beta`.
 
 ## Versioning
 
@@ -224,10 +229,10 @@ The `.github/workflows/build.yml` workflow has two jobs:
 - **`lint`** (ubuntu-latest, ~10s): runs `ruff check .` — fails the workflow on any violation
 - **`build`** (4-platform matrix): Windows Inno Setup installer (the bare PyInstaller .exe is built but not published — only the installer ships), macOS Apple Silicon .app, macOS Intel .app, and Linux binary
 
-Triggers on push to `main`, `beta`, or `gamma`, on release creation, or manually.
+Triggers on push to `main` or `beta`, on release creation, or manually.
 
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
-- `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer
+- `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer; the macOS runners additionally skip the Rust steps unconditionally — macOS is canvas-only (see GPU Tuner Renderer section)
 - The Windows job also installs Inno Setup 6 via Chocolatey and builds the installer; version is extracted from `config.py`'s `APP_VERSION` via PowerShell regex
 - Uploads artifacts to the workflow run; on Windows that's the installer only (`SaxShopCompanion-Windows-Setup-*.exe`). All published artifacts also attach to GitHub Releases on release events.
 

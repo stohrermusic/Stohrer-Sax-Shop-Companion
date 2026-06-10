@@ -66,6 +66,7 @@ Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W t
 
 ### Serial Number Lookup
 - Reference database for saxophone serial numbers by manufacturer
+- Handles makers that restarted their numbering (Buffet, LeBlanc/Vito, Yanagisawa) — an ambiguous serial reports every matching era, and since you're holding the horn, the ambiguity resolves on sight
 
 ### Screw Specifications
 - OEM screw and rod specifications database
@@ -79,15 +80,16 @@ Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W t
 - **Pad Press Spacers** — bundled 3D-printable STL files for setting pad press depth. Half-step set (3.0 / 3.5 / 4.0 / 4.5 mm), quarter-step set (3.25 / 3.75 / 4.25 mm), and an organizer rack.
 - **Kerf Test** — quick three-circle pattern for measuring kerf on any material.
 - **Speed & Power Test (beta)** — generate a sheet of small test discs at different speed / power / passes combinations to dial in laser settings on a new material. Each disc engraved with a 2-digit ID; a `legend.txt` saved alongside the G-code maps each ID to its parameters. Sweep 0–3 variables; "Also test with air off" doubles the matrix for side-by-side air-quality comparison.
-- **G-code presets** — Options > Tooling Settings now exposes per-material G-code for Acrylic and Basswood. Acrylic for die holders and inserts, basswood preset feeds the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
+- **G-code presets** — Options > Settings on the Tooling tab exposes per-material G-code for Acrylic and Basswood. Acrylic for die holders and inserts, basswood preset feeds the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
 
 ### Chromatic Strobe Tuner
 
 ![Chromatic Strobe Tuner](img/tuner.png)
 
 - 12-wheel stroboscopic chromatic tuner
-- GPU-accelerated rendering via Rust/wgpu — 60-120 fps strobe wheels
+- GPU-accelerated rendering via Rust/wgpu on Windows and Linux — 60-120 fps strobe wheels
   - Automatic fallback to CPU canvas rendering if GPU unavailable
+  - macOS uses the canvas renderer (Tk on macOS doesn't expose a native view the GPU renderer can draw into — fully functional, just capped at canvas frame rates)
 - Per-ring octave brightness from real spectral data
 - Grouped slider panel (display, pitch, bias) and vintage backlit VU meter
 - Per-pitch-class phase tracking with temporal smoothing

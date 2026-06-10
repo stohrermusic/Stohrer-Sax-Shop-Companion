@@ -254,6 +254,9 @@ with open(build_path) as f:
 
 test("build.py has tuner_render hidden import",
      "'tuner_render'" in build_src and 'hidden-import' in build_src)
+test("build.py skips tuner_render on macOS",
+     'skipping tuner_render' in build_src and
+     "sys.platform == 'darwin'" in build_src)
 test("build.py has icon.ico support", "'icon.ico'" in build_src)
 test("build.py has icon.icns support", "'icon.icns'" in build_src)
 test("build.py bundles icon.ico as data", "'--add-data'" in build_src and 'icon.ico' in build_src)
@@ -301,6 +304,8 @@ if os.path.exists(ci_path):
     test("CI builds tuner_render", 'maturin build' in ci_src)
     test("CI installs tuner_render wheel", 'tuner_render' in ci_src)
     test("Rust build only on full_build", 'matrix.full_build' in ci_src)
+    test("CI skips Rust build on macOS runners",
+         "!startsWith(matrix.os, 'macos')" in ci_src)
 else:
     test("CI workflow exists", False)
 
@@ -315,9 +320,15 @@ with open(tab_path) as f:
     tab_src = f.read()
 
 test("GPU import wrapped in try/except",
-     'try:\n    import tuner_render' in tab_src)
+     'try:\n        import tuner_render' in tab_src)
 test("_HAS_GPU_RENDERER set on ImportError",
      '_HAS_GPU_RENDERER = False' in tab_src)
+# macOS: Tk Aqua's winfo_id() is not an NSView — handing it to wgpu
+# segfaults natively, so darwin must never import tuner_render at all.
+test("macOS never imports tuner_render (darwin gate)",
+     'if IS_MACOS:\n    _HAS_GPU_RENDERER = False' in tab_src)
+test("CPU-mode install hint suppressed on macOS",
+     'if not IS_MACOS:' in tab_src)
 test("GPU init failure falls back to canvas",
      'self._tuner_use_gpu = False' in tab_src and
      '_tuner_build_wheels_canvas' in tab_src)
@@ -328,6 +339,12 @@ test("Canvas path preserved (StrobeWheel class exists)",
 test("_tuner_build_wheels dispatches to both paths",
      '_tuner_build_wheels_gpu' in tab_src and
      '_tuner_build_wheels_canvas' in tab_src)
+
+# On macOS, Cmd-Q / app-menu Quit fire ::tk::mac::Quit, which bypasses
+# WM_DELETE_WINDOW — without this route, on_exit (and the settings save)
+# never runs on the standard mac quit path.
+test("::tk::mac::Quit routed through on_exit (Cmd-Q saves settings)",
+     '"::tk::mac::Quit"' in main_src and 'createcommand' in main_src)
 
 
 # ============================================================

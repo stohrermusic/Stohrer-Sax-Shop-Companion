@@ -6,7 +6,9 @@ import shutil
 import ssl
 import logging
 import logging.handlers
-from tkinter import messagebox
+# NOTE: tkinter is imported lazily inside the functions that show dialogs.
+# This file is imported by the pure engines (svg_engine, gcode_engine), which
+# must stay importable in headless environments (tests, CI) without tkinter.
 
 
 def get_dart_settings_for_size(pad_size, settings):
@@ -177,13 +179,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.6"
+APP_VERSION = "2.61"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-06-05"
+    manual = "2026-06-10"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -297,6 +299,7 @@ def find_config_files_in_directory(directory):
     config_files = [
         "app_settings.json",
         "pad_presets.json",
+        "sizing_presets.json",
         "key_height_library.json",
         "screw_specs.json",
         "toner_data.json",
@@ -413,7 +416,13 @@ if os.path.exists(_old_toner_file) and not os.path.exists(TONER_DATA_FILE):
     try:
         os.rename(_old_toner_file, TONER_DATA_FILE)
     except OSError:
-        pass  # fallback: load_tone_presets will try old path
+        # Rename can fail on Windows if AV/sync tools hold the file.
+        # Fall back to copying — leaving the old file behind is fine,
+        # losing the library to a silently-failed migration is not.
+        try:
+            shutil.copy2(_old_toner_file, TONER_DATA_FILE)
+        except OSError:
+            pass
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"
@@ -920,10 +929,13 @@ def load_settings():
                             settings[key] = {}
                             for sub_key, sub_default in default_value.items():
                                 if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
-                                    # Two-level deep merge (e.g. gcode_settings.felt)
+                                    # Two-level deep merge (e.g. gcode_settings.felt).
+                                    # Filter nulls so old configs can't smuggle None
+                                    # past the defaults (same rule as top level).
                                     settings[key][sub_key] = sub_default.copy()
-                                    settings[key][sub_key].update(loaded_settings[key][sub_key])
-                                elif sub_key in loaded_settings[key]:
+                                    settings[key][sub_key].update(
+                                        {k: v for k, v in loaded_settings[key][sub_key].items() if v is not None})
+                                elif sub_key in loaded_settings[key] and loaded_settings[key][sub_key] is not None:
                                     settings[key][sub_key] = loaded_settings[key][sub_key]
                                 else:
                                     settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
@@ -962,14 +974,43 @@ def load_settings():
 
                 return settings
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError, ValueError):
+            _preserve_corrupt_file(SETTINGS_FILE)
             return copy.deepcopy(DEFAULT_SETTINGS)
     return copy.deepcopy(DEFAULT_SETTINGS)
 
+def _write_json_atomic(path, data):
+    """Write JSON via a temp file + atomic replace.
+
+    A plain open(path, 'w') truncates the target first, so a crash or
+    power loss mid-dump destroys the existing file. Writing to a sibling
+    temp file and os.replace()-ing it in means the target is always
+    either the old version or the complete new one.
+    """
+    tmp_path = path + ".tmp"
+    with open(tmp_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp_path, path)
+
+def _preserve_corrupt_file(path):
+    """Keep a copy of an unparseable config file before defaults take over.
+
+    Without this, the next save would permanently overwrite data that
+    might be hand-recoverable (e.g. a truncated preset library).
+    """
+    try:
+        backup = path + ".corrupt.bak"
+        if os.path.exists(path) and not os.path.exists(backup):
+            shutil.copy2(path, backup)
+            logging.getLogger(__name__).warning(
+                "Could not parse %s — copy preserved at %s", path, backup)
+    except OSError:
+        pass
+
 def save_settings(settings):
     try:
-        with open(SETTINGS_FILE, 'w') as f:
-            json.dump(settings, f, indent=2)
+        _write_json_atomic(SETTINGS_FILE, settings)
     except Exception as e:
+        from tkinter import messagebox
         messagebox.showerror(_("Error Saving Settings"), _("Could not save settings:\n{e}").format(e=e))
 
 def load_presets(file_path, preset_type_name="Preset"):
@@ -981,13 +1022,15 @@ def load_presets(file_path, preset_type_name="Preset"):
             if not isinstance(data, dict):
                 data = {}
         except (json.JSONDecodeError, TypeError):
+            _preserve_corrupt_file(file_path)
             data = {}
-    
+
     # Migration logic for old flat files (legacy support)
     if data and not any(isinstance(v, dict) for v in data.values()):
         print(f"Migrating old {preset_type_name} file...")
         new_data = {"My Presets": data}
         if save_presets(new_data, file_path):
+            from tkinter import messagebox
             messagebox.showinfo(
                 _("Library Updated"),
                 _("Your existing {preset_type_name} sets have been moved into a new library called 'My Presets'.").format(preset_type_name=preset_type_name),
@@ -995,14 +1038,14 @@ def load_presets(file_path, preset_type_name="Preset"):
             return new_data
         else:
             return {}
-    
+
     return data if data else {}
 
 def save_presets(presets, file_path):
     try:
-        with open(file_path, 'w') as f:
-            json.dump(presets, f, indent=2)
+        _write_json_atomic(file_path, presets)
         return True
     except Exception as e:
+        from tkinter import messagebox
         messagebox.showerror(_("Error Saving Preset"), str(e))
         return False

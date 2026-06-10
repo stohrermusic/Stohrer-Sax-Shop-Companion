@@ -583,3 +583,5 @@ if failed == 0:
 else:
     print(f"*** {failed} TESTS FAILED ***")
 print(f"{'='*50}\n")
+
+sys.exit(0 if failed == 0 else 1)

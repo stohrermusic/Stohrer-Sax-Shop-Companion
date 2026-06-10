@@ -36,7 +36,7 @@
 ### 2. Databases (Key Heights, Serials, Screws)
 * **Location:** Logic in `library_features.py` (Mixin).
 * **Architecture:** The main app inherits from `LibraryFeaturesMixin`. This adds the tabs for Key Heights, Serials, and Screws.
-* **Serials:** `lookup_serial_year` iterates through `SERIAL_DATA` ranges.
+* **Serials:** `lookup_serial_year` iterates through `SERIAL_DATA` ranges. Makers with restarted numbering (Buffet, LeBlanc/Vito, Yanagisawa) hold multiple ascending series in one list; the lookup splits on the descents and reports every series that matches (e.g. "1924 or 1978" for an ambiguous Buffet serial).
 
 ---
 
@@ -66,7 +66,7 @@ There is a secondary tool called the **"Standalone Pad SVG Generator"** used by 
 ## Known Constraints & Gotchas
 1.  **Settings Hierarchy:** Dart/Star settings are at the **root** of `app_settings.json`. Access via `self.settings["dart_threshold"]`.
 2.  **Imports:** `svg_engine.py` must remain "pure" (no tkinter imports) to ensure easy testing.
-3.  **Pad Strings:** Pad lists are multiline strings. The parser in `main.py` expects `"Size x Qty"` or just `"Size"`.
+3.  **Pad Strings:** Pad lists are multiline strings. The parser in `main.py` expects `"Size x Qty"` (or `"Size x max"`); bare `"Size"` lines do NOT parse. Lines that fail to parse are collected and surfaced in a skip-warning before generation.
 
 ## Building Executables
 The project uses **PyInstaller** via GitHub Actions.
