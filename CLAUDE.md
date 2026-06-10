@@ -208,7 +208,7 @@ python tools/test_i18n.py              # verify
 
 - **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
 - **`beta`**: Active development branch. New features land here first (e.g. filled engraving, air assist toggles, cut grouping). Always work on `beta` unless told otherwise.
-- CI builds trigger on push to `main` or `beta`. (The workflow trigger also lists `gamma`, a retired experiment branch that no longer exists — harmless, but don't expect a `gamma` to be there.)
+- CI builds trigger on push to `main` or `beta`.
 
 ## Versioning
 
@@ -226,7 +226,7 @@ The `.github/workflows/build.yml` workflow has two jobs:
 - **`lint`** (ubuntu-latest, ~10s): runs `ruff check .` — fails the workflow on any violation
 - **`build`** (4-platform matrix): Windows Inno Setup installer (the bare PyInstaller .exe is built but not published — only the installer ships), macOS Apple Silicon .app, macOS Intel .app, and Linux binary
 
-Triggers on push to `main` or `beta` (plus a vestigial `gamma` entry — that branch was deleted), on release creation, or manually.
+Triggers on push to `main` or `beta`, on release creation, or manually.
 
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
 - `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer
