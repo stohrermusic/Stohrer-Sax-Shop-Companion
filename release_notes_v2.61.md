@@ -95,6 +95,7 @@ A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental a
 ## Upgrading from v2.6 / earlier
 
 - **Apple Silicon Mac users: this upgrade fixes the Tuner-tab crash** in every Mac build from v1.95 through v2.6. Settings and presets carry over untouched.
+- One heads-up about the older release pages: v1.95 through v2.6 describe the tuner as GPU-accelerated with "automatic CPU fallback" on every platform. That was never true on macOS — instead of falling back, those Mac downloads crash when the Tuner tab opens. The old pages stay as they were published, so if you're grabbing (or linking someone to) a Mac build, use this release or newer.
 - Settings, presets, and libraries auto-migrate from older config locations on first run.
 - The per-material G-code preset library (`gcode_presets.json`) is created automatically from your current G-code settings, and any missing material is backfilled with a `Default` — your existing feeds and powers become your starting presets.
 - Existing camera calibrations remain valid — no need to recalibrate.
