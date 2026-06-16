@@ -39,10 +39,12 @@ IS_MACOS = sys.platform == 'darwin'
 # higher-power/slower (may melt), so the clean cell falls in the middle. Air
 # assist on, single pass. Refine from the cleanest disc.
 #
-# Grid: 3 speeds (cols) x 5 powers (rows) = 15 discs. At 1" OD that's the most
-# that fit a 4x6" sheet (3 cols is the width limit); power gets the finer axis
-# since it's usually the more sensitive knob for edge quality. Bump the sheet
-# to ~6x6" if you want a finer speed sweep.
+# Grid: 3 speeds (cols) x 5 powers (rows) = 15 discs on a 4x8" sheet (the stock
+# this targets). At 1" OD the 4" width caps the speed axis at 3 columns, so
+# power gets the finer axis (it's usually the more sensitive knob for edge
+# quality). Sheet size isn't a hard limit anymore — add stops freely and the
+# sheet grows to fit (lay the stock long-side-horizontal for a finer speed
+# sweep). The 8" length leaves headroom for a second pass in the empty space.
 FEEDS_SPEEDS_QUICK_PRESETS = {
     "polyester_flute_shim": {
         "material": "Polyester",
@@ -56,7 +58,7 @@ FEEDS_SPEEDS_QUICK_PRESETS = {
         "eng_power_value": 8,
         "air_assist": True,
         "also_test_no_air": False,
-        "sheet_w": "4", "sheet_h": "6", "sheet_unit": "in",
+        "sheet_w": "4", "sheet_h": "8", "sheet_unit": "in",
         "filename": "polyester_flute_shim",
     },
 }
@@ -1656,7 +1658,9 @@ class ToolingTabMixin:
             elif min_w <= sheet_w + 1e-6 and min_h <= sheet_h + 1e-6:
                 fit_note = _("  ✓ fits sheet")
             else:
-                fit_note = _("  ✗ does NOT fit current sheet")
+                # Sheet size is a target, not a hard cap — generation grows it
+                # to fit rather than erroring.
+                fit_note = _("  → sheet will grow to fit")
             self.fs_preview_var.set(
                 _("{n} discs — need at least {w:.0f} × {h:.0f} mm{note}").format(
                     n=n_total, w=min_w, h=min_h, note=fit_note))
@@ -1782,9 +1786,18 @@ class ToolingTabMixin:
         try:
             positions, total_w, total_h = _grid_pack_discs(
                 diameter, cols, rows, total_blocks, sheet_w, sheet_h)
-        except ValueError as e:
-            messagebox.showerror(_("Sheet Too Small"), str(e))
-            return None
+        except ValueError:
+            # The sheet size is a target, not a hard cap — who knows what
+            # people will want to run. If the matrix doesn't fit, grow the
+            # sheet (each axis only as far as needed) and carry on. The layout
+            # preview shows the enlarged sheet before the file dialog, so the
+            # user still sees the real size before committing.
+            min_w, min_h = _min_feeds_speeds_sheet(
+                diameter, cols, rows, total_blocks)
+            sheet_w = max(sheet_w, min_w)
+            sheet_h = max(sheet_h, min_h)
+            positions, total_w, total_h = _grid_pack_discs(
+                diameter, cols, rows, total_blocks, sheet_w, sheet_h)
 
         material_key = self._get_feeds_speeds_material_key()
         engraving_on = bool(self.fs_engraving_var.get())

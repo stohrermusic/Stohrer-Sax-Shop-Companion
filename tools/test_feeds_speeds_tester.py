@@ -264,6 +264,32 @@ except ValueError:
 check("Sheet 1mm under width raises", err)
 
 
+# ============================================================
+print("\n=== Sheet auto-grow (sheet size is a target, not a hard cap) ===")
+# ============================================================
+
+# A 5x5 grid of 1" (25.4mm) discs does NOT fit a 4x6" sheet — the case the UI
+# handles by growing the sheet instead of erroring.
+small_w, small_h = 4 * 25.4, 6 * 25.4
+grow_err = False
+try:
+    _grid_pack_discs(25.4, 5, 5, 1, small_w, small_h)
+except ValueError:
+    grow_err = True
+check("oversize 5x5 1in matrix does not fit a 4x6 sheet (triggers grow)", grow_err)
+
+# Growing each axis to the minimum (max of entered vs needed) lets it pack.
+gmin_w, gmin_h = _min_feeds_speeds_sheet(25.4, 5, 5, 1)
+grow_w, grow_h = max(small_w, gmin_w), max(small_h, gmin_h)
+gpos, gtw, gth = _grid_pack_discs(25.4, 5, 5, 1, grow_w, grow_h)
+check("auto-grow: 5x5 1in matrix packs after growing sheet to fit",
+      len(gpos) == 25)
+# Only the deficient axis grows; an already-big-enough axis is preserved.
+check("auto-grow: width grew to the minimum needed", grow_w >= gmin_w - 1e-6)
+check("auto-grow: height preserved (entered 6in already exceeded the need)",
+      abs(grow_h - small_h) < 1e-6)
+
+
 def make_pieces(diameter, sheet_w, sheet_h, cols, rows, nblk):
     """Helper to build a placed test_pieces list for engine tests."""
     triples, c, r, n = build_feeds_speeds_matrix(
