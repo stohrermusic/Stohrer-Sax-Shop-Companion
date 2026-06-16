@@ -31,31 +31,44 @@ IS_MACOS = sys.platform == 'darwin'
 # CLAUDE.md i18n note on module-level constants baking the source language);
 # the button label and the material name are translated at build/apply time.
 #
-# polyester_flute_shim: paper-thin polyester (Mylar-type) shim stock cut as
-# washers for flute padding. Geometry is the real shim size — 1" OD / 0.5" ID
-# (25.4 / 12.7 mm) — so good discs are usable parts. The sweep is an
-# intentionally WIDE starting bracket for a 40W-class diode laser aiming for a
-# clean melt-free edge: it brackets low-power/fast (may not cut through) to
-# higher-power/slower (may melt), so the clean cell falls in the middle. Air
-# assist on, single pass. Refine from the cleanest disc.
+# polyester_flute_shim: FEASIBILITY sweep for cutting paper-thin (or thinner),
+# OPAQUE colored polyester (Mylar/PET-type) shim stock as flute-pad washers on
+# a ~40W diode laser. The question is binary — can this material cut clean AND
+# lip-free (no melted edge bead)? — so the sweep is deliberately WIDE: it walks
+# the melt threshold from under-cut (fast/low power) through the clean lip-free
+# window to a clearly melted lip (slow/high power). Geometry is the real shim
+# size, 1" OD / 0.5" ID (25.4 / 12.7 mm), so good discs are usable parts.
+#
+# Range is grounded in published thin-Mylar/PET diode data, not just guessed:
+# a 5W diode cuts 3-7 mil (0.076-0.178mm) Mylar at 50-70% (~3W optical) and
+# 50-100 mm/s (3000-6000 mm/min) [allpcb stencil guide]. 3W optical on a 40W
+# diode is only ~7-8% power, so the clean/lip-free window for paper-thin opaque
+# film lives at LOW power + HIGH speed. The sweep brackets that: power 5-25% x
+# speed 2000-6000 mm/min, single pass, air on (air clears the melt that forms
+# the lip). Lip-free candidates cluster in the fast/low-power corner; the
+# slow/high-power corner deliberately shows the melted lip for contrast.
+# Different thicknesses shift the threshold, so the wide span covers the range.
+# (Opaque colored film absorbs the 450nm diode fine — white is the least
+# absorptive of orange/pink/grey/white but still cuts.)
 #
 # Grid: 3 speeds (cols) x 5 powers (rows) = 15 discs on a 4x8" sheet (the stock
-# this targets). At 1" OD the 4" width caps the speed axis at 3 columns, so
-# power gets the finer axis (it's usually the more sensitive knob for edge
-# quality). Sheet size isn't a hard limit anymore — add stops freely and the
-# sheet grows to fit (lay the stock long-side-horizontal for a finer speed
-# sweep). The 8" length leaves headroom for a second pass in the empty space.
+# Matt's colleague supplied). At 1" OD the 4" width caps the speed axis at 3
+# columns; sweeping power finely at each speed still walks the melt threshold.
+# Sheet size isn't a hard limit — add stops freely and the sheet grows to fit
+# (lay the stock long-side-horizontal for a finer speed sweep). On a 25mm
+# circle the head can't fully reach 6000 mm/min through the curve, so effective
+# speed (and energy) self-limits — commanding the high end is safe.
 FEEDS_SPEEDS_QUICK_PRESETS = {
     "polyester_flute_shim": {
         "material": "Polyester",
         "disc_diameter_mm": 25.4,   # 1" OD
         "inner_diameter_mm": 12.7,  # 0.5" ID
-        "speed": {"sweep": True, "value": 600, "start": 200, "end": 1000, "stops": 3},
-        "power": {"sweep": True, "value": 30, "start": 10, "end": 50, "stops": 5},
+        "speed": {"sweep": True, "value": 4000, "start": 2000, "end": 6000, "stops": 3},
+        "power": {"sweep": True, "value": 15, "start": 5, "end": 25, "stops": 5},
         "passes": {"sweep": False, "value": 1, "start": 1, "end": 3, "stops": 3},
         "engraving_on": True,
-        "eng_speed_value": 1500,
-        "eng_power_value": 8,
+        "eng_speed_value": 4000,
+        "eng_power_value": 4,
         "air_assist": True,
         "also_test_no_air": False,
         "sheet_w": "4", "sheet_h": "8", "sheet_unit": "in",
