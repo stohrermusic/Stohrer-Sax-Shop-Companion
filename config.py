@@ -697,6 +697,10 @@ DEFAULT_SETTINGS = {
         "feeds_speeds_tester": {
             "material": "Felt",
             "disc_diameter_mm": 20.0,
+            # Center hole diameter (mm). 0 = solid disc (the historical
+            # behavior). > 0 turns each test piece into a washer/ring — used
+            # for shim stock (e.g. flute padding shims). Must stay < disc dia.
+            "inner_diameter_mm": 0.0,
             "speed_value": 180,
             "speed_sweep": True,
             "speed_start": 80, "speed_end": 280, "speed_stops": 4,

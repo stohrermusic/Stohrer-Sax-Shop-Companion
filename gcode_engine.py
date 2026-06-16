@@ -7,7 +7,7 @@ Includes a single-stroke digit font for engraving pad sizes.
 
 import math
 
-from svg_engine import _wave_value
+from svg_engine import _wave_value, feeds_speeds_label_geometry
 
 # =============================================================================
 # SINGLE-STROKE DIGIT FONT
@@ -1847,7 +1847,10 @@ def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filena
     test_pieces: list of dicts with keys 'id' (str like "01"), 'cx', 'cy',
                  'diameter' (mm, SVG Y-down coords), 'speed' (mm/min),
                  'power' (%), 'passes' (int). Optional 'engraving_on'
-                 (default True), 'material' (defaults to 'felt').
+                 (default True), 'material' (defaults to 'felt'),
+                 'inner_diameter' (mm, default 0 = solid disc; > 0 turns the
+                 piece into a washer/ring — the inner hole is cut first, and
+                 the ID label moves into the lower ring).
 
     eng_speed_override, eng_power_override: when not None, override the
     material's engraving defaults for the label engraving layer.
@@ -1875,14 +1878,18 @@ def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filena
     if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
         overscan_mm = settings.get("filled_overscan_mm", 1.5)
 
-    # Collect engraving strokes for ALL labels (Y-flipped to G-code coords)
+    # Collect engraving strokes for ALL labels (Y-flipped to G-code coords).
+    # For a holed washer the label drops into the lower ring (label_dy > 0)
+    # since the disc center is cut away; a solid disc keeps the centered label.
     engraving_strokes = []
     for piece in test_pieces:
         if not piece.get('engraving_on', True):
             continue
         label = piece['id']
-        font_size = max(min(piece['diameter'] * 0.3, 5.0), 2.5)
-        cy_gcode = sheet_h_mm - piece['cy']
+        inner = piece.get('inner_diameter', 0) or 0
+        label_dy, font_size = feeds_speeds_label_geometry(piece['diameter'], inner)
+        # G-code Y is up, so "toward the bottom of the disc" is -label_dy.
+        cy_gcode = sheet_h_mm - piece['cy'] - label_dy
         if engraving_mode == "filled":
             engraving_strokes.extend(
                 get_filled_text_strokes(label, font_size, piece['cx'], cy_gcode, filled_spacing))
@@ -1903,8 +1910,16 @@ def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filena
     # enabled so half the matrix runs without air for comparison).
     for piece in test_pieces:
         cy_gcode = sheet_h_mm - piece['cy']
-        cut_strokes = [linearize_circle(piece['cx'], cy_gcode, piece['diameter'] / 2.0,
-                                        segments=72)]
+        inner = piece.get('inner_diameter', 0) or 0
+        # Cut the inner hole FIRST so the disc stays anchored to the sheet
+        # while the hole is cut; the outer perimeter (which frees the part)
+        # goes last. Both share this piece's speed/power/passes layer.
+        cut_strokes = []
+        if inner > 0:
+            cut_strokes.append(
+                linearize_circle(piece['cx'], cy_gcode, inner / 2.0, segments=72))
+        cut_strokes.append(
+            linearize_circle(piece['cx'], cy_gcode, piece['diameter'] / 2.0, segments=72))
         layer_name = f"C{piece['id']}"
         piece_air = piece.get('air_assist', air_assist)
         gcode_lines.extend(generate_gcode_layer(

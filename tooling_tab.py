@@ -16,7 +16,7 @@ from svg_engine import (
     generate_holder_svg, generate_kerf_test_svg,
     generate_die_organizer_svg,
     _min_feeds_speeds_sheet, _grid_pack_discs,
-    build_feeds_speeds_matrix,
+    build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
 )
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode,
@@ -25,6 +25,41 @@ from gcode_engine import (
 from ui_dialogs import GcodeSettingsWindow, SpeedPowerTestPreview
 
 IS_MACOS = sys.platform == 'darwin'
+
+# Quick-start presets for the Speed & Power tester. One click fills the whole
+# form for a known job. Numbers only here — no translatable strings (see the
+# CLAUDE.md i18n note on module-level constants baking the source language);
+# the button label and the material name are translated at build/apply time.
+#
+# polyester_flute_shim: paper-thin polyester (Mylar-type) shim stock cut as
+# washers for flute padding. Geometry is the real shim size — 1" OD / 0.5" ID
+# (25.4 / 12.7 mm) — so good discs are usable parts. The sweep is an
+# intentionally WIDE starting bracket for a 40W-class diode laser aiming for a
+# clean melt-free edge: it brackets low-power/fast (may not cut through) to
+# higher-power/slower (may melt), so the clean cell falls in the middle. Air
+# assist on, single pass. Refine from the cleanest disc.
+#
+# Grid: 3 speeds (cols) x 5 powers (rows) = 15 discs. At 1" OD that's the most
+# that fit a 4x6" sheet (3 cols is the width limit); power gets the finer axis
+# since it's usually the more sensitive knob for edge quality. Bump the sheet
+# to ~6x6" if you want a finer speed sweep.
+FEEDS_SPEEDS_QUICK_PRESETS = {
+    "polyester_flute_shim": {
+        "material": "Polyester",
+        "disc_diameter_mm": 25.4,   # 1" OD
+        "inner_diameter_mm": 12.7,  # 0.5" ID
+        "speed": {"sweep": True, "value": 600, "start": 200, "end": 1000, "stops": 3},
+        "power": {"sweep": True, "value": 30, "start": 10, "end": 50, "stops": 5},
+        "passes": {"sweep": False, "value": 1, "start": 1, "end": 3, "stops": 3},
+        "engraving_on": True,
+        "eng_speed_value": 1500,
+        "eng_power_value": 8,
+        "air_assist": True,
+        "also_test_no_air": False,
+        "sheet_w": "4", "sheet_h": "6", "sheet_unit": "in",
+        "filename": "polyester_flute_shim",
+    },
+}
 
 
 class ToolingTabMixin:
@@ -422,6 +457,15 @@ class ToolingTabMixin:
             justify="left", wraplength=540)
         fs_info.pack(anchor='w', pady=(0, 8))
 
+        # Quick-start presets — one click fills the whole form for a known job.
+        fs_quick_row = tk.Frame(fs_frame, bg=bg)
+        fs_quick_row.pack(fill='x', pady=(0, 8))
+        tk.Label(fs_quick_row, text=_("Quick start:"), bg=bg).pack(side='left')
+        tk.Button(fs_quick_row, text=_("Polyester flute shim"),
+                  command=lambda: self._apply_feeds_speeds_quick_preset(
+                      "polyester_flute_shim")
+                  ).pack(side='left', padx=(6, 0))
+
         # Material picker + apply-defaults
         fs_mat_row = tk.Frame(fs_frame, bg=bg)
         fs_mat_row.pack(fill='x', pady=(0, 5))
@@ -430,13 +474,13 @@ class ToolingTabMixin:
         fs_mat_combo = ttk.Combobox(
             fs_mat_row, textvariable=self.fs_material_var,
             values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic"),
-                    _("Basswood")],
+                    _("Basswood"), _("Polyester")],
             state="readonly", width=12)
         fs_mat_combo.pack(side='left', padx=(5, 10))
         tk.Button(fs_mat_row, text=_("Apply material defaults"),
                   command=self._apply_feeds_speeds_material_defaults).pack(side='left')
 
-        # Disc diameter
+        # Disc diameter + optional center hole (for washers / shims)
         fs_dia_row = tk.Frame(fs_frame, bg=bg)
         fs_dia_row.pack(fill='x', pady=(0, 5))
         tk.Label(fs_dia_row, text=_("Disc diameter:"), bg=bg).pack(side='left')
@@ -444,8 +488,16 @@ class ToolingTabMixin:
             value=str(fs_settings.get("disc_diameter_mm", 20.0)))
         tk.Entry(fs_dia_row, textvariable=self.fs_diameter_var, width=8
                  ).pack(side='left', padx=(2, 2))
-        tk.Label(fs_dia_row, text=_("mm"), bg=bg).pack(side='left')
+        tk.Label(fs_dia_row, text=_("mm"), bg=bg).pack(side='left', padx=(0, 15))
+        tk.Label(fs_dia_row, text=_("Hole diameter:"), bg=bg).pack(side='left')
+        self.fs_inner_diameter_var = tk.StringVar(
+            value=str(fs_settings.get("inner_diameter_mm", 0.0)))
+        tk.Entry(fs_dia_row, textvariable=self.fs_inner_diameter_var, width=8
+                 ).pack(side='left', padx=(2, 2))
+        tk.Label(fs_dia_row, text=_("mm  (0 = solid disc)"), bg=bg).pack(side='left')
         self.fs_diameter_var.trace_add(
+            "write", lambda *a: self._update_feeds_speeds_preview())
+        self.fs_inner_diameter_var.trace_add(
             "write", lambda *a: self._update_feeds_speeds_preview())
 
         # Sweep rows (Speed, Power, Passes)
@@ -1518,6 +1570,35 @@ class ToolingTabMixin:
         self.fs_eng_speed_var.set(str(int(round(eng_speed))))
         self.fs_eng_power_var.set(str(max(1, min(100, int(round(eng_power))))))
 
+    def _apply_feeds_speeds_quick_preset(self, key):
+        """Fill every tester field from a FEEDS_SPEEDS_QUICK_PRESETS entry."""
+        preset = FEEDS_SPEEDS_QUICK_PRESETS.get(key)
+        if not preset:
+            return
+        # Material name is stored in English; translate it so it matches the
+        # readonly combobox's (also translated) value list.
+        self.fs_material_var.set(_(preset["material"]))
+        self.fs_diameter_var.set(str(preset["disc_diameter_mm"]))
+        self.fs_inner_diameter_var.set(str(preset["inner_diameter_mm"]))
+        for var_name in ("speed", "power", "passes"):
+            cfg = preset[var_name]
+            v = self.fs_sweep_vars[var_name]
+            v['sweep'].set(bool(cfg.get("sweep", False)))
+            v['value'].set(str(cfg.get("value", 0)))
+            v['start'].set(str(cfg.get("start", 0)))
+            v['end'].set(str(cfg.get("end", 0)))
+            v['stops'].set(str(cfg.get("stops", 4)))
+        self.fs_engraving_var.set(bool(preset["engraving_on"]))
+        self.fs_eng_speed_var.set(str(preset["eng_speed_value"]))
+        self.fs_eng_power_var.set(str(preset["eng_power_value"]))
+        self.fs_air_assist_var.set(bool(preset["air_assist"]))
+        self.fs_also_no_air_var.set(bool(preset["also_test_no_air"]))
+        self.fs_sheet_w_var.set(preset["sheet_w"])
+        self.fs_sheet_h_var.set(preset["sheet_h"])
+        self.fs_sheet_unit_var.set(preset["sheet_unit"])
+        self.fs_filename_var.set(preset["filename"])
+        self._update_feeds_speeds_preview()
+
     def _feeds_speeds_sweep_count(self, var_name):
         """How many discs this variable contributes: 1 if not swept, else stops (clamped 2-10)."""
         v = self.fs_sweep_vars[var_name]
@@ -1591,6 +1672,10 @@ class ToolingTabMixin:
             fs["disc_diameter_mm"] = float(self.fs_diameter_var.get())
         except (ValueError, TypeError):
             pass
+        try:
+            fs["inner_diameter_mm"] = float(self.fs_inner_diameter_var.get())
+        except (ValueError, TypeError):
+            pass
         for var_name in ("speed", "power", "passes"):
             v = self.fs_sweep_vars[var_name]
             fs[f"{var_name}_sweep"] = bool(v['sweep'].get())
@@ -1647,6 +1732,21 @@ class ToolingTabMixin:
             return None
 
         try:
+            inner_diameter = float(self.fs_inner_diameter_var.get())
+        except (ValueError, TypeError):
+            messagebox.showerror(_("Invalid Input"),
+                                  _("Hole diameter must be a valid number (use 0 for a solid disc)."))
+            return None
+        if inner_diameter < 0:
+            messagebox.showerror(_("Invalid Input"),
+                                  _("Hole diameter can't be negative (use 0 for a solid disc)."))
+            return None
+        if inner_diameter > 0 and inner_diameter >= diameter:
+            messagebox.showerror(_("Invalid Input"),
+                                  _("Hole diameter must be smaller than the disc diameter."))
+            return None
+
+        try:
             eng_speed = float(self.fs_eng_speed_var.get())
             eng_power = float(self.fs_eng_power_var.get())
         except (ValueError, TypeError):
@@ -1689,6 +1789,19 @@ class ToolingTabMixin:
         material_key = self._get_feeds_speeds_material_key()
         engraving_on = bool(self.fs_engraving_var.get())
 
+        # Warn (don't block) when a hole leaves the ring too thin to hold a
+        # legible ID — the label would shrink to the floor and may run into
+        # the cut. The legend + grid position still identify the disc.
+        if (engraving_on and inner_diameter > 0
+                and not feeds_speeds_ring_fits_label(diameter, inner_diameter)):
+            if not messagebox.askyesno(
+                    _("Thin Ring"),
+                    _("With a {hole:.1f} mm hole in a {dia:.1f} mm disc, the ring is "
+                      "too narrow to engrave a clear ID — the number may be hard to "
+                      "read or run into the cut.\n\nGenerate anyway?").format(
+                          hole=inner_diameter, dia=diameter)):
+                return None
+
         test_pieces = []
         for idx, ((cx, cy), ((speed, power, passes), air_state)) in enumerate(
                 zip(positions, expanded), start=1):
@@ -1697,6 +1810,7 @@ class ToolingTabMixin:
                 'cx': cx,
                 'cy': cy,
                 'diameter': diameter,
+                'inner_diameter': inner_diameter,
                 'speed': speed,
                 'power': power,
                 'passes': passes,
@@ -1722,6 +1836,9 @@ class ToolingTabMixin:
         lines.append(_("Speed & Power Test — {fname}").format(fname=os.path.basename(save_path)))
         lines.append(_("Material: {m}").format(m=material_display))
         lines.append(_("Disc diameter: {d:.1f} mm").format(d=diameter))
+        inner = test_pieces[0].get('inner_diameter', 0) if test_pieces else 0
+        if inner and inner > 0:
+            lines.append(_("Hole diameter: {d:.1f} mm (washer / shim)").format(d=inner))
         lines.append(_("Engraving (labels): {s:.0f} mm/min @ {p:.0f}%").format(
             s=eng_speed, p=eng_power))
         if air_varies:
