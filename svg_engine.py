@@ -1695,6 +1695,51 @@ def generate_kerf_test_svg(material_name, filename, settings):
 FEEDS_SPEEDS_SPACING_MM = 3.0      # edge-to-edge spacing between discs within a block
 FEEDS_SPEEDS_SHEET_MARGIN_MM = 3.0  # margin from sheet edge to outermost discs
 
+# When a test piece has a center hole (washer / shim), its ID can't sit at the
+# center anymore — that's cut away. It moves into the lower ring. These bound
+# the auto-fit so the number stays on solid annular material and stays legible.
+FEEDS_SPEEDS_LABEL_MIN_FONT_MM = 2.0      # don't shrink the ID below this
+FEEDS_SPEEDS_LABEL_RING_CLEARANCE_MM = 1.0  # total radial clearance (0.5mm each side)
+
+
+def feeds_speeds_label_geometry(diameter_mm, inner_diameter_mm=0.0):
+    """Return (label_dy_mm, font_size_mm) for a Speed & Power test disc's ID.
+
+    label_dy_mm is how far the ID label is shifted toward the BOTTOM of the
+    disc from its center, in mm:
+      - Solid disc (inner_diameter_mm <= 0): 0.0 — the label stays centered and
+        the font matches the historical formula exactly (no behavior change).
+      - Washer (inner_diameter_mm > 0): the label moves into the lower ring,
+        centered on the mid-annulus radius, with the font auto-fit to the ring
+        width (floored at FEEDS_SPEEDS_LABEL_MIN_FONT_MM so it stays readable).
+
+    gcode_engine (engraving strokes) and the preview dialog both call this so
+    the drawn label and the cut label land in the same place.
+    """
+    solid_font = max(min(diameter_mm * 0.3, 5.0), 2.5)
+    if not inner_diameter_mm or inner_diameter_mm <= 0:
+        return 0.0, solid_font
+    outer_r = diameter_mm / 2.0
+    inner_r = inner_diameter_mm / 2.0
+    annulus = outer_r - inner_r
+    label_dy = (inner_r + outer_r) / 2.0  # mid-ring radius (toward the bottom)
+    fit_font = annulus - FEEDS_SPEEDS_LABEL_RING_CLEARANCE_MM
+    font = min(min(diameter_mm * 0.3, 5.0), fit_font)
+    font = max(font, FEEDS_SPEEDS_LABEL_MIN_FONT_MM)
+    return label_dy, font
+
+
+def feeds_speeds_ring_fits_label(diameter_mm, inner_diameter_mm):
+    """True if a holed disc's ring is wide enough to hold a legible ID label.
+
+    Used by the UI to warn (not block) when the hole is so large the ID would
+    have to overflow the ring. Mirrors feeds_speeds_label_geometry's fit math.
+    """
+    if not inner_diameter_mm or inner_diameter_mm <= 0:
+        return True
+    annulus = (diameter_mm - inner_diameter_mm) / 2.0
+    return annulus - FEEDS_SPEEDS_LABEL_RING_CLEARANCE_MM >= FEEDS_SPEEDS_LABEL_MIN_FONT_MM
+
 
 def _grid_pack_discs(diameter_mm, cols, rows, num_blocks, sheet_w_mm, sheet_h_mm,
                      spacing_mm=FEEDS_SPEEDS_SPACING_MM,

@@ -16,6 +16,7 @@ from config import (
 )
 from svg_engine import (
     get_disc_diameter, get_felt_thickness_mm, _wave_value,
+    feeds_speeds_label_geometry,
 )
 
 # On macOS, use native system colors for dark/light mode support.
@@ -6080,7 +6081,8 @@ class NestingPreviewWindow(tk.Toplevel):
         self.result = "save" if user clicks Save, None if Adjust/close.
     """
 
-    def __init__(self, parent, placements, width_mm, height_mm, polygon=None):
+    def __init__(self, parent, placements, width_mm, height_mm, polygon=None,
+                 proceed_label=None):
         """
         Args:
             parent: Parent tk widget
@@ -6088,6 +6090,9 @@ class NestingPreviewWindow(tk.Toplevel):
             width_mm: Sheet width in mm
             height_mm: Sheet height in mm
             polygon: Optional list of (x, y) polygon points in mm
+            proceed_label: Text for the confirm button (default "Save Files").
+                Frame & Cut passes "Continue →" since it streams to the
+                laser rather than writing files. result is "save" either way.
         """
         super().__init__(parent)
         self.title(_("Nesting Preview"))
@@ -6165,7 +6170,7 @@ class NestingPreviewWindow(tk.Toplevel):
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=(0, 10))
-        tk.Button(btn_frame, text=_("Save Files"), command=self._on_save,
+        tk.Button(btn_frame, text=proceed_label or _("Save Files"), command=self._on_save,
                   font=("Helvetica", 10, "bold"), width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Adjust"), command=self._on_adjust,
                   font=("Helvetica", 10), width=12).pack(side="left", padx=5)
@@ -6430,6 +6435,7 @@ class SpeedPowerTestPreview(tk.Toplevel):
             cx = offset_x + piece['cx'] * scale
             cy = offset_y + piece['cy'] * scale
             sr = (piece['diameter'] / 2.0) * scale
+            inner = piece.get('inner_diameter', 0) or 0
             if self._air_varies:
                 color = (self.AIR_ON_COLOR
                           if piece.get('air_assist', True)
@@ -6440,10 +6446,24 @@ class SpeedPowerTestPreview(tk.Toplevel):
             fill = self._lighten_hex(color, 0.85)
             cv.create_oval(cx - sr, cy - sr, cx + sr, cy + sr,
                            fill=fill, outline=color, width=1)
-            # ID label
+            # Center hole (washer / shim): punch it out of the fill in white
+            # so the ring reads as solid material, matching the cut output.
+            if inner > 0:
+                ir = (inner / 2.0) * scale
+                cv.create_oval(cx - ir, cy - ir, cx + ir, cy + ir,
+                               fill="white", outline=color, width=1)
+            # ID label — centered for a solid disc, dropped into the lower ring
+            # for a washer (mirrors feeds_speeds_label_geometry / the G-code).
+            label_dy_mm, _font_mm = feeds_speeds_label_geometry(
+                piece['diameter'], inner)
+            label_y = cy + label_dy_mm * scale
             if sr > 8:
                 font_size = max(7, min(12, int(sr * 0.6)))
-                cv.create_text(cx, cy, text=piece['id'],
+                if inner > 0:
+                    # Keep the number inside the ring band on screen too.
+                    ring_px = sr - (inner / 2.0) * scale
+                    font_size = max(6, min(font_size, int(ring_px * 0.7)))
+                cv.create_text(cx, label_y, text=piece['id'],
                                fill=color, font=("Helvetica", font_size, "bold"))
 
     @staticmethod

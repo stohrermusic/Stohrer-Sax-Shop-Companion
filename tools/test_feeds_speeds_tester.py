@@ -14,6 +14,8 @@ Engine-level tests (no tkinter). Covers:
 
 import sys
 import os
+import re
+import math
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,6 +24,8 @@ from config import DEFAULT_SETTINGS
 from svg_engine import (
     feeds_speeds_linspace, build_feeds_speeds_matrix,
     _grid_pack_discs, _min_feeds_speeds_sheet,
+    feeds_speeds_label_geometry, feeds_speeds_ring_fits_label,
+    FEEDS_SPEEDS_LABEL_MIN_FONT_MM,
 )
 from gcode_engine import generate_feeds_speeds_test_gcode
 
@@ -260,6 +264,32 @@ except ValueError:
 check("Sheet 1mm under width raises", err)
 
 
+# ============================================================
+print("\n=== Sheet auto-grow (sheet size is a target, not a hard cap) ===")
+# ============================================================
+
+# A 5x5 grid of 1" (25.4mm) discs does NOT fit a 4x6" sheet — the case the UI
+# handles by growing the sheet instead of erroring.
+small_w, small_h = 4 * 25.4, 6 * 25.4
+grow_err = False
+try:
+    _grid_pack_discs(25.4, 5, 5, 1, small_w, small_h)
+except ValueError:
+    grow_err = True
+check("oversize 5x5 1in matrix does not fit a 4x6 sheet (triggers grow)", grow_err)
+
+# Growing each axis to the minimum (max of entered vs needed) lets it pack.
+gmin_w, gmin_h = _min_feeds_speeds_sheet(25.4, 5, 5, 1)
+grow_w, grow_h = max(small_w, gmin_w), max(small_h, gmin_h)
+gpos, gtw, gth = _grid_pack_discs(25.4, 5, 5, 1, grow_w, grow_h)
+check("auto-grow: 5x5 1in matrix packs after growing sheet to fit",
+      len(gpos) == 25)
+# Only the deficient axis grows; an already-big-enough axis is preserved.
+check("auto-grow: width grew to the minimum needed", grow_w >= gmin_w - 1e-6)
+check("auto-grow: height preserved (entered 6in already exceeded the need)",
+      abs(grow_h - small_h) < 1e-6)
+
+
 def make_pieces(diameter, sheet_w, sheet_h, cols, rows, nblk):
     """Helper to build a placed test_pieces list for engine tests."""
     triples, c, r, n = build_feeds_speeds_matrix(
@@ -485,6 +515,109 @@ with tempfile.TemporaryDirectory() as tmpdir:
     check("filled mode engraving uses 1500 mm/min",
           "1500 mm/min" in text)
     check("air_assist=False emits M9", "M9" in text)
+
+
+# ============================================================
+print("\n=== feeds_speeds_label_geometry (washer ID placement) ===")
+# ============================================================
+
+# Solid disc: label stays centered, font matches the historical formula
+dy, font = feeds_speeds_label_geometry(20.0, 0.0)
+check("solid disc: label centered (dy=0)", dy == 0.0)
+check("solid disc: font = max(min(d*0.3,5),2.5) = 5.0", abs(font - 5.0) < 1e-9)
+
+dy, font = feeds_speeds_label_geometry(6.0, 0.0)
+check("solid small disc: font floored at 2.5", abs(font - 2.5) < 1e-9)
+
+# Washer: label drops into the lower ring at the mid-annulus radius
+dy, font = feeds_speeds_label_geometry(20.0, 10.0)
+check("washer 20/10: dy = mid-ring radius (7.5)", abs(dy - 7.5) < 1e-9)
+# annulus = (20-10)/2 = 5 -> fit = 5 - 1 = 4 -> min(d*0.3=6, 4) = 4
+check("washer 20/10: font auto-fit to ring (4.0)", abs(font - 4.0) < 1e-9)
+
+# Thin ring: font floored at MIN; label still below center
+dy, font = feeds_speeds_label_geometry(20.0, 18.0)
+check("thin ring: font floored at MIN", abs(font - FEEDS_SPEEDS_LABEL_MIN_FONT_MM) < 1e-9)
+check("thin ring: label still below center", dy > 0)
+
+# ring-fits-label helper used for the UI warning
+check("thin ring: ring_fits_label False", feeds_speeds_ring_fits_label(20.0, 18.0) is False)
+check("comfortable ring: ring_fits_label True", feeds_speeds_ring_fits_label(20.0, 10.0) is True)
+check("solid disc: ring_fits_label True", feeds_speeds_ring_fits_label(20.0, 0.0) is True)
+
+
+# ============================================================
+print("\n=== Inner diameter (washer / shim) cuts ===")
+# ============================================================
+
+def _parse_xy(line):
+    mx = re.search(r'X(-?\d+\.?\d*)', line)
+    my = re.search(r'Y(-?\d+\.?\d*)', line)
+    if mx and my:
+        return float(mx.group(1)), float(my.group(1))
+    return None
+
+
+def _cut_layer_coords(text, layer="; Layer C01", until=None):
+    lines = text.split('\n')
+    start = next(i for i, ln in enumerate(lines) if ln.strip() == layer)
+    end = len(lines)
+    if until is not None:
+        end = next(i for i, ln in enumerate(lines) if ln.strip() == until)
+    coords = [_parse_xy(ln) for ln in lines[start:end]]
+    return [c2 for c2 in coords if c2]
+
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    # One piece at a known center, engraving OFF, with a 10mm hole in a 20mm disc.
+    positions, _, _ = _grid_pack_discs(20.0, 1, 1, 1, 200, 200)
+    cx, cy = positions[0]
+    sheet_h = 200
+    cy_g = sheet_h - cy  # disc center in G-code (Y-up) coords
+
+    def washer_piece(inner, engraving_on=False):
+        return {'id': '01', 'cx': cx, 'cy': cy, 'diameter': 20.0,
+                'inner_diameter': inner, 'speed': 180, 'power': 60, 'passes': 1,
+                'material': 'felt', 'engraving_on': engraving_on}
+
+    # --- Washer: inner + outer circle, inner cut FIRST ---
+    wpath = os.path.join(tmpdir, "washer.gcode")
+    generate_feeds_speeds_test_gcode([washer_piece(10.0)], 200, sheet_h, wpath,
+                                      settings, air_assist=True)
+    with open(wpath) as f:
+        wtext = f.read()
+    wcoords = _cut_layer_coords(wtext)
+    wradii = [math.hypot(x - cx, y - cy_g) for (x, y) in wcoords]
+    check("washer: inner circle (r=5) present in cut layer",
+          sum(1 for rr in wradii if abs(rr - 5.0) < 0.2) >= 60)
+    check("washer: outer circle (r=10) present in cut layer",
+          sum(1 for rr in wradii if abs(rr - 10.0) < 0.2) >= 60)
+    check("washer: inner hole is cut before the outer perimeter",
+          all(abs(rr - 5.0) < 0.2 for rr in wradii[:3]))
+
+    # --- Solid disc (inner=0): single circle, no inner-radius points ---
+    spath = os.path.join(tmpdir, "solid.gcode")
+    generate_feeds_speeds_test_gcode([washer_piece(0.0)], 200, sheet_h, spath,
+                                      settings, air_assist=True)
+    with open(spath) as f:
+        stext = f.read()
+    scoords = _cut_layer_coords(stext)
+    sradii = [math.hypot(x - cx, y - cy_g) for (x, y) in scoords]
+    check("solid: outer circle present",
+          sum(1 for rr in sradii if abs(rr - 10.0) < 0.2) >= 60)
+    check("solid: no inner-radius points (single circle only)",
+          not any(abs(rr - 5.0) < 0.2 for rr in sradii))
+
+    # --- Ring label: engraving ON + hole drops the ID below disc center ---
+    epath = os.path.join(tmpdir, "washer_eng.gcode")
+    generate_feeds_speeds_test_gcode([washer_piece(10.0, engraving_on=True)],
+                                      200, sheet_h, epath, settings, air_assist=True)
+    with open(epath) as f:
+        etext = f.read()
+    ecoords = _cut_layer_coords(etext, layer="; Layer C00", until="; Layer C01")
+    eys = [y for (_x, y) in ecoords]
+    check("washer engraving: label dropped into lower ring (below center)",
+          bool(eys) and (sum(eys) / len(eys)) < cy_g - 3.0)
 
 
 # ============================================================

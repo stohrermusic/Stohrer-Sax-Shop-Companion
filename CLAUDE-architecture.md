@@ -37,6 +37,8 @@ build.py               → Cross-platform PyInstaller build script
 
 **Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs.py handles platform-specific scroll behavior (Windows/macOS/Linux).
 
+**macOS Quit Path**: `WM_DELETE_WINDOW` only covers the window-close button. On macOS, Cmd-Q and the app menu's Quit fire Tk's `::tk::mac::Quit`, whose default exits the process without running the close handler — settings would silently never save. `main.py` registers `root.createcommand("::tk::mac::Quit", self.on_exit)` on darwin (added v2.61). Any future work on the exit path must keep both routes pointing at `on_exit`.
+
 **macOS Theming**: On macOS (`IS_MACOS` flag in main.py and ui_dialogs.py), the app uses native system colors instead of custom cream/beige backgrounds. This allows the app to work correctly in both macOS dark and light mode. The `DIALOG_BG` constant in ui_dialogs.py resolves to `"systemWindowBackgroundColor"` on macOS (a Tk system color that adapts to dark/light mode) and `"#F0EAD6"` on Windows/Linux. The resonance theme system is disabled on macOS. When adding new UI widgets, use `DIALOG_BG` for dialog backgrounds and `self.root.cget('bg')` for main window widgets.
 
 ## Settings Backward Compatibility

@@ -16,7 +16,7 @@ from svg_engine import (
     generate_holder_svg, generate_kerf_test_svg,
     generate_die_organizer_svg,
     _min_feeds_speeds_sheet, _grid_pack_discs,
-    build_feeds_speeds_matrix,
+    build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
 )
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode,
@@ -436,7 +436,7 @@ class ToolingTabMixin:
         tk.Button(fs_mat_row, text=_("Apply material defaults"),
                   command=self._apply_feeds_speeds_material_defaults).pack(side='left')
 
-        # Disc diameter
+        # Disc diameter + optional center hole (for washers / shims)
         fs_dia_row = tk.Frame(fs_frame, bg=bg)
         fs_dia_row.pack(fill='x', pady=(0, 5))
         tk.Label(fs_dia_row, text=_("Disc diameter:"), bg=bg).pack(side='left')
@@ -444,8 +444,16 @@ class ToolingTabMixin:
             value=str(fs_settings.get("disc_diameter_mm", 20.0)))
         tk.Entry(fs_dia_row, textvariable=self.fs_diameter_var, width=8
                  ).pack(side='left', padx=(2, 2))
-        tk.Label(fs_dia_row, text=_("mm"), bg=bg).pack(side='left')
+        tk.Label(fs_dia_row, text=_("mm"), bg=bg).pack(side='left', padx=(0, 15))
+        tk.Label(fs_dia_row, text=_("Hole diameter:"), bg=bg).pack(side='left')
+        self.fs_inner_diameter_var = tk.StringVar(
+            value=str(fs_settings.get("inner_diameter_mm", 0.0)))
+        tk.Entry(fs_dia_row, textvariable=self.fs_inner_diameter_var, width=8
+                 ).pack(side='left', padx=(2, 2))
+        tk.Label(fs_dia_row, text=_("mm  (0 = solid disc)"), bg=bg).pack(side='left')
         self.fs_diameter_var.trace_add(
+            "write", lambda *a: self._update_feeds_speeds_preview())
+        self.fs_inner_diameter_var.trace_add(
             "write", lambda *a: self._update_feeds_speeds_preview())
 
         # Sweep rows (Speed, Power, Passes)
@@ -1575,7 +1583,9 @@ class ToolingTabMixin:
             elif min_w <= sheet_w + 1e-6 and min_h <= sheet_h + 1e-6:
                 fit_note = _("  ✓ fits sheet")
             else:
-                fit_note = _("  ✗ does NOT fit current sheet")
+                # Sheet size is a target, not a hard cap — generation grows it
+                # to fit rather than erroring.
+                fit_note = _("  → sheet will grow to fit")
             self.fs_preview_var.set(
                 _("{n} discs — need at least {w:.0f} × {h:.0f} mm{note}").format(
                     n=n_total, w=min_w, h=min_h, note=fit_note))
@@ -1589,6 +1599,10 @@ class ToolingTabMixin:
         fs["material"] = self.fs_material_var.get()
         try:
             fs["disc_diameter_mm"] = float(self.fs_diameter_var.get())
+        except (ValueError, TypeError):
+            pass
+        try:
+            fs["inner_diameter_mm"] = float(self.fs_inner_diameter_var.get())
         except (ValueError, TypeError):
             pass
         for var_name in ("speed", "power", "passes"):
@@ -1647,6 +1661,21 @@ class ToolingTabMixin:
             return None
 
         try:
+            inner_diameter = float(self.fs_inner_diameter_var.get())
+        except (ValueError, TypeError):
+            messagebox.showerror(_("Invalid Input"),
+                                  _("Hole diameter must be a valid number (use 0 for a solid disc)."))
+            return None
+        if inner_diameter < 0:
+            messagebox.showerror(_("Invalid Input"),
+                                  _("Hole diameter can't be negative (use 0 for a solid disc)."))
+            return None
+        if inner_diameter > 0 and inner_diameter >= diameter:
+            messagebox.showerror(_("Invalid Input"),
+                                  _("Hole diameter must be smaller than the disc diameter."))
+            return None
+
+        try:
             eng_speed = float(self.fs_eng_speed_var.get())
             eng_power = float(self.fs_eng_power_var.get())
         except (ValueError, TypeError):
@@ -1682,12 +1711,34 @@ class ToolingTabMixin:
         try:
             positions, total_w, total_h = _grid_pack_discs(
                 diameter, cols, rows, total_blocks, sheet_w, sheet_h)
-        except ValueError as e:
-            messagebox.showerror(_("Sheet Too Small"), str(e))
-            return None
+        except ValueError:
+            # The sheet size is a target, not a hard cap — who knows what
+            # people will want to run. If the matrix doesn't fit, grow the
+            # sheet (each axis only as far as needed) and carry on. The layout
+            # preview shows the enlarged sheet before the file dialog, so the
+            # user still sees the real size before committing.
+            min_w, min_h = _min_feeds_speeds_sheet(
+                diameter, cols, rows, total_blocks)
+            sheet_w = max(sheet_w, min_w)
+            sheet_h = max(sheet_h, min_h)
+            positions, total_w, total_h = _grid_pack_discs(
+                diameter, cols, rows, total_blocks, sheet_w, sheet_h)
 
         material_key = self._get_feeds_speeds_material_key()
         engraving_on = bool(self.fs_engraving_var.get())
+
+        # Warn (don't block) when a hole leaves the ring too thin to hold a
+        # legible ID — the label would shrink to the floor and may run into
+        # the cut. The legend + grid position still identify the disc.
+        if (engraving_on and inner_diameter > 0
+                and not feeds_speeds_ring_fits_label(diameter, inner_diameter)):
+            if not messagebox.askyesno(
+                    _("Thin Ring"),
+                    _("With a {hole:.1f} mm hole in a {dia:.1f} mm disc, the ring is "
+                      "too narrow to engrave a clear ID — the number may be hard to "
+                      "read or run into the cut.\n\nGenerate anyway?").format(
+                          hole=inner_diameter, dia=diameter)):
+                return None
 
         test_pieces = []
         for idx, ((cx, cy), ((speed, power, passes), air_state)) in enumerate(
@@ -1697,6 +1748,7 @@ class ToolingTabMixin:
                 'cx': cx,
                 'cy': cy,
                 'diameter': diameter,
+                'inner_diameter': inner_diameter,
                 'speed': speed,
                 'power': power,
                 'passes': passes,
@@ -1722,6 +1774,9 @@ class ToolingTabMixin:
         lines.append(_("Speed & Power Test — {fname}").format(fname=os.path.basename(save_path)))
         lines.append(_("Material: {m}").format(m=material_display))
         lines.append(_("Disc diameter: {d:.1f} mm").format(d=diameter))
+        inner = test_pieces[0].get('inner_diameter', 0) if test_pieces else 0
+        if inner and inner > 0:
+            lines.append(_("Hole diameter: {d:.1f} mm (washer / shim)").format(d=inner))
         lines.append(_("Engraving (labels): {s:.0f} mm/min @ {p:.0f}%").format(
             s=eng_speed, p=eng_power))
         if air_varies:

@@ -179,13 +179,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.61"
+APP_VERSION = "2.62"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-06-10"
+    manual = "2026-06-17"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -697,6 +697,10 @@ DEFAULT_SETTINGS = {
         "feeds_speeds_tester": {
             "material": "Felt",
             "disc_diameter_mm": 20.0,
+            # Center hole diameter (mm). 0 = solid disc (the historical
+            # behavior). > 0 turns each test piece into a washer/ring — used
+            # for shim stock (e.g. flute padding shims). Must stay < disc dia.
+            "inner_diameter_mm": 0.0,
             "speed_value": 180,
             "speed_sweep": True,
             "speed_start": 80, "speed_end": 280, "speed_stops": 4,

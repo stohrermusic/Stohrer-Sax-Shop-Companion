@@ -46,6 +46,8 @@ After reviewing submissions in the Google Sheet:
 
 Note: The `_dia` fields in the JSON are used for descriptions despite the legacy naming.
 
-## Related Repository
+## Related Repositories
 
 The website at https://www.stohrermusic.com is a Hugo site with the Blowfish theme, located at `C:\code\stohrermusic`. The screw specs library page there loads data from `/static/data/screw_specs.json` and must be kept in sync with this app's data.
+
+[JustATuner](https://github.com/stohrermusic/justatuner) (local checkout: `C:\code\justatuner`) is a standalone tuner app that extracted SSC's strobe tuner — `tuner_engine`, the tuner UI, and the `tuner_renderer/` Rust crate — and pairs it with a just-intonation drone practicer. The shared code is near-verbatim, so bugs and fixes found in either repo usually apply to the other (the v2.61 macOS wgpu crash fix was found in a justatuner review and ported here). Same branching convention: `beta` → `main`.
