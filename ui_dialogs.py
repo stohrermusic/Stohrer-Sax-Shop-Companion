@@ -6081,7 +6081,8 @@ class NestingPreviewWindow(tk.Toplevel):
         self.result = "save" if user clicks Save, None if Adjust/close.
     """
 
-    def __init__(self, parent, placements, width_mm, height_mm, polygon=None):
+    def __init__(self, parent, placements, width_mm, height_mm, polygon=None,
+                 proceed_label=None):
         """
         Args:
             parent: Parent tk widget
@@ -6089,6 +6090,9 @@ class NestingPreviewWindow(tk.Toplevel):
             width_mm: Sheet width in mm
             height_mm: Sheet height in mm
             polygon: Optional list of (x, y) polygon points in mm
+            proceed_label: Text for the confirm button (default "Save Files").
+                Frame & Cut passes "Continue →" since it streams to the
+                laser rather than writing files. result is "save" either way.
         """
         super().__init__(parent)
         self.title(_("Nesting Preview"))
@@ -6166,7 +6170,7 @@ class NestingPreviewWindow(tk.Toplevel):
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=(0, 10))
-        tk.Button(btn_frame, text=_("Save Files"), command=self._on_save,
+        tk.Button(btn_frame, text=proceed_label or _("Save Files"), command=self._on_save,
                   font=("Helvetica", 10, "bold"), width=12).pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Adjust"), command=self._on_adjust,
                   font=("Helvetica", 10), width=12).pack(side="left", padx=5)

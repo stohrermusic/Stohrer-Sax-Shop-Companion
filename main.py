@@ -2528,6 +2528,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                           "area.").format(m=material.replace('_', ' ')))
                     return
 
+            # Show the nesting layout before anything runs on the machine —
+            # same as the file-export Generate flow, so the user can see what
+            # will be cut and back out if it's not what they want. In scrap
+            # mode this is the subset that fits on the current scrap; in
+            # standard mode it's the whole batch. Cancelling (Adjust) backs out
+            # cleanly: the scrap is only counted after a completed cut (in
+            # _frame_cut_scrap_advance), so nothing is consumed here.
+            preview = NestingPreviewWindow(
+                self.root, {material: placed}, mat_w, mat_h,
+                polygon=mat_polygon, proceed_label=_("Continue →"))
+            if preview.result != "save":
+                return
+
             # Generate G-code to a temp file then read it back into memory.
             import tempfile
             import os as _os
