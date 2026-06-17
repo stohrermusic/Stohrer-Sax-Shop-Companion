@@ -26,56 +26,6 @@ from ui_dialogs import GcodeSettingsWindow, SpeedPowerTestPreview
 
 IS_MACOS = sys.platform == 'darwin'
 
-# Quick-start presets for the Speed & Power tester. One click fills the whole
-# form for a known job. Numbers only here — no translatable strings (see the
-# CLAUDE.md i18n note on module-level constants baking the source language);
-# the button label and the material name are translated at build/apply time.
-#
-# polyester_flute_shim: FEASIBILITY sweep for cutting paper-thin (or thinner),
-# OPAQUE colored polyester (Mylar/PET-type) shim stock as flute-pad washers on
-# a ~40W diode laser. The question is binary — can this material cut clean AND
-# lip-free (no melted edge bead)? — so the sweep is deliberately WIDE: it walks
-# the melt threshold from under-cut (fast/low power) through the clean lip-free
-# window to a clearly melted lip (slow/high power). Geometry is the real shim
-# size, 1" OD / 0.5" ID (25.4 / 12.7 mm), so good discs are usable parts.
-#
-# Range is grounded in published thin-Mylar/PET diode data, not just guessed:
-# a 5W diode cuts 3-7 mil (0.076-0.178mm) Mylar at 50-70% (~3W optical) and
-# 50-100 mm/s (3000-6000 mm/min) [allpcb stencil guide]. 3W optical on a 40W
-# diode is only ~7-8% power, so the clean/lip-free window for paper-thin opaque
-# film lives at LOW power + HIGH speed. The sweep brackets that: power 5-25% x
-# speed 2000-6000 mm/min, single pass, air on (air clears the melt that forms
-# the lip). Lip-free candidates cluster in the fast/low-power corner; the
-# slow/high-power corner deliberately shows the melted lip for contrast.
-# Different thicknesses shift the threshold, so the wide span covers the range.
-# (Opaque colored film absorbs the 450nm diode fine — white is the least
-# absorptive of orange/pink/grey/white but still cuts.)
-#
-# Grid: 3 speeds (cols) x 5 powers (rows) = 15 discs on a 4x8" sheet (the stock
-# Matt's colleague supplied). At 1" OD the 4" width caps the speed axis at 3
-# columns; sweeping power finely at each speed still walks the melt threshold.
-# Sheet size isn't a hard limit — add stops freely and the sheet grows to fit
-# (lay the stock long-side-horizontal for a finer speed sweep). On a 25mm
-# circle the head can't fully reach 6000 mm/min through the curve, so effective
-# speed (and energy) self-limits — commanding the high end is safe.
-FEEDS_SPEEDS_QUICK_PRESETS = {
-    "polyester_flute_shim": {
-        "material": "Polyester",
-        "disc_diameter_mm": 25.4,   # 1" OD
-        "inner_diameter_mm": 12.7,  # 0.5" ID
-        "speed": {"sweep": True, "value": 4000, "start": 2000, "end": 6000, "stops": 3},
-        "power": {"sweep": True, "value": 15, "start": 5, "end": 25, "stops": 5},
-        "passes": {"sweep": False, "value": 1, "start": 1, "end": 3, "stops": 3},
-        "engraving_on": True,
-        "eng_speed_value": 4000,
-        "eng_power_value": 4,
-        "air_assist": True,
-        "also_test_no_air": False,
-        "sheet_w": "4", "sheet_h": "8", "sheet_unit": "in",
-        "filename": "polyester_flute_shim",
-    },
-}
-
 
 class ToolingTabMixin:
     """Mixin class that adds the Tooling tab to the main application."""
@@ -472,15 +422,6 @@ class ToolingTabMixin:
             justify="left", wraplength=540)
         fs_info.pack(anchor='w', pady=(0, 8))
 
-        # Quick-start presets — one click fills the whole form for a known job.
-        fs_quick_row = tk.Frame(fs_frame, bg=bg)
-        fs_quick_row.pack(fill='x', pady=(0, 8))
-        tk.Label(fs_quick_row, text=_("Quick start:"), bg=bg).pack(side='left')
-        tk.Button(fs_quick_row, text=_("Polyester flute shim"),
-                  command=lambda: self._apply_feeds_speeds_quick_preset(
-                      "polyester_flute_shim")
-                  ).pack(side='left', padx=(6, 0))
-
         # Material picker + apply-defaults
         fs_mat_row = tk.Frame(fs_frame, bg=bg)
         fs_mat_row.pack(fill='x', pady=(0, 5))
@@ -489,7 +430,7 @@ class ToolingTabMixin:
         fs_mat_combo = ttk.Combobox(
             fs_mat_row, textvariable=self.fs_material_var,
             values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic"),
-                    _("Basswood"), _("Polyester")],
+                    _("Basswood")],
             state="readonly", width=12)
         fs_mat_combo.pack(side='left', padx=(5, 10))
         tk.Button(fs_mat_row, text=_("Apply material defaults"),
@@ -1584,35 +1525,6 @@ class ToolingTabMixin:
             eng_power = mat_settings.get("engraving_power", 10)
         self.fs_eng_speed_var.set(str(int(round(eng_speed))))
         self.fs_eng_power_var.set(str(max(1, min(100, int(round(eng_power))))))
-
-    def _apply_feeds_speeds_quick_preset(self, key):
-        """Fill every tester field from a FEEDS_SPEEDS_QUICK_PRESETS entry."""
-        preset = FEEDS_SPEEDS_QUICK_PRESETS.get(key)
-        if not preset:
-            return
-        # Material name is stored in English; translate it so it matches the
-        # readonly combobox's (also translated) value list.
-        self.fs_material_var.set(_(preset["material"]))
-        self.fs_diameter_var.set(str(preset["disc_diameter_mm"]))
-        self.fs_inner_diameter_var.set(str(preset["inner_diameter_mm"]))
-        for var_name in ("speed", "power", "passes"):
-            cfg = preset[var_name]
-            v = self.fs_sweep_vars[var_name]
-            v['sweep'].set(bool(cfg.get("sweep", False)))
-            v['value'].set(str(cfg.get("value", 0)))
-            v['start'].set(str(cfg.get("start", 0)))
-            v['end'].set(str(cfg.get("end", 0)))
-            v['stops'].set(str(cfg.get("stops", 4)))
-        self.fs_engraving_var.set(bool(preset["engraving_on"]))
-        self.fs_eng_speed_var.set(str(preset["eng_speed_value"]))
-        self.fs_eng_power_var.set(str(preset["eng_power_value"]))
-        self.fs_air_assist_var.set(bool(preset["air_assist"]))
-        self.fs_also_no_air_var.set(bool(preset["also_test_no_air"]))
-        self.fs_sheet_w_var.set(preset["sheet_w"])
-        self.fs_sheet_h_var.set(preset["sheet_h"])
-        self.fs_sheet_unit_var.set(preset["sheet_unit"])
-        self.fs_filename_var.set(preset["filename"])
-        self._update_feeds_speeds_preview()
 
     def _feeds_speeds_sweep_count(self, var_name):
         """How many discs this variable contributes: 1 if not swept, else stops (clamped 2-10)."""
