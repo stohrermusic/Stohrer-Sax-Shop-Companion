@@ -88,6 +88,23 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
+      - name: Verify permission keys and code signature (macOS)
+        if: runner.os == 'macOS'
+        # The plist keys alone are not enough: TCC silently denies (never
+        # prompts) if the bundle's signature doesn't validate, which is
+        # what happens when Info.plist is patched after signing without
+        # re-signing. Every Apple Silicon build through v2.62 shipped
+        # that way — build.py now re-signs, and this step catches any
+        # regression.
+        run: |
+          plutil -extract NSMicrophoneUsageDescription raw \
+            dist/SaxShopCompanion.app/Contents/Info.plist
+          plutil -extract NSCameraUsageDescription raw \
+            dist/SaxShopCompanion.app/Contents/Info.plist
+          echo "Mic + camera usage descriptions present in bundle."
+          codesign --verify --deep --strict dist/SaxShopCompanion.app
+          echo "Code signature valid."
+
       # Windows installer (Inno Setup). installer.iss sources
       # dist\SaxShopCompanion.exe directly, so this runs after PyInstaller.
       - name: Extract app version from config.py
@@ -121,12 +138,23 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: mv dist/SaxShopCompanion dist/SaxShopCompanion-Linux
 
-      # macOS: Create zip of .app bundle
+      # macOS: package the .app with ditto, not `zip -r` — zip follows
+      # the bundle's internal Frameworks<->Resources symlinks and stores
+      # them as duplicate real files (767 of them in the v2.62 zip),
+      # which breaks the code-signature resource seal on extraction.
+      # A broken seal means no TCC mic/camera prompt for end users.
       - name: Package macOS app
         if: runner.os == 'macOS'
         run: |
           cd dist
-          zip -r ${{ matrix.asset_name }} SaxShopCompanion.app
+          ditto -c -k --keepParent SaxShopCompanion.app ${{ matrix.asset_name }}
+
+      - name: Verify signature survives zip round-trip (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ditto -x -k dist/${{ matrix.asset_name }} "$RUNNER_TEMP/ziptest"
+          codesign --verify --deep --strict "$RUNNER_TEMP/ziptest/SaxShopCompanion.app"
+          echo "Signature valid after packaging round-trip."
 
       # Upload artifacts (Linux + macOS use matrix.asset_name; Windows
       # uploads only the installer below).

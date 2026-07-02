@@ -234,6 +234,7 @@ Triggers on push to `main` or `beta`, on release creation, or manually.
 - macOS Intel build (`macos-15-intel` runner) installs only svgwrite+pyinstaller (no numpy/sounddevice) — tuner and toner are unavailable
 - `full_build: true/false` matrix flag controls whether Rust toolchain + maturin are installed for the GPU tuner renderer; the macOS runners additionally skip the Rust steps unconditionally — macOS is canvas-only (see GPU Tuner Renderer section)
 - The Windows job also installs Inno Setup 6 via Chocolatey and builds the installer; version is extracted from `config.py`'s `APP_VERSION` via PowerShell regex
+- macOS jobs package the `.app` with `ditto -c -k --keepParent` (never `zip -r` — it materializes bundle symlinks and breaks the code-signature resource seal) and run three guards: `plutil -extract` for the mic + camera usage keys, `codesign --verify --deep --strict` on the built .app, and the same verify on an unzipped copy of the final artifact (see "macOS Build" in CLAUDE-architecture.md)
 - Uploads artifacts to the workflow run; on Windows that's the installer only (`SaxShopCompanion-Windows-Setup-*.exe`). All published artifacts also attach to GitHub Releases on release events.
 
 **Action pins**: `actions/checkout@v5`, `actions/setup-python@v6`, `actions/upload-artifact@v6` — all on Node 24. Don't downgrade; GitHub removes Node 20 from runners in September 2026.

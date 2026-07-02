@@ -159,6 +159,15 @@ The app is not signed with an Apple Developer certificate (they charge $100 a ye
 
 This strips the quarantine flag that macOS adds to downloaded files, which is what triggers both warnings. The same command works on every macOS version.
 
+When you first use the Tuner or Tone Analyzer, macOS will ask for **microphone access** — click **OK / Allow**, or those tabs can't hear anything. (Camera access gets the same treatment if you use the camera-based laser features.) You can change either later under System Settings → Privacy & Security. And because the app isn't Apple-signed, macOS may ask again after you update to a new version — that's normal.
+
+> **Upgrading from v2.62 or earlier?** Those macOS builds had a packaging bug that kept the microphone and camera permission dialogs from ever appearing — the app opened fine, but macOS silently denied access, so the Tuner and Tone Analyzer looked dead. This release fixes it. If the new version still doesn't ask for microphone access, macOS may have cached the old denial; clear it with these Terminal commands, then relaunch:
+>
+> ```
+> tccutil reset Microphone com.stohrer.saxshopcompanion
+> tccutil reset Camera com.stohrer.saxshopcompanion
+> ```
+
 **Linux users**: The tuner and toner require PortAudio. Install it with:
 ```
 sudo apt install libportaudio2
