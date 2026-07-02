@@ -121,6 +121,25 @@ def _patch_macos_plist():
     print("  Added NSMicrophoneUsageDescription + NSCameraUsageDescription to Info.plist")
 
 
+def _resign_macos_app():
+    """Re-sign the .app after the Info.plist patch.
+
+    PyInstaller ad-hoc signs the bundle as it builds it, and Info.plist is
+    sealed into that signature. Patching the plist afterwards breaks the
+    seal, and macOS TCC silently refuses to show the mic/camera permission
+    prompts for an app whose signature doesn't validate — the usage keys
+    are present but no prompt ever appears (exactly how every Apple Silicon
+    build through v2.62 shipped). Re-signing ad-hoc restores the seal;
+    --strict verify catches regressions.
+    """
+    app_path = f"dist/{APP_NAME}.app"
+    subprocess.check_call(
+        ['codesign', '--force', '--deep', '--sign', '-', app_path])
+    subprocess.check_call(
+        ['codesign', '--verify', '--deep', '--strict', app_path])
+    print("  Re-signed .app (ad-hoc) and verified the signature")
+
+
 def build():
     """Build the application for the current platform."""
     platform = get_platform_name()
@@ -255,6 +274,7 @@ def build():
         elif sys.platform == 'darwin':
             print(f"  App Bundle: dist/{APP_NAME}.app")
             _patch_macos_plist()
+            _resign_macos_app()
         else:
             print(f"  Executable: dist/{APP_NAME}")
     else:

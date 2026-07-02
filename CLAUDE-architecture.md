@@ -82,7 +82,11 @@ All JSON saves route through `_write_json_atomic()` in config.py — write to a 
 
 ## macOS Build
 
-`build.py` patches Info.plist after PyInstaller to add `NSMicrophoneUsageDescription`. Without this, macOS silently denies mic access to the tuner and toner.
+`build.py` patches Info.plist after PyInstaller to add `NSMicrophoneUsageDescription` and `NSCameraUsageDescription`. Without those keys, macOS silently denies mic access to the tuner and toner (and camera access to the machine-integration features).
+
+The keys alone are **not sufficient**: PyInstaller ad-hoc signs the bundle during build, and Info.plist is sealed into that signature. Patching the plist afterwards breaks the seal, and macOS TCC refuses to show a permission prompt for any app whose signature doesn't validate — same silent-denial symptom, keys present. Every shipped Apple Silicon build through v2.62 had a broken seal (verified against the released zip: sealed plist hash ≠ actual plist hash). `_resign_macos_app()` in build.py therefore re-signs ad-hoc (`codesign --force --deep --sign -`) immediately after the patch and verifies with `--strict`; any future work on the macOS build must keep the re-sign as the last step that touches the bundle.
+
+Packaging must preserve symlinks too: CI zips the `.app` with `ditto -c -k --keepParent`, because `zip -r` follows the bundle's internal Frameworks↔Resources symlinks and stores them as duplicate real files (767 of them in the v2.62 zip, roughly doubling the download), which breaks the signature's resource seal on extraction. The `--dmg` path is fine as-is — hdiutil preserves symlinks. CI verifies all of it on both macOS runners: `plutil -extract` for both usage keys, `codesign --verify --deep --strict` on the built .app, and again on an unzipped copy of the final artifact. Users upgrading from a broken build may need `tccutil reset Microphone com.stohrer.saxshopcompanion` (and `Camera`) if macOS cached the old silent denial — the README documents this.
 
 ## Feature Set
 
