@@ -30,7 +30,7 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (44 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_engine_parity`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_serial_lookup`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (45 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_engine_parity`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_job_history`, `test_large_batch_optimization`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_serial_lookup`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
 
 **SVG↔G-code parity**: `test_engine_parity` pins the contract that the SVG/preview output and the G-code output describe the same physical object (dart wave shape, engraving label placement, engine purity). The two engines render independently and have drifted before — when touching shared geometry (wave math, placement formulas, Y-flip), run this suite and extend it for any new shared shape.
 
@@ -51,6 +51,28 @@ ruff check --fix .    # auto-fix safe issues (unused imports, empty f-strings, e
 Config lives in `ruff.toml` (py311 target, 120-char lines, default E+F rules with E501/E701/E731/E741 relaxed, tools/ exempts E402 for `sys.path.insert` patterns). The CI `lint` job runs `ruff check .` and fails the workflow on any violation — keep the tree clean.
 
 **Ruff gotcha for test scripts**: `ruff --fix` will strip "unused" imports even when they're the whole point (e.g. a test that verifies names import cleanly). Reference the imported names afterward (`assert all([Class1, Class2, ...])`) so ruff sees them as used. See `tools/test_smoke_ui.py` for the pattern.
+
+## Job History
+
+File > Job History (Pad Maker) opens `JobHistoryWindow` (`ui_dialogs.py`) — a log of every batch that reached an output stage. Storage is `job_history.json` via `load_job_history()` / `save_job_history()` / `append_job_history()` in config.py (newest first, trimmed to `JOB_HISTORY_LIMIT` = 300).
+
+**Recording**: `PadSVGGeneratorApp._record_job(output, materials, pads, params, ...)` in main.py is called from exactly five places, always *after* real output exists:
+
+| Call site | `output` | Notes |
+|---|---|---|
+| `on_generate_svg` | `"svg"` | after the per-material write loop |
+| `_generate_svg_scrap_mode` | `"svg"` | per scrap, with `scrap_num` |
+| `on_generate_gcode` | `"gcode"` | after the write loop, before the working popup closes |
+| `_generate_gcode_scrap_mode` | `"gcode"` | per scrap, with `scrap_num` |
+| `on_frame_and_cut` | `"laser"` | after the cut dialog; `status` carries `_final_reason`, so stopped/errored runs are logged too |
+
+`_record_job` swallows every exception and logs it. Nothing in the app reads the history back except the dialog, so a history failure must never surface as a generation error — keep it that way when adding call sites.
+
+**Reload**: `_load_job_into_form(job)` restores only what the user typed — pad text, materials, sheet size, center hole, base filename. It deliberately does NOT restore sizing rules, G-code settings, or `custom_polygon` (a camera-captured scrap is gone by then; the entry records `polygon_vertices` for display only). Sheet size is stored both as-typed and in mm, so a job saved in inches reloads correctly when the app is now in mm. Loading is refused while a scrap session is active (the session owns the pad list and locks the material checkboxes).
+
+**List columns are measured, not fixed**: `_column_widths()` sizes each column from the widest header/value at refresh time. Translated headers vary a lot ("Pads" is "Zapatillas" in Spanish), and hardcoded widths truncated them. If you add a column, add it to `_headers()` and `_cells()` together — they're zipped positionally.
+
+Tests: `tools/test_job_history.py` (storage round-trip + corruption handling, column alignment including a simulated long-translation case, and a record→reload round trip through a real form).
 
 ## Pad Preview Window
 

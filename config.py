@@ -179,7 +179,7 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.63"
+APP_VERSION = "2.65"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
@@ -333,6 +333,12 @@ SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
 TONER_DATA_FILE = os.path.join(_CONFIG_DIR, "toner_data.json")
 SIZING_PRESET_FILE = os.path.join(_CONFIG_DIR, "sizing_presets.json")
 GCODE_PRESET_FILE = os.path.join(_CONFIG_DIR, "gcode_presets.json")
+JOB_HISTORY_FILE = os.path.join(_CONFIG_DIR, "job_history.json")
+
+# How many past jobs to keep. Each entry is small (a pad list plus a
+# handful of scalars), so a few hundred costs well under a megabyte and
+# covers a busy shop for a long time.
+JOB_HISTORY_LIMIT = 300
 
 # Settings keys captured by a sizing-rules preset (everything in the
 # Options > Sizing Rules dialog).
@@ -1053,3 +1059,58 @@ def save_presets(presets, file_path):
         from tkinter import messagebox
         messagebox.showerror(_("Error Saving Preset"), str(e))
         return False
+
+
+# ==========================================
+# JOB HISTORY
+# ==========================================
+# A log of pad jobs that reached an output stage — SVG written, G-code
+# written, or streamed to the laser. Purely a record: nothing in the
+# generation path reads it back, so a failure here must never take a
+# cut job down with it (every entry point swallows its errors and logs).
+
+def load_job_history():
+    """Return the job history as a list, newest first. Never raises."""
+    if not os.path.exists(JOB_HISTORY_FILE):
+        return []
+    try:
+        with open(JOB_HISTORY_FILE, 'r') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, TypeError, ValueError, OSError):
+        _preserve_corrupt_file(JOB_HISTORY_FILE)
+        return []
+
+    # Stored as {"version": 1, "jobs": [...]} so the file can grow
+    # metadata later; tolerate a bare list too.
+    if isinstance(data, dict):
+        data = data.get("jobs", [])
+    if not isinstance(data, list):
+        return []
+    return [j for j in data if isinstance(j, dict)]
+
+
+def save_job_history(jobs):
+    """Persist the job history (trimmed to JOB_HISTORY_LIMIT). Returns bool.
+
+    Unlike save_presets() this stays silent on failure — history is a
+    convenience log, and a modal error box in the middle of a laser run
+    would be worse than the lost entry.
+    """
+    try:
+        _write_json_atomic(JOB_HISTORY_FILE, {
+            "version": 1,
+            "jobs": list(jobs)[:JOB_HISTORY_LIMIT],
+        })
+        return True
+    except Exception:
+        logging.getLogger(__name__).exception("Could not save job history")
+        return False
+
+
+def append_job_history(entry):
+    """Add one job to the front of the history. Returns the trimmed list."""
+    jobs = load_job_history()
+    jobs.insert(0, entry)
+    del jobs[JOB_HISTORY_LIMIT:]
+    save_job_history(jobs)
+    return jobs

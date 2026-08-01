@@ -5,12 +5,15 @@ import json
 import sys
 import subprocess
 import time
+import datetime
+import logging
 
 # --- Local Imports ---
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
+    append_job_history, load_job_history, save_job_history,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
     setup_logging, get_log_file,
@@ -30,7 +33,8 @@ from ui_dialogs import (  # noqa: E402
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, WebImportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
-    UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow
+    UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow,
+    JobHistoryWindow
 )
 from library_features import LibraryFeaturesMixin  # noqa: E402
 from tooling_tab import ToolingTabMixin  # noqa: E402
@@ -327,6 +331,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_file_menu.add_command(label=_("Export Pad Presets..."), command=self.on_export_pad_presets)
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label=_("Import Matt's Pad Sets"), command=self.on_import_matts_pad_sets)
+        pad_file_menu.add_separator()
+        pad_file_menu.add_command(label=_("Job History..."), command=self.open_job_history)
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label=_("Import Settings from Folder..."), command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
@@ -1692,6 +1698,139 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return card_paper_dims[0], card_paper_dims[1], None
         return width_mm, height_mm, self.custom_polygon
 
+    def _record_job(self, output, materials, pads, params, placed_count=None,
+                    scrap_num=None, save_dir=None, status="complete"):
+        """Log a job that reached an output stage to the history file.
+
+        `output` is "svg", "gcode", or "laser". Call this only once real
+        output exists — files on disk, or G-code streamed to the machine.
+
+        Swallows every error on purpose: the history is a convenience
+        log, and nothing downstream reads it back, so a bad write must
+        never turn a successful cut into an error dialog.
+        """
+        try:
+            requested = sum(p['qty'] for p in pads if isinstance(p.get('qty'), int))
+            has_max = any(p.get('qty') == 'max' for p in pads)
+
+            entry = {
+                "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                "output": output,
+                "status": status,
+                "materials": list(materials),
+                # Raw text as typed — this is what gets restored, so the
+                # user gets their list back exactly (including "x max").
+                "pad_text": self.pad_entry.get("1.0", tk.END).strip(),
+                "pads": [{"size": p.get('size'), "qty": p.get('qty')} for p in pads],
+                "requested_count": requested,
+                "has_max": has_max,
+                # Discs actually placed on the sheet. Differs from
+                # requested when a "max" line filled the leftover space,
+                # and is the per-scrap subset in scrap mode.
+                "placed_count": placed_count,
+                "base": params.get('base'),
+                "units": self.settings.get('units'),
+                "sheet_w": self.width_entry.get().strip(),
+                "sheet_h": self.height_entry.get().strip(),
+                "sheet_w_mm": params.get('width_mm'),
+                "sheet_h_mm": params.get('height_mm'),
+                "card_paper": bool(params.get('card_paper_dims')),
+                "hole_option": self.hole_var.get(),
+                "custom_hole": self.custom_hole_entry.get().strip(),
+                "scrap_num": scrap_num,
+                "save_dir": save_dir,
+                "preset_library": self.pad_preset_loaded_library,
+                "preset_name": self.pad_preset_loaded_name,
+                # Recorded for display only. The shape itself isn't
+                # restorable in any meaningful way — a camera-captured
+                # polygon is anchored to a scrap that's now been cut up.
+                "polygon_vertices": len(self.custom_polygon) if self.custom_polygon else 0,
+            }
+            append_job_history(entry)
+        except Exception:
+            logging.getLogger(__name__).exception("Could not record job history")
+
+    def open_job_history(self):
+        """File > Job History — browse past jobs, optionally reload one."""
+        dlg = JobHistoryWindow(self.root, load_job_history(), save_job_history)
+        if dlg.result:
+            self._load_job_into_form(dlg.result)
+
+    def _load_job_into_form(self, job):
+        """Restore a history entry's inputs into the Pad Maker form.
+
+        Restores what the user typed: pad list, materials, sheet size,
+        center hole, base filename. Deliberately does NOT touch sizing
+        rules, G-code settings, or the custom polygon — those are
+        current-state settings the user may have tuned since, and a
+        camera-captured polygon is anchored to a scrap that no longer
+        exists.
+        """
+        # A live scrap session owns its own pad list and locks the
+        # material checkboxes; loading over the top would desync them.
+        if self.scrap_session.get('active'):
+            messagebox.showwarning(
+                _("Scrap Session Active"),
+                _("Finish or clear the current scrap session before "
+                  "loading a job from history."))
+            return
+
+        self.pad_entry.delete("1.0", tk.END)
+        self.pad_entry.insert(tk.END, job.get("pad_text", ""))
+        self._auto_resize_pad_entry()
+
+        # Loading a job is not loading a preset — drop the preset link
+        # so the Notes button doesn't point at an unrelated preset.
+        self.pad_preset_loaded_library = None
+        self.pad_preset_loaded_name = None
+        self.pad_notes_btn.config(state="disabled")
+
+        mats = job.get("materials") or []
+        if mats:
+            for m, var in self.material_vars.items():
+                var.set(m in mats)
+
+        # Sheet size is stored in mm as well as as-typed. Restore the
+        # typed text when the units still match, otherwise convert —
+        # units are a Sizing Rules setting and loading a job must not
+        # silently change them.
+        units = self.settings.get('units', 'in')
+        w_txt, h_txt = None, None
+        if job.get("units") == units and job.get("sheet_w") and job.get("sheet_h"):
+            w_txt, h_txt = job["sheet_w"], job["sheet_h"]
+        else:
+            w_mm, h_mm = job.get("sheet_w_mm"), job.get("sheet_h_mm")
+            if isinstance(w_mm, (int, float)) and isinstance(h_mm, (int, float)):
+                per_unit = {'in': 25.4, 'cm': 10.0, 'mm': 1.0}.get(units, 25.4)
+                w_txt = f"{w_mm / per_unit:g}"
+                h_txt = f"{h_mm / per_unit:g}"
+        if w_txt is not None:
+            self.width_entry.delete(0, tk.END)
+            self.width_entry.insert(0, w_txt)
+            self.height_entry.delete(0, tk.END)
+            self.height_entry.insert(0, h_txt)
+
+        if job.get("hole_option"):
+            self.hole_var.set(job["hole_option"])
+        if job.get("custom_hole"):
+            self.custom_hole_entry.config(state='normal')
+            self.custom_hole_entry.delete(0, tk.END)
+            self.custom_hole_entry.insert(0, job["custom_hole"])
+        self.toggle_custom_hole_entry()
+
+        if job.get("base"):
+            self.filename_entry.delete(0, tk.END)
+            self.filename_entry.insert(0, job["base"])
+
+        # The one thing that can't come back — say so rather than let
+        # the user assume the scrap shape came along with the numbers.
+        if job.get("polygon_vertices"):
+            messagebox.showinfo(
+                _("Job Loaded"),
+                _("Pad list, materials and sheet size are back.\n\n"
+                  "The custom shape from that job wasn't restored — "
+                  "draw or capture the piece you're cutting now."))
+
     def on_generate_svg(self):
         """Generate SVG files."""
         # --- Scrap Mode ---
@@ -1724,6 +1863,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 return
 
             save_dir = None
+            generated = []      # materials actually written, for the history log
+            last_placed = 0
 
             # Process each material (with optional per-material preview)
             for material in selected_materials:
@@ -1755,7 +1896,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
                 filename = os.path.join(save_dir, f"{base}_{material}.svg")
                 generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                generated.append(material)
+                last_placed = len(placed)
 
+            self._record_job("svg", generated, pads, params,
+                             placed_count=last_placed, save_dir=save_dir)
             save_settings(self.settings)
             messagebox.showinfo(_("Done"), _("SVG files generated successfully."))
 
@@ -1849,6 +1994,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Generate SVG from placed discs
             generate_svg_from_placed(placed, material, mat_w, mat_h, filename,
                                      hole_dia, self.settings, polygon=mat_polygon)
+
+            self._record_job("svg", [material], pads, params,
+                             placed_count=len(placed), scrap_num=scrap_num,
+                             save_dir=save_dir)
 
             # Update session with remaining pads
             self.scrap_session['remaining_pads'] = remaining
@@ -2715,6 +2864,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
 
+                # Log it before the scrap bookkeeping below, which can
+                # sit on a modal dialog. Stopped and errored cuts are
+                # logged too, with their status — the material still
+                # went under the laser, and knowing a job was cut short
+                # is exactly what you want when pads come up missing.
+                # scrap_count is bumped by _frame_cut_scrap_advance, so
+                # the number this cut belongs to is one past it.
+                self._record_job(
+                    "laser", [material], pads, params,
+                    placed_count=len(placed),
+                    scrap_num=(self.scrap_session['scrap_count'] + 1
+                               if scrap_mode else None),
+                    status=cut_dlg._final_reason or "stopped")
+
                 # Scrap mode: commit this scrap (decrement remaining,
                 # offer continue/recapture) only once the cut has
                 # streamed to completion. A stopped or errored cut
@@ -2815,13 +2978,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             tk.Label(working_popup, text=_("Generating G-code..."), bg=popup_bg, font=("Helvetica", 12)).pack(expand=True)
             working_popup.update()
 
+            last_placed = 0
             try:
                 for material, (placed, mat_w, mat_h, mat_polygon) in all_placed.items():
                     filename = os.path.join(save_dir, f"{base}_{material}.gcode")
                     generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                    last_placed = len(placed)
             finally:
                 working_popup.destroy()
 
+            self._record_job("gcode", list(all_placed.keys()), pads, params,
+                             placed_count=last_placed, save_dir=save_dir)
             save_settings(self.settings)
 
             # Auto-eject SD card if checkbox is checked and destination is removable
@@ -2892,6 +3059,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Generate G-code from placed discs
             generate_gcode_from_placed(placed, material, mat_w, mat_h, filename,
                                        hole_dia, self.settings, polygon=mat_polygon)
+
+            self._record_job("gcode", [material], pads, params,
+                             placed_count=len(placed), scrap_num=scrap_num,
+                             save_dir=save_dir)
 
             # Update session with remaining pads
             self.scrap_session['remaining_pads'] = remaining
