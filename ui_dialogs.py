@@ -415,6 +415,13 @@ class OptionsWindow:
         # what register as dirty.
         self._baseline = self._capture_form_to_dict()
 
+        # Detect whether the starting values match a saved preset, so the
+        # dropdown names what's loaded instead of looking empty.
+        match = self._detect_active_preset()
+        if match is not None:
+            self.active_preset_name = match
+            self._refresh_sizing_preset_combo(select=match)
+
     # ------------------------------------------------------------------
     # Dirty / baseline tracking
     # ------------------------------------------------------------------
@@ -1766,6 +1773,27 @@ class OptionsWindow:
 
         # Export
         self.compatibility_mode_var.set(source.get("compatibility_mode", d.get("compatibility_mode", False)))
+
+    def _detect_active_preset(self):
+        """Find a saved preset whose values match the form's current snapshot.
+
+        Applied settings always come from a preset — Apply refuses to commit
+        edits that aren't captured in one — so on open this names the preset
+        the user is actually working in. Returns the name, or None when the
+        values match nothing saved (e.g. a hand-edited config).
+        """
+        if not self.sizing_presets:
+            return None
+        try:
+            snapshot = self._capture_form_to_dict()
+        except tk.TclError:
+            return None
+        # Sorted so an exact tie between two identical presets resolves the
+        # same way every open, and matches the dropdown's own ordering.
+        for name in sorted(self.sizing_presets):
+            if self.sizing_presets[name] == snapshot:
+                return name
+        return None
 
     def _refresh_sizing_preset_combo(self, select=None):
         names = sorted(self.sizing_presets.keys())
