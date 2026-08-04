@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-01 09:45-0400\n"
+"POT-Creation-Date: 2026-08-04 12:13-0400\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -137,7 +137,7 @@ msgstr "Altezze chiavi"
 msgid "Serial:"
 msgstr "Numero di serie:"
 
-#: library_features.py:194 library_features.py:668 toner_tab.py:1867
+#: library_features.py:194 library_features.py:681 toner_tab.py:1867
 #: toner_tab.py:5439
 msgid "Notes:"
 msgstr "Note:"
@@ -173,7 +173,7 @@ msgstr "Errore di salvataggio"
 msgid "Please select a specific library to save to."
 msgstr "Selezioni una libreria specifica in cui salvare."
 
-#: library_features.py:300 library_features.py:746
+#: library_features.py:300 library_features.py:768
 msgid "Missing Info"
 msgstr "Dati mancanti"
 
@@ -260,17 +260,17 @@ msgstr "Preset '{selected_preset}' eliminato."
 msgid "Import Key Height Sets"
 msgstr "Importa set di altezze chiavi"
 
-#: library_features.py:441 library_features.py:859 main.py:3317
+#: library_features.py:441 library_features.py:881 main.py:3317
 #: ui_dialogs.py:1889 ui_dialogs.py:1908 ui_dialogs.py:2841
 msgid "JSON files"
 msgstr "File JSON"
 
-#: library_features.py:441 library_features.py:859 main.py:3317
+#: library_features.py:441 library_features.py:881 main.py:3317
 #: ui_dialogs.py:1889 ui_dialogs.py:1908 ui_dialogs.py:2841
 msgid "All files"
 msgstr "Tutti i file"
 
-#: library_features.py:462 library_features.py:966 main.py:3337 main.py:3420
+#: library_features.py:462 library_features.py:988 main.py:3337 main.py:3420
 #: toner_tab.py:5527 toner_tab.py:5682 ui_dialogs.py:1916 ui_dialogs.py:1919
 #: ui_dialogs.py:2953 ui_dialogs.py:3066
 msgid "Import Error"
@@ -285,7 +285,7 @@ msgstr ""
 "Impossibile importare i set di chiavi:\n"
 "{e}"
 
-#: library_features.py:477 library_features.py:800 main.py:3354
+#: library_features.py:477 library_features.py:822 main.py:3354
 msgid "Connection Error"
 msgstr "Errore di connessione"
 
@@ -300,11 +300,11 @@ msgstr ""
 "\n"
 "{e}"
 
-#: library_features.py:481 library_features.py:804 main.py:3358
+#: library_features.py:481 library_features.py:826 main.py:3358
 msgid "Data Error"
 msgstr "Errore nei dati"
 
-#: library_features.py:482 library_features.py:805
+#: library_features.py:482 library_features.py:827
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -316,7 +316,7 @@ msgstr ""
 "{e}"
 
 #: library_features.py:486 library_features.py:499 library_features.py:524
-#: library_features.py:809 library_features.py:851 main.py:3363
+#: library_features.py:831 library_features.py:873 main.py:3363
 #: toner_tab.py:4812 toner_tab.py:5533
 msgid "No Data"
 msgstr "Nessun dato"
@@ -329,7 +329,7 @@ msgstr "Nessun dato di altezze chiavi trovato sul server."
 msgid "No key height presets found on the server."
 msgstr "Nessun preset di altezze chiavi trovato sul server."
 
-#: library_features.py:508 library_features.py:823
+#: library_features.py:508 library_features.py:845
 msgid "Overwrite Existing?"
 msgstr "Sovrascrivere quelli esistenti?"
 
@@ -343,7 +343,7 @@ msgstr ""
 "La libreria di Matt contiene già {n} preset. Sovrascriverli con l'ultima "
 "versione dal web?"
 
-#: library_features.py:521 library_features.py:848 main.py:3416
+#: library_features.py:521 library_features.py:870 main.py:3416
 #: toner_tab.py:5718 ui_dialogs.py:2955 ui_dialogs.py:3063 ui_dialogs.py:3068
 msgid "Import Complete"
 msgstr "Importazione completata"
@@ -361,7 +361,7 @@ msgstr "Nessun preset da importare."
 msgid "Saxophone Serial Number Lookup"
 msgstr "Ricerca numero di serie sassofono"
 
-#: library_features.py:547 library_features.py:604
+#: library_features.py:547 library_features.py:617
 msgid "Manufacturer:"
 msgstr "Costruttore:"
 
@@ -377,61 +377,71 @@ msgstr "Inserisca un numero di serie..."
 msgid "Screw & Rod Specifications"
 msgstr "Specifiche viti e aste"
 
-#: library_features.py:612
+#: library_features.py:602
+msgid ""
+"No specs loaded yet. Use File > Import Matt's Specs to download the "
+"reference library from stohrermusic.com, or choose (add new) below to "
+"enter your own."
+msgstr ""
+"Nessuna specifica ancora caricata. Usa File > Importa le specifiche di Matt "
+"per scaricare la libreria di riferimento da stohrermusic.com, oppure scegli "
+"(add new) qui sotto per inserire le tue."
+
+#: library_features.py:625
 msgid "Model:"
 msgstr "Modello:"
 
-#: library_features.py:620
+#: library_features.py:633
 msgid "OEM Specifications"
 msgstr "Specifiche OEM"
 
-#: library_features.py:624
+#: library_features.py:637
 msgid "Threads / Pitch"
 msgstr "Filettatura / Passo"
 
-#: library_features.py:625
+#: library_features.py:638
 msgid "Dia / Desc"
 msgstr "Diam. / Descr."
 
-#: library_features.py:679
+#: library_features.py:692
 msgid "Save / Update Spec"
 msgstr "Salva / aggiorna specifica"
 
-#: library_features.py:680
+#: library_features.py:693
 msgid "Delete Spec"
 msgstr "Elimina specifica"
 
-#: library_features.py:742
+#: library_features.py:764
 msgid "Invalid Name"
 msgstr "Nome non valido"
 
-#: library_features.py:742
+#: library_features.py:764
 msgid "Please type a real name for the Manufacturer and Model."
 msgstr "Digiti un nome reale per Costruttore e Modello."
 
-#: library_features.py:746
+#: library_features.py:768
 msgid "Please enter both a Manufacturer and a Model."
 msgstr "Inserisca sia il Costruttore sia il Modello."
 
-#: library_features.py:762
+#: library_features.py:784
 msgid "Saved"
 msgstr "Salvato"
 
-#: library_features.py:762
+#: library_features.py:784
 #, python-brace-format
 msgid "Specs for {maker} {model} saved."
 msgstr "Specifiche per {maker} {model} salvate."
 
-#: library_features.py:774
+#: library_features.py:796
 msgid "Confirm Delete"
 msgstr "Conferma eliminazione"
 
-#: library_features.py:774
+#: library_features.py:796
 #, python-brace-format
 msgid "Delete specs for {maker} {model}?"
 msgstr "Eliminare le specifiche per {maker} {model}?"
 
-#: library_features.py:801
+#: library_features.py:823
 #, python-brace-format
 msgid ""
 "Could not fetch specs from stohrermusic.com:\n"
@@ -442,11 +452,11 @@ msgstr ""
 "\n"
 "{e}"
 
-#: library_features.py:809
+#: library_features.py:831
 msgid "No specs found on the server."
 msgstr "Nessuna specifica trovata sul server."
 
-#: library_features.py:824
+#: library_features.py:846
 #, python-brace-format
 msgid ""
 "{n} Matt's spec(s) already exist locally:\n"
@@ -455,7 +465,7 @@ msgstr ""
 "{n} specifica/specifiche di Matt esistono già in locale:\n"
 "\n"
 
-#: library_features.py:827
+#: library_features.py:849
 msgid ""
 "\n"
 "\n"
@@ -465,45 +475,45 @@ msgstr ""
 "\n"
 "Sovrascrivere con l'ultima versione dal web?"
 
-#: library_features.py:849
+#: library_features.py:871
 #, python-brace-format
 msgid "Imported {count} spec(s) from Matt's library."
 msgstr "Importate {count} specifiche dalla libreria di Matt."
 
-#: library_features.py:851
+#: library_features.py:873
 msgid "No specs found to import."
 msgstr "Nessuna specifica da importare."
 
-#: library_features.py:858 library_features.py:899
+#: library_features.py:880 library_features.py:921
 msgid "Import Screw Specs"
 msgstr "Importa specifiche viti"
 
-#: library_features.py:895 ui_dialogs.py:1943 ui_dialogs.py:3106
+#: library_features.py:917 ui_dialogs.py:1943 ui_dialogs.py:3106
 msgid "Import"
 msgstr "Importa"
 
-#: library_features.py:895
+#: library_features.py:917
 msgid "No specs found in file."
 msgstr "Nessuna specifica trovata nel file."
 
-#: library_features.py:917
+#: library_features.py:939
 msgid "Select specs to import:"
 msgstr "Selezioni le specifiche da importare:"
 
-#: library_features.py:959 ui_dialogs.py:2689
+#: library_features.py:981 ui_dialogs.py:2689
 msgid "Success"
 msgstr "Operazione riuscita"
 
-#: library_features.py:959
+#: library_features.py:981
 #, python-brace-format
 msgid "Imported {count} specs."
 msgstr "Importate {count} specifiche."
 
-#: library_features.py:963 ui_dialogs.py:2906 ui_dialogs.py:3021
+#: library_features.py:985 ui_dialogs.py:2906 ui_dialogs.py:3021
 msgid "Import Selected"
 msgstr "Importa selezionati"
 
-#: library_features.py:966
+#: library_features.py:988
 #, python-brace-format
 msgid ""
 "Failed to import:\n"

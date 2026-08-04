@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-01 09:45-0400\n"
+"POT-Creation-Date: 2026-08-04 12:13-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -132,7 +132,7 @@ msgstr ""
 msgid "Serial:"
 msgstr ""
 
-#: library_features.py:194 library_features.py:668 toner_tab.py:1867
+#: library_features.py:194 library_features.py:681 toner_tab.py:1867
 #: toner_tab.py:5439
 msgid "Notes:"
 msgstr ""
@@ -168,7 +168,7 @@ msgstr ""
 msgid "Please select a specific library to save to."
 msgstr ""
 
-#: library_features.py:300 library_features.py:746
+#: library_features.py:300 library_features.py:768
 msgid "Missing Info"
 msgstr ""
 
@@ -251,17 +251,17 @@ msgstr ""
 msgid "Import Key Height Sets"
 msgstr ""
 
-#: library_features.py:441 library_features.py:859 main.py:3317
+#: library_features.py:441 library_features.py:881 main.py:3317
 #: ui_dialogs.py:1889 ui_dialogs.py:1908 ui_dialogs.py:2841
 msgid "JSON files"
 msgstr ""
 
-#: library_features.py:441 library_features.py:859 main.py:3317
+#: library_features.py:441 library_features.py:881 main.py:3317
 #: ui_dialogs.py:1889 ui_dialogs.py:1908 ui_dialogs.py:2841
 msgid "All files"
 msgstr ""
 
-#: library_features.py:462 library_features.py:966 main.py:3337 main.py:3420
+#: library_features.py:462 library_features.py:988 main.py:3337 main.py:3420
 #: toner_tab.py:5527 toner_tab.py:5682 ui_dialogs.py:1916 ui_dialogs.py:1919
 #: ui_dialogs.py:2953 ui_dialogs.py:3066
 msgid "Import Error"
@@ -274,7 +274,7 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:477 library_features.py:800 main.py:3354
+#: library_features.py:477 library_features.py:822 main.py:3354
 msgid "Connection Error"
 msgstr ""
 
@@ -286,11 +286,11 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:481 library_features.py:804 main.py:3358
+#: library_features.py:481 library_features.py:826 main.py:3358
 msgid "Data Error"
 msgstr ""
 
-#: library_features.py:482 library_features.py:805
+#: library_features.py:482 library_features.py:827
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -299,7 +299,7 @@ msgid ""
 msgstr ""
 
 #: library_features.py:486 library_features.py:499 library_features.py:524
-#: library_features.py:809 library_features.py:851 main.py:3363
+#: library_features.py:831 library_features.py:873 main.py:3363
 #: toner_tab.py:4812 toner_tab.py:5533
 msgid "No Data"
 msgstr ""
@@ -312,7 +312,7 @@ msgstr ""
 msgid "No key height presets found on the server."
 msgstr ""
 
-#: library_features.py:508 library_features.py:823
+#: library_features.py:508 library_features.py:845
 msgid "Overwrite Existing?"
 msgstr ""
 
@@ -324,7 +324,7 @@ msgid ""
 "Overwrite with latest from web?"
 msgstr ""
 
-#: library_features.py:521 library_features.py:848 main.py:3416
+#: library_features.py:521 library_features.py:870 main.py:3416
 #: toner_tab.py:5718 ui_dialogs.py:2955 ui_dialogs.py:3063 ui_dialogs.py:3068
 msgid "Import Complete"
 msgstr ""
@@ -342,7 +342,7 @@ msgstr ""
 msgid "Saxophone Serial Number Lookup"
 msgstr ""
 
-#: library_features.py:547 library_features.py:604
+#: library_features.py:547 library_features.py:617
 msgid "Manufacturer:"
 msgstr ""
 
@@ -358,61 +358,68 @@ msgstr ""
 msgid "Screw & Rod Specifications"
 msgstr ""
 
-#: library_features.py:612
-msgid "Model:"
-msgstr ""
-
-#: library_features.py:620
-msgid "OEM Specifications"
-msgstr ""
-
-#: library_features.py:624
-msgid "Threads / Pitch"
+#: library_features.py:602
+msgid ""
+"No specs loaded yet. Use File > Import Matt's Specs to download the "
+"reference library from stohrermusic.com, or choose (add new) below to "
+"enter your own."
 msgstr ""
 
 #: library_features.py:625
+msgid "Model:"
+msgstr ""
+
+#: library_features.py:633
+msgid "OEM Specifications"
+msgstr ""
+
+#: library_features.py:637
+msgid "Threads / Pitch"
+msgstr ""
+
+#: library_features.py:638
 msgid "Dia / Desc"
 msgstr ""
 
-#: library_features.py:679
+#: library_features.py:692
 msgid "Save / Update Spec"
 msgstr ""
 
-#: library_features.py:680
+#: library_features.py:693
 msgid "Delete Spec"
 msgstr ""
 
-#: library_features.py:742
+#: library_features.py:764
 msgid "Invalid Name"
 msgstr ""
 
-#: library_features.py:742
+#: library_features.py:764
 msgid "Please type a real name for the Manufacturer and Model."
 msgstr ""
 
-#: library_features.py:746
+#: library_features.py:768
 msgid "Please enter both a Manufacturer and a Model."
 msgstr ""
 
-#: library_features.py:762
+#: library_features.py:784
 msgid "Saved"
 msgstr ""
 
-#: library_features.py:762
+#: library_features.py:784
 #, python-brace-format
 msgid "Specs for {maker} {model} saved."
 msgstr ""
 
-#: library_features.py:774
+#: library_features.py:796
 msgid "Confirm Delete"
 msgstr ""
 
-#: library_features.py:774
+#: library_features.py:796
 #, python-brace-format
 msgid "Delete specs for {maker} {model}?"
 msgstr ""
 
-#: library_features.py:801
+#: library_features.py:823
 #, python-brace-format
 msgid ""
 "Could not fetch specs from stohrermusic.com:\n"
@@ -420,63 +427,63 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:809
+#: library_features.py:831
 msgid "No specs found on the server."
 msgstr ""
 
-#: library_features.py:824
+#: library_features.py:846
 #, python-brace-format
 msgid ""
 "{n} Matt's spec(s) already exist locally:\n"
 "\n"
 msgstr ""
 
-#: library_features.py:827
+#: library_features.py:849
 msgid ""
 "\n"
 "\n"
 "Overwrite with latest from web?"
 msgstr ""
 
-#: library_features.py:849
+#: library_features.py:871
 #, python-brace-format
 msgid "Imported {count} spec(s) from Matt's library."
 msgstr ""
 
-#: library_features.py:851
+#: library_features.py:873
 msgid "No specs found to import."
 msgstr ""
 
-#: library_features.py:858 library_features.py:899
+#: library_features.py:880 library_features.py:921
 msgid "Import Screw Specs"
 msgstr ""
 
-#: library_features.py:895 ui_dialogs.py:1943 ui_dialogs.py:3106
+#: library_features.py:917 ui_dialogs.py:1943 ui_dialogs.py:3106
 msgid "Import"
 msgstr ""
 
-#: library_features.py:895
+#: library_features.py:917
 msgid "No specs found in file."
 msgstr ""
 
-#: library_features.py:917
+#: library_features.py:939
 msgid "Select specs to import:"
 msgstr ""
 
-#: library_features.py:959 ui_dialogs.py:2689
+#: library_features.py:981 ui_dialogs.py:2689
 msgid "Success"
 msgstr ""
 
-#: library_features.py:959
+#: library_features.py:981
 #, python-brace-format
 msgid "Imported {count} specs."
 msgstr ""
 
-#: library_features.py:963 ui_dialogs.py:2906 ui_dialogs.py:3021
+#: library_features.py:985 ui_dialogs.py:2906 ui_dialogs.py:3021
 msgid "Import Selected"
 msgstr ""
 
-#: library_features.py:966
+#: library_features.py:988
 #, python-brace-format
 msgid ""
 "Failed to import:\n"
