@@ -231,6 +231,29 @@ python tools/test_i18n.py              # verify
 
 ## Branching Strategy
 
+**ALWAYS sync with the remote before doing anything else.** Matt develops this app from several
+different computers, so a local checkout is frequently behind `origin/beta` — and may also hold
+unpushed local commits, making the branch *diverged* rather than simply stale. Before reading code,
+answering questions about what the app does, or making any edit:
+
+```bash
+git fetch --all --prune
+git status --short --branch                       # ahead / behind counts
+git log --oneline beta..origin/beta               # what this machine is missing
+git log --oneline origin/beta..beta               # what this machine hasn't pushed
+```
+
+- **Behind only** → `git pull --rebase` and continue.
+- **Diverged (ahead *and* behind)** → `git pull --rebase` so local work replays on top; check the
+  local commits for conflicts with what landed upstream before pushing.
+- Never start work off a stale checkout. `APP_VERSION` in the local `config.py`, the local release
+  notes, and memory files are all unreliable until this sync has run — check
+  `git show origin/beta:config.py | grep APP_VERSION` and `gh release list --limit 5` for the real
+  current version.
+
+The `.claude/settings.json` `SessionStart` hook runs the fetch + divergence report automatically at
+the start of each session, but it only *reports* — reconciling is still a deliberate step.
+
 - **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
 - **`beta`**: Active development branch. New features land here first (e.g. filled engraving, air assist toggles, cut grouping). Always work on `beta` unless told otherwise.
 - CI builds trigger on push to `main` or `beta`.

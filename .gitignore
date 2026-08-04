@@ -216,3 +216,6 @@ __marimo__/
 .claude/*
 !.claude/commands/
 !.claude/commands/*.md
+!.claude/settings.json
+!.claude/hooks/
+!.claude/hooks/*.sh
