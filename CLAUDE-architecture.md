@@ -15,6 +15,7 @@ audio_utils.py          → AudioRingBuffer (shared audio stream health monitori
 tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
+i18n.py                → gettext catalog init; must run in main.py BEFORE any UI module import
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
 ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)

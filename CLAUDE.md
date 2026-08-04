@@ -97,6 +97,8 @@ The Sizing Rules dialog (`OptionsWindow`) is preset-first — the preset section
 
 Dirty detection is a `_capture_form_to_dict()` snapshot vs `self._baseline`; the baseline resets on dialog open, after Load, and after a successful Save Preset. `active_preset_name` tracks which preset's values currently sit in the form (used for the Save Preset overwrite default).
 
+**Naming the loaded preset**: on open, `_detect_active_preset()` matches the form's snapshot against each saved preset and selects the one that fits, so the dropdown names what's loaded instead of sitting blank. There is deliberately no stored "active preset" settings key — the applied values themselves identify the preset, which can't go stale after an edit and stays honest when a config is hand-edited (the dropdown just stays blank). This relies on Apply refusing to commit changes that aren't captured in a preset, so applied settings always correspond to a saved one. `GcodeSettingsWindow` does the same per material.
+
 **Bootstrap**: `main.py` auto-creates a `Default` preset from current settings on first run if `sizing_presets` is empty (via `config.settings_to_sizing_preset`). The app guarantees at least one preset always exists.
 
 ## G-code Settings Presets Workflow
@@ -178,7 +180,7 @@ CI wraps `dist\SaxShopCompanion.exe` into a versioned `SaxShopCompanion-Windows-
 
 ```bash
 python build.py
-iscc /DAppVersion=2.62 installer.iss    # requires Inno Setup 6
+iscc /DAppVersion=2.65 installer.iss    # requires Inno Setup 6
 ```
 
 **Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
