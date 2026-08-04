@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-04 12:13-0400\n"
+"POT-Creation-Date: 2026-08-04 14:02-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -142,9 +142,9 @@ msgid "Units:"
 msgstr ""
 
 #: library_features.py:208 tooling_tab.py:153 tooling_tab.py:185
-#: tooling_tab.py:277 tooling_tab.py:447 tooling_tab.py:531 ui_dialogs.py:967
-#: ui_dialogs.py:1021 ui_dialogs.py:1253 ui_dialogs.py:2025 ui_dialogs.py:4266
-#: ui_dialogs.py:4312 ui_dialogs.py:4325 ui_dialogs.py:4350
+#: tooling_tab.py:277 tooling_tab.py:447 tooling_tab.py:531 ui_dialogs.py:974
+#: ui_dialogs.py:1028 ui_dialogs.py:1260 ui_dialogs.py:2053 ui_dialogs.py:4294
+#: ui_dialogs.py:4340 ui_dialogs.py:4353 ui_dialogs.py:4378
 msgid "mm"
 msgstr ""
 
@@ -176,16 +176,16 @@ msgstr ""
 msgid "Please fill in at least Make, Model, and Size before saving."
 msgstr ""
 
-#: library_features.py:317 main.py:3199
+#: library_features.py:317 main.py:3202
 msgid "Overwrite"
 msgstr ""
 
-#: library_features.py:317 main.py:3199
+#: library_features.py:317 main.py:3202
 #, python-brace-format
 msgid "A set named '{name}' already exists in this library. Overwrite it?"
 msgstr ""
 
-#: library_features.py:323 main.py:3224
+#: library_features.py:323 main.py:3227
 msgid "Preset Saved"
 msgstr ""
 
@@ -194,7 +194,7 @@ msgstr ""
 msgid "Preset '{name}' saved successfully to '{active_library}'."
 msgstr ""
 
-#: library_features.py:369 library_features.py:422 main.py:3145 main.py:3262
+#: library_features.py:369 library_features.py:422 main.py:3148 main.py:3265
 msgid "Delete Library"
 msgstr ""
 
@@ -203,7 +203,7 @@ msgstr ""
 msgid "Are you sure you want to delete the empty library '{selected_lib}'?"
 msgstr ""
 
-#: library_features.py:374 main.py:3267
+#: library_features.py:374 main.py:3270
 msgid "Library Deleted"
 msgstr ""
 
@@ -212,16 +212,16 @@ msgstr ""
 msgid "Library '{selected_lib}' deleted."
 msgstr ""
 
-#: library_features.py:381 library_features.py:389 main.py:3274 main.py:3282
-#: main.py:3297
+#: library_features.py:381 library_features.py:389 main.py:3277 main.py:3285
+#: main.py:3300
 msgid "Delete Error"
 msgstr ""
 
-#: library_features.py:381 main.py:3274
+#: library_features.py:381 main.py:3277
 msgid "Please load a set to delete."
 msgstr ""
 
-#: library_features.py:389 main.py:3282
+#: library_features.py:389 main.py:3285
 msgid ""
 "Cannot delete from 'All Libraries' view. Please select the specific "
 "library first."
@@ -238,7 +238,7 @@ msgid ""
 "'{selected_lib}' library?"
 msgstr ""
 
-#: library_features.py:403 main.py:3295
+#: library_features.py:403 main.py:3298
 msgid "Preset Deleted"
 msgstr ""
 
@@ -251,19 +251,19 @@ msgstr ""
 msgid "Import Key Height Sets"
 msgstr ""
 
-#: library_features.py:441 library_features.py:881 main.py:3317
-#: ui_dialogs.py:1889 ui_dialogs.py:1908 ui_dialogs.py:2841
+#: library_features.py:441 library_features.py:881 main.py:3320
+#: ui_dialogs.py:1917 ui_dialogs.py:1936 ui_dialogs.py:2869
 msgid "JSON files"
 msgstr ""
 
-#: library_features.py:441 library_features.py:881 main.py:3317
-#: ui_dialogs.py:1889 ui_dialogs.py:1908 ui_dialogs.py:2841
+#: library_features.py:441 library_features.py:881 main.py:3320
+#: ui_dialogs.py:1917 ui_dialogs.py:1936 ui_dialogs.py:2869
 msgid "All files"
 msgstr ""
 
-#: library_features.py:462 library_features.py:988 main.py:3337 main.py:3420
-#: toner_tab.py:5527 toner_tab.py:5682 ui_dialogs.py:1916 ui_dialogs.py:1919
-#: ui_dialogs.py:2953 ui_dialogs.py:3066
+#: library_features.py:462 library_features.py:988 main.py:3340 main.py:3423
+#: toner_tab.py:5527 toner_tab.py:5682 ui_dialogs.py:1944 ui_dialogs.py:1947
+#: ui_dialogs.py:2981 ui_dialogs.py:3094
 msgid "Import Error"
 msgstr ""
 
@@ -274,7 +274,7 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:477 library_features.py:822 main.py:3354
+#: library_features.py:477 library_features.py:822 main.py:3357
 msgid "Connection Error"
 msgstr ""
 
@@ -286,7 +286,7 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:481 library_features.py:826 main.py:3358
+#: library_features.py:481 library_features.py:826 main.py:3361
 msgid "Data Error"
 msgstr ""
 
@@ -299,7 +299,7 @@ msgid ""
 msgstr ""
 
 #: library_features.py:486 library_features.py:499 library_features.py:524
-#: library_features.py:831 library_features.py:873 main.py:3363
+#: library_features.py:831 library_features.py:873 main.py:3366
 #: toner_tab.py:4812 toner_tab.py:5533
 msgid "No Data"
 msgstr ""
@@ -324,8 +324,8 @@ msgid ""
 "Overwrite with latest from web?"
 msgstr ""
 
-#: library_features.py:521 library_features.py:870 main.py:3416
-#: toner_tab.py:5718 ui_dialogs.py:2955 ui_dialogs.py:3063 ui_dialogs.py:3068
+#: library_features.py:521 library_features.py:870 main.py:3419
+#: toner_tab.py:5718 ui_dialogs.py:2983 ui_dialogs.py:3091 ui_dialogs.py:3096
 msgid "Import Complete"
 msgstr ""
 
@@ -458,7 +458,7 @@ msgstr ""
 msgid "Import Screw Specs"
 msgstr ""
 
-#: library_features.py:917 ui_dialogs.py:1943 ui_dialogs.py:3106
+#: library_features.py:917 ui_dialogs.py:1971 ui_dialogs.py:3134
 msgid "Import"
 msgstr ""
 
@@ -470,7 +470,7 @@ msgstr ""
 msgid "Select specs to import:"
 msgstr ""
 
-#: library_features.py:981 ui_dialogs.py:2689
+#: library_features.py:981 ui_dialogs.py:2717
 msgid "Success"
 msgstr ""
 
@@ -479,7 +479,7 @@ msgstr ""
 msgid "Imported {count} specs."
 msgstr ""
 
-#: library_features.py:985 ui_dialogs.py:2906 ui_dialogs.py:3021
+#: library_features.py:985 ui_dialogs.py:2934 ui_dialogs.py:3049
 msgid "Import Selected"
 msgstr ""
 
@@ -514,7 +514,7 @@ msgstr ""
 msgid "Export Pad Presets..."
 msgstr ""
 
-#: main.py:333 ui_dialogs.py:2969
+#: main.py:333 ui_dialogs.py:2997
 msgid "Import Matt's Pad Sets"
 msgstr ""
 
@@ -650,31 +650,31 @@ msgstr ""
 msgid "Open Log File"
 msgstr ""
 
-#: main.py:471 ui_dialogs.py:5972
+#: main.py:471 ui_dialogs.py:6000
 msgid "About"
 msgstr ""
 
-#: main.py:504 ui_dialogs.py:4875
+#: main.py:504 ui_dialogs.py:4903
 msgid "Pad Maker"
 msgstr ""
 
-#: main.py:509 main.py:3688 ui_dialogs.py:4876 ui_dialogs.py:5249
+#: main.py:509 main.py:3691 ui_dialogs.py:4904 ui_dialogs.py:5277
 msgid "Key Height Library"
 msgstr ""
 
-#: main.py:514 main.py:3689 ui_dialogs.py:4877 ui_dialogs.py:5257
+#: main.py:514 main.py:3692 ui_dialogs.py:4905 ui_dialogs.py:5285
 msgid "Serial Lookup"
 msgstr ""
 
-#: main.py:519 main.py:3690 ui_dialogs.py:4878 ui_dialogs.py:5262
+#: main.py:519 main.py:3693 ui_dialogs.py:4906 ui_dialogs.py:5290
 msgid "Screw Specs"
 msgstr ""
 
-#: main.py:523 main.py:3691 ui_dialogs.py:4879
+#: main.py:523 main.py:3694 ui_dialogs.py:4907
 msgid "Tooling"
 msgstr ""
 
-#: main.py:528 main.py:3692 ui_dialogs.py:4880 ui_dialogs.py:5388
+#: main.py:528 main.py:3695 ui_dialogs.py:4908 ui_dialogs.py:5416
 msgid "Tuner"
 msgstr ""
 
@@ -686,7 +686,7 @@ msgstr ""
 msgid "Enter pad sizes (e.g. 42.0x3):"
 msgstr ""
 
-#: main.py:643 main.py:3139 main.py:3227
+#: main.py:643 main.py:3142 main.py:3230
 msgid "Load Pad Preset"
 msgstr ""
 
@@ -698,9 +698,9 @@ msgstr ""
 msgid "View Notes"
 msgstr ""
 
-#: main.py:657 main.py:3147 toner_tab.py:2049 ui_dialogs.py:1863
-#: ui_dialogs.py:1867 ui_dialogs.py:1873 ui_dialogs.py:4625 ui_dialogs.py:4631
-#: ui_dialogs.py:4637
+#: main.py:657 main.py:3150 toner_tab.py:2049 ui_dialogs.py:1891
+#: ui_dialogs.py:1895 ui_dialogs.py:1901 ui_dialogs.py:4653 ui_dialogs.py:4659
+#: ui_dialogs.py:4665
 msgid "Delete Preset"
 msgstr ""
 
@@ -708,7 +708,7 @@ msgstr ""
 msgid "Materials"
 msgstr ""
 
-#: main.py:690 ui_dialogs.py:5023
+#: main.py:690 ui_dialogs.py:5051
 msgid "Center Hole"
 msgstr ""
 
@@ -724,29 +724,29 @@ msgstr ""
 msgid "Sheet Size"
 msgstr ""
 
-#: main.py:709 main.py:3992
+#: main.py:709 main.py:3995
 #, python-brace-format
 msgid "Width ({units}):"
 msgstr ""
 
-#: main.py:715 main.py:3993
+#: main.py:715 main.py:3996
 #, python-brace-format
 msgid "Height ({units}):"
 msgstr ""
 
-#: main.py:732 main.py:1232 tooling_tab.py:193 ui_dialogs.py:5129
+#: main.py:732 main.py:1232 tooling_tab.py:193 ui_dialogs.py:5157
 msgid "Scrap Mode"
 msgstr ""
 
-#: main.py:743 tooling_tab.py:196 ui_dialogs.py:3300
+#: main.py:743 tooling_tab.py:196 ui_dialogs.py:3328
 msgid "Clear"
 msgstr ""
 
-#: main.py:750 ui_dialogs.py:5142
+#: main.py:750 ui_dialogs.py:5170
 msgid "Edge Bias"
 msgstr ""
 
-#: main.py:771 main.py:1208 ui_dialogs.py:963 ui_dialogs.py:1017
+#: main.py:771 main.py:1208 ui_dialogs.py:970 ui_dialogs.py:1024
 msgid "ctr"
 msgstr ""
 
@@ -780,7 +780,7 @@ msgstr ""
 msgid "Generate G-code"
 msgstr ""
 
-#: main.py:842 ui_dialogs.py:5223
+#: main.py:842 ui_dialogs.py:5251
 msgid "Frame & Cut"
 msgstr ""
 
@@ -915,7 +915,7 @@ msgid ""
 "Applies to every remaining scrap in this session."
 msgstr ""
 
-#: main.py:1379 main.py:1396 main.py:2961 tooling_tab.py:1167
+#: main.py:1379 main.py:1396 main.py:2964 tooling_tab.py:1167
 msgid "Select Folder to Save G-code"
 msgstr ""
 
@@ -951,7 +951,7 @@ msgid ""
 "Try a larger scrap piece."
 msgstr ""
 
-#: main.py:1445 main.py:2013 main.py:3078 tooling_tab.py:1137
+#: main.py:1445 main.py:2013 main.py:3081 tooling_tab.py:1137
 #: tooling_tab.py:1209
 msgid "Session Complete!"
 msgstr ""
@@ -964,16 +964,16 @@ msgstr ""
 msgid "Remaining"
 msgstr ""
 
-#: main.py:1494 main.py:1905 main.py:2999 main.py:3001 main.py:3003
+#: main.py:1494 main.py:1905 main.py:3002 main.py:3004 main.py:3006
 #: toner_tab.py:2785 tooling_tab.py:947 tooling_tab.py:993 tooling_tab.py:1264
 #: tooling_tab.py:1894 tooling_tab.py:1933 tooling_tab.py:1958
-#: tooling_tab.py:1992 ui_dialogs.py:8775
+#: tooling_tab.py:1992 ui_dialogs.py:8808
 msgid "Done"
 msgstr ""
 
 #: main.py:1505 toner_tab.py:1638 toner_tab.py:4797 toner_tab.py:5105
-#: tooling_tab.py:1273 tuner_tab.py:1257 ui_dialogs.py:4922 ui_dialogs.py:6167
-#: ui_dialogs.py:6986 ui_dialogs.py:8279 ui_dialogs.py:8675 ui_dialogs.py:8879
+#: tooling_tab.py:1273 tuner_tab.py:1257 ui_dialogs.py:4950 ui_dialogs.py:6195
+#: ui_dialogs.py:7014 ui_dialogs.py:8307 ui_dialogs.py:8704 ui_dialogs.py:8912
 msgid "Close"
 msgstr ""
 
@@ -1000,8 +1000,8 @@ msgstr ""
 #: tooling_tab.py:1649 tooling_tab.py:1655 tooling_tab.py:1659
 #: tooling_tab.py:1666 tooling_tab.py:1670 tooling_tab.py:1674
 #: tooling_tab.py:1682 tooling_tab.py:1686 tooling_tab.py:1693
-#: ui_dialogs.py:4724 ui_dialogs.py:4735 ui_dialogs.py:4755 ui_dialogs.py:4764
-#: ui_dialogs.py:4787 ui_dialogs.py:4796
+#: ui_dialogs.py:4752 ui_dialogs.py:4763 ui_dialogs.py:4783 ui_dialogs.py:4792
+#: ui_dialogs.py:4815 ui_dialogs.py:4824
 msgid "Invalid Input"
 msgstr ""
 
@@ -1101,7 +1101,7 @@ msgid ""
 "piece you're cutting now."
 msgstr ""
 
-#: main.py:1853 main.py:2927
+#: main.py:1853 main.py:2930
 msgid "No Materials Selected"
 msgstr ""
 
@@ -1109,29 +1109,29 @@ msgstr ""
 msgid "Please select at least one material."
 msgstr ""
 
-#: main.py:1860 main.py:2933
+#: main.py:1860 main.py:2936
 msgid "Preview"
 msgstr ""
 
-#: main.py:1861 main.py:2934
+#: main.py:1861 main.py:2937
 msgid ""
 "Preview works with one material at a time.\n"
 "Please select a single material to preview its layout."
 msgstr ""
 
-#: main.py:1878 main.py:2947
+#: main.py:1878 main.py:2950
 msgid "paper"
 msgstr ""
 
-#: main.py:1878 main.py:2947
+#: main.py:1878 main.py:2950
 msgid "sheet"
 msgstr ""
 
-#: main.py:1879 main.py:2675 main.py:2948 tooling_tab.py:929 tooling_tab.py:973
+#: main.py:1879 main.py:2675 main.py:2951 tooling_tab.py:929 tooling_tab.py:973
 msgid "Nesting Error"
 msgstr ""
 
-#: main.py:1879 main.py:2948
+#: main.py:1879 main.py:2951
 #, python-brace-format
 msgid "Could not fit all '{material}' pieces on the specified {size_desc} size."
 msgstr ""
@@ -1144,7 +1144,7 @@ msgstr ""
 msgid "SVG files generated successfully."
 msgstr ""
 
-#: main.py:1909 main.py:2022 main.py:2897 main.py:3007 main.py:3087
+#: main.py:1909 main.py:2022 main.py:2900 main.py:3010 main.py:3090
 msgid "An Error Occurred"
 msgstr ""
 
@@ -1156,7 +1156,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:1927 main.py:3025
+#: main.py:1927 main.py:3028
 msgid "Scrap Mode Error"
 msgstr ""
 
@@ -1164,7 +1164,7 @@ msgstr ""
 msgid "Please select exactly one material for scrap mode."
 msgstr ""
 
-#: main.py:2014 main.py:3079
+#: main.py:2014 main.py:3082
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1173,7 +1173,7 @@ msgid ""
 "Files saved to: {save_dir}"
 msgstr ""
 
-#: main.py:2022 main.py:3087
+#: main.py:2022 main.py:3090
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -1181,7 +1181,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2189 main.py:2617 ui_dialogs.py:7479
+#: main.py:2189 main.py:2617 ui_dialogs.py:7507
 msgid "Falcon Not Detected"
 msgstr ""
 
@@ -1199,7 +1199,7 @@ msgid "Falcon returned: {m}"
 msgstr ""
 
 #: main.py:2300 main.py:2338 main.py:2385 main.py:2433 main.py:2603
-#: ui_dialogs.py:7516 ui_dialogs.py:7628
+#: ui_dialogs.py:7544 ui_dialogs.py:7656
 msgid "Missing Dependency"
 msgstr ""
 
@@ -1208,7 +1208,7 @@ msgstr ""
 msgid "Home needs pyserial: {e}"
 msgstr ""
 
-#: main.py:2304 ui_dialogs.py:7288 ui_dialogs.py:9203
+#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9270
 msgid "Home Laser?"
 msgstr ""
 
@@ -1218,8 +1218,8 @@ msgid ""
 "speed. Make sure nothing is in its path."
 msgstr ""
 
-#: main.py:2314 main.py:2347 main.py:2393 main.py:2743 ui_dialogs.py:7297
-#: ui_dialogs.py:7528 ui_dialogs.py:7640
+#: main.py:2314 main.py:2347 main.py:2393 main.py:2743 ui_dialogs.py:7325
+#: ui_dialogs.py:7556 ui_dialogs.py:7668
 msgid "Connection Failed"
 msgstr ""
 
@@ -1387,22 +1387,22 @@ msgstr ""
 msgid "Save Failed"
 msgstr ""
 
-#: main.py:2543 toner_tab.py:1756 ui_dialogs.py:2402 ui_dialogs.py:2518
-#: ui_dialogs.py:2550 ui_dialogs.py:4386 ui_dialogs.py:6071
+#: main.py:2543 toner_tab.py:1756 ui_dialogs.py:2430 ui_dialogs.py:2546
+#: ui_dialogs.py:2578 ui_dialogs.py:4414 ui_dialogs.py:6099
 msgid "Save"
 msgstr ""
 
-#: main.py:2546 main.py:3532 main.py:3627 main.py:3855 main.py:3910
+#: main.py:2546 main.py:3535 main.py:3630 main.py:3858 main.py:3913
 #: toner_tab.py:1481 toner_tab.py:1758 toner_tab.py:1972 toner_tab.py:2038
 #: toner_tab.py:2203 toner_tab.py:2306 toner_tab.py:3543 toner_tab.py:5372
-#: toner_tab.py:5502 toner_tab.py:5663 ui_dialogs.py:285 ui_dialogs.py:2404
-#: ui_dialogs.py:2520 ui_dialogs.py:2552 ui_dialogs.py:3107 ui_dialogs.py:3309
-#: ui_dialogs.py:4023 ui_dialogs.py:6072 ui_dialogs.py:7125 ui_dialogs.py:8368
-#: ui_dialogs.py:8795
+#: toner_tab.py:5502 toner_tab.py:5663 ui_dialogs.py:285 ui_dialogs.py:2432
+#: ui_dialogs.py:2548 ui_dialogs.py:2580 ui_dialogs.py:3135 ui_dialogs.py:3337
+#: ui_dialogs.py:4051 ui_dialogs.py:6100 ui_dialogs.py:7153 ui_dialogs.py:8396
+#: ui_dialogs.py:8828
 msgid "Cancel"
 msgstr ""
 
-#: main.py:2557 ui_dialogs.py:8898
+#: main.py:2557 ui_dialogs.py:8931
 msgid "Homing"
 msgstr ""
 
@@ -1455,16 +1455,16 @@ msgstr ""
 msgid "Start Frame →"
 msgstr ""
 
-#: main.py:2852
+#: main.py:2855
 msgid "Framing — verify cut area, jog if needed, click Cut when ready"
 msgstr ""
 
-#: main.py:2865
+#: main.py:2868
 #, python-brace-format
 msgid "Cutting — {m}"
 msgstr ""
 
-#: main.py:2898
+#: main.py:2901
 #, python-brace-format
 msgid ""
 "Something went wrong during Frame & Cut:\n"
@@ -1472,37 +1472,37 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2927
+#: main.py:2930
 msgid "Please select at least one material (G-code not supported for Exact Size)."
 msgstr ""
 
-#: main.py:2968
+#: main.py:2971
 msgid "Working"
 msgstr ""
 
-#: main.py:2978
+#: main.py:2981
 msgid "Generating G-code..."
 msgstr ""
 
-#: main.py:2999
+#: main.py:3002
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
 "SD card safely ejected — you can remove it now!"
 msgstr ""
 
-#: main.py:3001
+#: main.py:3004
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
 "Please safely eject the SD card before removing."
 msgstr ""
 
-#: main.py:3003
+#: main.py:3006
 msgid "G-code files generated successfully."
 msgstr ""
 
-#: main.py:3007
+#: main.py:3010
 #, python-brace-format
 msgid ""
 "Something went wrong during G-code generation:\n"
@@ -1510,37 +1510,37 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:3026
+#: main.py:3029
 msgid ""
 "Please select exactly one material for scrap mode.\n"
 "(G-code not supported for Exact Size)"
 msgstr ""
 
-#: main.py:3172
+#: main.py:3175
 msgid "Library Name"
 msgstr ""
 
-#: main.py:3173
+#: main.py:3176
 msgid "Enter a library name to save to:"
 msgstr ""
 
-#: main.py:3186 main.py:3190
+#: main.py:3189 main.py:3193
 msgid "Save Pad Preset"
 msgstr ""
 
-#: main.py:3186
+#: main.py:3189
 msgid "Enter a name for this preset:"
 msgstr ""
 
-#: main.py:3190
+#: main.py:3193
 msgid "Cannot save an empty list."
 msgstr ""
 
-#: main.py:3212
+#: main.py:3215
 msgid "Duplicate Detected"
 msgstr ""
 
-#: main.py:3213
+#: main.py:3216
 #, python-brace-format
 msgid ""
 "This pad list is identical to '{pname}' in '{lib}'.\n"
@@ -1548,61 +1548,61 @@ msgid ""
 "Save anyway?"
 msgstr ""
 
-#: main.py:3224
+#: main.py:3227
 #, python-brace-format
 msgid "Preset '{name}' saved successfully."
 msgstr ""
 
-#: main.py:3263
+#: main.py:3266
 #, python-brace-format
 msgid "Are you sure you want to delete the empty library '{lib}'?"
 msgstr ""
 
-#: main.py:3267
+#: main.py:3270
 #, python-brace-format
 msgid "Library '{lib}' deleted."
 msgstr ""
 
-#: main.py:3285
+#: main.py:3288
 msgid "Delete Pad Preset"
 msgstr ""
 
-#: main.py:3285
+#: main.py:3288
 #, python-brace-format
 msgid ""
 "Are you sure you want to delete the preset '{preset}' from the '{lib}' "
 "library?"
 msgstr ""
 
-#: main.py:3295
+#: main.py:3298
 #, python-brace-format
 msgid "Preset '{preset}' deleted."
 msgstr ""
 
-#: main.py:3297
+#: main.py:3300
 msgid "Could not find the preset to delete."
 msgstr ""
 
-#: main.py:3303
+#: main.py:3306
 msgid "Notes"
 msgstr ""
 
-#: main.py:3303
+#: main.py:3306
 msgid "No preset loaded."
 msgstr ""
 
-#: main.py:3316
+#: main.py:3319
 msgid "Import Pad Presets"
 msgstr ""
 
-#: main.py:3337
+#: main.py:3340
 #, python-brace-format
 msgid ""
 "Could not import pad presets:\n"
 "{error}"
 msgstr ""
 
-#: main.py:3355
+#: main.py:3358
 #, python-brace-format
 msgid ""
 "Could not fetch pad sets from stohrermusic.com:\n"
@@ -1610,7 +1610,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:3359
+#: main.py:3362
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -1618,19 +1618,19 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:3363
+#: main.py:3366
 msgid "No pad set data found on the server."
 msgstr ""
 
-#: main.py:3371
+#: main.py:3374
 msgid "Select Folder with Settings"
 msgstr ""
 
-#: main.py:3379
+#: main.py:3382
 msgid "No Settings Found"
 msgstr ""
 
-#: main.py:3380
+#: main.py:3383
 msgid ""
 "No config files found in the selected folder.\n"
 "\n"
@@ -1638,7 +1638,7 @@ msgid ""
 "key_height_library.json, screw_specs.json, toner_data.json"
 msgstr ""
 
-#: main.py:3386
+#: main.py:3389
 #, python-brace-format
 msgid ""
 "The following files will be imported and will REPLACE your current "
@@ -1649,11 +1649,11 @@ msgid ""
 "Are you sure you want to continue?"
 msgstr ""
 
-#: main.py:3390
+#: main.py:3393
 msgid "Confirm Import"
 msgstr ""
 
-#: main.py:3417
+#: main.py:3420
 #, python-brace-format
 msgid ""
 "Successfully imported {count} file(s).\n"
@@ -1661,30 +1661,30 @@ msgid ""
 "Imported: {files}"
 msgstr ""
 
-#: main.py:3420
+#: main.py:3423
 #, python-brace-format
 msgid ""
 "Could not import settings:\n"
 "{error}"
 msgstr ""
 
-#: main.py:3441 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:930
+#: main.py:3444 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:937
 msgid "Felt"
 msgstr ""
 
-#: main.py:3441 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:931
+#: main.py:3444 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:938
 msgid "Card"
 msgstr ""
 
-#: main.py:3441 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:928
+#: main.py:3444 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:935
 msgid "Leather"
 msgstr ""
 
-#: main.py:3453 main.py:3465 main.py:3525 toner_tab.py:1061
+#: main.py:3456 main.py:3468 main.py:3528 toner_tab.py:1061
 msgid "Input Device"
 msgstr ""
 
-#: main.py:3454
+#: main.py:3457
 msgid ""
 "On Linux, audio input is locked to the system default.\n"
 "\n"
@@ -1692,111 +1692,111 @@ msgid ""
 "(PulseAudio or PipeWire)."
 msgstr ""
 
-#: main.py:3461
+#: main.py:3464
 msgid "No Devices"
 msgstr ""
 
-#: main.py:3461 toner_tab.py:1103
+#: main.py:3464 toner_tab.py:1103
 msgid "No audio input devices found."
 msgstr ""
 
-#: main.py:3474
+#: main.py:3477
 msgid "Select audio input device:"
 msgstr ""
 
-#: main.py:3476
+#: main.py:3479
 msgid ""
 "Showing devices with 44.1 kHz+ sample rate.\n"
 "Bluetooth headsets are excluded (sample rate too low)."
 msgstr ""
 
-#: main.py:3481 main.py:3484 tuner_tab.py:1136 tuner_tab.py:1139
+#: main.py:3484 main.py:3487 tuner_tab.py:1136 tuner_tab.py:1139
 msgid "System Default"
 msgstr ""
 
-#: main.py:3526
+#: main.py:3529
 #, python-brace-format
 msgid "Audio input set to: {dev_name}"
 msgstr ""
 
-#: main.py:3530 main.py:3625 main.py:3908 ui_dialogs.py:283 ui_dialogs.py:4021
+#: main.py:3533 main.py:3628 main.py:3911 ui_dialogs.py:283 ui_dialogs.py:4049
 msgid "Apply"
 msgstr ""
 
-#: main.py:3538
+#: main.py:3541
 msgid "Capture Threshold"
 msgstr ""
 
-#: main.py:3547
+#: main.py:3550
 msgid ""
 "Set the minimum signal level to trigger capture.\n"
 "Raise the threshold if chair noises or breathing\n"
 "trigger false captures."
 msgstr ""
 
-#: main.py:3556
+#: main.py:3559
 msgid "Current level:"
 msgstr ""
 
-#: main.py:3571
+#: main.py:3574
 msgid "Threshold:"
 msgstr ""
 
-#: main.py:3635 main.py:3644 main.py:3900 main.py:3903
+#: main.py:3638 main.py:3647 main.py:3903 main.py:3906
 msgid "Feature Set"
 msgstr ""
 
-#: main.py:3646
+#: main.py:3649
 msgid ""
 "Choose which tabs to show.\n"
 "The Pad Maker is always on."
 msgstr ""
 
-#: main.py:3651
+#: main.py:3654
 msgid "Language"
 msgstr ""
 
-#: main.py:3668
+#: main.py:3671
 msgid " (restart to apply)"
 msgstr ""
 
-#: main.py:3672
+#: main.py:3675
 msgid "Tool Tips"
 msgstr ""
 
-#: main.py:3676
+#: main.py:3679
 msgid "Show tool tips when hovering over settings"
 msgstr ""
 
-#: main.py:3679
+#: main.py:3682
 msgid ""
 "\n"
 "Tabs"
 msgstr ""
 
-#: main.py:3695 ui_dialogs.py:4881
+#: main.py:3698 ui_dialogs.py:4909
 msgid "Toner"
 msgstr ""
 
-#: main.py:3705
+#: main.py:3708
 msgid ""
 "\n"
 "Experimental / In Progress"
 msgstr ""
 
-#: main.py:3724
+#: main.py:3727
 msgid "Machine menu (direct Falcon serial control)"
 msgstr ""
 
-#: main.py:3731
+#: main.py:3734
 msgid "Toner — Beta Notice"
 msgstr ""
 
-#: main.py:3741
+#: main.py:3744
 msgid "Harmonic Tone Analyzer"
 msgstr ""
 
-#: main.py:3760
+#: main.py:3763
 msgid ""
 "This feature is in beta. Run it in full screen.\n"
 "\n"
@@ -1858,7 +1858,7 @@ msgid ""
 "\n"
 msgstr ""
 
-#: main.py:3838
+#: main.py:3841
 msgid ""
 "\n"
 "This feature is in active development. Please contact me with "
@@ -1866,34 +1866,34 @@ msgid ""
 "screenshots are super helpful.\n"
 msgstr ""
 
-#: main.py:3853
+#: main.py:3856
 msgid "I Understand — Enable Toner"
 msgstr ""
 
-#: main.py:3901
+#: main.py:3904
 msgid "Restart the app for the language change to take effect."
 msgstr ""
 
-#: main.py:3904
+#: main.py:3907
 msgid "Changes will take effect next time you open the app."
 msgstr ""
 
-#: main.py:3941
+#: main.py:3944
 msgid "Log File"
 msgstr ""
 
-#: main.py:3941
+#: main.py:3944
 #, python-brace-format
 msgid ""
 "No log file found.\n"
 "Expected at: {log_path}"
 msgstr ""
 
-#: main.py:4032
+#: main.py:4035
 msgid "Unexpected Error"
 msgstr ""
 
-#: main.py:4033
+#: main.py:4036
 #, python-brace-format
 msgid ""
 "{exc_type}: {exc_value}\n"
@@ -1905,7 +1905,7 @@ msgstr ""
 msgid "IN TUNE"
 msgstr ""
 
-#: toner_tab.py:365 toner_tab.py:2495 toner_tab.py:2799 ui_dialogs.py:8761
+#: toner_tab.py:365 toner_tab.py:2495 toner_tab.py:2799 ui_dialogs.py:8794
 msgid "Pause"
 msgstr ""
 
@@ -2100,7 +2100,7 @@ msgid ""
 "unconventional setups like contact mics."
 msgstr ""
 
-#: toner_tab.py:1479 toner_tab.py:3123 tooling_tab.py:1404 ui_dialogs.py:6046
+#: toner_tab.py:1479 toner_tab.py:3123 tooling_tab.py:1404 ui_dialogs.py:6074
 msgid "OK"
 msgstr ""
 
@@ -2108,7 +2108,7 @@ msgstr ""
 msgid "Apply all changes and close."
 msgstr ""
 
-#: toner_tab.py:1484 ui_dialogs.py:4028
+#: toner_tab.py:1484 ui_dialogs.py:4056
 msgid "Close without applying any changes."
 msgstr ""
 
@@ -2145,8 +2145,8 @@ msgstr ""
 msgid "Import Audio File..."
 msgstr ""
 
-#: toner_tab.py:1635 ui_dialogs.py:588 ui_dialogs.py:791 ui_dialogs.py:894
-#: ui_dialogs.py:1036 ui_dialogs.py:1083 ui_dialogs.py:4392
+#: toner_tab.py:1635 ui_dialogs.py:595 ui_dialogs.py:798 ui_dialogs.py:901
+#: ui_dialogs.py:1043 ui_dialogs.py:1090 ui_dialogs.py:4420
 msgid "Delete"
 msgstr ""
 
@@ -2155,7 +2155,7 @@ msgstr ""
 msgid "Notes — {name}"
 msgstr ""
 
-#: toner_tab.py:1723 ui_dialogs.py:6062
+#: toner_tab.py:1723 ui_dialogs.py:6090
 #, python-brace-format
 msgid "Notes for \"{name}\":"
 msgstr ""
@@ -2262,7 +2262,7 @@ msgid ""
 "Calibration will cover {total} notes."
 msgstr ""
 
-#: toner_tab.py:2144 ui_dialogs.py:8776
+#: toner_tab.py:2144 ui_dialogs.py:8809
 msgid "Stop"
 msgstr ""
 
@@ -2292,12 +2292,12 @@ msgstr ""
 msgid "No presets yet. Create one in File > Presets."
 msgstr ""
 
-#: toner_tab.py:2264 ui_dialogs.py:1784 ui_dialogs.py:1787 ui_dialogs.py:4534
-#: ui_dialogs.py:4539
+#: toner_tab.py:2264 ui_dialogs.py:1812 ui_dialogs.py:1815 ui_dialogs.py:4562
+#: ui_dialogs.py:4567
 msgid "Load Preset"
 msgstr ""
 
-#: toner_tab.py:2305 ui_dialogs.py:1065 ui_dialogs.py:4383
+#: toner_tab.py:2305 ui_dialogs.py:1072 ui_dialogs.py:4411
 msgid "Load"
 msgstr ""
 
@@ -2412,7 +2412,7 @@ msgstr ""
 msgid "Resumed..."
 msgstr ""
 
-#: toner_tab.py:2806 ui_dialogs.py:8764
+#: toner_tab.py:2806 ui_dialogs.py:8797
 msgid "Resume"
 msgstr ""
 
@@ -2484,7 +2484,7 @@ msgstr ""
 msgid "Captured {note} ✓  stop playing..."
 msgstr ""
 
-#: toner_tab.py:3089 ui_dialogs.py:5810
+#: toner_tab.py:3089 ui_dialogs.py:5838
 msgid "Recording Quality"
 msgstr ""
 
@@ -2531,7 +2531,7 @@ msgstr ""
 msgid "{date}  ({caps} caps, {notes} notes)"
 msgstr ""
 
-#: toner_tab.py:3444 ui_dialogs.py:2747 ui_dialogs.py:2879 ui_dialogs.py:2983
+#: toner_tab.py:3444 ui_dialogs.py:2775 ui_dialogs.py:2907 ui_dialogs.py:3011
 msgid "Select All"
 msgstr ""
 
@@ -2952,7 +2952,7 @@ msgstr ""
 msgid "Select at least one preset to export."
 msgstr ""
 
-#: toner_tab.py:5654 ui_dialogs.py:1898 ui_dialogs.py:2851
+#: toner_tab.py:5654 ui_dialogs.py:1926 ui_dialogs.py:2879
 msgid "Export Successful"
 msgstr ""
 
@@ -2963,7 +2963,7 @@ msgid ""
 "{path}"
 msgstr ""
 
-#: toner_tab.py:5657 ui_dialogs.py:1902 ui_dialogs.py:2854
+#: toner_tab.py:5657 ui_dialogs.py:1930 ui_dialogs.py:2882
 msgid "Export Error"
 msgstr ""
 
@@ -2982,7 +2982,7 @@ msgstr ""
 msgid "Import Tone Presets"
 msgstr ""
 
-#: toner_tab.py:5682 ui_dialogs.py:1916
+#: toner_tab.py:5682 ui_dialogs.py:1944
 #, python-brace-format
 msgid ""
 "Could not read file:\n"
@@ -3084,7 +3084,7 @@ msgstr ""
 msgid "Height:"
 msgstr ""
 
-#: tooling_tab.py:183 tooling_tab.py:275 tooling_tab.py:528 ui_dialogs.py:1251
+#: tooling_tab.py:183 tooling_tab.py:275 tooling_tab.py:528 ui_dialogs.py:1258
 msgid "in"
 msgstr ""
 
@@ -3150,7 +3150,7 @@ msgstr ""
 msgid "Pattern size: 110 × 54 mm (4.3 × 2.1 in)"
 msgstr ""
 
-#: tooling_tab.py:364 tooling_tab.py:428 ui_dialogs.py:6528
+#: tooling_tab.py:364 tooling_tab.py:428 ui_dialogs.py:6556
 msgid "Material:"
 msgstr ""
 
@@ -3166,7 +3166,7 @@ msgstr ""
 msgid "Cut speed:"
 msgstr ""
 
-#: tooling_tab.py:389 tooling_tab.py:572 ui_dialogs.py:3986
+#: tooling_tab.py:389 tooling_tab.py:572 ui_dialogs.py:4014
 msgid "mm/min"
 msgstr ""
 
@@ -3216,15 +3216,15 @@ msgid ""
 "End. Unchecked → held constant at \"Value\"."
 msgstr ""
 
-#: tooling_tab.py:471 ui_dialogs.py:4069
+#: tooling_tab.py:471 ui_dialogs.py:4097
 msgid "Speed (mm/min)"
 msgstr ""
 
-#: tooling_tab.py:472 ui_dialogs.py:4071
+#: tooling_tab.py:472 ui_dialogs.py:4099
 msgid "Power (%)"
 msgstr ""
 
-#: tooling_tab.py:473 ui_dialogs.py:4073
+#: tooling_tab.py:473 ui_dialogs.py:4101
 msgid "Passes"
 msgstr ""
 
@@ -3314,7 +3314,7 @@ msgid ""
 "Continue?"
 msgstr ""
 
-#: tooling_tab.py:827 ui_dialogs.py:3342 ui_dialogs.py:3456
+#: tooling_tab.py:827 ui_dialogs.py:3370 ui_dialogs.py:3484
 msgid "No Camera"
 msgstr ""
 
@@ -3597,7 +3597,7 @@ msgstr ""
 msgid "Speed & Power Test — {fname}"
 msgstr ""
 
-#: tooling_tab.py:1775 ui_dialogs.py:6355
+#: tooling_tab.py:1775 ui_dialogs.py:6383
 #, python-brace-format
 msgid "Material: {m}"
 msgstr ""
@@ -3915,7 +3915,7 @@ msgstr ""
 msgid "Hidden corner."
 msgstr ""
 
-#: ui_dialogs.py:308 ui_dialogs.py:1623
+#: ui_dialogs.py:308 ui_dialogs.py:1630
 msgid "Revert to Defaults"
 msgstr ""
 
@@ -3925,11 +3925,11 @@ msgid ""
 "with caution — this clears your current settings here)."
 msgstr ""
 
-#: ui_dialogs.py:442
+#: ui_dialogs.py:449
 msgid "Invalid value"
 msgstr ""
 
-#: ui_dialogs.py:443
+#: ui_dialogs.py:450
 #, python-brace-format
 msgid ""
 "One of the numeric fields is empty or not a number.\n"
@@ -3937,475 +3937,475 @@ msgid ""
 "Please fix it before you {action}."
 msgstr ""
 
-#: ui_dialogs.py:444
+#: ui_dialogs.py:451
 msgid "continue"
 msgstr ""
 
-#: ui_dialogs.py:491
+#: ui_dialogs.py:498
 msgid "Show live pad preview"
 msgstr ""
 
-#: ui_dialogs.py:498
+#: ui_dialogs.py:505
 msgid ""
 "Open a resizable window that draws what the pad will look like with the "
 "current sizing rules. Pick a pad size and which materials to show; the "
 "preview updates live as you edit settings here."
 msgstr ""
 
-#: ui_dialogs.py:504
+#: ui_dialogs.py:511
 msgid "Sheet Units"
 msgstr ""
 
-#: ui_dialogs.py:509
+#: ui_dialogs.py:516
 msgid "Inches (in)"
 msgstr ""
 
-#: ui_dialogs.py:511
+#: ui_dialogs.py:518
 msgid "Centimeters (cm)"
 msgstr ""
 
-#: ui_dialogs.py:513
+#: ui_dialogs.py:520
 msgid "Millimeters (mm)"
 msgstr ""
 
-#: ui_dialogs.py:517
+#: ui_dialogs.py:524
 msgid "Sizing Rules (Advanced)"
 msgstr ""
 
-#: ui_dialogs.py:529 ui_dialogs.py:619 ui_dialogs.py:812 ui_dialogs.py:914
+#: ui_dialogs.py:536 ui_dialogs.py:626 ui_dialogs.py:819 ui_dialogs.py:921
 msgid "Universal"
 msgstr ""
 
-#: ui_dialogs.py:532 ui_dialogs.py:622 ui_dialogs.py:815 ui_dialogs.py:917
+#: ui_dialogs.py:539 ui_dialogs.py:629 ui_dialogs.py:822 ui_dialogs.py:924
 msgid "Per Size Range"
 msgstr ""
 
-#: ui_dialogs.py:551 ui_dialogs.py:708 ui_dialogs.py:849 ui_dialogs.py:983
+#: ui_dialogs.py:558 ui_dialogs.py:715 ui_dialogs.py:856 ui_dialogs.py:990
 msgid "Range:"
 msgstr ""
 
-#: ui_dialogs.py:556
+#: ui_dialogs.py:563
 msgid ""
 "Pick a defined size range to edit, or use Add Range below to create a new"
 " one."
 msgstr ""
 
-#: ui_dialogs.py:559 ui_dialogs.py:717 ui_dialogs.py:857 ui_dialogs.py:991
+#: ui_dialogs.py:566 ui_dialogs.py:724 ui_dialogs.py:864 ui_dialogs.py:998
 msgid "Min Size (mm):"
 msgstr ""
 
-#: ui_dialogs.py:563 ui_dialogs.py:723 ui_dialogs.py:861 ui_dialogs.py:995
+#: ui_dialogs.py:570 ui_dialogs.py:730 ui_dialogs.py:868 ui_dialogs.py:1002
 msgid "Max Size (mm):"
 msgstr ""
 
-#: ui_dialogs.py:568
+#: ui_dialogs.py:575
 msgid "Lower bound (inclusive) of this size range, in millimeters."
 msgstr ""
 
-#: ui_dialogs.py:572
+#: ui_dialogs.py:579
 msgid "Upper bound (inclusive) of this size range, in millimeters."
 msgstr ""
 
-#: ui_dialogs.py:584 ui_dialogs.py:787 ui_dialogs.py:890 ui_dialogs.py:1032
+#: ui_dialogs.py:591 ui_dialogs.py:794 ui_dialogs.py:897 ui_dialogs.py:1039
 msgid "Add Range"
 msgstr ""
 
-#: ui_dialogs.py:586 ui_dialogs.py:789 ui_dialogs.py:892 ui_dialogs.py:1034
+#: ui_dialogs.py:593 ui_dialogs.py:796 ui_dialogs.py:899 ui_dialogs.py:1041
 msgid "Update"
 msgstr ""
 
-#: ui_dialogs.py:590
+#: ui_dialogs.py:597
 msgid "Add a new size range using the values entered above."
 msgstr ""
 
-#: ui_dialogs.py:591 ui_dialogs.py:794 ui_dialogs.py:897 ui_dialogs.py:1039
+#: ui_dialogs.py:598 ui_dialogs.py:801 ui_dialogs.py:904 ui_dialogs.py:1046
 msgid "Save the values above into the currently selected range."
 msgstr ""
 
-#: ui_dialogs.py:592 ui_dialogs.py:795 ui_dialogs.py:898 ui_dialogs.py:1040
+#: ui_dialogs.py:599 ui_dialogs.py:802 ui_dialogs.py:905 ui_dialogs.py:1047
 msgid "Delete the currently selected range."
 msgstr ""
 
-#: ui_dialogs.py:597
+#: ui_dialogs.py:604
 msgid "Darts"
 msgstr ""
 
-#: ui_dialogs.py:601
+#: ui_dialogs.py:608
 msgid "Enable Darts"
 msgstr ""
 
-#: ui_dialogs.py:606
+#: ui_dialogs.py:613
 msgid ""
 "When on, leather discs below the threshold size get a dart cutout so the "
 "leather can fold around the felt without bunching."
 msgstr ""
 
-#: ui_dialogs.py:631
+#: ui_dialogs.py:638
 msgid "Use Darts below (mm):"
 msgstr ""
 
-#: ui_dialogs.py:636
+#: ui_dialogs.py:643
 msgid ""
 "Pad sizes at or below this value get a darted cut. Larger pads are cut as"
 " a plain wrap with no darts."
 msgstr ""
 
-#: ui_dialogs.py:641
+#: ui_dialogs.py:648
 msgid "Dart Safe Overwrap (Valley) (mm):"
 msgstr ""
 
-#: ui_dialogs.py:646
+#: ui_dialogs.py:653
 msgid ""
 "How far each dart valley overlaps the felt edge. Larger values leave more"
 " material in the valleys (safer wrap, more bunching). 0.5 mm is a typical"
 " default."
 msgstr ""
 
-#: ui_dialogs.py:652
+#: ui_dialogs.py:659
 msgid "Dart Wrap Bonus (Adds to Tip) (mm):"
 msgstr ""
 
-#: ui_dialogs.py:657
+#: ui_dialogs.py:664
 msgid ""
 "Extra material added to each dart tip. Larger values produce longer, "
 "pointier tips with more leather to wrap with."
 msgstr ""
 
-#: ui_dialogs.py:662
+#: ui_dialogs.py:669
 msgid "Dart Frequency Multiplier (1.0=Default):"
 msgstr ""
 
-#: ui_dialogs.py:667
+#: ui_dialogs.py:674
 msgid ""
 "Scales the number of dart points. 1.0 = default count; >1.0 = more, finer"
 " points; <1.0 = fewer, chunkier points."
 msgstr ""
 
-#: ui_dialogs.py:681 ui_dialogs.py:760
+#: ui_dialogs.py:688 ui_dialogs.py:767
 msgid "Shape:"
 msgstr ""
 
-#: ui_dialogs.py:683 ui_dialogs.py:762
+#: ui_dialogs.py:690 ui_dialogs.py:769
 msgid "Triangle"
 msgstr ""
 
-#: ui_dialogs.py:689 ui_dialogs.py:768
+#: ui_dialogs.py:696 ui_dialogs.py:775
 msgid "Square"
 msgstr ""
 
-#: ui_dialogs.py:694 ui_dialogs.py:778
+#: ui_dialogs.py:701 ui_dialogs.py:785
 msgid "Show Label on Dart Pads"
 msgstr ""
 
-#: ui_dialogs.py:698
+#: ui_dialogs.py:705
 msgid ""
 "Engrave the size number on darted leather pads. Helpful for sorting them "
 "out after cutting."
 msgstr ""
 
-#: ui_dialogs.py:713
+#: ui_dialogs.py:720
 msgid ""
 "Pick a defined dart size range to edit, or use Add Range to define a new "
 "one."
 msgstr ""
 
-#: ui_dialogs.py:721
+#: ui_dialogs.py:728
 msgid "Lower bound (inclusive) of this dart size range."
 msgstr ""
 
-#: ui_dialogs.py:727
+#: ui_dialogs.py:734
 msgid "Upper bound (inclusive) of this dart size range."
 msgstr ""
 
-#: ui_dialogs.py:729
+#: ui_dialogs.py:736
 msgid "Overwrap (Valley) (mm):"
 msgstr ""
 
-#: ui_dialogs.py:734
+#: ui_dialogs.py:741
 msgid ""
 "Overlap at the dart valleys for this range. Larger values leave more "
 "material in the valleys."
 msgstr ""
 
-#: ui_dialogs.py:739
+#: ui_dialogs.py:746
 msgid "Wrap Bonus (Tip) (mm):"
 msgstr ""
 
-#: ui_dialogs.py:744
+#: ui_dialogs.py:751
 msgid "Extra material added to each dart tip for this range."
 msgstr ""
 
-#: ui_dialogs.py:748
+#: ui_dialogs.py:755
 msgid "Frequency Multiplier:"
 msgstr ""
 
-#: ui_dialogs.py:753
+#: ui_dialogs.py:760
 msgid ""
 "Number of points multiplier for this range. 1.0 = default; >1.0 = more, "
 "finer points; <1.0 = fewer, chunkier points."
 msgstr ""
 
-#: ui_dialogs.py:771
+#: ui_dialogs.py:778
 msgid ""
 "Dart wave shape for this range. Triangle = sharp linear ramps; Sine "
 "(slider centered) = smooth curves; Square = flats with steep transitions."
 msgstr ""
 
-#: ui_dialogs.py:782
+#: ui_dialogs.py:789
 msgid "Engrave the size number on darted leather pads in this range."
 msgstr ""
 
-#: ui_dialogs.py:793
+#: ui_dialogs.py:800
 msgid "Add a new dart range using the values entered above."
 msgstr ""
 
-#: ui_dialogs.py:801
+#: ui_dialogs.py:808
 msgid "Engraving Settings (Standard Pads)"
 msgstr ""
 
-#: ui_dialogs.py:822 ui_dialogs.py:868
+#: ui_dialogs.py:829 ui_dialogs.py:875
 msgid "Show Size Label"
 msgstr ""
 
-#: ui_dialogs.py:825
+#: ui_dialogs.py:832
 msgid "Engrave the pad-size number on each disc for identification."
 msgstr ""
 
-#: ui_dialogs.py:827 ui_dialogs.py:873
+#: ui_dialogs.py:834 ui_dialogs.py:880
 msgid "Font Sizes (mm)"
 msgstr ""
 
-#: ui_dialogs.py:839
+#: ui_dialogs.py:846
 #, python-brace-format
 msgid "Engraving font size in millimeters for {material} discs."
 msgstr ""
 
-#: ui_dialogs.py:854
+#: ui_dialogs.py:861
 msgid ""
 "Pick an engraving-settings range to edit, or use Add Range to define a "
 "new one."
 msgstr ""
 
-#: ui_dialogs.py:865 ui_dialogs.py:999
+#: ui_dialogs.py:872 ui_dialogs.py:1006
 msgid "Lower bound (inclusive) of this size range."
 msgstr ""
 
-#: ui_dialogs.py:866 ui_dialogs.py:1000
+#: ui_dialogs.py:873 ui_dialogs.py:1007
 msgid "Upper bound (inclusive) of this size range."
 msgstr ""
 
-#: ui_dialogs.py:871
+#: ui_dialogs.py:878
 msgid "Engrave the size number on pads in this size range."
 msgstr ""
 
-#: ui_dialogs.py:884
+#: ui_dialogs.py:891
 #, python-brace-format
 msgid "Engraving font size for {material} pads in this range."
 msgstr ""
 
-#: ui_dialogs.py:896
+#: ui_dialogs.py:903
 msgid "Add a new engraving-settings range using the values above."
 msgstr ""
 
-#: ui_dialogs.py:903
+#: ui_dialogs.py:910
 msgid "Engraving Placement"
 msgstr ""
 
-#: ui_dialogs.py:929
+#: ui_dialogs.py:936
 msgid "Darted leather"
 msgstr ""
 
-#: ui_dialogs.py:932
+#: ui_dialogs.py:939
 msgid "Exact size"
 msgstr ""
 
-#: ui_dialogs.py:957 ui_dialogs.py:1013
+#: ui_dialogs.py:964 ui_dialogs.py:1020
 msgid "out"
 msgstr ""
 
-#: ui_dialogs.py:961 ui_dialogs.py:1015
+#: ui_dialogs.py:968 ui_dialogs.py:1022
 msgid "int"
 msgstr ""
 
-#: ui_dialogs.py:972
+#: ui_dialogs.py:979
 msgid ""
 "Distance in millimeters from the chosen reference (outside, inside, or "
 "centered)."
 msgstr ""
 
-#: ui_dialogs.py:988
+#: ui_dialogs.py:995
 msgid ""
 "Pick an engraving-placement range to edit, or use Add Range to define a "
 "new one."
 msgstr ""
 
-#: ui_dialogs.py:1026
+#: ui_dialogs.py:1033
 msgid "Distance from the chosen reference, in millimeters."
 msgstr ""
 
-#: ui_dialogs.py:1038
+#: ui_dialogs.py:1045
 msgid "Add a new engraving-placement range using the values above."
 msgstr ""
 
-#: ui_dialogs.py:1044
+#: ui_dialogs.py:1051
 msgid "Export Settings"
 msgstr ""
 
-#: ui_dialogs.py:1047
+#: ui_dialogs.py:1054
 msgid "Enable Inkscape/Compatibility Mode (unitless SVG)"
 msgstr ""
 
-#: ui_dialogs.py:1051
+#: ui_dialogs.py:1058
 msgid ""
 "Write SVGs without explicit unit attributes. Turn on if Inkscape (or "
 "other software) misinterprets the file scale. LightBurn does not need "
 "this."
 msgstr ""
 
-#: ui_dialogs.py:1057
+#: ui_dialogs.py:1064
 msgid "Sizing Rules Preset"
 msgstr ""
 
-#: ui_dialogs.py:1062 ui_dialogs.py:4378
+#: ui_dialogs.py:1069 ui_dialogs.py:4406
 msgid "Preset:"
 msgstr ""
 
-#: ui_dialogs.py:1067 ui_dialogs.py:2435 ui_dialogs.py:2449 ui_dialogs.py:2453
-#: ui_dialogs.py:4572
+#: ui_dialogs.py:1074 ui_dialogs.py:2463 ui_dialogs.py:2477 ui_dialogs.py:2481
+#: ui_dialogs.py:4600
 msgid "Save Preset"
 msgstr ""
 
-#: ui_dialogs.py:1070
+#: ui_dialogs.py:1077
 msgid ""
 "Saved snapshots of every value in this dialog. Pick one and click Load to"
 " fill the form below."
 msgstr ""
 
-#: ui_dialogs.py:1073
+#: ui_dialogs.py:1080
 msgid ""
 "Fill the form below from the selected preset. Click Apply at the bottom "
 "to commit it to the app."
 msgstr ""
 
-#: ui_dialogs.py:1076
+#: ui_dialogs.py:1083
 msgid ""
 "Save the current form as a preset — overwrite an existing one or create a"
 " new one (you'll be asked)."
 msgstr ""
 
-#: ui_dialogs.py:1081 ui_dialogs.py:4389
+#: ui_dialogs.py:1088 ui_dialogs.py:4417
 msgid "Rename"
 msgstr ""
 
-#: ui_dialogs.py:1085
+#: ui_dialogs.py:1092
 msgid "Import..."
 msgstr ""
 
-#: ui_dialogs.py:1087
+#: ui_dialogs.py:1094
 msgid "Export..."
 msgstr ""
 
-#: ui_dialogs.py:1090
+#: ui_dialogs.py:1097
 msgid "Rename the selected preset."
 msgstr ""
 
-#: ui_dialogs.py:1092
+#: ui_dialogs.py:1099
 msgid ""
 "Remove the selected preset (cannot be undone). At least one preset must "
 "remain."
 msgstr ""
 
-#: ui_dialogs.py:1095
+#: ui_dialogs.py:1102
 msgid "Add presets from a JSON file shared by another tech."
 msgstr ""
 
-#: ui_dialogs.py:1097
+#: ui_dialogs.py:1104
 msgid "Save the entire preset library to a JSON file you can share."
 msgstr ""
 
-#: ui_dialogs.py:1169 ui_dialogs.py:1183 ui_dialogs.py:1321 ui_dialogs.py:1334
-#: ui_dialogs.py:1401 ui_dialogs.py:1414 ui_dialogs.py:1484 ui_dialogs.py:1497
+#: ui_dialogs.py:1176 ui_dialogs.py:1190 ui_dialogs.py:1328 ui_dialogs.py:1341
+#: ui_dialogs.py:1408 ui_dialogs.py:1421 ui_dialogs.py:1491 ui_dialogs.py:1504
 msgid "Invalid Range"
 msgstr ""
 
-#: ui_dialogs.py:1169 ui_dialogs.py:1183 ui_dialogs.py:1321 ui_dialogs.py:1334
-#: ui_dialogs.py:1401 ui_dialogs.py:1414 ui_dialogs.py:1484 ui_dialogs.py:1497
+#: ui_dialogs.py:1176 ui_dialogs.py:1190 ui_dialogs.py:1328 ui_dialogs.py:1341
+#: ui_dialogs.py:1408 ui_dialogs.py:1421 ui_dialogs.py:1491 ui_dialogs.py:1504
 msgid "Min size must be less than max size."
 msgstr ""
 
-#: ui_dialogs.py:1179 ui_dialogs.py:1193 ui_dialogs.py:1330 ui_dialogs.py:1343
-#: ui_dialogs.py:1410 ui_dialogs.py:1423 ui_dialogs.py:1493 ui_dialogs.py:1506
-#: ui_dialogs.py:2816
+#: ui_dialogs.py:1186 ui_dialogs.py:1200 ui_dialogs.py:1337 ui_dialogs.py:1350
+#: ui_dialogs.py:1417 ui_dialogs.py:1430 ui_dialogs.py:1500 ui_dialogs.py:1513
+#: ui_dialogs.py:2844
 msgid "No Selection"
 msgstr ""
 
-#: ui_dialogs.py:1179 ui_dialogs.py:1330 ui_dialogs.py:1410 ui_dialogs.py:1493
+#: ui_dialogs.py:1186 ui_dialogs.py:1337 ui_dialogs.py:1417 ui_dialogs.py:1500
 msgid "Select a range to update."
 msgstr ""
 
-#: ui_dialogs.py:1193 ui_dialogs.py:1343 ui_dialogs.py:1423 ui_dialogs.py:1506
+#: ui_dialogs.py:1200 ui_dialogs.py:1350 ui_dialogs.py:1430 ui_dialogs.py:1513
 msgid "Select a range to delete."
 msgstr ""
 
-#: ui_dialogs.py:1203
+#: ui_dialogs.py:1210
 msgid "Felt Diameter Reduction (mm):"
 msgstr ""
 
-#: ui_dialogs.py:1208
+#: ui_dialogs.py:1215
 msgid ""
 "How much smaller the felt disc is than the pad-cup size you enter. 0.75 "
 "mm means the felt disc is cut 0.75 mm under the stated diameter."
 msgstr ""
 
-#: ui_dialogs.py:1214
+#: ui_dialogs.py:1221
 msgid "Card Additional Reduction (mm):"
 msgstr ""
 
-#: ui_dialogs.py:1219
+#: ui_dialogs.py:1226
 msgid ""
 "Extra reduction applied on top of the felt offset for the cardboard "
 "backing disc — keeps the card just under the felt."
 msgstr ""
 
-#: ui_dialogs.py:1224
+#: ui_dialogs.py:1231
 msgid "Leather Wrap Multiplier (1.00=default):"
 msgstr ""
 
-#: ui_dialogs.py:1229
+#: ui_dialogs.py:1236
 msgid ""
 "Controls how much extra leather is added to wrap around the felt. 1.00 = "
 "standard wrap; raise to add more wrap, lower to take some away."
 msgstr ""
 
-#: ui_dialogs.py:1235
+#: ui_dialogs.py:1242
 msgid "Min. Pad Size for Hole (mm):"
 msgstr ""
 
-#: ui_dialogs.py:1240
+#: ui_dialogs.py:1247
 msgid ""
 "Pads smaller than this size skip the center mounting hole automatically —"
 " they're too small for it to be useful."
 msgstr ""
 
-#: ui_dialogs.py:1247
+#: ui_dialogs.py:1254
 msgid "Felt Thickness:"
 msgstr ""
 
-#: ui_dialogs.py:1256
+#: ui_dialogs.py:1263
 msgid ""
 "Thickness of the felt you're using. Feeds into the leather-wrap "
 "calculation so the wrap accounts for the felt's side wall."
 msgstr ""
 
-#: ui_dialogs.py:1524
+#: ui_dialogs.py:1531
 msgid "apply"
 msgstr ""
 
-#: ui_dialogs.py:1531
+#: ui_dialogs.py:1538
 msgid "Save changes as a preset?"
 msgstr ""
 
-#: ui_dialogs.py:1532
+#: ui_dialogs.py:1539
 msgid ""
 "You have edits that aren't captured in any preset.\n"
 "\n"
@@ -4415,11 +4415,11 @@ msgid ""
 "No   — go back to the sizing dialog without applying."
 msgstr ""
 
-#: ui_dialogs.py:1558 ui_dialogs.py:4675 ui_dialogs.py:4684
+#: ui_dialogs.py:1565 ui_dialogs.py:4703 ui_dialogs.py:4712
 msgid "Unsaved changes"
 msgstr ""
 
-#: ui_dialogs.py:1559
+#: ui_dialogs.py:1566
 msgid ""
 "You have edits that aren't captured in any preset.\n"
 "\n"
@@ -4428,25 +4428,25 @@ msgid ""
 "Cancel  — keep editing."
 msgstr ""
 
-#: ui_dialogs.py:1623
+#: ui_dialogs.py:1630
 msgid "Are you sure you want to revert all settings to their original defaults?"
 msgstr ""
 
-#: ui_dialogs.py:1784 ui_dialogs.py:1828 ui_dialogs.py:1863 ui_dialogs.py:4535
-#: ui_dialogs.py:4589 ui_dialogs.py:4626
+#: ui_dialogs.py:1812 ui_dialogs.py:1856 ui_dialogs.py:1891 ui_dialogs.py:4563
+#: ui_dialogs.py:4617 ui_dialogs.py:4654
 msgid "Pick a preset from the dropdown first."
 msgstr ""
 
-#: ui_dialogs.py:1787 ui_dialogs.py:4540
+#: ui_dialogs.py:1815 ui_dialogs.py:4568
 #, python-brace-format
 msgid "Preset '{name}' not found."
 msgstr ""
 
-#: ui_dialogs.py:1793 ui_dialogs.py:4546
+#: ui_dialogs.py:1821 ui_dialogs.py:4574
 msgid "Discard unsaved changes?"
 msgstr ""
 
-#: ui_dialogs.py:1794 ui_dialogs.py:4547
+#: ui_dialogs.py:1822 ui_dialogs.py:4575
 #, python-brace-format
 msgid ""
 "You have unsaved edits to {label}.\n"
@@ -4454,314 +4454,314 @@ msgid ""
 "Loading '{name}' will discard them. Continue?"
 msgstr ""
 
-#: ui_dialogs.py:1804
+#: ui_dialogs.py:1832
 msgid "save it as a preset"
 msgstr ""
 
-#: ui_dialogs.py:1828 ui_dialogs.py:1831 ui_dialogs.py:1843 ui_dialogs.py:1849
-#: ui_dialogs.py:4588 ui_dialogs.py:4593 ui_dialogs.py:4602 ui_dialogs.py:4609
+#: ui_dialogs.py:1856 ui_dialogs.py:1859 ui_dialogs.py:1871 ui_dialogs.py:1877
+#: ui_dialogs.py:4616 ui_dialogs.py:4621 ui_dialogs.py:4630 ui_dialogs.py:4637
 msgid "Rename Preset"
 msgstr ""
 
-#: ui_dialogs.py:1832 ui_dialogs.py:4594
+#: ui_dialogs.py:1860 ui_dialogs.py:4622
 #, python-brace-format
 msgid "New name for '{old}':"
 msgstr ""
 
-#: ui_dialogs.py:1843 ui_dialogs.py:2449 ui_dialogs.py:4603
+#: ui_dialogs.py:1871 ui_dialogs.py:2477 ui_dialogs.py:4631
 msgid "Preset name cannot be empty."
 msgstr ""
 
-#: ui_dialogs.py:1850 ui_dialogs.py:4610
+#: ui_dialogs.py:1878 ui_dialogs.py:4638
 #, python-brace-format
 msgid "A preset named '{new}' already exists."
 msgstr ""
 
-#: ui_dialogs.py:1868
+#: ui_dialogs.py:1896
 msgid ""
 "At least one sizing preset must remain. Save another preset before "
 "deleting this one."
 msgstr ""
 
-#: ui_dialogs.py:1873 ui_dialogs.py:4638
+#: ui_dialogs.py:1901 ui_dialogs.py:4666
 #, python-brace-format
 msgid "Delete preset '{name}'?"
 msgstr ""
 
-#: ui_dialogs.py:1883
+#: ui_dialogs.py:1911
 msgid "Export Presets"
 msgstr ""
 
-#: ui_dialogs.py:1883
+#: ui_dialogs.py:1911
 msgid "There are no sizing presets to export."
 msgstr ""
 
-#: ui_dialogs.py:1887
+#: ui_dialogs.py:1915
 msgid "Export Sizing Presets"
 msgstr ""
 
-#: ui_dialogs.py:1899
+#: ui_dialogs.py:1927
 #, python-brace-format
 msgid "Exported {count} preset(s)."
 msgstr ""
 
-#: ui_dialogs.py:1902 ui_dialogs.py:2854
+#: ui_dialogs.py:1930 ui_dialogs.py:2882
 #, python-brace-format
 msgid ""
 "Could not export presets:\n"
 "{e}"
 msgstr ""
 
-#: ui_dialogs.py:1907
+#: ui_dialogs.py:1935
 msgid "Import Sizing Presets"
 msgstr ""
 
-#: ui_dialogs.py:1919
+#: ui_dialogs.py:1947
 msgid "File does not contain any sizing presets."
 msgstr ""
 
-#: ui_dialogs.py:1943
+#: ui_dialogs.py:1971
 msgid "No valid sizing presets found in that file."
 msgstr ""
 
-#: ui_dialogs.py:1951 ui_dialogs.py:2950
+#: ui_dialogs.py:1979 ui_dialogs.py:2978
 msgid "Import Successful"
 msgstr ""
 
-#: ui_dialogs.py:1983
+#: ui_dialogs.py:2011
 msgid "Pad Preview"
 msgstr ""
 
-#: ui_dialogs.py:2022
+#: ui_dialogs.py:2050
 msgid "Preview pad size:"
 msgstr ""
 
-#: ui_dialogs.py:2028
+#: ui_dialogs.py:2056
 msgid ""
 "Diameter (in mm) of the pad to render. The preview applies the parent "
 "dialog's sizing rules to this size."
 msgstr ""
 
-#: ui_dialogs.py:2037
+#: ui_dialogs.py:2065
 msgid "Materials:"
 msgstr ""
 
-#: ui_dialogs.py:2049
+#: ui_dialogs.py:2077
 msgid "Layout:"
 msgstr ""
 
-#: ui_dialogs.py:2051
+#: ui_dialogs.py:2079
 msgid "Layered (concentric)"
 msgstr ""
 
-#: ui_dialogs.py:2057
+#: ui_dialogs.py:2085
 msgid "Side by side"
 msgstr ""
 
-#: ui_dialogs.py:2064
+#: ui_dialogs.py:2092
 msgid ""
 "Stack each material on the same center, like the layers of a finished "
 "pad. Smaller materials draw on top."
 msgstr ""
 
-#: ui_dialogs.py:2069
+#: ui_dialogs.py:2097
 msgid ""
 "Lay the discs out in a row at consistent scale, so you can compare "
 "diameters at a glance."
 msgstr ""
 
-#: ui_dialogs.py:2237
+#: ui_dialogs.py:2265
 #, python-brace-format
 msgid ""
 "{label}\n"
 "{mm:.1f} mm"
 msgstr ""
 
-#: ui_dialogs.py:2339
+#: ui_dialogs.py:2367
 msgid "Save Sizing Preset"
 msgstr ""
 
-#: ui_dialogs.py:2364
+#: ui_dialogs.py:2392
 msgid "Save the current sizing-rules form as a preset."
 msgstr ""
 
-#: ui_dialogs.py:2372
+#: ui_dialogs.py:2400
 msgid "Overwrite existing:"
 msgstr ""
 
-#: ui_dialogs.py:2391
+#: ui_dialogs.py:2419
 msgid "Save as new preset:"
 msgstr ""
 
-#: ui_dialogs.py:2435
+#: ui_dialogs.py:2463
 msgid "Pick a preset to overwrite."
 msgstr ""
 
-#: ui_dialogs.py:2438
+#: ui_dialogs.py:2466
 msgid "Overwrite Preset"
 msgstr ""
 
-#: ui_dialogs.py:2439
+#: ui_dialogs.py:2467
 #, python-brace-format
 msgid "Overwrite '{target}' with the current values?"
 msgstr ""
 
-#: ui_dialogs.py:2454
+#: ui_dialogs.py:2482
 #, python-brace-format
 msgid ""
 "A preset named '{name}' already exists.\n"
 "Use Overwrite, or choose a different name."
 msgstr ""
 
-#: ui_dialogs.py:2468
+#: ui_dialogs.py:2496
 msgid "Layer Color Mapping"
 msgstr ""
 
-#: ui_dialogs.py:2522
+#: ui_dialogs.py:2550
 msgid "Apply the color choices and close."
 msgstr ""
 
-#: ui_dialogs.py:2523
+#: ui_dialogs.py:2551
 msgid "Close without changing layer colors."
 msgstr ""
 
-#: ui_dialogs.py:2540
+#: ui_dialogs.py:2568
 msgid "Key Height Layout Options"
 msgstr ""
 
-#: ui_dialogs.py:2554
+#: ui_dialogs.py:2582
 msgid "Apply the layout changes and close."
 msgstr ""
 
-#: ui_dialogs.py:2555
+#: ui_dialogs.py:2583
 msgid "Close without changing the layout."
 msgstr ""
 
-#: ui_dialogs.py:2579
+#: ui_dialogs.py:2607
 msgid "Horn Info Layout"
 msgstr ""
 
-#: ui_dialogs.py:2585
+#: ui_dialogs.py:2613
 msgid "Show 'Serial' field"
 msgstr ""
 
-#: ui_dialogs.py:2588
+#: ui_dialogs.py:2616
 msgid ""
 "Show a Serial field in the horn-info header for each key-height set, so "
 "you can record the saxophone's serial number alongside the measurements."
 msgstr ""
 
-#: ui_dialogs.py:2595
+#: ui_dialogs.py:2623
 msgid "Use large 'Notes' field"
 msgstr ""
 
-#: ui_dialogs.py:2598
+#: ui_dialogs.py:2626
 msgid ""
 "Use a multi-line Notes field instead of a single line, good for jotting "
 "setup observations or repair history."
 msgstr ""
 
-#: ui_dialogs.py:2601
+#: ui_dialogs.py:2629
 msgid "Visible Key Heights"
 msgstr ""
 
-#: ui_dialogs.py:2608
+#: ui_dialogs.py:2636
 #, python-brace-format
 msgid "Show '{key_name}' field"
 msgstr ""
 
-#: ui_dialogs.py:2611
+#: ui_dialogs.py:2639
 #, python-brace-format
 msgid ""
 "Show the '{key_name}' measurement field on key-height sets. Hide fields "
 "you never measure to keep the layout compact."
 msgstr ""
 
-#: ui_dialogs.py:2631
+#: ui_dialogs.py:2659
 msgid "Resonance Chamber"
 msgstr ""
 
-#: ui_dialogs.py:2640
+#: ui_dialogs.py:2668
 msgid "Add Resonance"
 msgstr ""
 
-#: ui_dialogs.py:2656
+#: ui_dialogs.py:2684
 msgid "Optimizing..."
 msgstr ""
 
-#: ui_dialogs.py:2662
+#: ui_dialogs.py:2690
 msgid "Applying resonance..."
 msgstr ""
 
-#: ui_dialogs.py:2684
+#: ui_dialogs.py:2712
 msgid "Power Overwhelming"
 msgstr ""
 
-#: ui_dialogs.py:2684
+#: ui_dialogs.py:2712
 msgid "You have become too powerful."
 msgstr ""
 
-#: ui_dialogs.py:2700
+#: ui_dialogs.py:2728
 msgid "Resetting..."
 msgstr ""
 
-#: ui_dialogs.py:2706
+#: ui_dialogs.py:2734
 msgid "Uninstalling resonance..."
 msgstr ""
 
-#: ui_dialogs.py:2743
+#: ui_dialogs.py:2771
 msgid "Select sets to export:"
 msgstr ""
 
-#: ui_dialogs.py:2748 ui_dialogs.py:2880 ui_dialogs.py:2984
+#: ui_dialogs.py:2776 ui_dialogs.py:2908 ui_dialogs.py:3012
 msgid "Select None"
 msgstr ""
 
-#: ui_dialogs.py:2762
+#: ui_dialogs.py:2790
 msgid "No local sets found."
 msgstr ""
 
-#: ui_dialogs.py:2785
+#: ui_dialogs.py:2813
 msgid "Export Selected"
 msgstr ""
 
-#: ui_dialogs.py:2816
+#: ui_dialogs.py:2844
 msgid "Please select at least one set to export."
 msgstr ""
 
-#: ui_dialogs.py:2822
+#: ui_dialogs.py:2850
 msgid "Provenance"
 msgstr ""
 
-#: ui_dialogs.py:2822
+#: ui_dialogs.py:2850
 msgid "Enter your name (for filename):"
-msgstr ""
-
-#: ui_dialogs.py:2839
-#, python-brace-format
-msgid "Save {title} As..."
-msgstr ""
-
-#: ui_dialogs.py:2851
-#, python-brace-format
-msgid "Successfully exported {count} sets."
 msgstr ""
 
 #: ui_dialogs.py:2867
 #, python-brace-format
+msgid "Save {title} As..."
+msgstr ""
+
+#: ui_dialogs.py:2879
+#, python-brace-format
+msgid "Successfully exported {count} sets."
+msgstr ""
+
+#: ui_dialogs.py:2895
+#, python-brace-format
 msgid "Import {preset_type_name}s"
 msgstr ""
 
-#: ui_dialogs.py:2875
+#: ui_dialogs.py:2903
 #, python-brace-format
 msgid "Select {preset_type_name}s to import:"
 msgstr ""
 
-#: ui_dialogs.py:2894
+#: ui_dialogs.py:2922
 msgid "No presets found in file."
 msgstr ""
 
-#: ui_dialogs.py:2951
+#: ui_dialogs.py:2979
 #, python-brace-format
 msgid ""
 "Import complete.\n"
@@ -4770,361 +4770,361 @@ msgid ""
 "Renamed due to conflicts: {renamed} presets"
 msgstr ""
 
-#: ui_dialogs.py:2953
+#: ui_dialogs.py:2981
 msgid "Could not save new presets to file."
 msgstr ""
 
-#: ui_dialogs.py:2955
+#: ui_dialogs.py:2983
 msgid "No new presets were imported."
 msgstr ""
 
-#: ui_dialogs.py:2978
+#: ui_dialogs.py:3006
 msgid "Select pad sets to import:"
 msgstr ""
 
-#: ui_dialogs.py:3064
+#: ui_dialogs.py:3092
 #, python-brace-format
 msgid "Imported {added} pad sets into {libs} library/libraries."
 msgstr ""
 
-#: ui_dialogs.py:3066
+#: ui_dialogs.py:3094
 msgid "Could not save presets to file."
 msgstr ""
 
-#: ui_dialogs.py:3068
+#: ui_dialogs.py:3096
 msgid "No pad sets were imported."
 msgstr ""
 
-#: ui_dialogs.py:3080
+#: ui_dialogs.py:3108
 msgid "Select Import Library"
 msgstr ""
 
-#: ui_dialogs.py:3088
+#: ui_dialogs.py:3116
 msgid "Where do you want to add these sets?"
 msgstr ""
 
-#: ui_dialogs.py:3092
+#: ui_dialogs.py:3120
 msgid "Add to existing library:"
 msgstr ""
 
-#: ui_dialogs.py:3100
+#: ui_dialogs.py:3128
 msgid "Create new library:"
 msgstr ""
 
-#: ui_dialogs.py:3124
+#: ui_dialogs.py:3152
 msgid "No Library"
 msgstr ""
 
-#: ui_dialogs.py:3124
+#: ui_dialogs.py:3152
 msgid "Please select a library."
 msgstr ""
 
-#: ui_dialogs.py:3129
+#: ui_dialogs.py:3157
 msgid "No Name"
 msgstr ""
 
-#: ui_dialogs.py:3129
+#: ui_dialogs.py:3157
 msgid "Please enter a name for the new library."
 msgstr ""
 
-#: ui_dialogs.py:3234
+#: ui_dialogs.py:3262
 msgid "Draw / Capture Shape"
 msgstr ""
 
-#: ui_dialogs.py:3236
+#: ui_dialogs.py:3264
 msgid "Draw Shape"
 msgstr ""
 
-#: ui_dialogs.py:3261
+#: ui_dialogs.py:3289
 #, python-brace-format
 msgid "Grid: {size}x{size} {unit_label} (1 square = 1 {unit})"
 msgstr ""
 
-#: ui_dialogs.py:3290
+#: ui_dialogs.py:3318
 msgid "Show live camera underneath"
 msgstr ""
 
-#: ui_dialogs.py:3304
+#: ui_dialogs.py:3332
 msgid "Get from camera"
 msgstr ""
 
-#: ui_dialogs.py:3307
+#: ui_dialogs.py:3335
 msgid "Submit"
 msgstr ""
 
-#: ui_dialogs.py:3343 ui_dialogs.py:3457
+#: ui_dialogs.py:3371 ui_dialogs.py:3485
 msgid "No cameras detected."
 msgstr ""
 
-#: ui_dialogs.py:3379
+#: ui_dialogs.py:3407
 #, python-brace-format
 msgid "Captured {n} points from camera"
 msgstr ""
 
-#: ui_dialogs.py:3448
+#: ui_dialogs.py:3476
 msgid "No camera calibration on disk."
 msgstr ""
 
-#: ui_dialogs.py:3450
+#: ui_dialogs.py:3478
 msgid "Camera Overlay Unavailable"
 msgstr ""
 
-#: ui_dialogs.py:3461
+#: ui_dialogs.py:3489
 msgid "Opening camera for overlay..."
 msgstr ""
 
-#: ui_dialogs.py:3470
+#: ui_dialogs.py:3498
 msgid "Camera no frame"
 msgstr ""
 
-#: ui_dialogs.py:3487
+#: ui_dialogs.py:3515
 msgid "Live camera underlay on."
 msgstr ""
 
-#: ui_dialogs.py:3491
+#: ui_dialogs.py:3519
 #, python-brace-format
 msgid "Camera open failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:3806
+#: ui_dialogs.py:3834
 msgid "Not Enough Points"
 msgstr ""
 
-#: ui_dialogs.py:3807
+#: ui_dialogs.py:3835
 msgid "Please draw at least 3 points to create a shape."
 msgstr ""
 
-#: ui_dialogs.py:3813
+#: ui_dialogs.py:3841
 msgid "Shape Not Closed"
 msgstr ""
 
-#: ui_dialogs.py:3814
+#: ui_dialogs.py:3842
 msgid "Please close the shape by clicking near the first point."
 msgstr ""
 
-#: ui_dialogs.py:3918
+#: ui_dialogs.py:3946
 msgid "Configure laser speed and power for each material and operation."
 msgstr ""
 
-#: ui_dialogs.py:3921
+#: ui_dialogs.py:3949
 msgid "Order: Engraving → Center Hole → Outer Cut"
 msgstr ""
 
-#: ui_dialogs.py:3924
+#: ui_dialogs.py:3952
 msgid ""
 "Note: Power uses Grbl's S0-S1000 scale. If power seems wrong, check that "
 "your machine's $30 setting is 1000 (run \"$30=1000\" in your console)."
 msgstr ""
 
-#: ui_dialogs.py:3959
+#: ui_dialogs.py:3987
 msgid "\"Filled\" engraving overscan optimization"
 msgstr ""
 
-#: ui_dialogs.py:3963
+#: ui_dialogs.py:3991
 msgid "(extends scan lines so laser is at full speed at character edges)"
 msgstr ""
 
-#: ui_dialogs.py:3967
+#: ui_dialogs.py:3995
 msgid ""
 "Extends each filled scan line a few millimeters past the character edges "
 "so the laser head reaches full speed before burning. Produces cleaner "
 "edges on filled engraving at the cost of slightly more travel time."
 msgstr ""
 
-#: ui_dialogs.py:3975
+#: ui_dialogs.py:4003
 msgid "Global Settings"
 msgstr ""
 
-#: ui_dialogs.py:3981
+#: ui_dialogs.py:4009
 msgid "Return-to-home speed:"
 msgstr ""
 
-#: ui_dialogs.py:3989
+#: ui_dialogs.py:4017
 msgid ""
 "How fast the laser head returns home after a job. Slower settings can "
 "avoid endstop crashes on machines with cheap limit switches; faster gets "
 "you to the next job sooner."
 msgstr ""
 
-#: ui_dialogs.py:3998
+#: ui_dialogs.py:4026
 msgid "Cut grouping:"
 msgstr ""
 
-#: ui_dialogs.py:4001
+#: ui_dialogs.py:4029
 msgid "By layer (all engravings, then all holes, then all cuts)"
 msgstr ""
 
-#: ui_dialogs.py:4005
+#: ui_dialogs.py:4033
 msgid "By pad (engrave + hole + cut for each pad, then next)"
 msgstr ""
 
-#: ui_dialogs.py:4009
+#: ui_dialogs.py:4037
 msgid ""
 "Run every engraving, then every hole, then every cut across the whole "
 "sheet. Good when you want to swap settings or check progress between "
 "layers."
 msgstr ""
 
-#: ui_dialogs.py:4013
+#: ui_dialogs.py:4041
 msgid ""
 "Finish each pad completely (engrave, hole, then cut) before moving on to "
 "the next. Good when you want each finished pad to drop free as it "
 "completes."
 msgstr ""
 
-#: ui_dialogs.py:4025
+#: ui_dialogs.py:4053
 msgid "Reset to Defaults"
 msgstr ""
 
-#: ui_dialogs.py:4027
+#: ui_dialogs.py:4055
 msgid "Apply the values in this dialog and close."
 msgstr ""
 
-#: ui_dialogs.py:4030
+#: ui_dialogs.py:4058
 msgid ""
 "Reset every value in this dialog back to factory defaults (tuned for the "
 "Creality Falcon2 Pro 40W)."
 msgstr ""
 
-#: ui_dialogs.py:4067
+#: ui_dialogs.py:4095
 msgid "Operation"
 msgstr ""
 
-#: ui_dialogs.py:4075
+#: ui_dialogs.py:4103
 msgid "Air"
 msgstr ""
 
-#: ui_dialogs.py:4077
+#: ui_dialogs.py:4105
 msgid "Feed rate in millimeters per minute."
 msgstr ""
 
-#: ui_dialogs.py:4079
+#: ui_dialogs.py:4107
 msgid ""
 "Laser power, 0–100 %. Mapped onto Grbl's S0–S1000 scale, so check that "
 "your machine's $30 setting is 1000 (`$30=1000` in your console) for the "
 "percentage to mean what it says."
 msgstr ""
 
-#: ui_dialogs.py:4084
+#: ui_dialogs.py:4112
 msgid ""
 "How many times to repeat each stroke in this layer. Two or more lower-"
 "power passes often cut thicker leather or acrylic cleaner than one high-"
 "power pass."
 msgstr ""
 
-#: ui_dialogs.py:4088
+#: ui_dialogs.py:4116
 msgid ""
 "Per-operation air-assist toggle. Sends M8 (on) before the operation and "
 "M9 (off) after."
 msgstr ""
 
-#: ui_dialogs.py:4112
+#: ui_dialogs.py:4140
 msgid "Engraving (Line)"
 msgstr ""
 
-#: ui_dialogs.py:4123
+#: ui_dialogs.py:4151
 msgid ""
 "Single-stroke outline engraving — traces each character path once. "
 "Faster, simpler text on this material."
 msgstr ""
 
-#: ui_dialogs.py:4125
+#: ui_dialogs.py:4153
 msgid "Feed rate for line-engraving on this material."
 msgstr ""
 
-#: ui_dialogs.py:4126
+#: ui_dialogs.py:4154
 msgid "Laser power for line-engraving on this material."
 msgstr ""
 
-#: ui_dialogs.py:4128
+#: ui_dialogs.py:4156
 msgid ""
 "How many times to repeat the line-engraving strokes. Default 1; raise it "
 "if a single pass leaves the text too faint on this material."
 msgstr ""
 
-#: ui_dialogs.py:4136
+#: ui_dialogs.py:4164
 msgid "Air-assist on during line-engraving on this material."
 msgstr ""
 
-#: ui_dialogs.py:4154
+#: ui_dialogs.py:4182
 msgid "Engraving (\"Filled\")"
 msgstr ""
 
-#: ui_dialogs.py:4165
+#: ui_dialogs.py:4193
 msgid ""
 "Scan-line raster fill of each character — solid filled glyphs. Slower "
 "than line-engraving but more legible on dark / soft materials."
 msgstr ""
 
-#: ui_dialogs.py:4168
+#: ui_dialogs.py:4196
 msgid "Feed rate for filled engraving on this material."
 msgstr ""
 
-#: ui_dialogs.py:4169
+#: ui_dialogs.py:4197
 msgid "Laser power for filled engraving on this material."
 msgstr ""
 
-#: ui_dialogs.py:4171
+#: ui_dialogs.py:4199
 msgid ""
 "How many times to repeat the filled-engraving scan. Default 1; raise it "
 "for darker, more solid coverage."
 msgstr ""
 
-#: ui_dialogs.py:4178
+#: ui_dialogs.py:4206
 msgid "Air-assist on during filled engraving on this material."
 msgstr ""
 
-#: ui_dialogs.py:4192
+#: ui_dialogs.py:4220
 msgid "Fill density:"
 msgstr ""
 
-#: ui_dialogs.py:4194 ui_dialogs.py:8331
+#: ui_dialogs.py:4222 ui_dialogs.py:8359
 msgid "less"
 msgstr ""
 
-#: ui_dialogs.py:4200 ui_dialogs.py:8319
+#: ui_dialogs.py:4228 ui_dialogs.py:8347
 msgid "more"
 msgstr ""
 
-#: ui_dialogs.py:4203
+#: ui_dialogs.py:4231
 msgid ""
 "Spacing between scan lines for filled engraving. Less = wider lines "
 "(faster, slightly visible gaps). More = tighter lines (slower, fully "
 "solid coverage)."
 msgstr ""
 
-#: ui_dialogs.py:4241
+#: ui_dialogs.py:4269
 #, python-brace-format
 msgid "Settings for the {descr} on this material."
 msgstr ""
 
-#: ui_dialogs.py:4242
+#: ui_dialogs.py:4270
 #, python-brace-format
 msgid "Feed rate for the {short} on this material."
 msgstr ""
 
-#: ui_dialogs.py:4243
+#: ui_dialogs.py:4271
 #, python-brace-format
 msgid "Laser power for the {short} on this material."
 msgstr ""
 
-#: ui_dialogs.py:4245
+#: ui_dialogs.py:4273
 #, python-brace-format
 msgid ""
 "How many times to repeat the {short} on this material. Default 1; raise "
 "it for thicker stock where one high-power pass leaves rough edges."
 msgstr ""
 
-#: ui_dialogs.py:4251
+#: ui_dialogs.py:4279
 #, python-brace-format
 msgid "Air-assist on during the {short} on this material."
 msgstr ""
 
-#: ui_dialogs.py:4255
+#: ui_dialogs.py:4283
 msgid "Kerf width:"
 msgstr ""
 
-#: ui_dialogs.py:4269
+#: ui_dialogs.py:4297
 msgid ""
 "Full kerf width measured from a calibration cut on this material (hole ID"
 " minus disc OD). The app splits this in half automatically — outer cuts "
@@ -5132,149 +5132,149 @@ msgid ""
 "for half-kerf; this dialog wants the full measured width."
 msgstr ""
 
-#: ui_dialogs.py:4281
+#: ui_dialogs.py:4309
 msgid "Die Engraving"
 msgstr ""
 
-#: ui_dialogs.py:4288
+#: ui_dialogs.py:4316
 msgid "Engraving:"
 msgstr ""
 
-#: ui_dialogs.py:4290
+#: ui_dialogs.py:4318
 msgid "Filled"
 msgstr ""
 
-#: ui_dialogs.py:4293
+#: ui_dialogs.py:4321
 msgid "Line"
 msgstr ""
 
-#: ui_dialogs.py:4297
+#: ui_dialogs.py:4325
 msgid ""
 "Solid raster fill of the size labels on dies. More legible on dark "
 "acrylic but slower."
 msgstr ""
 
-#: ui_dialogs.py:4300
+#: ui_dialogs.py:4328
 msgid ""
 "Single-stroke outline of the size labels on dies. Fastest; readable on "
 "light acrylic."
 msgstr ""
 
-#: ui_dialogs.py:4307
+#: ui_dialogs.py:4335
 msgid "Ring font size:"
 msgstr ""
 
-#: ui_dialogs.py:4315
+#: ui_dialogs.py:4343
 msgid ""
 "Font size in millimeters for the size label engraved on the die ring (the"
 " outer annulus that stays in the holder)."
 msgstr ""
 
-#: ui_dialogs.py:4320
+#: ui_dialogs.py:4348
 msgid "Cutout font size:"
 msgstr ""
 
-#: ui_dialogs.py:4328
+#: ui_dialogs.py:4356
 msgid ""
 "Font size in millimeters for the actual-size label engraved on the inner "
 "cutout disc (the piece that drops out of the ring — useful as a pad-cup "
 "tool)."
 msgstr ""
 
-#: ui_dialogs.py:4338
+#: ui_dialogs.py:4366
 msgid "Ring engraving placement:"
 msgstr ""
 
-#: ui_dialogs.py:4341
+#: ui_dialogs.py:4369
 msgid "Centered"
 msgstr ""
 
-#: ui_dialogs.py:4344
+#: ui_dialogs.py:4372
 msgid "From outside"
 msgstr ""
 
-#: ui_dialogs.py:4353
+#: ui_dialogs.py:4381
 msgid "Where the size label sits on the die ring annulus."
 msgstr ""
 
-#: ui_dialogs.py:4355
+#: ui_dialogs.py:4383
 msgid ""
 "Place the label centered between the inner hole and the outer edge of the"
 " ring."
 msgstr ""
 
-#: ui_dialogs.py:4358
+#: ui_dialogs.py:4386
 msgid ""
 "Place the label a fixed distance inward from the outer edge of the ring "
 "(set the distance below)."
 msgstr ""
 
-#: ui_dialogs.py:4361
+#: ui_dialogs.py:4389
 msgid ""
 "Distance from the ring's outer edge, in millimeters (used only with the "
 "From outside option)."
 msgstr ""
 
-#: ui_dialogs.py:4396
+#: ui_dialogs.py:4424
 #, python-brace-format
 msgid "Saved laser settings for {label}. Pick one and click Load."
 msgstr ""
 
-#: ui_dialogs.py:4398
+#: ui_dialogs.py:4426
 #, python-brace-format
 msgid ""
 "Fill the {label} fields below from the selected preset. Click Apply at "
 "the bottom to commit it to the app."
 msgstr ""
 
-#: ui_dialogs.py:4401
+#: ui_dialogs.py:4429
 #, python-brace-format
 msgid ""
 "Save the current {label} fields as a preset — overwrite an existing one "
 "or create a new one."
 msgstr ""
 
-#: ui_dialogs.py:4403
+#: ui_dialogs.py:4431
 #, python-brace-format
 msgid "Rename the selected {label} preset."
 msgstr ""
 
-#: ui_dialogs.py:4405
+#: ui_dialogs.py:4433
 #, python-brace-format
 msgid ""
 "Delete the selected {label} preset (cannot be undone). At least one "
 "preset must remain."
 msgstr ""
 
-#: ui_dialogs.py:4544
+#: ui_dialogs.py:4572
 msgid "the current values"
 msgstr ""
 
-#: ui_dialogs.py:4563
+#: ui_dialogs.py:4591
 #, python-brace-format
 msgid "Save {label} Preset"
 msgstr ""
 
-#: ui_dialogs.py:4564
+#: ui_dialogs.py:4592
 #, python-brace-format
 msgid "Save the current {label} fields as a preset."
 msgstr ""
 
-#: ui_dialogs.py:4573
+#: ui_dialogs.py:4601
 #, python-brace-format
 msgid ""
 "One or more {label} fields has an invalid value. Fix it before saving as "
 "a preset."
 msgstr ""
 
-#: ui_dialogs.py:4632
+#: ui_dialogs.py:4660
 #, python-brace-format
 msgid ""
 "At least one {label} preset must remain. Save another preset before "
 "deleting this one."
 msgstr ""
 
-#: ui_dialogs.py:4677
+#: ui_dialogs.py:4705
 #, python-brace-format
 msgid ""
 "You have edits to {labels} that aren't saved as a preset.\n"
@@ -5286,7 +5286,7 @@ msgid ""
 "• Cancel — keep editing."
 msgstr ""
 
-#: ui_dialogs.py:4686
+#: ui_dialogs.py:4714
 #, python-brace-format
 msgid ""
 "You have edits to {labels} that aren't saved as a preset.\n"
@@ -5298,258 +5298,258 @@ msgid ""
 "• Cancel — keep editing."
 msgstr ""
 
-#: ui_dialogs.py:4725
+#: ui_dialogs.py:4753
 #, python-brace-format
 msgid "Invalid value for {mat} line engraving. Please enter valid numbers."
 msgstr ""
 
-#: ui_dialogs.py:4736
+#: ui_dialogs.py:4764
 #, python-brace-format
 msgid "Invalid value for {mat} filled engraving. Please enter valid numbers."
 msgstr ""
 
-#: ui_dialogs.py:4756
+#: ui_dialogs.py:4784
 #, python-brace-format
 msgid "Invalid value for {mat} {op}. Please enter valid numbers."
 msgstr ""
 
-#: ui_dialogs.py:4765
+#: ui_dialogs.py:4793
 #, python-brace-format
 msgid "Invalid kerf width for {mat}. Please enter a valid number."
 msgstr ""
 
-#: ui_dialogs.py:4787
+#: ui_dialogs.py:4815
 msgid "Font sizes must be valid numbers."
 msgstr ""
 
-#: ui_dialogs.py:4796
+#: ui_dialogs.py:4824
 msgid "Return speed must be a valid number."
 msgstr ""
 
-#: ui_dialogs.py:4888
+#: ui_dialogs.py:4916
 #, python-brace-format
 msgid "User Guide — {section}"
 msgstr ""
 
-#: ui_dialogs.py:4890 ui_dialogs.py:4927
+#: ui_dialogs.py:4918 ui_dialogs.py:4955
 msgid "User Guide"
 msgstr ""
 
-#: ui_dialogs.py:4920
+#: ui_dialogs.py:4948
 msgid "Show Full Guide"
 msgstr ""
 
-#: ui_dialogs.py:4965 ui_dialogs.py:5979
+#: ui_dialogs.py:4993 ui_dialogs.py:6007
 msgid "Stohrer Sax Shop Companion"
 msgstr ""
 
-#: ui_dialogs.py:4966
+#: ui_dialogs.py:4994
 msgid ""
 "A tool for saxophone technicians: generate laser-cutting templates, "
 "record key heights, look up serial numbers, reference screw specs, tune, "
 "and analyze tone."
 msgstr ""
 
-#: ui_dialogs.py:4997
+#: ui_dialogs.py:5025
 msgid "Pad Maker (SVG / G-code)"
 msgstr ""
 
-#: ui_dialogs.py:4998
+#: ui_dialogs.py:5026
 msgid ""
 "Enter pad sizes in the text area, one per line, in the format \"size x "
 "quantity\" (e.g. \"42.0 x 3\"). Select one or more materials and click "
 "Generate to create laser-cutting files."
 msgstr ""
 
-#: ui_dialogs.py:5001
+#: ui_dialogs.py:5029
 msgid "Felt: disc diameter = pad size minus felt offset"
 msgstr ""
 
-#: ui_dialogs.py:5002
+#: ui_dialogs.py:5030
 msgid "Card: further reduced by card-to-felt offset"
 msgstr ""
 
-#: ui_dialogs.py:5003
+#: ui_dialogs.py:5031
 msgid ""
 "Leather: enlarged to wrap around felt, with star/dart pattern for small "
 "pads"
 msgstr ""
 
-#: ui_dialogs.py:5004
+#: ui_dialogs.py:5032
 msgid "Exact Size: no offset applied (SVG only, not available for G-code)"
 msgstr ""
 
-#: ui_dialogs.py:5005
+#: ui_dialogs.py:5033
 msgid ""
 "\"max\" quantity (e.g. \"18.0 x max\"): fills remaining sheet space with "
 "that size. Only one \"max\" entry is allowed per sheet."
 msgstr ""
 
-#: ui_dialogs.py:5009
+#: ui_dialogs.py:5037
 msgid "SVG vs G-code Output"
 msgstr ""
 
-#: ui_dialogs.py:5010
+#: ui_dialogs.py:5038
 msgid ""
 "SVG: each operation (engraving, holes, cuts) on its own color layer for "
 "LightBurn or similar. Use this if your software imports SVG."
 msgstr ""
 
-#: ui_dialogs.py:5012
+#: ui_dialogs.py:5040
 msgid ""
 "G-code: standalone Grbl with speeds and power baked in. Use this if your "
 "laser reads G-code directly (e.g. Creality Falcon)."
 msgstr ""
 
-#: ui_dialogs.py:5014
+#: ui_dialogs.py:5042
 msgid ""
 "Files are named with your base name plus the material "
 "(\"my_pad_job_felt.svg\"). One file per selected material."
 msgstr ""
 
-#: ui_dialogs.py:5018
+#: ui_dialogs.py:5046
 msgid "Units"
 msgstr ""
 
-#: ui_dialogs.py:5019
+#: ui_dialogs.py:5047
 msgid ""
 "Pad sizes and sheet dimensions use the unit set in Options > Sizing Rules"
 " (inches, mm, or cm). Output files are always in mm."
 msgstr ""
 
-#: ui_dialogs.py:5024
+#: ui_dialogs.py:5052
 msgid ""
 "Select a center hole size for rivet or screw mounting. Choose None, "
 "3.0mm, 3.5mm, or enter a custom diameter."
 msgstr ""
 
-#: ui_dialogs.py:5026
+#: ui_dialogs.py:5054
 msgid ""
 "Pads below the minimum hole size threshold (set in Sizing Rules) skip the"
 " center hole automatically — they're too small for it to be useful."
 msgstr ""
 
-#: ui_dialogs.py:5030
+#: ui_dialogs.py:5058
 msgid "Sheet Size & Fit to Paper"
 msgstr ""
 
-#: ui_dialogs.py:5031
+#: ui_dialogs.py:5059
 msgid ""
 "Enter the width and height of your material sheet. For card stock, check "
 "\"Fit card to paper\" to use a standard paper size (letter or A4) instead"
 " of the sheet dimensions."
 msgstr ""
 
-#: ui_dialogs.py:5036
+#: ui_dialogs.py:5064
 msgid "Engraving"
 msgstr ""
 
-#: ui_dialogs.py:5037
+#: ui_dialogs.py:5065
 msgid ""
 "Each disc is engraved with its pad size number for identification. "
 "Engraving settings and placement are configured in Options > Sizing "
 "Rules."
 msgstr ""
 
-#: ui_dialogs.py:5039
+#: ui_dialogs.py:5067
 msgid ""
 "Position modes: distance from outside edge, distance from inside (center "
 "hole), or centered between the two"
 msgstr ""
 
-#: ui_dialogs.py:5041
+#: ui_dialogs.py:5069
 msgid "Font size is set per material"
 msgstr ""
 
-#: ui_dialogs.py:5042
+#: ui_dialogs.py:5070
 msgid ""
 "Both engraving settings (on/off, font sizes) and placement (position "
 "modes) support Universal or Per Size Range mode, just like sizing rules"
 msgstr ""
 
-#: ui_dialogs.py:5044
+#: ui_dialogs.py:5072
 msgid ""
 "On small pads, text shifts toward the center to fit; only scales down as "
 "a last resort."
 msgstr ""
 
-#: ui_dialogs.py:5046
+#: ui_dialogs.py:5074
 msgid ""
 "If the font exceeds 80 percent of the disc radius, engraving is skipped "
 "for that pad (warning shown before generating)."
 msgstr ""
 
-#: ui_dialogs.py:5050
+#: ui_dialogs.py:5078
 msgid "Pad Presets"
 msgstr ""
 
-#: ui_dialogs.py:5051
+#: ui_dialogs.py:5079
 msgid ""
 "Save frequently-used pad lists as presets for quick recall. Presets are "
 "organized into libraries (e.g. \"My Presets\", \"Customer Jobs\")."
 msgstr ""
 
-#: ui_dialogs.py:5053
+#: ui_dialogs.py:5081
 msgid "Save as Preset: saves the current pad list to the selected library"
 msgstr ""
 
-#: ui_dialogs.py:5054
+#: ui_dialogs.py:5082
 msgid "Select a preset from the dropdown to load it into the text area"
 msgstr ""
 
-#: ui_dialogs.py:5055
+#: ui_dialogs.py:5083
 msgid "Delete Preset: removes the selected preset"
 msgstr ""
 
-#: ui_dialogs.py:5056
+#: ui_dialogs.py:5084
 msgid "File > Import/Export Pad Presets: share preset files with colleagues"
 msgstr ""
 
-#: ui_dialogs.py:5057
+#: ui_dialogs.py:5085
 msgid ""
 "File > Import Matt's Pad Sets: downloads reference pad sets from "
 "stohrermusic.com"
 msgstr ""
 
-#: ui_dialogs.py:5060
+#: ui_dialogs.py:5088
 msgid "Materials & Sizing Rules"
 msgstr ""
 
-#: ui_dialogs.py:5061
+#: ui_dialogs.py:5089
 msgid ""
 "Options > Sizing Rules configures how disc sizes are calculated from the "
 "pad size you enter:"
 msgstr ""
 
-#: ui_dialogs.py:5063
+#: ui_dialogs.py:5091
 msgid ""
 "Felt Offset: how much smaller the felt disc is than the pad cup (e.g. "
 "0.75mm means the felt disc is 0.75mm smaller in diameter)"
 msgstr ""
 
-#: ui_dialogs.py:5065
+#: ui_dialogs.py:5093
 msgid ""
 "Card-to-Felt Offset: additional reduction for cardboard backing (added on"
 " top of the felt offset)"
 msgstr ""
 
-#: ui_dialogs.py:5067
+#: ui_dialogs.py:5095
 msgid ""
 "Leather Wrap Multiplier: controls how much extra leather is added for "
 "wrapping around the felt (1.0 = standard wrap)"
 msgstr ""
 
-#: ui_dialogs.py:5069
+#: ui_dialogs.py:5097
 msgid ""
 "Felt Thickness: the thickness of felt being used, affects leather wrap "
 "calculation"
 msgstr ""
 
-#: ui_dialogs.py:5071
+#: ui_dialogs.py:5099
 msgid "Min. Pad Size for Hole: pads below this size skip the center hole"
 msgstr ""
 
-#: ui_dialogs.py:5072
+#: ui_dialogs.py:5100
 msgid ""
 "Sizing rules, engraving settings, engraving placement, and star/dart "
 "settings each have a Universal/Range toggle. In Universal mode (default),"
@@ -5559,259 +5559,259 @@ msgid ""
 "slightly differently: pads not in a range simply get no star pattern."
 msgstr ""
 
-#: ui_dialogs.py:5079
+#: ui_dialogs.py:5107
 msgid ""
 "Darts: for leather pads below a size threshold, a dart pattern is added "
 "so the leather can fold around the felt. Overwrap, wrap bonus, frequency "
 "multiplier, and shape (triangle / sine / square) are all adjustable."
 msgstr ""
 
-#: ui_dialogs.py:5084
+#: ui_dialogs.py:5112
 msgid ""
 "Sizing-rules presets: at the top of the Sizing Rules dialog you can save "
 "the entire configuration as a named preset, load presets from the "
 "dropdown, and export/import preset files to share with other techs."
 msgstr ""
 
-#: ui_dialogs.py:5087
+#: ui_dialogs.py:5115
 msgid ""
 "Save Preset: snapshots every value in the dialog (sizing, darts, "
 "engraving, placement) — overwrite an existing preset or save as a new one"
 msgstr ""
 
-#: ui_dialogs.py:5089
+#: ui_dialogs.py:5117
 msgid "Load: fills the dialog from the selected preset — click Apply to commit"
 msgstr ""
 
-#: ui_dialogs.py:5090
+#: ui_dialogs.py:5118
 msgid "Import/Export: JSON files containing one or more presets"
 msgstr ""
 
-#: ui_dialogs.py:5093
+#: ui_dialogs.py:5121
 msgid "G-code Settings"
 msgstr ""
 
-#: ui_dialogs.py:5094
+#: ui_dialogs.py:5122
 msgid ""
 "Options > G-code Settings configures the laser parameters for each "
 "material."
 msgstr ""
 
-#: ui_dialogs.py:5095
+#: ui_dialogs.py:5123
 msgid "Speed & Power: set per operation (engraving, center hole, outer cut)"
 msgstr ""
 
-#: ui_dialogs.py:5096
+#: ui_dialogs.py:5124
 msgid ""
 "Engraving Mode: \"Line\" (single-stroke outline) or \"Filled\" (scan-line"
 " raster fill)"
 msgstr ""
 
-#: ui_dialogs.py:5097
+#: ui_dialogs.py:5125
 msgid "Fill Density: controls scan line spacing for filled engraving"
 msgstr ""
 
-#: ui_dialogs.py:5098
+#: ui_dialogs.py:5126
 msgid ""
 "Overscan: extends filled scan lines so the laser is at full speed at "
 "character edges"
 msgstr ""
 
-#: ui_dialogs.py:5099
+#: ui_dialogs.py:5127
 msgid ""
 "Kerf Width: full beam width. The app compensates each cut (expands outer "
 "cuts, shrinks holes). Note: LightBurn asks for half-kerf; here, enter the"
 " full measured width."
 msgstr ""
 
-#: ui_dialogs.py:5102
+#: ui_dialogs.py:5130
 msgid "Air Assist: per-layer toggle for air assist (M8 on / M9 off)"
 msgstr ""
 
-#: ui_dialogs.py:5103
+#: ui_dialogs.py:5131
 msgid ""
 "Return Speed: how fast the head returns home after the job (slower avoids"
 " endstop issues)"
 msgstr ""
 
-#: ui_dialogs.py:5104
+#: ui_dialogs.py:5132
 msgid ""
 "Cut Grouping: \"By layer\" does all engravings, then all holes, then all "
 "cuts; \"By pad\" completes each pad before moving to the next"
 msgstr ""
 
-#: ui_dialogs.py:5108
+#: ui_dialogs.py:5136
 msgid "Layer Colors"
 msgstr ""
 
-#: ui_dialogs.py:5109
+#: ui_dialogs.py:5137
 msgid ""
 "Options > Layer Colors maps each operation to a LightBurn color layer "
 "(numbered 00 through 29). This only affects SVG output for use in "
 "LightBurn."
 msgstr ""
 
-#: ui_dialogs.py:5113
+#: ui_dialogs.py:5141
 msgid "Custom Shapes"
 msgstr ""
 
-#: ui_dialogs.py:5114
+#: ui_dialogs.py:5142
 msgid ""
 "\"Draw / Capture Shape\" defines an irregular polygon for leather skins "
 "or scrap pieces. The nesting algorithm fits circles inside the polygon "
 "instead of the rectangular sheet."
 msgstr ""
 
-#: ui_dialogs.py:5117
+#: ui_dialogs.py:5145
 msgid ""
 "Click points on the grid to define the outline. Vertex placement is free "
 "— not snapped to grid intersections."
 msgstr ""
 
-#: ui_dialogs.py:5119
+#: ui_dialogs.py:5147
 msgid ""
 "Grid sized to cover the laser bed (default 17 in / 43 cm; auto-grown if "
 "your bed is larger)."
 msgstr ""
 
-#: ui_dialogs.py:5121
+#: ui_dialogs.py:5149
 msgid ""
 "\"Show live camera underneath\" overlays the camera feed at 1:1 scale so "
 "you can trace your scrap by eye. Requires a saved camera calibration."
 msgstr ""
 
-#: ui_dialogs.py:5123
+#: ui_dialogs.py:5151
 msgid ""
 "\"Get from camera\" auto-detects the scrap outline. A safety inset "
 "(default 3 mm, Options > Machine) shrinks the polygon to absorb minor "
 "camera measurement error at the edges."
 msgstr ""
 
-#: ui_dialogs.py:5126
+#: ui_dialogs.py:5154
 msgid "Unload clears the shape and returns to rectangle mode."
 msgstr ""
 
-#: ui_dialogs.py:5130
+#: ui_dialogs.py:5158
 msgid "Place pads across multiple irregular pieces instead of one sheet."
 msgstr ""
 
-#: ui_dialogs.py:5131
+#: ui_dialogs.py:5159
 msgid "One material at a time."
 msgstr ""
 
-#: ui_dialogs.py:5132
+#: ui_dialogs.py:5160
 msgid ""
 "Set dimensions or draw / capture a shape for each scrap. Generate fits "
 "what it can and tracks the remainder."
 msgstr ""
 
-#: ui_dialogs.py:5134
+#: ui_dialogs.py:5162
 msgid ""
 "Between scraps: keep the loaded shape, unload it, or re-capture from "
 "camera (when calibrated)."
 msgstr ""
 
-#: ui_dialogs.py:5136
+#: ui_dialogs.py:5164
 msgid "Files named _scrap1, _scrap2, etc."
 msgstr ""
 
-#: ui_dialogs.py:5137
+#: ui_dialogs.py:5165
 msgid ""
 "With 75+ pads, an opt-in popup offers \"large-batch optimization\": the "
 "nester tries multiple disc orderings per scrap and keeps the best result."
 " Costs extra compute, fits more pads."
 msgstr ""
 
-#: ui_dialogs.py:5143
+#: ui_dialogs.py:5171
 msgid ""
 "The Edge Bias d-pad control lets you tell the nesting algorithm which "
 "direction to pack circles toward. This is useful for leather skins or "
 "scrap pieces where some edges are cleaner than others."
 msgstr ""
 
-#: ui_dialogs.py:5146
+#: ui_dialogs.py:5174
 msgid "Click an arrow to bias packing toward that edge or corner"
 msgstr ""
 
-#: ui_dialogs.py:5147
+#: ui_dialogs.py:5175
 msgid "Click the center dot to return to default behavior (no bias)"
 msgstr ""
 
-#: ui_dialogs.py:5148
+#: ui_dialogs.py:5176
 msgid ""
 "Cardinal directions (N, S, E, W) scan from that edge inward, filling row "
 "by row or column by column"
 msgstr ""
 
-#: ui_dialogs.py:5150
+#: ui_dialogs.py:5178
 msgid ""
 "Corner directions (NW, NE, SW, SE) radiate outward from the corner — "
 "small pads nestle into the corner first, larger ones fan out behind them "
 "in a wedge pattern"
 msgstr ""
 
-#: ui_dialogs.py:5153
+#: ui_dialogs.py:5181
 msgid ""
 "For custom polygon shapes, positions closer to the biased edge or corner "
 "are scored more favorably"
 msgstr ""
 
-#: ui_dialogs.py:5155
+#: ui_dialogs.py:5183
 msgid ""
 "Example: a triangular scrap with two clean edges forming a right angle "
 "and a rough hypotenuse — bias toward the corner where the good edges meet"
 " so pads pack there first"
 msgstr ""
 
-#: ui_dialogs.py:5158
+#: ui_dialogs.py:5186
 msgid "The setting is saved and persists between sessions"
 msgstr ""
 
-#: ui_dialogs.py:5161 ui_dialogs.py:6478 ui_dialogs.py:6506
+#: ui_dialogs.py:5189 ui_dialogs.py:6506 ui_dialogs.py:6534
 msgid "Nesting Preview"
 msgstr ""
 
-#: ui_dialogs.py:5162
+#: ui_dialogs.py:5190
 msgid ""
 "Check \"Preview before saving\" to see how your pads will be arranged on "
 "the sheet before any files are written."
 msgstr ""
 
-#: ui_dialogs.py:5164
+#: ui_dialogs.py:5192
 msgid ""
 "Preview works with one material at a time — select a single material to "
 "use it"
 msgstr ""
 
-#: ui_dialogs.py:5166
+#: ui_dialogs.py:5194
 msgid ""
 "The preview shows the sheet boundary (or custom polygon) with circles at "
 "their nested positions, labeled with pad sizes, and a material usage "
 "percentage"
 msgstr ""
 
-#: ui_dialogs.py:5169
+#: ui_dialogs.py:5197
 msgid "Click Save Files to proceed to file generation"
 msgstr ""
 
-#: ui_dialogs.py:5170
+#: ui_dialogs.py:5198
 msgid ""
 "Click Adjust to go back and change edge bias, sheet dimensions, custom "
 "polygon shape, or pad sizes/quantities, then generate again"
 msgstr ""
 
-#: ui_dialogs.py:5172
+#: ui_dialogs.py:5200
 msgid ""
 "Works in scrap mode too — preview each scrap piece before committing. "
 "Combine with edge bias and custom polygon shapes to optimize irregular "
 "scrap pieces."
 msgstr ""
 
-#: ui_dialogs.py:5177 ui_dialogs.py:6105
+#: ui_dialogs.py:5205 ui_dialogs.py:6133
 msgid "Job History"
 msgstr ""
 
-#: ui_dialogs.py:5178
+#: ui_dialogs.py:5206
 msgid ""
 "File > Job History lists every batch that made it to an output stage — "
 "SVG written, G-code written, or streamed to the laser. Newest first, with"
@@ -5819,47 +5819,47 @@ msgid ""
 "count, and sheet size."
 msgstr ""
 
-#: ui_dialogs.py:5182
+#: ui_dialogs.py:5210
 msgid ""
 "Select a row to see the full pad list, center hole, base filename, output"
 " folder, and which preset it came from"
 msgstr ""
 
-#: ui_dialogs.py:5184
+#: ui_dialogs.py:5212
 msgid ""
 "\"Load into Pad Maker\" puts the pad list, materials, sheet size, center "
 "hole and filename back into the form — handy for re-cutting a set you've "
 "done before"
 msgstr ""
 
-#: ui_dialogs.py:5187
+#: ui_dialogs.py:5215
 msgid ""
 "Loading a job leaves your sizing rules and G-code settings alone, and "
 "does not restore a custom polygon shape (a camera-captured scrap no "
 "longer exists to cut)"
 msgstr ""
 
-#: ui_dialogs.py:5190
+#: ui_dialogs.py:5218
 msgid ""
 "Laser runs that were stopped or errored are logged too, marked with a * —"
 " so missing pads have an explanation"
 msgstr ""
 
-#: ui_dialogs.py:5192
+#: ui_dialogs.py:5220
 msgid ""
 "In scrap mode each scrap is logged separately, numbered to match the "
 "session"
 msgstr ""
 
-#: ui_dialogs.py:5194
+#: ui_dialogs.py:5222
 msgid "Delete single entries or clear the whole log; it holds the last 300 jobs"
 msgstr ""
 
-#: ui_dialogs.py:5198
+#: ui_dialogs.py:5226
 msgid "Machine Integration (experimental, opt-in)"
 msgstr ""
 
-#: ui_dialogs.py:5199
+#: ui_dialogs.py:5227
 msgid ""
 "File > Feature Set > \"Experimental: machine integration\" enables direct"
 " USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W "
@@ -5867,36 +5867,36 @@ msgid ""
 "features below."
 msgstr ""
 
-#: ui_dialogs.py:5203
+#: ui_dialogs.py:5231
 msgid ""
 "Options > Machine: Home Laser, Test Connection, Clear Errors, Reset "
 "Falcon, Camera Calibration, Camera-Polygon Inset Margin."
 msgstr ""
 
-#: ui_dialogs.py:5205
+#: ui_dialogs.py:5233
 msgid ""
 "Camera features (overlay, Get from camera, Frame & Cut auto-locate) stay "
 "greyed until you've run the one-time camera calibration."
 msgstr ""
 
-#: ui_dialogs.py:5209
+#: ui_dialogs.py:5237
 msgid "Camera Calibration (one-time)"
 msgstr ""
 
-#: ui_dialogs.py:5210
+#: ui_dialogs.py:5238
 msgid ""
 "Establishes the camera-to-bed mapping so the app can convert what the "
 "camera sees into machine coords. Two steps:"
 msgstr ""
 
-#: ui_dialogs.py:5212
+#: ui_dialogs.py:5240
 msgid ""
 "Engrave a ChArUco card on basswood. Place + secure the basswood; home the"
 " laser; jog to roughly bed center; click Frame to verify placement; click"
 " Engrave."
 msgstr ""
 
-#: ui_dialogs.py:5215
+#: ui_dialogs.py:5243
 msgid ""
 "Capture 12 frames with the camera. The first capture(s) MUST be with the "
 "card still at its engraved position — that anchors camera to machine "
@@ -5904,13 +5904,13 @@ msgid ""
 "solves lens distortion."
 msgstr ""
 
-#: ui_dialogs.py:5219
+#: ui_dialogs.py:5247
 msgid ""
 "Saved to a JSON file in the config directory; reused across sessions. "
 "Engrave reads your basswood preset (Tooling > Options)."
 msgstr ""
 
-#: ui_dialogs.py:5224
+#: ui_dialogs.py:5252
 msgid ""
 "When a Falcon is connected, a Frame & Cut button appears next to Generate"
 " SVG / Generate G-code. It generates the G-code in memory, lets you "
@@ -5918,35 +5918,35 @@ msgid ""
 "then streams the cut to the laser."
 msgstr ""
 
-#: ui_dialogs.py:5228
+#: ui_dialogs.py:5256
 msgid ""
 "Position dialog: Home Laser button (re-home if MPos has drifted); jog "
 "arrows; Try Auto Locate (drives head to the polygon's bottom-left vertex "
 "when available and the laser is homed)."
 msgstr ""
 
-#: ui_dialogs.py:5231
+#: ui_dialogs.py:5259
 msgid ""
 "Framing loops at low power until you click \"Looks Good — Cut!\" — lets "
 "you jog between passes to fine-tune alignment."
 msgstr ""
 
-#: ui_dialogs.py:5233
+#: ui_dialogs.py:5261
 msgid ""
 "For tilted scraps: jog to the visible bottom-left corner of the material."
 " The G92 work-origin offset bridges the gap between that corner and the "
 "polygon's bbox origin so both framing and cutting land where you expect."
 msgstr ""
 
-#: ui_dialogs.py:5237
+#: ui_dialogs.py:5265
 msgid "Pause / Resume / Stop act in real time. Stop is a soft-reset."
 msgstr ""
 
-#: ui_dialogs.py:5240
+#: ui_dialogs.py:5268
 msgid "SD Card & Eject"
 msgstr ""
 
-#: ui_dialogs.py:5241
+#: ui_dialogs.py:5269
 msgid ""
 "Check \"Eject SD card after G-code export\" below the Generate buttons. "
 "When generating G-code to a removable drive (USB/SD card), the app will "
@@ -5955,83 +5955,83 @@ msgid ""
 "only)"
 msgstr ""
 
-#: ui_dialogs.py:5250
+#: ui_dialogs.py:5278
 msgid ""
 "Record and compare key height measurements for different saxophones. "
 "Organize sets into libraries, import/export, and share with colleagues."
 msgstr ""
 
-#: ui_dialogs.py:5252
+#: ui_dialogs.py:5280
 msgid "Options > Layout Options controls which key fields are visible"
 msgstr ""
 
-#: ui_dialogs.py:5253
+#: ui_dialogs.py:5281
 msgid ""
 "File > Import Matt's Key Heights downloads reference data from "
 "stohrermusic.com"
 msgstr ""
 
-#: ui_dialogs.py:5258
+#: ui_dialogs.py:5286
 msgid ""
 "Look up saxophone serial number ranges by manufacturer to estimate year "
 "of production."
 msgstr ""
 
-#: ui_dialogs.py:5263
+#: ui_dialogs.py:5291
 msgid ""
 "Reference database of screw thread specifications for different saxophone"
 " models."
 msgstr ""
 
-#: ui_dialogs.py:5264
+#: ui_dialogs.py:5292
 msgid "File > Import Matt's Specs downloads the latest data from stohrermusic.com"
 msgstr ""
 
-#: ui_dialogs.py:5265
+#: ui_dialogs.py:5293
 msgid "Import/export to share specs with colleagues"
 msgstr ""
 
-#: ui_dialogs.py:5269
+#: ui_dialogs.py:5297
 msgid "Tooling — Die Inserts"
 msgstr ""
 
-#: ui_dialogs.py:5270
+#: ui_dialogs.py:5298
 msgid ""
 "Generate laser-cutting files (SVG or G-code) for acrylic pad die inserts."
 " Dies are rings with a fixed outer diameter and an inner hole matching "
 "the pad size."
 msgstr ""
 
-#: ui_dialogs.py:5273
+#: ui_dialogs.py:5301
 msgid "Small dies (pad sizes 7.0–39.5mm): 50mm outer diameter"
 msgstr ""
 
-#: ui_dialogs.py:5274
+#: ui_dialogs.py:5302
 msgid "Large dies (pad sizes 40.0–60.0mm): 70mm outer diameter"
 msgstr ""
 
-#: ui_dialogs.py:5275
+#: ui_dialogs.py:5303
 msgid ""
 "Enter sizes as individual values (\"7, 8.5, 25\"), ranges (\"15-30\"), or"
 " use the Full Set buttons. Step size controls the increment for ranges "
 "(default 0.5mm)."
 msgstr ""
 
-#: ui_dialogs.py:5278
+#: ui_dialogs.py:5306
 msgid "\"Engrave size on ring\" labels the die ring with the pad size number"
 msgstr ""
 
-#: ui_dialogs.py:5279
+#: ui_dialogs.py:5307
 msgid ""
 "\"Engrave size on cutout\" labels the inner disc with its actual physical"
 " size after kerf deduction"
 msgstr ""
 
-#: ui_dialogs.py:5283
+#: ui_dialogs.py:5311
 msgid "Tooling — Cutout Discs as Pad Cup Tools"
 msgstr ""
 
-#: ui_dialogs.py:5284
+#: ui_dialogs.py:5312
 msgid ""
 "When a die ring is laser-cut, the inner cutout falls out as a solid disc "
 "(pad cup diameter minus kerf). These work as pad cup stiffeners, rim "
@@ -6041,33 +6041,33 @@ msgid ""
 "and set acrylic speeds and powers there."
 msgstr ""
 
-#: ui_dialogs.py:5292
+#: ui_dialogs.py:5320
 msgid "Tooling — Die Holders"
 msgstr ""
 
-#: ui_dialogs.py:5293
+#: ui_dialogs.py:5321
 msgid ""
 "Generate laser-cutting files for the acrylic die holder assembly. Each "
 "holder is a stack of 85mm discs cemented together permanently:"
 msgstr ""
 
-#: ui_dialogs.py:5295
+#: ui_dialogs.py:5323
 msgid "Solid bottom disc"
 msgstr ""
 
-#: ui_dialogs.py:5296
+#: ui_dialogs.py:5324
 msgid "Magnet disc (6.5mm hole)"
 msgstr ""
 
-#: ui_dialogs.py:5297
+#: ui_dialogs.py:5325
 msgid "Pin discs (3.5mm alignment holes) — 2 for 5-layer, 3 for 6-layer"
 msgstr ""
 
-#: ui_dialogs.py:5298
+#: ui_dialogs.py:5326
 msgid "Retaining ring (inner diameter matches the die size class)"
 msgstr ""
 
-#: ui_dialogs.py:5299
+#: ui_dialogs.py:5327
 msgid ""
 "Pick the layer count, then the variant: Large (70mm inner), Small (50mm "
 "inner), or Both — two complete independent holders, one of each size, "
@@ -6076,101 +6076,101 @@ msgid ""
 "message."
 msgstr ""
 
-#: ui_dialogs.py:5306
+#: ui_dialogs.py:5334
 msgid "Tooling — Scrap Mode"
 msgstr ""
 
-#: ui_dialogs.py:5307
+#: ui_dialogs.py:5335
 msgid ""
 "A full set of dies (107 sizes from 7–60mm) takes many sheets of acrylic. "
 "Check Scrap Mode to spread die generation across multiple sheets:"
 msgstr ""
 
-#: ui_dialogs.py:5309
+#: ui_dialogs.py:5337
 msgid "Enter your die sizes and sheet dimensions"
 msgstr ""
 
-#: ui_dialogs.py:5310
+#: ui_dialogs.py:5338
 msgid "Generate — what fits is saved, the rest is tracked"
 msgstr ""
 
-#: ui_dialogs.py:5311
+#: ui_dialogs.py:5339
 msgid "Adjust the sheet size if needed and generate again"
 msgstr ""
 
-#: ui_dialogs.py:5312
+#: ui_dialogs.py:5340
 msgid "A progress window shows remaining and completed dies"
 msgstr ""
 
-#: ui_dialogs.py:5313
+#: ui_dialogs.py:5341
 msgid "Files are named with _scrap1, _scrap2, etc. suffixes"
 msgstr ""
 
-#: ui_dialogs.py:5316
+#: ui_dialogs.py:5344
 msgid "Tooling — Die Organizer"
 msgstr ""
 
-#: ui_dialogs.py:5317
+#: ui_dialogs.py:5345
 msgid ""
 "Generate SVGs for a stackable die organizer (230 × 330 mm). Two parts: "
 "Upper plate with slots for the dies, Lower base plate."
 msgstr ""
 
-#: ui_dialogs.py:5319
+#: ui_dialogs.py:5347
 msgid "Cut three Uppers and one Lower (wood works great; acrylic does too)."
 msgstr ""
 
-#: ui_dialogs.py:5320
+#: ui_dialogs.py:5348
 msgid ""
 "Align the four 1/8\" corner holes and glue the stack together — a book "
 "press lightly clamps it nicely while the glue sets."
 msgstr ""
 
-#: ui_dialogs.py:5322
+#: ui_dialogs.py:5350
 msgid "Resize the alignment holes to whatever pin you have."
 msgstr ""
 
-#: ui_dialogs.py:5323
+#: ui_dialogs.py:5351
 msgid "SVG only — open in LightBurn or your laser software to cut."
 msgstr ""
 
-#: ui_dialogs.py:5326
+#: ui_dialogs.py:5354
 msgid "Tooling — Kerf Test"
 msgstr ""
 
-#: ui_dialogs.py:5327
+#: ui_dialogs.py:5355
 msgid ""
 "A quick test pattern (three circles at 10/20/30mm) for measuring kerf on "
 "any material."
 msgstr ""
 
-#: ui_dialogs.py:5329
+#: ui_dialogs.py:5357
 msgid "Pick the material, cut the pattern, pop out the three discs."
 msgstr ""
 
-#: ui_dialogs.py:5330
+#: ui_dialogs.py:5358
 msgid "Measure hole ID and disc OD with calipers."
 msgstr ""
 
-#: ui_dialogs.py:5331
+#: ui_dialogs.py:5359
 msgid "Kerf = hole ID − disc OD (full width of material vaporized)."
 msgstr ""
 
-#: ui_dialogs.py:5332
+#: ui_dialogs.py:5360
 msgid "Enter the full kerf in G-code Settings; the app handles compensation."
 msgstr ""
 
-#: ui_dialogs.py:5333
+#: ui_dialogs.py:5361
 msgid ""
 "Defaults to your existing speed/power for that material. Uncheck \"Use "
 "existing settings\" for a one-off test with custom values."
 msgstr ""
 
-#: ui_dialogs.py:5337
+#: ui_dialogs.py:5365
 msgid "Tooling — Speed & Power Test"
 msgstr ""
 
-#: ui_dialogs.py:5338
+#: ui_dialogs.py:5366
 msgid ""
 "Beta. Generates a sheet of small test discs, each cut at a different "
 "combination of speed/power/passes. Each disc is engraved with its 2-digit"
@@ -6180,19 +6180,19 @@ msgid ""
 "material."
 msgstr ""
 
-#: ui_dialogs.py:5343
+#: ui_dialogs.py:5371
 msgid ""
 "Pick the material and click \"Apply material defaults\" to pre-fill the "
 "speed/power fields with sensible starting values for that material."
 msgstr ""
 
-#: ui_dialogs.py:5345
+#: ui_dialogs.py:5373
 msgid ""
 "Disc diameter is yours to set. Smaller saves material; bigger helps the "
 "engraving stay legible. 20 mm is a good default."
 msgstr ""
 
-#: ui_dialogs.py:5347
+#: ui_dialogs.py:5375
 msgid ""
 "Three sweep rows — Speed, Power, Passes. Check \"Sweep\" to test "
 "\"Stops\" evenly-spaced values from Start to End; uncheck to hold "
@@ -6200,7 +6200,7 @@ msgid ""
 "disc, a row, a grid, or a 3-D block."
 msgstr ""
 
-#: ui_dialogs.py:5351
+#: ui_dialogs.py:5379
 msgid ""
 "Engraving speed/power are editable too. The label engraving has to be "
 "readable for the test to be useful, so don't leave it at zero — the "
@@ -6208,83 +6208,83 @@ msgid ""
 "engraving settings."
 msgstr ""
 
-#: ui_dialogs.py:5355
+#: ui_dialogs.py:5383
 msgid ""
 "\"Air assist\" toggles air on/off for every disc. \"Also test with air "
 "off\" doubles the matrix so half the discs run with air and half without,"
 " side by side."
 msgstr ""
 
-#: ui_dialogs.py:5358
+#: ui_dialogs.py:5386
 msgid ""
 "\"Preview before saving\" pops a layout view so you can sanity-check disc"
 " count and arrangement before committing to the file dialog."
 msgstr ""
 
-#: ui_dialogs.py:5360
+#: ui_dialogs.py:5388
 msgid ""
 "G-code only — no SVG output, since the per-disc speed/power/passes would "
 "be lost on import. The legend.txt is the source of truth for looking up "
 "which disc had which settings."
 msgstr ""
 
-#: ui_dialogs.py:5365
+#: ui_dialogs.py:5393
 msgid "Tooling — Pad Press Spacers"
 msgstr ""
 
-#: ui_dialogs.py:5366
+#: ui_dialogs.py:5394
 msgid ""
 "3D-printable spacer biscuits for pad pressing. 1.75\" (44.45 mm) square "
 "biscuits with their thickness engraved on top — stack them to set pad "
 "press depth. PLA or PETG both work."
 msgstr ""
 
-#: ui_dialogs.py:5369
+#: ui_dialogs.py:5397
 msgid "Half-step set: 3.0 / 3.5 / 4.0 / 4.5 mm (4 of each, 16 total)."
 msgstr ""
 
-#: ui_dialogs.py:5370
+#: ui_dialogs.py:5398
 msgid "Quarter-step set: 3.25 / 3.75 / 4.25 mm (4 of each, 12 total)."
 msgstr ""
 
-#: ui_dialogs.py:5371
+#: ui_dialogs.py:5399
 msgid "Organizer rack: 7 compartments to hold the whole spacer set."
 msgstr ""
 
-#: ui_dialogs.py:5372
+#: ui_dialogs.py:5400
 msgid "Save the .stl files to disk and slice them in your 3D printer software."
 msgstr ""
 
-#: ui_dialogs.py:5375
+#: ui_dialogs.py:5403
 msgid "Tooling — Settings"
 msgstr ""
 
-#: ui_dialogs.py:5376
+#: ui_dialogs.py:5404
 msgid ""
 "Options > Tooling Settings: per-material G-code (acrylic, basswood) and "
 "die-engraving options."
 msgstr ""
 
-#: ui_dialogs.py:5378
+#: ui_dialogs.py:5406
 msgid ""
 "Acrylic / basswood G-code: speed, power, passes, kerf, air assist. "
 "Defaults tuned for the Falcon2 Pro 40W (3 mm acrylic; 3 mm basswood). "
 "Adjust to your machine."
 msgstr ""
 
-#: ui_dialogs.py:5381
+#: ui_dialogs.py:5409
 msgid ""
 "Basswood preset feeds the camera-calibration card engrave AND the die "
 "organizer (when you cut it in LightBurn)."
 msgstr ""
 
-#: ui_dialogs.py:5383
+#: ui_dialogs.py:5411
 msgid ""
 "Die engraving: filled vs. line mode, font sizes for ring + cutout "
 "engraving, ring engraving placement."
 msgstr ""
 
-#: ui_dialogs.py:5389
+#: ui_dialogs.py:5417
 msgid ""
 "A 12-wheel chromatic stroboscopic tuner. Each wheel shows concentric "
 "rings (one per octave) of alternating colored and dark segments visible "
@@ -6292,160 +6292,160 @@ msgid ""
 " detected fundamental pitch and cents error."
 msgstr ""
 
-#: ui_dialogs.py:5393
+#: ui_dialogs.py:5421
 msgid ""
 "When the input pitch matches the reference, the pattern freezes (appears "
 "stationary)"
 msgstr ""
 
-#: ui_dialogs.py:5394
+#: ui_dialogs.py:5422
 msgid "Sharp: pattern drifts right. Flat: pattern drifts left"
 msgstr ""
 
-#: ui_dialogs.py:5395
+#: ui_dialogs.py:5423
 msgid "Faster drift = farther from in-tune. Frozen = perfectly in tune"
 msgstr ""
 
-#: ui_dialogs.py:5396
+#: ui_dialogs.py:5424
 msgid ""
 "Multiple wheels respond simultaneously from harmonics in the sound — this"
 " is real FFT analysis of the audio, not simulated"
 msgstr ""
 
-#: ui_dialogs.py:5398
+#: ui_dialogs.py:5426
 msgid ""
 "Per-pitch-class phase tracking with temporal smoothing keeps each wheel's"
 " rotation independent and stable"
 msgstr ""
 
-#: ui_dialogs.py:5402
+#: ui_dialogs.py:5430
 msgid "Rendering:"
 msgstr ""
 
-#: ui_dialogs.py:5403
+#: ui_dialogs.py:5431
 msgid "GPU-accelerated via Rust/wgpu when available — 60 to 120 fps"
 msgstr ""
 
-#: ui_dialogs.py:5404
+#: ui_dialogs.py:5432
 msgid ""
 "Automatic CPU canvas fallback if the GPU path is unavailable (older "
 "systems, virtual machines, etc.)"
 msgstr ""
 
-#: ui_dialogs.py:5408
+#: ui_dialogs.py:5436
 msgid "On-screen controls (the slider panel below the wheels):"
 msgstr ""
 
-#: ui_dialogs.py:5409
+#: ui_dialogs.py:5437
 msgid "DISP > SENS: how loud a signal needs to be to register"
 msgstr ""
 
-#: ui_dialogs.py:5410
+#: ui_dialogs.py:5438
 msgid "DISP > BRIGHT: master brightness for the strobe disc segments"
 msgstr ""
 
-#: ui_dialogs.py:5411
+#: ui_dialogs.py:5439
 msgid "DISP > FPS: target frame rate (60 / 90 / 120)"
 msgstr ""
 
-#: ui_dialogs.py:5412
+#: ui_dialogs.py:5440
 msgid "PITCH > A=: reference pitch in Hz (default 440)"
 msgstr ""
 
-#: ui_dialogs.py:5413
+#: ui_dialogs.py:5441
 msgid "PITCH > KEY: instrument transposition (C / Bb / Eb / F)"
 msgstr ""
 
-#: ui_dialogs.py:5414
+#: ui_dialogs.py:5442
 msgid ""
 "BIAS > NOTE: per-wheel ring brightness contrast (0 = all rings same "
 "brightness, 100 = played octave ring brightest)"
 msgstr ""
 
-#: ui_dialogs.py:5416
+#: ui_dialogs.py:5444
 msgid "BIAS > OCT.: dominant octave boost (emphasizes the strongest ring)"
 msgstr ""
 
-#: ui_dialogs.py:5419
+#: ui_dialogs.py:5447
 msgid "Settings (Options > Settings):"
 msgstr ""
 
-#: ui_dialogs.py:5420
+#: ui_dialogs.py:5448
 msgid "Input Device: pick the microphone the tuner listens to"
 msgstr ""
 
-#: ui_dialogs.py:5421
+#: ui_dialogs.py:5449
 msgid "Backlight Color: color of the strobe disc segments"
 msgstr ""
 
-#: ui_dialogs.py:5422
+#: ui_dialogs.py:5450
 msgid "Faceplate Color: background color of the tuner display"
 msgstr ""
 
-#: ui_dialogs.py:5423
+#: ui_dialogs.py:5451
 msgid ""
 "Show frame rate on screen: overlays a small live FPS counter for "
 "diagnostics"
 msgstr ""
 
-#: ui_dialogs.py:5426 ui_dialogs.py:5498
+#: ui_dialogs.py:5454 ui_dialogs.py:5526
 msgid "Microphone"
 msgstr ""
 
-#: ui_dialogs.py:5427
+#: ui_dialogs.py:5455
 msgid ""
 "The tuner analyzes audio from your microphone. A quality mic makes a "
 "significant difference in accuracy, especially for low notes where the "
 "fundamental frequency may be weak."
 msgstr ""
 
-#: ui_dialogs.py:5430
+#: ui_dialogs.py:5458
 msgid ""
 "The mic needs to capture the full frequency range of the saxophone (down "
 "to ~100 Hz for baritone). This requires a sample rate of at least 44.1 "
 "kHz and a flat low-frequency response."
 msgstr ""
 
-#: ui_dialogs.py:5433
+#: ui_dialogs.py:5461
 msgid "Recommended: Audio-Technica AT2020 USB (no audio interface needed)"
 msgstr ""
 
-#: ui_dialogs.py:5434
+#: ui_dialogs.py:5462
 msgid "Any condenser mic through an audio interface will also work well"
 msgstr ""
 
-#: ui_dialogs.py:5435
+#: ui_dialogs.py:5463
 msgid ""
 "Laptop/built-in mics work for basic tuning but may struggle with low "
 "register notes"
 msgstr ""
 
-#: ui_dialogs.py:5437
+#: ui_dialogs.py:5465
 msgid ""
 "Bluetooth headset mics do not work — their sample rate is too low (16 "
 "kHz) for harmonic analysis"
 msgstr ""
 
-#: ui_dialogs.py:5439
+#: ui_dialogs.py:5467
 msgid "Select your mic via Options > Input Device"
 msgstr ""
 
-#: ui_dialogs.py:5442
+#: ui_dialogs.py:5470
 msgid ""
 "The tuner activates automatically when you switch to the Tuner tab and "
 "stops when you leave it, so there is no CPU or audio usage when you are "
 "on other tabs."
 msgstr ""
 
-#: ui_dialogs.py:5448
+#: ui_dialogs.py:5476
 msgid "Toner — Tone Analyzer"
 msgstr ""
 
-#: ui_dialogs.py:5451
+#: ui_dialogs.py:5479
 msgid "What This Tool Does"
 msgstr ""
 
-#: ui_dialogs.py:5452
+#: ui_dialogs.py:5480
 msgid ""
 "The Toner is a harmonic analyzer. It detects your fundamental pitch and "
 "measures the strength of each harmonic up to the 20th. Every reading "
@@ -6454,7 +6454,7 @@ msgid ""
 "from changing one variable at a time and watching the delta."
 msgstr ""
 
-#: ui_dialogs.py:5459
+#: ui_dialogs.py:5487
 msgid ""
 "This is a tool for relative measurements, not absolute truth about gear. "
 "In our data, mouthpiece + player + mic routinely dwarf horn-to-horn "
@@ -6465,76 +6465,76 @@ msgid ""
 "current chain rather than the horn alone."
 msgstr ""
 
-#: ui_dialogs.py:5469
+#: ui_dialogs.py:5497
 msgid "Two Ways to Use It"
 msgstr ""
 
-#: ui_dialogs.py:5471
+#: ui_dialogs.py:5499
 msgid "1. Live biofeedback while practicing"
 msgstr ""
 
-#: ui_dialogs.py:5472
+#: ui_dialogs.py:5500
 msgid ""
 "The gauges and spectrum respond in real time. The movement is the "
 "information — it shows how your air, embouchure, and voicing choices "
 "affect the sound moment to moment."
 msgstr ""
 
-#: ui_dialogs.py:5478
+#: ui_dialogs.py:5506
 msgid "2. Tracking changes over time"
 msgstr ""
 
-#: ui_dialogs.py:5479
+#: ui_dialogs.py:5507
 msgid ""
 "Record a session, change one thing, record another. The comparison tool "
 "shows what moved and by how much. Works for any variable:"
 msgstr ""
 
-#: ui_dialogs.py:5481
+#: ui_dialogs.py:5509
 msgid "Switching mouthpieces — same horn, reed, mic. Delta is the mouthpiece."
 msgstr ""
 
-#: ui_dialogs.py:5482
+#: ui_dialogs.py:5510
 msgid "Day-to-day variation — same everything. Delta is you."
 msgstr ""
 
-#: ui_dialogs.py:5483
+#: ui_dialogs.py:5511
 msgid "Ribbon vs condenser — same horn, same room. Delta is the recording chain."
 msgstr ""
 
-#: ui_dialogs.py:5484
+#: ui_dialogs.py:5512
 msgid "Two horns — same player, mouthpiece, mic, room. Delta is the horn."
 msgstr ""
 
-#: ui_dialogs.py:5486
+#: ui_dialogs.py:5514
 msgid ""
 "Over many sessions, what stays the same emerges from what drifts. That "
 "takes time and discipline about what you control. Be skeptical of strong "
 "conclusions from small samples."
 msgstr ""
 
-#: ui_dialogs.py:5492
+#: ui_dialogs.py:5520
 msgid "Getting Started"
 msgstr ""
 
-#: ui_dialogs.py:5494
+#: ui_dialogs.py:5522
 msgid "Before your first capture, you need two things: a microphone and a preset."
 msgstr ""
 
-#: ui_dialogs.py:5499
+#: ui_dialogs.py:5527
 msgid ""
 "Mic type and model are set per preset — you'll enter them when creating a"
 " preset in File → Presets. Both are required before capturing."
 msgstr ""
 
-#: ui_dialogs.py:5502
+#: ui_dialogs.py:5530
 msgid ""
 "A condenser mic (e.g. Audio-Technica AT2020 USB) gives you the fullest "
 "picture — flat response captures upper harmonics accurately, which is "
 "where most of the interesting differences live."
 msgstr ""
 
-#: ui_dialogs.py:5506
+#: ui_dialogs.py:5534
 msgid ""
 "Ribbon and dynamic mics can still be used, but they attenuate upper "
 "harmonics, which skews complexity-based comparisons. The mic type is "
@@ -6542,42 +6542,42 @@ msgid ""
 "Analyze tool warns when comparing across mic types."
 msgstr ""
 
-#: ui_dialogs.py:5511
+#: ui_dialogs.py:5539
 msgid ""
 "Laptop/built-in mics are not suitable — they roll off both low and high "
 "frequencies and add noise"
 msgstr ""
 
-#: ui_dialogs.py:5513
+#: ui_dialogs.py:5541
 msgid ""
 "Bluetooth headset mics do not work — sample rate is too low (16 kHz) for "
 "harmonic analysis"
 msgstr ""
 
-#: ui_dialogs.py:5517
+#: ui_dialogs.py:5545
 msgid "Mic placement"
 msgstr ""
 
-#: ui_dialogs.py:5518
+#: ui_dialogs.py:5546
 msgid "2–3 feet (60–90 cm) from the bell, slightly off-axis."
 msgstr ""
 
-#: ui_dialogs.py:5519
+#: ui_dialogs.py:5547
 msgid "Closer than 1 foot — proximity effect exaggerates low harmonics."
 msgstr ""
 
-#: ui_dialogs.py:5520
+#: ui_dialogs.py:5548
 msgid "Quieter room is better — background noise masks upper harmonics."
 msgstr ""
 
-#: ui_dialogs.py:5521
+#: ui_dialogs.py:5549
 msgid ""
 "Mic position matters more than almost anything else. Moving a few inches "
 "between takes — same horn, same player, minutes apart — changed rolloff "
 "by over 1 dB/harmonic in our tests, enough to shift complexity by 10–20%."
 msgstr ""
 
-#: ui_dialogs.py:5524
+#: ui_dialogs.py:5552
 msgid ""
 "For controlled comparisons, use a mic stand at a fixed position; the "
 "position change otherwise shows up in your data and can be larger than "
@@ -6585,17 +6585,17 @@ msgid ""
 "how much it influences capture.)"
 msgstr ""
 
-#: ui_dialogs.py:5530
+#: ui_dialogs.py:5558
 msgid "Preset"
 msgstr ""
 
-#: ui_dialogs.py:5531
+#: ui_dialogs.py:5559
 msgid ""
 "A preset saves your setup details: horn + player + mouthpiece + mic. It "
 "pre-fills session metadata for quick capture start."
 msgstr ""
 
-#: ui_dialogs.py:5534
+#: ui_dialogs.py:5562
 msgid ""
 "Click Capture, then create or load a preset. Six fields are required: "
 "Make, Model, Player, Mouthpiece, Mic Type, and Mic Model. Optional fields"
@@ -6603,86 +6603,86 @@ msgid ""
 "→ Settings → Analysis tab."
 msgstr ""
 
-#: ui_dialogs.py:5540
+#: ui_dialogs.py:5568
 msgid ""
 "The SAX selector sets the transposition and is stored with the preset. "
 "When you load a preset, it updates automatically."
 msgstr ""
 
-#: ui_dialogs.py:5546
+#: ui_dialogs.py:5574
 msgid "Capturing"
 msgstr ""
 
-#: ui_dialogs.py:5547
+#: ui_dialogs.py:5575
 msgid "Click Capture, select or create a preset, then play."
 msgstr ""
 
-#: ui_dialogs.py:5548
+#: ui_dialogs.py:5576
 msgid ""
 "The tool auto-detects steady tones: hold a note for about a second and it"
 " triggers automatically. No button-pressing while playing."
 msgstr ""
 
-#: ui_dialogs.py:5551
+#: ui_dialogs.py:5579
 msgid ""
 "Move to the next note and it captures again. Play through the horn's "
 "range at your own pace."
 msgstr ""
 
-#: ui_dialogs.py:5553
+#: ui_dialogs.py:5581
 msgid ""
 "The first ~100ms of each note is automatically skipped — the attack "
 "transient doesn't represent the sustained tone."
 msgstr ""
 
-#: ui_dialogs.py:5556
+#: ui_dialogs.py:5584
 msgid "Capture at least 8 unique notes for a useful fingerprint. More is better."
 msgstr ""
 
-#: ui_dialogs.py:5558
+#: ui_dialogs.py:5586
 msgid ""
 "Click Stop when done. A coverage summary shows which notes you hit and "
 "where the gaps are."
 msgstr ""
 
-#: ui_dialogs.py:5560
+#: ui_dialogs.py:5588
 msgid ""
 "Every capture is timestamped. The session date is saved automatically, so"
 " you can track changes over time."
 msgstr ""
 
-#: ui_dialogs.py:5566
+#: ui_dialogs.py:5594
 msgid "Display"
 msgstr ""
 
-#: ui_dialogs.py:5567
+#: ui_dialogs.py:5595
 msgid ""
 "Spectrum view: full FFT frequency spectrum with harmonics highlighted in "
 "amber and the fundamental in green"
 msgstr ""
 
-#: ui_dialogs.py:5570
+#: ui_dialogs.py:5598
 msgid "Bars view: one bar per harmonic, clean and simple"
 msgstr ""
 
-#: ui_dialogs.py:5571
+#: ui_dialogs.py:5599
 msgid ""
 "Scale: Linear (default) shows true amplitude ratios. dB shows the "
 "logarithmic audio scale."
 msgstr ""
 
-#: ui_dialogs.py:5575
+#: ui_dialogs.py:5603
 msgid "Live Display"
 msgstr ""
 
-#: ui_dialogs.py:5576
+#: ui_dialogs.py:5604
 msgid ""
 "The live display shows two things in real time: the intonation gauge "
 "(flat/sharp with cents readout, IN TUNE lamp within ±4 cents) and the "
 "spectrum bars (complete harmonic shape from H1 through H20)."
 msgstr ""
 
-#: ui_dialogs.py:5581
+#: ui_dialogs.py:5609
 msgid ""
 "Live descriptor gauges (Pure↔Complex, Thin↔Warm) were removed because "
 "absolute single-preset readouts proved too noisy to trust — mic position "
@@ -6692,11 +6692,11 @@ msgid ""
 "confounders out."
 msgstr ""
 
-#: ui_dialogs.py:5590
+#: ui_dialogs.py:5618
 msgid "Spectrum Overlay"
 msgstr ""
 
-#: ui_dialogs.py:5591
+#: ui_dialogs.py:5619
 msgid ""
 "You can load a preset as a ghost overlay on the live spectrum. From the "
 "Analyze tool, view a single preset or a group average, then click "
@@ -6704,95 +6704,95 @@ msgid ""
 "updating per-note as you play."
 msgstr ""
 
-#: ui_dialogs.py:5597
+#: ui_dialogs.py:5625
 msgid ""
 "This lets you eyeball how your live sound compares to a stored reference "
 "— useful for quick A/B checks. For rigorous comparison, use the Analyze "
 "tool where both sides are averaged data."
 msgstr ""
 
-#: ui_dialogs.py:5604
+#: ui_dialogs.py:5632
 msgid "The Analyze Tool"
 msgstr ""
 
-#: ui_dialogs.py:5605
+#: ui_dialogs.py:5633
 msgid ""
 "This is where the tool earns its keep. The Analyze tool (File → Analyze…)"
 " shows you what's different between two or more presets — not which one "
 "is \"better,\" but what changed and where."
 msgstr ""
 
-#: ui_dialogs.py:5610
+#: ui_dialogs.py:5638
 msgid ""
 "File → Analyze opens a picker with filters for horn type, player, "
 "mouthpiece, and mic type"
 msgstr ""
 
-#: ui_dialogs.py:5612
+#: ui_dialogs.py:5640
 msgid "Select one preset: detail view with descriptors and harmonic curve"
 msgstr ""
 
-#: ui_dialogs.py:5614
+#: ui_dialogs.py:5642
 msgid ""
 "Select two presets: side-by-side delta analysis with a Difference chart —"
 " a single curve of the harmonic-by-harmonic delta that instantly shows "
 "where the sound diverges"
 msgstr ""
 
-#: ui_dialogs.py:5618
+#: ui_dialogs.py:5646
 msgid "Select three or more: spread analysis across the group"
 msgstr ""
 
-#: ui_dialogs.py:5619
+#: ui_dialogs.py:5647
 msgid ""
 "Toggle between Horn Average and Per-Note to see whether differences are "
 "across the board or concentrated in certain registers"
 msgstr ""
 
-#: ui_dialogs.py:5622
+#: ui_dialogs.py:5650
 msgid ""
 "Population percentiles: each preset's descriptors are ranked against all "
 "other presets of the same sax type, with low/below avg/mid-range/above "
 "avg/high labels"
 msgstr ""
 
-#: ui_dialogs.py:5625
+#: ui_dialogs.py:5653
 msgid ""
 "\"Overlay on Spectrum\" loads a preset as a blue ghost behind the live "
 "display for real-time A/B comparison while playing"
 msgstr ""
 
-#: ui_dialogs.py:5628
+#: ui_dialogs.py:5656
 msgid ""
 "Clickable legend labels and chart lines show preset details (player, "
 "mouthpiece, mic, etc.)"
 msgstr ""
 
-#: ui_dialogs.py:5630
+#: ui_dialogs.py:5658
 msgid ""
 "Back button on analysis windows returns you to the picker to try a "
 "different selection"
 msgstr ""
 
-#: ui_dialogs.py:5633
+#: ui_dialogs.py:5661
 msgid ""
 "The table shows mic type and recording quality (rolloff rate) for each "
 "preset. If mic types differ, the analysis notes that harmonic differences"
 " may partly reflect the mic rather than the horn."
 msgstr ""
 
-#: ui_dialogs.py:5640
+#: ui_dialogs.py:5668
 msgid "Preset Management Extras"
 msgstr ""
 
-#: ui_dialogs.py:5641
+#: ui_dialogs.py:5669
 msgid ""
 "Mutate Preset: duplicates a preset with all fields pre-filled (name "
 "cleared) so you can change one variable (mouthpiece, mic, reed) and save "
 "it as a new preset. Streamlines A/B testing workflows."
 msgstr ""
 
-#: ui_dialogs.py:5645
+#: ui_dialogs.py:5673
 msgid ""
 "Sandbox mode: enable in Options → Settings → Analysis to relax field "
 "requirements for non-sax instruments, contact mics, effects chains, or "
@@ -6800,18 +6800,18 @@ msgid ""
 "you don't confuse them with horn data."
 msgstr ""
 
-#: ui_dialogs.py:5650
+#: ui_dialogs.py:5678
 msgid ""
 "Mic position field: an optional preset field for documenting where the "
 "mic was placed (distance, angle, axis). Highly recommended — mic position"
 " is one of the biggest sources of variation in captures."
 msgstr ""
 
-#: ui_dialogs.py:5657
+#: ui_dialogs.py:5685
 msgid "Tone Descriptors"
 msgstr ""
 
-#: ui_dialogs.py:5658
+#: ui_dialogs.py:5686
 msgid ""
 "The Analyze tool computes a handful of descriptors from the harmonic "
 "data. They are most useful for side-by-side comparison, where deltas "
@@ -6820,11 +6820,11 @@ msgid ""
 "Even/Odd is on by default; Rolloff Shape is off by default."
 msgstr ""
 
-#: ui_dialogs.py:5666
+#: ui_dialogs.py:5694
 msgid "Warmth and brightness are independent"
 msgstr ""
 
-#: ui_dialogs.py:5667
+#: ui_dialogs.py:5695
 msgid ""
 "The two main descriptors — Warmth and Harmonic Complexity — measure "
 "independent properties of saxophone tone, and they don't have to agree. A"
@@ -6833,36 +6833,36 @@ msgid ""
 "that players name and care about."
 msgstr ""
 
-#: ui_dialogs.py:5675
+#: ui_dialogs.py:5703
 msgid "The four quadrants:"
 msgstr ""
 
-#: ui_dialogs.py:5676
+#: ui_dialogs.py:5704
 msgid ""
 "Warm + bright: fat, supported, projecting. Vintage Conns played hard, "
 "some metal mouthpieces, the classic \"big\" tenor sound."
 msgstr ""
 
-#: ui_dialogs.py:5679
+#: ui_dialogs.py:5707
 msgid ""
 "Warm + dark: round, mellow, rich. Classical large-chamber mouthpieces, "
 "dark Otto Links."
 msgstr ""
 
-#: ui_dialogs.py:5681
+#: ui_dialogs.py:5709
 msgid ""
 "Not warm + bright: edgy, cutting, no body. Berg Larsen 115/0, screaming "
 "fusion mouthpieces."
 msgstr ""
 
-#: ui_dialogs.py:5683
+#: ui_dialogs.py:5711
 msgid ""
 "Not warm + dark: hollow, woody, clarinet-like. The \"pure fundamental, "
 "suppressed everything else\" character. Some vintage large-chamber hard "
 "rubber mouthpieces sit here."
 msgstr ""
 
-#: ui_dialogs.py:5688
+#: ui_dialogs.py:5716
 msgid ""
 "Why they're independent: Warmth measures how strongly the 2nd harmonic "
 "(the octave above the fundamental) sits in the tone — that comes from how"
@@ -6872,7 +6872,7 @@ msgid ""
 " can engineer either axis without affecting the other."
 msgstr ""
 
-#: ui_dialogs.py:5698
+#: ui_dialogs.py:5726
 msgid ""
 "The Analyze tool's Character Map plots Warmth against a brightness "
 "measure so you can see where any selected preset sits in the two-"
@@ -6884,7 +6884,7 @@ msgid ""
 " and tend to track Warmth rather than provide an independent axis."
 msgstr ""
 
-#: ui_dialogs.py:5711
+#: ui_dialogs.py:5739
 msgid ""
 "Character Map is most reliable within a single sax type. Lower-pitched "
 "horns read warmer and brighter regardless of mouthpiece, so cross-type "
@@ -6892,11 +6892,11 @@ msgid ""
 "warns before opening one."
 msgstr ""
 
-#: ui_dialogs.py:5717
+#: ui_dialogs.py:5745
 msgid "The descriptors in detail"
 msgstr ""
 
-#: ui_dialogs.py:5718
+#: ui_dialogs.py:5746
 msgid ""
 "Warmth (Thin ↔ Warm) — strength of the 2nd harmonic relative to the "
 "fundamental. A strong H2 produces a round body sitting just above the "
@@ -6906,7 +6906,7 @@ msgid ""
 "warm\") or a strong H2 (reads \"warm\")."
 msgstr ""
 
-#: ui_dialogs.py:5726
+#: ui_dialogs.py:5754
 msgid ""
 "Some setups — metal mouthpieces driven hard especially — produce H2 "
 "LOUDER than the fundamental, a \"horn-like\" spectrum where the octave "
@@ -6916,7 +6916,7 @@ msgid ""
 " may evolve."
 msgstr ""
 
-#: ui_dialogs.py:5734
+#: ui_dialogs.py:5762
 msgid ""
 "Harmonic Complexity (Pure ↔ Complex) — spectral flatness, a measure of "
 "how evenly distributed the harmonic energy is. A pure tone with one "
@@ -6925,7 +6925,7 @@ msgid ""
 "timbre."
 msgstr ""
 
-#: ui_dialogs.py:5742
+#: ui_dialogs.py:5770
 msgid ""
 "Even/Odd Ratio (Odd ↔ Even) — the balance between even harmonics (H2, H4,"
 " H6...) and odd harmonics (H3, H5, H7...). Even harmonics produce a "
@@ -6937,7 +6937,7 @@ msgid ""
 "consistent descriptor across varying recording conditions."
 msgstr ""
 
-#: ui_dialogs.py:5755
+#: ui_dialogs.py:5783
 msgid ""
 "Rolloff Shape (Smooth ↔ Peaked) — how cleanly the harmonics roll off from"
 " strong to weak. A low value means a clean, linear rolloff; a high value "
@@ -6946,7 +6946,7 @@ msgid ""
 " turn on in Options → Settings → Analysis."
 msgstr ""
 
-#: ui_dialogs.py:5764
+#: ui_dialogs.py:5792
 msgid ""
 "Evenness (Variable ↔ Even) — how uniformly the tone character sits across"
 " the register. Low evenness means the horn sounds different in different "
@@ -6955,47 +6955,47 @@ msgid ""
 "captured."
 msgstr ""
 
-#: ui_dialogs.py:5773
+#: ui_dialogs.py:5801
 msgid "Where Differences Come From"
 msgstr ""
 
-#: ui_dialogs.py:5774
+#: ui_dialogs.py:5802
 msgid ""
 "The analysis text flags which harmonic range moved most. Different parts "
 "of the saxophone tend to affect different harmonics, though the mapping "
 "isn't perfectly understood:"
 msgstr ""
 
-#: ui_dialogs.py:5778
+#: ui_dialogs.py:5806
 msgid ""
 "H1–H4 (low): research suggests bore-driven more than mouthpiece-driven; "
 "this range shows the least variation in our player/mouthpiece swaps."
 msgstr ""
 
-#: ui_dialogs.py:5780
+#: ui_dialogs.py:5808
 msgid ""
 "H7–H13 (upper): where neck swaps show their biggest effect in our data, "
 "and where mouthpiece changes also show up."
 msgstr ""
 
-#: ui_dialogs.py:5782
+#: ui_dialogs.py:5810
 msgid ""
 "H3–H12 broadband: mouthpiece and player changes tend to lift or suppress "
 "the whole upper series rather than a narrow band."
 msgstr ""
 
-#: ui_dialogs.py:5785
+#: ui_dialogs.py:5813
 msgid ""
 "These are observed patterns, not laws of physics. Same-player comparisons"
 " isolate equipment; cross-player comparisons can't cleanly separate horn "
 "from player."
 msgstr ""
 
-#: ui_dialogs.py:5790
+#: ui_dialogs.py:5818
 msgid "Measurement noise: how big does a delta need to be?"
 msgstr ""
 
-#: ui_dialogs.py:5791
+#: ui_dialogs.py:5819
 #, python-format
 msgid ""
 "In our early data, two takes of the same setup ten minutes apart varied "
@@ -7006,11 +7006,11 @@ msgid ""
 " data arrives."
 msgstr ""
 
-#: ui_dialogs.py:5800
+#: ui_dialogs.py:5828
 msgid "Preset Reports"
 msgstr ""
 
-#: ui_dialogs.py:5801
+#: ui_dialogs.py:5829
 msgid ""
 "The report view shows one preset's history: descriptors, session-by-"
 "session changes (with deltas from the previous session), harmonic curve, "
@@ -7018,29 +7018,29 @@ msgid ""
 "have drifted over time."
 msgstr ""
 
-#: ui_dialogs.py:5811
+#: ui_dialogs.py:5839
 msgid ""
 "The app measures harmonic rolloff — how quickly upper harmonics fade "
 "relative to the fundamental. This tells you how much of the signal your "
 "recording setup is capturing:"
 msgstr ""
 
-#: ui_dialogs.py:5815
+#: ui_dialogs.py:5843
 msgid "1.0–2.0 dB/H: Condenser mic, close placement. Full harmonic detail."
 msgstr ""
 
-#: ui_dialogs.py:5817
+#: ui_dialogs.py:5845
 msgid "2.0–2.5 dB/H: Good mic, further away or reflective room."
 msgstr ""
 
-#: ui_dialogs.py:5819
+#: ui_dialogs.py:5847
 msgid ""
 "2.5+ dB/H: Ribbon, dynamic, built-in, or distant mic. Upper harmonics "
 "attenuated. The app warns you after the first few captures if this is "
 "detected."
 msgstr ""
 
-#: ui_dialogs.py:5824
+#: ui_dialogs.py:5852
 msgid ""
 "If you want to learn the most about your actual setup — what the horn and"
 " mouthpiece are doing — use a condenser mic. If you want to learn how "
@@ -7048,33 +7048,33 @@ msgid ""
 "Both are valid uses."
 msgstr ""
 
-#: ui_dialogs.py:5832
+#: ui_dialogs.py:5860
 msgid "Data & Transfer"
 msgstr ""
 
-#: ui_dialogs.py:5833
+#: ui_dialogs.py:5861
 msgid ""
 "Presets and sessions are saved automatically. Each session records the "
 "date, setup details, mic type, and mic model alongside the harmonic data."
 msgstr ""
 
-#: ui_dialogs.py:5837
+#: ui_dialogs.py:5865
 msgid ""
 "File → Transfer Data → Export/Import Preset Library: for backup or moving"
 " data between machines. Exported files are JSON."
 msgstr ""
 
-#: ui_dialogs.py:5842
+#: ui_dialogs.py:5870
 msgid "WAV Recording"
 msgstr ""
 
-#: ui_dialogs.py:5843
+#: ui_dialogs.py:5871
 msgid ""
 "WAV recording is on by default. Each session writes a WAV alongside the "
 "harmonic data; first capture asks you to choose a folder."
 msgstr ""
 
-#: ui_dialogs.py:5846
+#: ui_dialogs.py:5874
 msgid ""
 "Why it matters: at the end of each session, the toner re-analyzes the "
 "recording offline with stricter segment detection than the live pipeline "
@@ -7085,57 +7085,57 @@ msgid ""
 "analysis."
 msgstr ""
 
-#: ui_dialogs.py:5853
+#: ui_dialogs.py:5881
 msgid "Other reasons to keep the WAVs:"
 msgstr ""
 
-#: ui_dialogs.py:5854
+#: ui_dialogs.py:5882
 msgid "Re-analyze with future, better tools."
 msgstr ""
 
-#: ui_dialogs.py:5855
+#: ui_dialogs.py:5883
 msgid "Share recordings for others to analyze or import."
 msgstr ""
 
-#: ui_dialogs.py:5856
+#: ui_dialogs.py:5884
 msgid "Listen back and correlate what you hear with what the data shows."
 msgstr ""
 
-#: ui_dialogs.py:5857
+#: ui_dialogs.py:5885
 msgid "Keep a record of how a horn sounded on a given day."
 msgstr ""
 
-#: ui_dialogs.py:5859
+#: ui_dialogs.py:5887
 msgid ""
 "Files are named with preset name + session date. The toner activates "
 "automatically on tab switch and stops when you leave."
 msgstr ""
 
-#: ui_dialogs.py:5864
+#: ui_dialogs.py:5892
 msgid "Nerd Info — How It Works Under the Hood"
 msgstr ""
 
-#: ui_dialogs.py:5866
+#: ui_dialogs.py:5894
 msgid "FFT Pipeline"
 msgstr ""
 
-#: ui_dialogs.py:5867
+#: ui_dialogs.py:5895
 msgid ""
 "16,384-sample FFT at 44.1 kHz → 2.69 Hz resolution, fine enough for "
 "individual harmonics on the lowest baritone notes."
 msgstr ""
 
-#: ui_dialogs.py:5869
+#: ui_dialogs.py:5897
 msgid ""
 "Hann window before the FFT (−31.6 dB sidelobes), standard for harmonic "
 "analysis."
 msgstr ""
 
-#: ui_dialogs.py:5873
+#: ui_dialogs.py:5901
 msgid "Pitch Detection"
 msgstr ""
 
-#: ui_dialogs.py:5874
+#: ui_dialogs.py:5902
 msgid ""
 "Peak-picking with sub-harmonic verification: on sax the 2nd or 3rd "
 "harmonic is often louder than the fundamental, so the detector checks "
@@ -7143,36 +7143,36 @@ msgid ""
 " that candidate's own series. Prevents octave errors."
 msgstr ""
 
-#: ui_dialogs.py:5878
+#: ui_dialogs.py:5906
 msgid "Temporal hysteresis prevents frame-to-frame octave jumps."
 msgstr ""
 
-#: ui_dialogs.py:5881
+#: ui_dialogs.py:5909
 msgid "Harmonic Measurement"
 msgstr ""
 
-#: ui_dialogs.py:5882
+#: ui_dialogs.py:5910
 msgid ""
 "For each harmonic up to the 20th: peak-pick within ±3 bins, then "
 "parabolic interpolation (CCRMA method) refines frequency and amplitude. "
 "Corrects up to 1.42 dB of inter-bin scalloping loss."
 msgstr ""
 
-#: ui_dialogs.py:5885
+#: ui_dialogs.py:5913
 msgid ""
 "Measured in dB relative to the fundamental — normalizes out volume and "
 "mic gain."
 msgstr ""
 
-#: ui_dialogs.py:5887
+#: ui_dialogs.py:5915
 msgid "Harmonics under −60 dB are discarded as noise."
 msgstr ""
 
-#: ui_dialogs.py:5890
+#: ui_dialogs.py:5918
 msgid "Descriptors — Formulas"
 msgstr ""
 
-#: ui_dialogs.py:5891
+#: ui_dialogs.py:5919
 msgid ""
 "Harmonic Complexity uses spectral flatness (the ratio of geometric mean "
 "to arithmetic mean of harmonic amplitudes), scaled by the coverage of "
@@ -7181,7 +7181,7 @@ msgid ""
 "has high flatness."
 msgstr ""
 
-#: ui_dialogs.py:5897
+#: ui_dialogs.py:5925
 msgid ""
 "Warmth measures the strength of the 2nd harmonic (the octave) in dB "
 "relative to the fundamental, mapped to a 0–1 range. A stronger H2 reads "
@@ -7189,28 +7189,28 @@ msgid ""
 "wind instruments."
 msgstr ""
 
-#: ui_dialogs.py:5902
+#: ui_dialogs.py:5930
 msgid ""
 "Even/Odd Ratio is computed in the linear (not dB) amplitude domain as the"
 " sum of even harmonic amplitudes divided by the sum of all harmonic "
 "amplitudes. Higher values indicate even-harmonic dominance."
 msgstr ""
 
-#: ui_dialogs.py:5906
+#: ui_dialogs.py:5934
 msgid ""
 "Rolloff Shape is the standard deviation of residuals from a linear fit to"
 " the harmonic series in dB. Low values mean a clean exponential rolloff; "
 "high values mean peaks or notches in the harmonic structure."
 msgstr ""
 
-#: ui_dialogs.py:5910
+#: ui_dialogs.py:5938
 msgid ""
 "Evenness is computed as 1 minus (standard deviation of complexity across "
 "notes / 0.40), clamped to the 0–1 range. Requires at least 5 notes "
 "captured."
 msgstr ""
 
-#: ui_dialogs.py:5913
+#: ui_dialogs.py:5941
 msgid ""
 "Rolloff Rate is the slope (dB per harmonic) of the linear fit to H1–H12 "
 "in dB. Used as both a recording-quality indicator and a darkness proxy. "
@@ -7218,126 +7218,126 @@ msgid ""
 "1.9–2.3, soprano 2.8–4.0."
 msgstr ""
 
-#: ui_dialogs.py:5920
+#: ui_dialogs.py:5948
 msgid ""
 "Descriptors are never stored — they are recomputed from raw harmonic data"
 " using the current formulas, so improvements apply retroactively to every"
 " historical capture."
 msgstr ""
 
-#: ui_dialogs.py:5925
+#: ui_dialogs.py:5953
 msgid "What Gets Saved"
 msgstr ""
 
-#: ui_dialogs.py:5926
+#: ui_dialogs.py:5954
 msgid ""
 "Per capture: raw harmonic amplitudes (dB rel. fundamental), harmonic "
 "cents deviations, fundamental frequency, spectral centroid, signal level."
 " Everything else is derived."
 msgstr ""
 
-#: ui_dialogs.py:5929
+#: ui_dialogs.py:5957
 msgid ""
 "Captures are averaged per-note first, then across notes with equal "
 "weight. Prevents register skew — 20 high-note captures and 3 low-note "
 "captures still represent the whole horn evenly."
 msgstr ""
 
-#: ui_dialogs.py:5932
+#: ui_dialogs.py:5960
 msgid ""
 "The first ~100 ms of each note is skipped — attack transients contain "
 "broadband non-harmonic energy that doesn't represent sustained tone "
 "(Saldanha & Corso 1964)."
 msgstr ""
 
-#: ui_dialogs.py:5937
+#: ui_dialogs.py:5965
 msgid "Why Raw Data Matters"
 msgstr ""
 
-#: ui_dialogs.py:5938
+#: ui_dialogs.py:5966
 msgid ""
 "Spectral centroid is stored as future-proofing — the most validated "
 "acoustic correlate of perceived brightness in the literature."
 msgstr ""
 
-#: ui_dialogs.py:5940
+#: ui_dialogs.py:5968
 msgid ""
 "Harmonics are stored up to H20 even though current gauges use only the "
 "first few; low-register sax can produce 20+ audible harmonics."
 msgstr ""
 
-#: ui_dialogs.py:5942
+#: ui_dialogs.py:5970
 msgid "Today's captures will be fully usable by better analysis tools tomorrow."
 msgstr ""
 
-#: ui_dialogs.py:5946
+#: ui_dialogs.py:5974
 msgid "Import / Export & Sharing"
 msgstr ""
 
-#: ui_dialogs.py:5947
+#: ui_dialogs.py:5975
 msgid ""
 "Each data tab supports importing and exporting so you can share data with"
 " colleagues or back up your measurements:"
 msgstr ""
 
-#: ui_dialogs.py:5949
+#: ui_dialogs.py:5977
 msgid ""
 "Pad Presets: File > Export/Import Pad Presets to share saved pad size "
 "lists"
 msgstr ""
 
-#: ui_dialogs.py:5950
+#: ui_dialogs.py:5978
 msgid "Key Heights: File > Export/Import Key Heights to share measurement sets"
 msgstr ""
 
-#: ui_dialogs.py:5951
+#: ui_dialogs.py:5979
 msgid "Screw Specs: File > Export/Import Screw Specs to share thread data"
 msgstr ""
 
-#: ui_dialogs.py:5952
+#: ui_dialogs.py:5980
 msgid "Tone Presets: File > Transfer Data > Export/Import Preset Library"
 msgstr ""
 
-#: ui_dialogs.py:5953
+#: ui_dialogs.py:5981
 msgid ""
 "All Settings: File > Import Settings from Folder copies all config files "
 "from another installation"
 msgstr ""
 
-#: ui_dialogs.py:5955
+#: ui_dialogs.py:5983
 msgid ""
 "Exported files are standard JSON and can be emailed or shared via any "
 "method."
 msgstr ""
 
-#: ui_dialogs.py:5959
+#: ui_dialogs.py:5987
 msgid "Learn to Make Pads"
 msgstr ""
 
-#: ui_dialogs.py:5960
+#: ui_dialogs.py:5988
 msgid ""
 "If you somehow got this program and missed the guide that started it all,"
 " here's the complete how-to on making saxophone pads:"
 msgstr ""
 
-#: ui_dialogs.py:5962
+#: ui_dialogs.py:5990
 msgid "stohrermusic.com/articles/how-to-make-saxophone-pads/"
 msgstr ""
 
-#: ui_dialogs.py:5981
+#: ui_dialogs.py:6009
 msgid "by Matt Stohrer"
 msgstr ""
 
-#: ui_dialogs.py:5983
+#: ui_dialogs.py:6011
 msgid "~Salingeresque Sax Repair Techno-poet~"
 msgstr ""
 
-#: ui_dialogs.py:5985
+#: ui_dialogs.py:6013
 #, python-brace-format
 msgid "Version {version}  •  Built {build}"
 msgstr ""
 
-#: ui_dialogs.py:5990
+#: ui_dialogs.py:6018
 msgid ""
 "•  SVG & G-code generation for laser-cut pads\n"
 "•  Key height library with import/export\n"
@@ -7348,214 +7348,214 @@ msgid ""
 "•  Harmonic tone analyzer"
 msgstr ""
 
-#: ui_dialogs.py:6007
+#: ui_dialogs.py:6035
 msgid "Questions or feedback:"
 msgstr ""
 
-#: ui_dialogs.py:6017
+#: ui_dialogs.py:6045
 msgid "Like this app? Want to say thanks?"
 msgstr ""
 
-#: ui_dialogs.py:6020
+#: ui_dialogs.py:6048
 msgid ""
 "PayPal: stohrermusic@gmail.com\n"
 "Venmo: @matthew-stohrer"
 msgstr ""
 
-#: ui_dialogs.py:6029
+#: ui_dialogs.py:6057
 msgid "Join my "
 msgstr ""
 
-#: ui_dialogs.py:6031
+#: ui_dialogs.py:6059
 msgid "YouTube channel"
 msgstr ""
 
-#: ui_dialogs.py:6038
+#: ui_dialogs.py:6066
 msgid " as a paying member"
 msgstr ""
 
-#: ui_dialogs.py:6041
+#: ui_dialogs.py:6069
 msgid ""
 "Or email me for my address to send a six-pack,\n"
 "some old tools, or whatever!"
 msgstr ""
 
-#: ui_dialogs.py:6054
+#: ui_dialogs.py:6082
 #, python-brace-format
 msgid "Preset Notes — {name}"
 msgstr ""
 
-#: ui_dialogs.py:6116
+#: ui_dialogs.py:6144
 msgid "Past Jobs"
 msgstr ""
 
-#: ui_dialogs.py:6119
+#: ui_dialogs.py:6147
 msgid ""
 "Every batch that was written to file or sent to the laser, newest first.\n"
 "A * on the output means that laser run ended early."
 msgstr ""
 
-#: ui_dialogs.py:6158
+#: ui_dialogs.py:6186
 msgid "Load into Pad Maker"
 msgstr ""
 
-#: ui_dialogs.py:6162 ui_dialogs.py:6423
+#: ui_dialogs.py:6190 ui_dialogs.py:6451
 msgid "Delete Entry"
 msgstr ""
 
-#: ui_dialogs.py:6165 ui_dialogs.py:6435
+#: ui_dialogs.py:6193 ui_dialogs.py:6463
 msgid "Clear History"
 msgstr ""
 
-#: ui_dialogs.py:6171
+#: ui_dialogs.py:6199
 msgid ""
 "Put this job's pad list, materials, sheet size and filename back into the"
 " form so you can run it again. Sizing rules and custom shapes aren't "
 "changed."
 msgstr ""
 
-#: ui_dialogs.py:6174
+#: ui_dialogs.py:6202
 msgid "Remove just this job from the history."
 msgstr ""
 
-#: ui_dialogs.py:6197
+#: ui_dialogs.py:6225
 msgid "Laser*"
 msgstr ""
 
-#: ui_dialogs.py:6198
+#: ui_dialogs.py:6226
 msgid "Laser"
 msgstr ""
 
-#: ui_dialogs.py:6200
+#: ui_dialogs.py:6228
 msgid "G-code"
 msgstr ""
 
-#: ui_dialogs.py:6202
+#: ui_dialogs.py:6230
 msgid "SVG"
 msgstr ""
 
-#: ui_dialogs.py:6220
+#: ui_dialogs.py:6248
 #, python-brace-format
 msgid "{n} material"
 msgid_plural "{n} materials"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui_dialogs.py:6247
+#: ui_dialogs.py:6275
 msgid "When"
 msgstr ""
 
-#: ui_dialogs.py:6247
+#: ui_dialogs.py:6275
 msgid "Output"
 msgstr ""
 
-#: ui_dialogs.py:6247
+#: ui_dialogs.py:6275
 msgid "Material"
 msgstr ""
 
-#: ui_dialogs.py:6247
+#: ui_dialogs.py:6275
 msgid "Pads"
 msgstr ""
 
-#: ui_dialogs.py:6247
+#: ui_dialogs.py:6275
 msgid "Sheet"
 msgstr ""
 
-#: ui_dialogs.py:6252
+#: ui_dialogs.py:6280
 #, python-brace-format
 msgid "{n} pad"
 msgid_plural "{n} pads"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui_dialogs.py:6296
+#: ui_dialogs.py:6324
 msgid "  (no jobs yet — generate or cut something and it'll show up here)"
 msgstr ""
 
-#: ui_dialogs.py:6339
+#: ui_dialogs.py:6367
 msgid "Sent to the laser"
 msgstr ""
 
-#: ui_dialogs.py:6342
+#: ui_dialogs.py:6370
 #, python-brace-format
 msgid " — run ended early ({status})"
 msgstr ""
 
-#: ui_dialogs.py:6344
+#: ui_dialogs.py:6372
 msgid "G-code files written"
 msgstr ""
 
-#: ui_dialogs.py:6346
+#: ui_dialogs.py:6374
 msgid "SVG files written"
 msgstr ""
 
-#: ui_dialogs.py:6352
+#: ui_dialogs.py:6380
 #, python-brace-format
 msgid "Scrap piece #{n} of a scrap-mode session"
 msgstr ""
 
-#: ui_dialogs.py:6358
+#: ui_dialogs.py:6386
 #, python-brace-format
 msgid "{n} pad on the sheet"
 msgid_plural "{n} pads on the sheet"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui_dialogs.py:6361
+#: ui_dialogs.py:6389
 msgid " (a 'max' line filled the leftover space)"
 msgstr ""
 
-#: ui_dialogs.py:6364
+#: ui_dialogs.py:6392
 #, python-brace-format
 msgid "Sheet: {s}"
 msgstr ""
 
-#: ui_dialogs.py:6366
+#: ui_dialogs.py:6394
 msgid " (card used the paper size setting)"
 msgstr ""
 
-#: ui_dialogs.py:6371
+#: ui_dialogs.py:6399
 #, python-brace-format
 msgid "Center hole: {v}mm (custom)"
 msgstr ""
 
-#: ui_dialogs.py:6374
+#: ui_dialogs.py:6402
 #, python-brace-format
 msgid "Center hole: {v}"
 msgstr ""
 
-#: ui_dialogs.py:6377
+#: ui_dialogs.py:6405
 #, python-brace-format
 msgid "Filename: {b}"
 msgstr ""
 
-#: ui_dialogs.py:6379
+#: ui_dialogs.py:6407
 #, python-brace-format
 msgid "Saved to: {d}"
 msgstr ""
 
-#: ui_dialogs.py:6381
+#: ui_dialogs.py:6409
 #, python-brace-format
 msgid "From preset: [{lib}] {name}"
 msgstr ""
 
-#: ui_dialogs.py:6385
+#: ui_dialogs.py:6413
 #, python-brace-format
 msgid "Custom shape: {n} point (not restored on load)"
 msgid_plural "Custom shape: {n} points (not restored on load)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui_dialogs.py:6396
+#: ui_dialogs.py:6424
 #, python-brace-format
 msgid "Pad list: {list}"
 msgstr ""
 
-#: ui_dialogs.py:6407
+#: ui_dialogs.py:6435
 msgid "Load Job"
 msgstr ""
 
-#: ui_dialogs.py:6408
+#: ui_dialogs.py:6436
 #, python-brace-format
 msgid ""
 "Replace what's currently in the Pad Maker form with this job?\n"
@@ -7565,7 +7565,7 @@ msgid ""
 "Your sizing rules and G-code settings stay as they are."
 msgstr ""
 
-#: ui_dialogs.py:6424
+#: ui_dialogs.py:6452
 #, python-brace-format
 msgid ""
 "Remove this job from the history?\n"
@@ -7573,7 +7573,7 @@ msgid ""
 "{row}"
 msgstr ""
 
-#: ui_dialogs.py:6436
+#: ui_dialogs.py:6464
 #, python-brace-format
 msgid ""
 "Delete all {n} jobs from the history?\n"
@@ -7581,7 +7581,7 @@ msgid ""
 "This only clears the log — your presets and files are untouched."
 msgstr ""
 
-#: ui_dialogs.py:6507
+#: ui_dialogs.py:6535
 msgid ""
 "This preview shows how your pads will be arranged on the sheet before "
 "files are generated.\n"
@@ -7597,61 +7597,61 @@ msgid ""
 "Preview works with one material at a time."
 msgstr ""
 
-#: ui_dialogs.py:6553
+#: ui_dialogs.py:6581
 msgid "Save Files"
 msgstr ""
 
-#: ui_dialogs.py:6555 ui_dialogs.py:6772
+#: ui_dialogs.py:6583 ui_dialogs.py:6800
 msgid "Adjust"
 msgstr ""
 
-#: ui_dialogs.py:6660
+#: ui_dialogs.py:6688
 #, python-brace-format, python-format
 msgid "{pct:.0f}% used"
 msgstr ""
 
-#: ui_dialogs.py:6666
+#: ui_dialogs.py:6694
 #, python-brace-format
 msgid "{count} pads ({material}) on {w:.0f} x {h:.0f} mm{shape}"
 msgstr ""
 
-#: ui_dialogs.py:6666
+#: ui_dialogs.py:6694
 msgid " (custom shape)"
 msgstr ""
 
-#: ui_dialogs.py:6700
+#: ui_dialogs.py:6728
 msgid "Speed & Power Test Preview"
 msgstr ""
 
-#: ui_dialogs.py:6728
+#: ui_dialogs.py:6756
 #, python-brace-format
 msgid "{n} discs - Speed {sp} mm/min, Power {pw}%, Passes {ps}"
 msgstr ""
 
-#: ui_dialogs.py:6740
+#: ui_dialogs.py:6768
 #, python-brace-format
 msgid ""
 "Material: {m}   Sheet: {w:.0f} x {h:.0f} mm   Engraving: {es} mm/min @ "
 "{ep}%"
 msgstr ""
 
-#: ui_dialogs.py:6753
+#: ui_dialogs.py:6781
 msgid "air ON  "
 msgstr ""
 
-#: ui_dialogs.py:6758
+#: ui_dialogs.py:6786
 msgid "air OFF"
 msgstr ""
 
-#: ui_dialogs.py:6770
+#: ui_dialogs.py:6798
 msgid "Save G-code"
 msgstr ""
 
-#: ui_dialogs.py:6882 ui_dialogs.py:6997
+#: ui_dialogs.py:6910 ui_dialogs.py:7025
 msgid "Camera Calibration"
 msgstr ""
 
-#: ui_dialogs.py:6982
+#: ui_dialogs.py:7010
 #, python-brace-format
 msgid ""
 "Camera calibration requires opencv-python and Pillow:\n"
@@ -7661,55 +7661,55 @@ msgid ""
 "Error: {e}"
 msgstr ""
 
-#: ui_dialogs.py:7042
+#: ui_dialogs.py:7070
 msgid "Frame"
 msgstr ""
 
-#: ui_dialogs.py:7046 ui_dialogs.py:7176
+#: ui_dialogs.py:7074 ui_dialogs.py:7204
 msgid "Engrave"
 msgstr ""
 
-#: ui_dialogs.py:7051
+#: ui_dialogs.py:7079
 msgid "Next →"
 msgstr ""
 
-#: ui_dialogs.py:7063
+#: ui_dialogs.py:7091
 msgid "Engrave new card"
 msgstr ""
 
-#: ui_dialogs.py:7069 ui_dialogs.py:8124
+#: ui_dialogs.py:7097 ui_dialogs.py:8152
 msgid "Capture reference"
 msgstr ""
 
-#: ui_dialogs.py:7077
+#: ui_dialogs.py:7105
 msgid "Done with references"
 msgstr ""
 
-#: ui_dialogs.py:7084
+#: ui_dialogs.py:7112
 msgid "Retake last"
 msgstr ""
 
-#: ui_dialogs.py:7088
+#: ui_dialogs.py:7116
 msgid "Reset all"
 msgstr ""
 
-#: ui_dialogs.py:7092
+#: ui_dialogs.py:7120
 msgid "Calibrate & Save"
 msgstr ""
 
-#: ui_dialogs.py:7101
+#: ui_dialogs.py:7129
 msgid "Reconnect camera"
 msgstr ""
 
-#: ui_dialogs.py:7109 ui_dialogs.py:8365 ui_dialogs.py:9451
+#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9522
 msgid "Switch camera"
 msgstr ""
 
-#: ui_dialogs.py:7119
+#: ui_dialogs.py:7147
 msgid "Enter offset manually..."
 msgstr ""
 
-#: ui_dialogs.py:7149
+#: ui_dialogs.py:7177
 msgid ""
 "Step 1 of 2 — engrave the calibration card.\n"
 "\n"
@@ -7731,55 +7731,55 @@ msgid ""
 "5. Click Engrave to commit. (Takes a while.)"
 msgstr ""
 
-#: ui_dialogs.py:7168
+#: ui_dialogs.py:7196
 msgid "Ready. Home the laser and jog into position."
 msgstr ""
 
-#: ui_dialogs.py:7169
+#: ui_dialogs.py:7197
 msgid "Camera opening..."
 msgstr ""
 
-#: ui_dialogs.py:7214
+#: ui_dialogs.py:7242
 msgid "Position the head"
 msgstr ""
 
-#: ui_dialogs.py:7219 ui_dialogs.py:8852 ui_dialogs.py:9240
+#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9307
 msgid "Home Laser ($H)"
 msgstr ""
 
-#: ui_dialogs.py:7221
+#: ui_dialogs.py:7249
 msgid "MPos: --"
 msgstr ""
 
-#: ui_dialogs.py:7227 ui_dialogs.py:8824
+#: ui_dialogs.py:7255 ui_dialogs.py:8857
 msgid "Step (mm):"
 msgstr ""
 
-#: ui_dialogs.py:7272
+#: ui_dialogs.py:7300
 #, python-brace-format
 msgid "MPos: X={x:7.2f}  Y={y:7.2f}"
 msgstr ""
 
-#: ui_dialogs.py:7289
+#: ui_dialogs.py:7317
 msgid ""
 "Send the laser home? The head will travel to the home corner at full "
 "speed."
 msgstr ""
 
-#: ui_dialogs.py:7304 ui_dialogs.py:9213 ui_dialogs.py:9216
+#: ui_dialogs.py:7332 ui_dialogs.py:9280 ui_dialogs.py:9283
 msgid "Homing..."
 msgstr ""
 
-#: ui_dialogs.py:7339
+#: ui_dialogs.py:7367
 msgid "Homed. Now jog into the camera view."
 msgstr ""
 
-#: ui_dialogs.py:7342
+#: ui_dialogs.py:7370
 #, python-brace-format
 msgid "Home failed: {m}"
 msgstr ""
 
-#: ui_dialogs.py:7366
+#: ui_dialogs.py:7394
 #, python-brace-format
 msgid ""
 "Step 2 of 2 — calibration captures.\n"
@@ -7797,15 +7797,15 @@ msgid ""
 "Target: {n} good captures total."
 msgstr ""
 
-#: ui_dialogs.py:7388 ui_dialogs.py:8303
+#: ui_dialogs.py:7416 ui_dialogs.py:8331
 msgid "Opening camera ..."
 msgstr ""
 
-#: ui_dialogs.py:7453
+#: ui_dialogs.py:7481
 msgid "Card Would Run Off Bed"
 msgstr ""
 
-#: ui_dialogs.py:7454
+#: ui_dialogs.py:7482
 #, python-brace-format
 msgid ""
 "With head at machine (X={x:.1f}, Y={y:.1f}), the card would engrave at "
@@ -7818,15 +7818,15 @@ msgid ""
 "Need head at roughly X={midx:.0f}-{maxx:.0f}, Y={midy:.0f}-{maxy:.0f}."
 msgstr ""
 
-#: ui_dialogs.py:7480
+#: ui_dialogs.py:7508
 msgid "Can't operate — no Falcon connection."
 msgstr ""
 
-#: ui_dialogs.py:7484
+#: ui_dialogs.py:7512
 msgid "Home Laser First?"
 msgstr ""
 
-#: ui_dialogs.py:7485
+#: ui_dialogs.py:7513
 msgid ""
 "The laser needs to be homed so machine coordinates have a known "
 "reference. Without homing, the engrave's position is bogus.\n"
@@ -7837,30 +7837,30 @@ msgid ""
 "Cancel — back out."
 msgstr ""
 
-#: ui_dialogs.py:7517
+#: ui_dialogs.py:7545
 #, python-brace-format
 msgid "Frame needs pyserial: {e}"
 msgstr ""
 
-#: ui_dialogs.py:7572
+#: ui_dialogs.py:7600
 msgid "Framing — jog to position, click Done when alignment looks right"
 msgstr ""
 
-#: ui_dialogs.py:7597
+#: ui_dialogs.py:7625
 msgid "Framing done. Click Engrave when ready."
 msgstr ""
 
-#: ui_dialogs.py:7606
+#: ui_dialogs.py:7634
 msgid "Engrave first"
 msgstr ""
 
-#: ui_dialogs.py:7607
+#: ui_dialogs.py:7635
 msgid ""
 "No engrave offset on file yet. Click Engrave (and wait for it to finish) "
 "before moving to captures."
 msgstr ""
 
-#: ui_dialogs.py:7629
+#: ui_dialogs.py:7657
 #, python-brace-format
 msgid ""
 "Engrave needs pyserial:\n"
@@ -7868,19 +7868,19 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: ui_dialogs.py:7649
+#: ui_dialogs.py:7677
 msgid "No machine position"
 msgstr ""
 
-#: ui_dialogs.py:7650
+#: ui_dialogs.py:7678
 msgid "Couldn't read MPos. Home the laser first."
 msgstr ""
 
-#: ui_dialogs.py:7672
+#: ui_dialogs.py:7700
 msgid "Start Engrave?"
 msgstr ""
 
-#: ui_dialogs.py:7673
+#: ui_dialogs.py:7701
 #, python-brace-format
 msgid ""
 "Are you sure? Card will engrave centered on machine (X={x:.0f}, "
@@ -7892,23 +7892,23 @@ msgid ""
 "first."
 msgstr ""
 
-#: ui_dialogs.py:7719
+#: ui_dialogs.py:7747
 msgid "Engraving Calibration Card"
 msgstr ""
 
-#: ui_dialogs.py:7734
+#: ui_dialogs.py:7762
 msgid "Engrave stopped. Put fresh basswood, re-Frame, then Engrave."
 msgstr ""
 
-#: ui_dialogs.py:7770
+#: ui_dialogs.py:7798
 msgid "Engrave complete. Click Next when ready for calibration captures."
 msgstr ""
 
-#: ui_dialogs.py:7775
+#: ui_dialogs.py:7803
 msgid "Card Engraved — DO NOT TOUCH"
 msgstr ""
 
-#: ui_dialogs.py:7776
+#: ui_dialogs.py:7804
 msgid ""
 "Card engraved successfully.\n"
 "\n"
@@ -7919,11 +7919,11 @@ msgid ""
 "moves before then, the calibration is off."
 msgstr ""
 
-#: ui_dialogs.py:7794
+#: ui_dialogs.py:7822
 msgid "Engrave a New Card?"
 msgstr ""
 
-#: ui_dialogs.py:7795
+#: ui_dialogs.py:7823
 #, python-brace-format
 msgid ""
 "Discard the existing calibration session and start over with a fresh "
@@ -7935,29 +7935,29 @@ msgid ""
 "Current captures ({n}) will be discarded."
 msgstr ""
 
-#: ui_dialogs.py:7828 ui_dialogs.py:8426
+#: ui_dialogs.py:7856 ui_dialogs.py:8454
 msgid "Opening camera..."
 msgstr ""
 
-#: ui_dialogs.py:7836 ui_dialogs.py:8434
+#: ui_dialogs.py:7864 ui_dialogs.py:8462
 msgid "Camera opened but returned no frame."
 msgstr ""
 
-#: ui_dialogs.py:7850
+#: ui_dialogs.py:7878
 #, python-brace-format
 msgid "Camera live. Captured 0 / {n} good frames."
 msgstr ""
 
-#: ui_dialogs.py:7855
+#: ui_dialogs.py:7883
 #, python-brace-format
 msgid "Could not open camera index {i}: {e}"
 msgstr ""
 
-#: ui_dialogs.py:7880
+#: ui_dialogs.py:7908
 msgid "Camera lost — click Reconnect Camera to recover."
 msgstr ""
 
-#: ui_dialogs.py:7894
+#: ui_dialogs.py:7922
 msgid ""
 "Enter the engraved card's bottom-left machine-mm coords.\n"
 "\n"
@@ -7968,54 +7968,54 @@ msgid ""
 "on the bed at known coords."
 msgstr ""
 
-#: ui_dialogs.py:7900
+#: ui_dialogs.py:7928
 msgid "Manual Engrave Offset"
 msgstr ""
 
-#: ui_dialogs.py:7911
+#: ui_dialogs.py:7939
 msgid "Bad Offset"
 msgstr ""
 
-#: ui_dialogs.py:7912
+#: ui_dialogs.py:7940
 #, python-brace-format
 msgid ""
 "Couldn't parse '{v}' as X,Y mm:\n"
 "{e}"
 msgstr ""
 
-#: ui_dialogs.py:7927
+#: ui_dialogs.py:7955
 #, python-brace-format
 msgid "Offset set to ({x:.3f}, {y:.3f}). Click Next to capture."
 msgstr ""
 
-#: ui_dialogs.py:7943
+#: ui_dialogs.py:7971
 msgid "Reopening camera..."
 msgstr ""
 
-#: ui_dialogs.py:7954 ui_dialogs.py:8387 ui_dialogs.py:9477
+#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9548
 msgid "Only One Camera"
 msgstr ""
 
-#: ui_dialogs.py:7955 ui_dialogs.py:8388 ui_dialogs.py:9478
+#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9549
 msgid "Only one camera is detected."
 msgstr ""
 
-#: ui_dialogs.py:7970 ui_dialogs.py:8404
+#: ui_dialogs.py:7998 ui_dialogs.py:8432
 #, python-brace-format
 msgid "Switched to camera index {i}. Reopening..."
 msgstr ""
 
-#: ui_dialogs.py:8027
+#: ui_dialogs.py:8055
 #, python-brace-format
 msgid "Detected {d} corners — captured {n} / {target} good frames."
 msgstr ""
 
-#: ui_dialogs.py:8031
+#: ui_dialogs.py:8059
 #, python-brace-format
 msgid "Move the card into view — captured {n} / {target} good frames."
 msgstr ""
 
-#: ui_dialogs.py:8056
+#: ui_dialogs.py:8084
 #, python-brace-format
 msgid ""
 "REFERENCE captured ({nref} of card untouched). Take more references for "
@@ -8023,40 +8023,40 @@ msgid ""
 "references' when ready to MOVE the card."
 msgstr ""
 
-#: ui_dialogs.py:8062
+#: ui_dialogs.py:8090
 msgid "Click Calibrate & Save when ready."
 msgstr ""
 
-#: ui_dialogs.py:8064
+#: ui_dialogs.py:8092
 msgid "MOVE the card to a new position and capture again."
 msgstr ""
 
-#: ui_dialogs.py:8066
+#: ui_dialogs.py:8094
 #, python-brace-format
 msgid "Captured {n} / {t} good frames. {hint}"
 msgstr ""
 
-#: ui_dialogs.py:8076
+#: ui_dialogs.py:8104
 msgid "Capture (card moved)"
 msgstr ""
 
-#: ui_dialogs.py:8079
+#: ui_dialogs.py:8107
 #, python-brace-format
 msgid ""
 "References done ({n} pooled). Now MOVE the card to different positions / "
 "tilts and capture {m} more frames for lens-distortion calibration."
 msgstr ""
 
-#: ui_dialogs.py:8107
+#: ui_dialogs.py:8135
 #, python-brace-format
 msgid "Removed last capture. {n} / {t} remaining."
 msgstr ""
 
-#: ui_dialogs.py:8114
+#: ui_dialogs.py:8142
 msgid "Reset all captures?"
 msgstr ""
 
-#: ui_dialogs.py:8115
+#: ui_dialogs.py:8143
 #, python-brace-format
 msgid ""
 "Discard all {n} captures and start over.\n"
@@ -8067,21 +8067,21 @@ msgid ""
 "Continue?"
 msgstr ""
 
-#: ui_dialogs.py:8130
+#: ui_dialogs.py:8158
 msgid ""
 "Captures cleared. Place the card in its engraved position and click "
 "Capture reference."
 msgstr ""
 
-#: ui_dialogs.py:8137
+#: ui_dialogs.py:8165
 msgid "Computing calibration ..."
 msgstr ""
 
-#: ui_dialogs.py:8174
+#: ui_dialogs.py:8202
 msgid "Calibration Saved"
 msgstr ""
 
-#: ui_dialogs.py:8175
+#: ui_dialogs.py:8203
 #, python-brace-format
 msgid ""
 "Camera calibration complete.\n"
@@ -8094,11 +8094,11 @@ msgid ""
 "{p}"
 msgstr ""
 
-#: ui_dialogs.py:8185
+#: ui_dialogs.py:8213
 msgid "Calibration Failed"
 msgstr ""
 
-#: ui_dialogs.py:8186
+#: ui_dialogs.py:8214
 #, python-brace-format
 msgid ""
 "Calibration did not converge:\n"
@@ -8108,196 +8108,196 @@ msgid ""
 "Try capturing more frames at different positions and tilts."
 msgstr ""
 
-#: ui_dialogs.py:8235 ui_dialogs.py:8284
+#: ui_dialogs.py:8263 ui_dialogs.py:8312
 msgid "Capture Scrap Outline"
 msgstr ""
 
-#: ui_dialogs.py:8274
+#: ui_dialogs.py:8302
 msgid "No camera calibration found. Run Options > Camera Calibration first."
 msgstr ""
 
-#: ui_dialogs.py:8288
+#: ui_dialogs.py:8316
 msgid ""
 "Place the scrap on the laser bed (close the cover). The green outline "
 "shows what will be captured. Click Use when it looks right, or Retry to "
 "re-detect."
 msgstr ""
 
-#: ui_dialogs.py:8298
+#: ui_dialogs.py:8326
 msgid "Waking camera..."
 msgstr ""
 
-#: ui_dialogs.py:8316
+#: ui_dialogs.py:8344
 msgid "Detection sensitivity:"
 msgstr ""
 
-#: ui_dialogs.py:8352
+#: ui_dialogs.py:8380
 msgid "Invert colors (use when scrap is DARKER than the bed)"
 msgstr ""
 
-#: ui_dialogs.py:8359
+#: ui_dialogs.py:8387
 msgid "Use"
 msgstr ""
 
-#: ui_dialogs.py:8447
+#: ui_dialogs.py:8475
 #, python-brace-format
 msgid "Could not open camera: {e}"
 msgstr ""
 
-#: ui_dialogs.py:8519
+#: ui_dialogs.py:8547
 #, python-brace-format
 msgid "Detected: {n}-vertex polygon, {w:.0f} × {h:.0f} mm bbox"
 msgstr ""
 
-#: ui_dialogs.py:8523
+#: ui_dialogs.py:8551
 msgid "No scrap detected — place a piece on the bed."
 msgstr ""
 
-#: ui_dialogs.py:8621 ui_dialogs.py:8713
+#: ui_dialogs.py:8650 ui_dialogs.py:8746
 msgid "Sending to Falcon"
 msgstr ""
 
-#: ui_dialogs.py:8723
+#: ui_dialogs.py:8756
 #, python-brace-format
 msgid "Position the head, then click {label}."
 msgstr ""
 
-#: ui_dialogs.py:8726
+#: ui_dialogs.py:8759
 msgid "Connecting ..."
 msgstr ""
 
-#: ui_dialogs.py:8745
+#: ui_dialogs.py:8778
 #, python-brace-format
 msgid "Line 0 / {n}"
 msgstr ""
 
-#: ui_dialogs.py:8749
+#: ui_dialogs.py:8782
 msgid "Elapsed 0:00"
 msgstr ""
 
-#: ui_dialogs.py:8804
+#: ui_dialogs.py:8837
 msgid "Looks Good — Cut!"
 msgstr ""
 
-#: ui_dialogs.py:8815
+#: ui_dialogs.py:8848
 msgid "Nudge head"
 msgstr ""
 
-#: ui_dialogs.py:8862
+#: ui_dialogs.py:8895
 msgid "Try Auto Locate"
 msgstr ""
 
-#: ui_dialogs.py:8876
+#: ui_dialogs.py:8909
 msgid "Running ..."
 msgstr ""
 
-#: ui_dialogs.py:8878
+#: ui_dialogs.py:8911
 #, python-brace-format
 msgid "Failed to start: {e}"
 msgstr ""
 
-#: ui_dialogs.py:8892
+#: ui_dialogs.py:8925
 msgid "Idle"
 msgstr ""
 
-#: ui_dialogs.py:8893
+#: ui_dialogs.py:8926
 msgid "Running"
 msgstr ""
 
-#: ui_dialogs.py:8894
+#: ui_dialogs.py:8927
 msgid "Paused (feed hold)"
 msgstr ""
 
-#: ui_dialogs.py:8895
+#: ui_dialogs.py:8928
 msgid "ALARM"
 msgstr ""
 
-#: ui_dialogs.py:8896
+#: ui_dialogs.py:8929
 msgid "Safety door open"
 msgstr ""
 
-#: ui_dialogs.py:8897
+#: ui_dialogs.py:8930
 msgid "Jogging"
 msgstr ""
 
-#: ui_dialogs.py:8899
+#: ui_dialogs.py:8932
 msgid "Sleeping"
 msgstr ""
 
-#: ui_dialogs.py:8918
+#: ui_dialogs.py:8951
 #, python-brace-format
 msgid "Line {s} / {t}  ({pct:.0f}%)"
 msgstr ""
 
-#: ui_dialogs.py:8922
+#: ui_dialogs.py:8955
 #, python-brace-format
 msgid "Error: {m}"
 msgstr ""
 
-#: ui_dialogs.py:8926
+#: ui_dialogs.py:8959
 #, python-brace-format
 msgid "ALARM: {m}"
 msgstr ""
 
-#: ui_dialogs.py:8940
+#: ui_dialogs.py:8973
 #, python-brace-format
 msgid "Pass {n} complete — waiting for Idle..."
 msgstr ""
 
-#: ui_dialogs.py:8963
+#: ui_dialogs.py:8996
 msgid "Complete ✓"
 msgstr ""
 
-#: ui_dialogs.py:8965
+#: ui_dialogs.py:8998
 msgid "Stopped"
 msgstr ""
 
-#: ui_dialogs.py:8970
+#: ui_dialogs.py:9003
 msgid "unknown error"
 msgstr ""
 
-#: ui_dialogs.py:8975
+#: ui_dialogs.py:9008
 #, python-brace-format
 msgid "Stopped on error: {e}"
 msgstr ""
 
-#: ui_dialogs.py:8977
+#: ui_dialogs.py:9010
 #, python-brace-format
 msgid "  — {d}"
 msgstr ""
 
-#: ui_dialogs.py:8979
+#: ui_dialogs.py:9012
 #, python-brace-format
 msgid ""
 "\n"
 "Failing line {n}: {l}"
 msgstr ""
 
-#: ui_dialogs.py:9011
+#: ui_dialogs.py:9044
 #, python-brace-format
 msgid "Jog the head to your material's bottom-left corner, then click {label}."
 msgstr ""
 
-#: ui_dialogs.py:9077
+#: ui_dialogs.py:9110
 #, python-brace-format
 msgid "Timed out waiting for Idle (state={s})"
 msgstr ""
 
-#: ui_dialogs.py:9102
+#: ui_dialogs.py:9135
 #, python-brace-format
 msgid "Regenerate failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:9109
+#: ui_dialogs.py:9142
 #, python-brace-format
 msgid "Restart failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:9144
+#: ui_dialogs.py:9177
 msgid "Lid Appears Open"
 msgstr ""
 
-#: ui_dialogs.py:9145
+#: ui_dialogs.py:9178
 msgid ""
 "The laser is reporting that the safety lid is open. Grbl blocks motion in"
 " Door state, so the next step won't fire until the lid is closed.\n"
@@ -8305,79 +8305,103 @@ msgid ""
 "Close the lid, then click Yes to continue. Click No to stay in framing."
 msgstr ""
 
-#: ui_dialogs.py:9161 ui_dialogs.py:9328
+#: ui_dialogs.py:9208
+msgid "Cover Is Open"
+msgstr ""
+
+#: ui_dialogs.py:9209
+msgid ""
+"The laser reports the cover is open. Starting now puts it in Door state, "
+"which needs a power cycle to clear.\n"
+"\n"
+"Close the cover, then click Yes."
+msgstr ""
+
+#: ui_dialogs.py:9214
+msgid "Cover Closed?"
+msgstr ""
+
+#: ui_dialogs.py:9215
+msgid ""
+"Is the cover closed?\n"
+"\n"
+"Starting with it open throws the laser into an error state that needs a "
+"power cycle."
+msgstr ""
+
+#: ui_dialogs.py:9228 ui_dialogs.py:9399
 msgid "Finishing pass..."
 msgstr ""
 
-#: ui_dialogs.py:9165
+#: ui_dialogs.py:9232
 msgid "Cut requested — finishing current framing pass..."
 msgstr ""
 
-#: ui_dialogs.py:9190
+#: ui_dialogs.py:9257
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr ""
 
-#: ui_dialogs.py:9204
+#: ui_dialogs.py:9271
 msgid "Homing will abort the run in progress. Continue?"
 msgstr ""
 
-#: ui_dialogs.py:9250
+#: ui_dialogs.py:9317
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr ""
 
-#: ui_dialogs.py:9252
+#: ui_dialogs.py:9319
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr ""
 
-#: ui_dialogs.py:9279
+#: ui_dialogs.py:9346
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:9281
+#: ui_dialogs.py:9348
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr ""
 
-#: ui_dialogs.py:9332
+#: ui_dialogs.py:9403
 msgid "Finishing current pass + centering head..."
 msgstr ""
 
-#: ui_dialogs.py:9337
+#: ui_dialogs.py:9408
 msgid "Stop?"
 msgstr ""
 
-#: ui_dialogs.py:9338
+#: ui_dialogs.py:9409
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
 msgstr ""
 
-#: ui_dialogs.py:9352
+#: ui_dialogs.py:9423
 msgid "Stop and close?"
 msgstr ""
 
-#: ui_dialogs.py:9353
+#: ui_dialogs.py:9424
 msgid "A job is still running. Stop it and close the window?"
 msgstr ""
 
-#: ui_dialogs.py:9383 ui_dialogs.py:9393
+#: ui_dialogs.py:9454 ui_dialogs.py:9464
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr ""
 
-#: ui_dialogs.py:9390
+#: ui_dialogs.py:9461
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr ""
 
-#: ui_dialogs.py:9416
+#: ui_dialogs.py:9487
 msgid "Live camera"
 msgstr ""
 
-#: ui_dialogs.py:9436
+#: ui_dialogs.py:9507
 msgid "Camera preview unavailable"
 msgstr ""
 

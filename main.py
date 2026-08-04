@@ -2802,7 +2802,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 stop_needs_confirm=False,
                 done_button_label=_("Start Frame →"),
                 auto_locate_target=auto_locate_target,
-                is_homed=self._falcon_homed_this_session)
+                is_homed=self._falcon_homed_this_session,
+                # The title above invites opening the lid to position the
+                # head by hand, so confirm it's back down before framing.
+                confirm_lid_on_advance=True)
             if jog_dlg._final_reason != "complete":
                 return
 

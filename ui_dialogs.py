@@ -8644,7 +8644,8 @@ class FalconRunDialog(tk.Toplevel):
                   show_pause_resume=True, show_cut_button=True,
                   stop_needs_confirm=True, done_button_label=None,
                   require_jog_first=False,
-                  auto_locate_target=None, is_homed=False):
+                  auto_locate_target=None, is_homed=False,
+                  confirm_lid_on_advance=False):
         super().__init__(parent)
         self.title(title or _("Sending to Falcon"))
         self.configure(bg=DIALOG_BG)
@@ -8701,6 +8702,10 @@ class FalconRunDialog(tk.Toplevel):
         # button text describes what happens next, not just that this
         # dialog goes away.
         self._done_button_label = done_button_label or _("Close")
+        # Ask "is the cover closed?" before the advance button hands off
+        # to a step that fires the laser. Off by default: for most
+        # callers the advance button is just "Close" on a finished job.
+        self._confirm_lid_on_advance = confirm_lid_on_advance
         # MANUAL-mode safety gate: the post-stream done button stays
         # disabled until the user clicks at least one jog button. Used
         # by the "jog to material position" step so the user can't
@@ -9177,6 +9182,40 @@ class FalconRunDialog(tk.Toplevel):
               "to stay in framing."),
             parent=self)
 
+    def _confirm_lid_before_advance(self):
+        """Cover reminder before an advance that fires the laser.
+
+        Asks every time rather than only when Grbl reports the door pin.
+        Two reasons: the jog step actively invites opening the lid to
+        push the head by hand, and not every Falcon wires the door
+        switch through to Grbl — so a clean status is not proof the
+        cover is down. Forgetting it drops the machine into Door/Alarm,
+        which costs a laser power cycle AND an app restart to recover;
+        one Yes click is the cheaper side of that trade.
+
+        Returns True to proceed, False if the user backed out.
+        """
+        # Refresh the status first. In jog-only mode nothing streams, so
+        # the cached status is whatever connect() left behind and has
+        # never seen a door pin. Safe here per get_status' contract:
+        # connected but idle, no worker thread racing for the port.
+        try:
+            self._sender.get_status()
+        except Exception:
+            pass
+        if self._is_door_open():
+            return messagebox.askyesno(
+                _("Cover Is Open"),
+                _("The laser reports the cover is open. Starting now "
+                  "puts it in Door state, which needs a power cycle to "
+                  "clear.\n\nClose the cover, then click Yes."),
+                parent=self)
+        return messagebox.askyesno(
+            _("Cover Closed?"),
+            _("Is the cover closed?\n\nStarting with it open throws the "
+              "laser into an error state that needs a power cycle."),
+            parent=self)
+
     def _on_cut_clicked(self):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
         request; the current pass will be allowed to finish, then the
@@ -9331,6 +9370,8 @@ class FalconRunDialog(tk.Toplevel):
         alone and just destroy so the caller proceeds. Routing this
         through _on_close_window would cancel via the jog-only mode
         path."""
+        if self._confirm_lid_on_advance and not self._confirm_lid_before_advance():
+            return  # stay in the dialog so the user can close the cover
         self.destroy()
 
     def _on_stop_clicked(self):
@@ -9339,8 +9380,10 @@ class FalconRunDialog(tk.Toplevel):
             # step" path (e.g. the "Start Frame →" button on the jog-
             # to-position dialog). _final_reason is already "complete"
             # from _on_done — leave it alone and just destroy so the
-            # caller proceeds to the next step.
-            self.destroy()
+            # caller proceeds to the next step. Delegate rather than
+            # destroy() directly so the cover check can't be skipped
+            # if the _on_done button rewire ever failed.
+            self._on_advance_clicked()
             return
         # Graceful "Done" path (framing context, no cut button): let
         # the current pass finish — its trailing G0 moves the head
