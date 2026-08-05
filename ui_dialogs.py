@@ -9143,57 +9143,22 @@ class FalconRunDialog(tk.Toplevel):
             self._finished = True
             self._final_reason = "error"
 
-    def _is_door_open(self):
-        """True if Grbl currently reports the safety door is open.
-
-        Reads the cached status (set by the on_status callbacks at
-        STATUS_POLL_HZ during streaming) — no synchronous get_status
-        call, so this stays non-blocking and doesn't race the
-        streamer for the serial port. Cache is at most ~250ms stale
-        during active framing, which is fine for a "is the door open
-        right now?" confirmation.
-        """
-        st = self._sender.status or {}
-        if st.get('state') == 'Door':
-            return True
-        # Grbl 1.1 Pn: field reports active input pins. 'D' = door.
-        pins = st.get('pins') or ''
-        if 'D' in pins:
-            return True
-        return False
-
-    def _confirm_door_closed(self):
-        """If the door is open, pop a confirmation. Returns True if it
-        is safe to proceed (door closed OR user explicitly accepted
-        the warning), False if the user backed out.
-
-        Used at every "leaving the framing dialog into something that
-        fires the laser" boundary — without this, an open lid silently
+    def _remind_lid_closed(self):
+        """Plain OK-only popup shown at every "about to fire the laser"
+        boundary — Start Frame, Cut, and Done-during-framing-only-loop.
+        Not a yes/no gate; there's nothing to decline, clicking the
+        (only) button is what lets the caller proceed. An open lid
         wedges the next stream because Grbl blocks motion in Door
-        state (no error returned, just an unresponsive controller)."""
-        if not self._is_door_open():
-            return True
-        return messagebox.askyesno(
-            _("Lid Appears Open"),
-            _("The laser is reporting that the safety lid is open. "
-              "Grbl blocks motion in Door state, so the next step "
-              "won't fire until the lid is closed.\n\n"
-              "Close the lid, then click Yes to continue. Click No "
-              "to stay in framing."),
-            parent=self)
+        state (no error returned, just an unresponsive controller),
+        which costs a laser power cycle AND an app restart to recover.
 
-    def _confirm_lid_before_advance(self):
-        """Cover reminder before an advance that fires the laser.
-
-        A plain OK-only popup, not a yes/no gate — clicking the (only)
-        button is what starts framing. Originally this branched on
-        Grbl's reported door state (Door/Alarm state or a Pn: 'D' pin),
-        but live-hardware testing on 2026-08-05 found the Falcon2 Pro
+        This used to try to detect the door via Grbl status (Door state
+        or a Pn: 'D' pin) and only ask when it couldn't tell. Retired
+        after live-hardware testing on 2026-08-05 found the Falcon2 Pro
         40W (ESP32-S3 controller) never sends a Pn: field at all, lid
-        open or closed — so the "detected" branch was dead weight that
-        only added a synchronous status poll before the popup could
-        show. Same reminder every time is both simpler and honest about
-        what the app actually knows.
+        open or closed — so detection was unverifiable across Falcon
+        models and dead code on the one machine tested. Same reminder
+        every time is simpler and honest about what the app knows.
         """
         messagebox.showinfo(
             _("Lid Closed?"),
@@ -9206,8 +9171,7 @@ class FalconRunDialog(tk.Toplevel):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
         request; the current pass will be allowed to finish, then the
         loop exits cleanly with reason='complete'."""
-        if not self._confirm_door_closed():
-            return
+        self._remind_lid_closed()
         self._cut_requested = True
         try:
             self._cut_btn.config(state='disabled',
@@ -9357,7 +9321,7 @@ class FalconRunDialog(tk.Toplevel):
         through _on_close_window would cancel via the jog-only mode
         path."""
         if self._confirm_lid_on_advance:
-            self._confirm_lid_before_advance()
+            self._remind_lid_closed()
         self.destroy()
 
     def _on_stop_clicked(self):
@@ -9377,8 +9341,7 @@ class FalconRunDialog(tk.Toplevel):
         # reset. Same mechanism as the Cut button uses.
         graceful = self._loop and not self._show_cut_button
         if graceful:
-            if not self._confirm_door_closed():
-                return
+            self._remind_lid_closed()
             self._cut_requested = True
             try:
                 self._stop_btn.config(state='disabled',

@@ -1,21 +1,25 @@
 """
-Tests for the Frame & Cut lid reminder (FalconRunDialog).
+Tests for the laser lid reminder (FalconRunDialog._remind_lid_closed).
 
-Clicking "Start Frame →" with the laser's lid open drops the Falcon into
-Door/Alarm state, which costs a machine power cycle AND an app restart before
-SSC sees the laser again. The advance button shows a plain "Is the lid
-closed?" reminder first -- a single-OK popup, not a yes/no gate. Clicking the
-only button is what starts framing.
+Firing the laser with the lid open drops the Falcon into Door/Alarm state,
+which costs a machine power cycle AND an app restart before SSC sees the
+laser again. FalconRunDialog shows a plain "Is the lid closed?" reminder --
+a single-OK popup, not a yes/no gate -- at every boundary that hands off to
+something that fires the laser: Start Frame (the jog-to-position dialog's
+advance button, gated by confirm_lid_on_advance), Cut ("Looks Good — Cut!"
+during a loop with a cut button), and Done during a framing-only loop (no
+cut button -- e.g. Camera Calibration's continuous framing trace).
 
-An earlier version tried to detect the door via Grbl status (Door state or a
-Pn: 'D' pin) and only asked when it couldn't tell. Live-hardware testing on
-2026-08-05 found the Falcon2 Pro 40W (ESP32-S3 controller) never sends a Pn:
-field at all, lid open or closed -- so detection was unverifiable and added a
-pointless synchronous status poll. Matt asked for the simple version: same
-reminder, every time, OK starts it.
+All three used to be gated by _is_door_open(), which read Grbl's status for
+Door state or a Pn: 'D' pin and only asked when it couldn't tell. Retired
+after live-hardware testing on 2026-08-05: the Falcon2 Pro 40W (ESP32-S3
+controller) never sends a Pn: field at all, lid open or closed, so
+detection was unverifiable and added a pointless synchronous status poll.
+Matt asked for the simple version: same reminder, every time, OK proceeds.
 
 These drive the handlers on an instance built via __new__, setting only the
-attributes they touch — no Tk, no serial port, so this runs headless anywhere.
+attributes each path touches — no Tk, no serial port, so this runs headless
+anywhere.
 
 Run:
     python tools/test_lid_confirm.py
@@ -47,16 +51,26 @@ def check(name, fn):
         results.append(False)
 
 
-def make_dialog(confirm=True):
-    """A FalconRunDialog with only the advance-path attributes set."""
+class FakeWidget:
+    """Stands in for a tk.Button/tk.StringVar — config()/set() are no-ops."""
+
+    def config(self, **kw):
+        pass
+
+    def set(self, *a, **kw):
+        pass
+
+
+def make_dialog(**attrs):
+    """A FalconRunDialog with only the attributes a given handler touches."""
     d = FalconRunDialog.__new__(FalconRunDialog)
-    d._confirm_lid_on_advance = confirm
-    d._finished = True
     d._destroyed = 0
 
     def fake_destroy():
         d._destroyed += 1
     d.destroy = fake_destroy
+    for k, v in attrs.items():
+        setattr(d, k, v)
     return d
 
 
@@ -96,33 +110,17 @@ class FailOnAskYesNo:
 
 
 def main_test():
-    print("Frame & Cut Lid Reminder Tests")
+    print("Laser Lid Reminder Tests")
     print("=" * 60)
 
-    def flag_off_never_prompts():
-        # Default callers use the advance button as plain "Close" on a
-        # finished job — a laser prompt there would be wrong.
-        d = make_dialog(confirm=False)
-        with PatchShowInfo() as p:
-            d._on_advance_clicked()
-        assert not p.calls, f"should not prompt when flag is off: {p.calls}"
-        assert d._destroyed == 1, "dialog should close straight through"
-    check("Advance without the flag closes with no prompt", flag_off_never_prompts)
-
-    def flag_on_shows_reminder_then_proceeds():
-        d = make_dialog()
-        with PatchShowInfo() as p:
-            d._on_advance_clicked()
-        assert len(p.calls) == 1, f"expected one reminder, got {len(p.calls)}"
-        assert d._destroyed == 1, \
-            "OK is the only button -- dismissing it must always proceed"
-    check("Advance with the flag shows the reminder, then always proceeds",
-          flag_on_shows_reminder_then_proceeds)
+    # ------------------------------------------------------------
+    # The reminder itself
+    # ------------------------------------------------------------
 
     def reminder_wording_is_constant():
         d = make_dialog()
         with PatchShowInfo() as p:
-            d._confirm_lid_before_advance()
+            d._remind_lid_closed()
         title, message = p.calls[0]
         assert title == "Lid Closed?", f"unexpected title {title!r}"
         assert "Is the laser's lid closed?" in message, message
@@ -133,12 +131,12 @@ def main_test():
         # away from: a decision popup that can be answered "No."
         d = make_dialog()
         with FailOnAskYesNo(), PatchShowInfo():
-            d._confirm_lid_before_advance()
+            d._remind_lid_closed()
     check("Reminder never calls askyesno (single OK button only)",
           reminder_is_not_a_yes_no_gate)
 
-    def no_status_poll_happens(monkeypatch_free=True):
-        # Detection is gone entirely -- confirming the popup must not
+    def no_status_poll_happens():
+        # Detection is gone entirely -- showing the reminder must not
         # touch self._sender at all, let alone poll it.
         d = make_dialog()
 
@@ -147,23 +145,94 @@ def main_test():
                 raise AssertionError("reminder must not poll sender status")
         d._sender = ExplodingSender()
         with PatchShowInfo():
-            d._confirm_lid_before_advance()
-    check("Confirming the reminder never touches the sender", no_status_poll_happens)
+            d._remind_lid_closed()
+    check("Reminder never touches the sender", no_status_poll_happens)
 
-    def stop_button_finished_path_still_reminds():
+    # ------------------------------------------------------------
+    # Start Frame → (_on_advance_clicked)
+    # ------------------------------------------------------------
+
+    def flag_off_never_prompts():
+        # Default callers use the advance button as plain "Close" on a
+        # finished job — a laser prompt there would be wrong.
+        d = make_dialog(_confirm_lid_on_advance=False)
+        with PatchShowInfo() as p:
+            d._on_advance_clicked()
+        assert not p.calls, f"should not prompt when flag is off: {p.calls}"
+        assert d._destroyed == 1, "dialog should close straight through"
+    check("Advance without the flag closes with no prompt", flag_off_never_prompts)
+
+    def flag_on_shows_reminder_then_proceeds():
+        d = make_dialog(_confirm_lid_on_advance=True)
+        with PatchShowInfo() as p:
+            d._on_advance_clicked()
+        assert len(p.calls) == 1, f"expected one reminder, got {len(p.calls)}"
+        assert d._destroyed == 1, \
+            "OK is the only button -- dismissing it must always proceed"
+    check("Advance with the flag shows the reminder, then always proceeds",
+          flag_on_shows_reminder_then_proceeds)
+
+    def stop_button_finished_path_delegates_to_advance():
         # _on_done rewires the stop button to the advance handler; if that
-        # rewire ever fails, the stop path must still show the reminder.
-        d = make_dialog()
-        d._finished = True
+        # rewire ever fails, the finished-Stop path must still remind.
+        d = make_dialog(_finished=True, _confirm_lid_on_advance=True)
         with PatchShowInfo() as p:
             d._on_stop_clicked()
         assert len(p.calls) == 1, "stop-when-finished must still show the reminder"
         assert d._destroyed == 1
     check("Stop button's finished path also shows the reminder",
-          stop_button_finished_path_still_reminds)
+          stop_button_finished_path_delegates_to_advance)
+
+    # ------------------------------------------------------------
+    # Cut ("Looks Good — Cut!")
+    # ------------------------------------------------------------
+
+    def cut_click_shows_reminder():
+        d = make_dialog(_cut_btn=FakeWidget(), _state_var=FakeWidget())
+        with PatchShowInfo() as p:
+            d._on_cut_clicked()
+        assert len(p.calls) == 1, f"expected one reminder, got {len(p.calls)}"
+        assert d._cut_requested is True
+    check("Cut click shows the reminder and flags the cut request",
+          cut_click_shows_reminder)
+
+    # ------------------------------------------------------------
+    # Done during a framing-only loop (no cut button)
+    # ------------------------------------------------------------
+
+    def graceful_stop_shows_reminder():
+        d = make_dialog(_finished=False, _loop=True, _show_cut_button=False,
+                         _stop_btn=FakeWidget(), _state_var=FakeWidget())
+        with PatchShowInfo() as p:
+            d._on_stop_clicked()
+        assert len(p.calls) == 1, f"expected one reminder, got {len(p.calls)}"
+        assert d._cut_requested is True
+    check("Graceful Done (framing-only loop) shows the reminder",
+          graceful_stop_shows_reminder)
+
+    def aggressive_stop_does_not_remind():
+        # Cut-context Stop is an abort, not a "fires the laser" handoff --
+        # it must go straight to the existing Stop-confirmation, not the
+        # lid reminder.
+        calls = []
+
+        class Sender:
+            def stop(self):
+                calls.append('stopped')
+        d = make_dialog(_finished=False, _loop=False, _show_cut_button=True,
+                         _stop_needs_confirm=False, _sender=Sender())
+        with PatchShowInfo() as p:
+            d._on_stop_clicked()
+        assert not p.calls, f"aggressive stop should not show the lid reminder: {p.calls}"
+        assert calls == ['stopped']
+    check("Aggressive Stop (mid-cut abort) does not show the lid reminder",
+          aggressive_stop_does_not_remind)
+
+    # ------------------------------------------------------------
+    # Wiring
+    # ------------------------------------------------------------
 
     def frame_and_cut_opts_in():
-        # Pin the wiring: the Frame & Cut jog dialog must request it.
         import inspect
         import main
         src = inspect.getsource(main.PadSVGGeneratorApp.on_frame_and_cut)
@@ -171,6 +240,14 @@ def main_test():
             "Frame & Cut jog dialog no longer opts into the lid reminder"
         assert "Start Frame" in src, "expected the jog dialog in this method"
     check("Frame & Cut opts into the lid reminder", frame_and_cut_opts_in)
+
+    def old_names_are_gone():
+        # Regression guard: the detection-based helpers should not come back.
+        for name in ('_is_door_open', '_confirm_door_closed', '_confirm_lid_before_advance'):
+            assert not hasattr(FalconRunDialog, name), \
+                f"{name} should have been removed, not just unused"
+        assert hasattr(FalconRunDialog, '_remind_lid_closed')
+    check("Retired detection helpers are actually gone", old_names_are_gone)
 
     print("=" * 60)
     passed = sum(1 for r in results if r)

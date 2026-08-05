@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-05 14:31-0400\n"
+"POT-Creation-Date: 2026-08-05 14:39-0400\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: de\n"
@@ -1324,7 +1324,7 @@ msgstr "Fehlende Abhängigkeit"
 msgid "Home needs pyserial: {e}"
 msgstr "Referenzfahrt benötigt pyserial: {e}"
 
-#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9256
+#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9220
 msgid "Home Laser?"
 msgstr "Laser referenzieren?"
 
@@ -9333,7 +9333,7 @@ msgstr "Kalibrieren & speichern"
 msgid "Reconnect camera"
 msgstr "Kamera neu verbinden"
 
-#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9508
+#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9471
 msgid "Switch camera"
 msgstr "Kamera wechseln"
 
@@ -9395,7 +9395,7 @@ msgstr "Kamera wird geöffnet..."
 msgid "Position the head"
 msgstr "Kopf positionieren"
 
-#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9293
+#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9257
 msgid "Home Laser ($H)"
 msgstr "Laser referenzieren ($H)"
 
@@ -9420,7 +9420,7 @@ msgstr ""
 "Laser referenzieren? Der Kopf fährt mit voller Geschwindigkeit in die "
 "Referenzecke."
 
-#: ui_dialogs.py:7332 ui_dialogs.py:9266 ui_dialogs.py:9269
+#: ui_dialogs.py:7332 ui_dialogs.py:9230 ui_dialogs.py:9233
 msgid "Homing..."
 msgstr "Referenzfahrt..."
 
@@ -9726,11 +9726,11 @@ msgstr "Versatz auf ({x:.3f}, {y:.3f}) gesetzt. „Weiter“ klicken, um aufzune
 msgid "Reopening camera..."
 msgstr "Kamera wird wieder geöffnet..."
 
-#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9534
+#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9497
 msgid "Only One Camera"
 msgstr "Nur eine Kamera"
 
-#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9535
+#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9498
 msgid "Only one camera is detected."
 msgstr "Nur eine Kamera erkannt."
 
@@ -10066,29 +10066,11 @@ msgstr "Neu-Erzeugen fehlgeschlagen: {e}"
 msgid "Restart failed: {e}"
 msgstr "Neustart fehlgeschlagen: {e}"
 
-#: ui_dialogs.py:9177
-msgid "Lid Appears Open"
-msgstr "Deckel scheint offen"
-
-#: ui_dialogs.py:9178
-msgid ""
-"The laser is reporting that the safety lid is open. Grbl blocks motion in"
-" Door state, so the next step won't fire until the lid is closed.\n"
-"\n"
-"Close the lid, then click Yes to continue. Click No to stay in framing."
-msgstr ""
-"Der Laser meldet, dass die Sicherheitstür offen ist. Grbl blockiert "
-"Bewegung im Door-Zustand, daher startet der nächste Schritt nicht, bis "
-"der Deckel geschlossen ist.\n"
-"\n"
-"Deckel schließen, dann Ja zum Fortfahren klicken. Nein, um im Rahmen-"
-"Modus zu bleiben."
-
-#: ui_dialogs.py:9199
+#: ui_dialogs.py:9164
 msgid "Lid Closed?"
 msgstr "Deckel geschlossen?"
 
-#: ui_dialogs.py:9200
+#: ui_dialogs.py:9165
 msgid ""
 "Is the laser's lid closed?\n"
 "\n"
@@ -10100,51 +10082,51 @@ msgstr ""
 "Mit offenem Deckel zu starten versetzt den Laser in einen Fehlerzustand, "
 "der nur durch Aus- und Einschalten behoben wird."
 
-#: ui_dialogs.py:9214 ui_dialogs.py:9385
+#: ui_dialogs.py:9178 ui_dialogs.py:9348
 msgid "Finishing pass..."
 msgstr "Durchgang wird beendet..."
 
-#: ui_dialogs.py:9218
+#: ui_dialogs.py:9182
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Schneiden angefordert — laufender Rahmen-Durchgang wird beendet..."
 
-#: ui_dialogs.py:9243
+#: ui_dialogs.py:9207
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Kopf positioniert. {label} klicken, wenn bereit."
 
-#: ui_dialogs.py:9257
+#: ui_dialogs.py:9221
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "Die Referenzfahrt bricht den laufenden Job ab. Fortfahren?"
 
-#: ui_dialogs.py:9303
+#: ui_dialogs.py:9267
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Referenzfahrt abgeschlossen. MPos ist jetzt (0, 0)."
 
-#: ui_dialogs.py:9305
+#: ui_dialogs.py:9269
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Referenzfahrt fehlgeschlagen: {m}"
 
-#: ui_dialogs.py:9332
+#: ui_dialogs.py:9296
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Auto-Locate fehlgeschlagen: {e}"
 
-#: ui_dialogs.py:9334
+#: ui_dialogs.py:9298
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Fahrt zur Polygon-BL bei MPos ({x:.1f}, {y:.1f}) …"
 
-#: ui_dialogs.py:9389
+#: ui_dialogs.py:9352
 msgid "Finishing current pass + centering head..."
 msgstr "Aktueller Durchgang wird beendet und Kopf zentriert..."
 
-#: ui_dialogs.py:9394
+#: ui_dialogs.py:9357
 msgid "Stop?"
 msgstr "Stoppen?"
 
-#: ui_dialogs.py:9395
+#: ui_dialogs.py:9358
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -10152,29 +10134,29 @@ msgstr ""
 "Job stoppen? Dies führt einen Soft-Reset des Lasers durch und leert den "
 "Planner-Puffer sofort. Material in Bearbeitung kann ruiniert werden."
 
-#: ui_dialogs.py:9409
+#: ui_dialogs.py:9372
 msgid "Stop and close?"
 msgstr "Stoppen und schließen?"
 
-#: ui_dialogs.py:9410
+#: ui_dialogs.py:9373
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Ein Job läuft noch. Stoppen und Fenster schließen?"
 
-#: ui_dialogs.py:9440 ui_dialogs.py:9450
+#: ui_dialogs.py:9403 ui_dialogs.py:9413
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Vergangen {em}:{es:02d}"
 
-#: ui_dialogs.py:9447
+#: ui_dialogs.py:9410
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Vergangen {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs.py:9473
+#: ui_dialogs.py:9436
 msgid "Live camera"
 msgstr "Live-Kamera"
 
-#: ui_dialogs.py:9493
+#: ui_dialogs.py:9456
 msgid "Camera preview unavailable"
 msgstr "Kameravorschau nicht verfügbar"
 
@@ -10619,4 +10601,26 @@ msgstr "Kameravorschau nicht verfügbar"
 #~ "lässt.\n"
 #~ "\n"
 #~ "Deckel schließen, dann Ja klicken."
+
+#~ msgid "Lid Appears Open"
+#~ msgstr "Deckel scheint offen"
+
+#~ msgid ""
+#~ "The laser is reporting that the "
+#~ "safety lid is open. Grbl blocks "
+#~ "motion in Door state, so the next"
+#~ " step won't fire until the lid "
+#~ "is closed.\n"
+#~ "\n"
+#~ "Close the lid, then click Yes to continue. Click No to stay in framing."
+#~ msgstr ""
+#~ "Der Laser meldet, dass die "
+#~ "Sicherheitstür offen ist. Grbl blockiert "
+#~ "Bewegung im Door-Zustand, daher startet"
+#~ " der nächste Schritt nicht, bis der"
+#~ " Deckel geschlossen ist.\n"
+#~ "\n"
+#~ "Deckel schließen, dann Ja zum Fortfahren"
+#~ " klicken. Nein, um im Rahmen-Modus"
+#~ " zu bleiben."
 
