@@ -9185,35 +9185,21 @@ class FalconRunDialog(tk.Toplevel):
     def _confirm_lid_before_advance(self):
         """Cover reminder before an advance that fires the laser.
 
-        Asks every time rather than only when Grbl reports the door pin.
-        Two reasons: the jog step actively invites opening the lid to
-        push the head by hand, and not every Falcon wires the door
-        switch through to Grbl — so a clean status is not proof the
-        cover is down. Forgetting it drops the machine into Door/Alarm,
-        which costs a laser power cycle AND an app restart to recover;
-        one Yes click is the cheaper side of that trade.
-
-        Returns True to proceed, False if the user backed out.
+        A plain OK-only popup, not a yes/no gate — clicking the (only)
+        button is what starts framing. Originally this branched on
+        Grbl's reported door state (Door/Alarm state or a Pn: 'D' pin),
+        but live-hardware testing on 2026-08-05 found the Falcon2 Pro
+        40W (ESP32-S3 controller) never sends a Pn: field at all, lid
+        open or closed — so the "detected" branch was dead weight that
+        only added a synchronous status poll before the popup could
+        show. Same reminder every time is both simpler and honest about
+        what the app actually knows.
         """
-        # Refresh the status first. In jog-only mode nothing streams, so
-        # the cached status is whatever connect() left behind and has
-        # never seen a door pin. Safe here per get_status' contract:
-        # connected but idle, no worker thread racing for the port.
-        try:
-            self._sender.get_status()
-        except Exception:
-            pass
-        if self._is_door_open():
-            return messagebox.askyesno(
-                _("Cover Is Open"),
-                _("The laser reports the cover is open. Starting now "
-                  "puts it in Door state, which needs a power cycle to "
-                  "clear.\n\nClose the cover, then click Yes."),
-                parent=self)
-        return messagebox.askyesno(
-            _("Cover Closed?"),
-            _("Is the cover closed?\n\nStarting with it open throws the "
-              "laser into an error state that needs a power cycle."),
+        messagebox.showinfo(
+            _("Lid Closed?"),
+            _("Is the laser's lid closed?\n\nStarting with it open "
+              "throws the laser into an error state that needs a "
+              "power cycle to clear."),
             parent=self)
 
     def _on_cut_clicked(self):
@@ -9370,8 +9356,8 @@ class FalconRunDialog(tk.Toplevel):
         alone and just destroy so the caller proceeds. Routing this
         through _on_close_window would cancel via the jog-only mode
         path."""
-        if self._confirm_lid_on_advance and not self._confirm_lid_before_advance():
-            return  # stay in the dialog so the user can close the cover
+        if self._confirm_lid_on_advance:
+            self._confirm_lid_before_advance()
         self.destroy()
 
     def _on_stop_clicked(self):

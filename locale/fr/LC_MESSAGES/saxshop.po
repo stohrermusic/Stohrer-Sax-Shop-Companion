@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-04 14:02-0400\n"
+"POT-Creation-Date: 2026-08-05 14:31-0400\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -1320,7 +1320,7 @@ msgstr "Dépendance manquante"
 msgid "Home needs pyserial: {e}"
 msgstr "L'origine requiert pyserial : {e}"
 
-#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9270
+#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9256
 msgid "Home Laser?"
 msgstr "Origine du laser ?"
 
@@ -9342,7 +9342,7 @@ msgstr "Calibrer et enregistrer"
 msgid "Reconnect camera"
 msgstr "Reconnecter la caméra"
 
-#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9522
+#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9508
 msgid "Switch camera"
 msgstr "Changer de caméra"
 
@@ -9405,7 +9405,7 @@ msgstr "Ouverture de la caméra..."
 msgid "Position the head"
 msgstr "Positionner la tête"
 
-#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9307
+#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9293
 msgid "Home Laser ($H)"
 msgstr "Origine du laser ($H)"
 
@@ -9430,7 +9430,7 @@ msgstr ""
 "Faire l'origine du laser ? La tête se déplacera vers le coin d'origine à "
 "pleine vitesse."
 
-#: ui_dialogs.py:7332 ui_dialogs.py:9280 ui_dialogs.py:9283
+#: ui_dialogs.py:7332 ui_dialogs.py:9266 ui_dialogs.py:9269
 msgid "Homing..."
 msgstr "Origine en cours..."
 
@@ -9725,11 +9725,11 @@ msgstr "Décalage défini à ({x:.3f}, {y:.3f}). Cliquez Suivant pour capturer."
 msgid "Reopening camera..."
 msgstr "Réouverture de la caméra..."
 
-#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9548
+#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9534
 msgid "Only One Camera"
 msgstr "Une seule caméra"
 
-#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9549
+#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9535
 msgid "Only one camera is detected."
 msgstr "Une seule caméra détectée."
 
@@ -10081,83 +10081,67 @@ msgstr ""
 "Fermez le capot, puis cliquez sur Oui pour continuer. Cliquez sur Non "
 "pour rester dans l'encadrement."
 
-#: ui_dialogs.py:9208
-msgid "Cover Is Open"
-msgstr "Le capot est ouvert"
-
-#: ui_dialogs.py:9209
-msgid ""
-"The laser reports the cover is open. Starting now puts it in Door state, "
-"which needs a power cycle to clear.\n"
-"\n"
-"Close the cover, then click Yes."
-msgstr ""
-"Le laser signale que le capot est ouvert. Démarrer maintenant le met en "
-"état Door, qui ne se lève qu'en éteignant et rallumant la machine.\n"
-"\n"
-"Fermez le capot, puis cliquez sur Oui."
-
-#: ui_dialogs.py:9214
-msgid "Cover Closed?"
+#: ui_dialogs.py:9199
+msgid "Lid Closed?"
 msgstr "Capot fermé ?"
 
-#: ui_dialogs.py:9215
+#: ui_dialogs.py:9200
 msgid ""
-"Is the cover closed?\n"
+"Is the laser's lid closed?\n"
 "\n"
 "Starting with it open throws the laser into an error state that needs a "
-"power cycle."
+"power cycle to clear."
 msgstr ""
-"Le capot est-il fermé ?\n"
+"Le capot du laser est-il fermé ?\n"
 "\n"
 "Démarrer avec le capot ouvert met le laser en état d'erreur, qui oblige à"
 " l'éteindre et le rallumer."
 
-#: ui_dialogs.py:9228 ui_dialogs.py:9399
+#: ui_dialogs.py:9214 ui_dialogs.py:9385
 msgid "Finishing pass..."
 msgstr "Fin de la passe..."
 
-#: ui_dialogs.py:9232
+#: ui_dialogs.py:9218
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Coupe demandée — fin de la passe d'encadrement en cours..."
 
-#: ui_dialogs.py:9257
+#: ui_dialogs.py:9243
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Tête positionnée. Cliquez {label} quand vous êtes prêt."
 
-#: ui_dialogs.py:9271
+#: ui_dialogs.py:9257
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "L'origine va interrompre le job en cours. Continuer ?"
 
-#: ui_dialogs.py:9317
+#: ui_dialogs.py:9303
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Origine terminée. MPos est maintenant (0, 0)."
 
-#: ui_dialogs.py:9319
+#: ui_dialogs.py:9305
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Échec de l'origine : {m}"
 
-#: ui_dialogs.py:9346
+#: ui_dialogs.py:9332
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Échec de la localisation auto : {e}"
 
-#: ui_dialogs.py:9348
+#: ui_dialogs.py:9334
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Déplacement vers le BL du polygone à MPos ({x:.1f}, {y:.1f}) …"
 
-#: ui_dialogs.py:9403
+#: ui_dialogs.py:9389
 msgid "Finishing current pass + centering head..."
 msgstr "Fin de la passe en cours et centrage de la tête..."
 
-#: ui_dialogs.py:9408
+#: ui_dialogs.py:9394
 msgid "Stop?"
 msgstr "Arrêter ?"
 
-#: ui_dialogs.py:9409
+#: ui_dialogs.py:9395
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -10165,29 +10149,29 @@ msgstr ""
 "Arrêter le travail ? Cela fera un soft-reset du laser et videra "
 "immédiatement le buffer du planner. Le matériau en cours peut être abîmé."
 
-#: ui_dialogs.py:9423
+#: ui_dialogs.py:9409
 msgid "Stop and close?"
 msgstr "Arrêter et fermer ?"
 
-#: ui_dialogs.py:9424
+#: ui_dialogs.py:9410
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Un travail est toujours en cours. L'arrêter et fermer la fenêtre ?"
 
-#: ui_dialogs.py:9454 ui_dialogs.py:9464
+#: ui_dialogs.py:9440 ui_dialogs.py:9450
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Écoulé {em}:{es:02d}"
 
-#: ui_dialogs.py:9461
+#: ui_dialogs.py:9447
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Écoulé {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs.py:9487
+#: ui_dialogs.py:9473
 msgid "Live camera"
 msgstr "Caméra en direct"
 
-#: ui_dialogs.py:9507
+#: ui_dialogs.py:9493
 msgid "Camera preview unavailable"
 msgstr "Aperçu caméra indisponible"
 
@@ -10624,4 +10608,23 @@ msgstr "Aperçu caméra indisponible"
 
 #~ msgid "Sheet Too Small"
 #~ msgstr "Feuille trop petite"
+
+#~ msgid "Cover Is Open"
+#~ msgstr "Le capot est ouvert"
+
+#~ msgid ""
+#~ "The laser reports the cover is "
+#~ "open. Starting now puts it in Door"
+#~ " state, which needs a power cycle "
+#~ "to clear.\n"
+#~ "\n"
+#~ "Close the cover, then click Yes."
+#~ msgstr ""
+#~ "Le laser signale que le capot est"
+#~ " ouvert. Démarrer maintenant le met "
+#~ "en état Door, qui ne se lève "
+#~ "qu'en éteignant et rallumant la machine."
+#~ "\n"
+#~ "\n"
+#~ "Fermez le capot, puis cliquez sur Oui."
 

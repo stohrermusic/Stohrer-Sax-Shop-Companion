@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion 2.21\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-04 14:02-0400\n"
+"POT-Creation-Date: 2026-08-05 14:31-0400\n"
 "PO-Revision-Date: 2026-05-13 11:30-0400\n"
 "Last-Translator: Draft (machine-assisted) <stohrermusic@gmail.com>\n"
 "Language: es\n"
@@ -1317,7 +1317,7 @@ msgstr "Falta dependencia"
 msgid "Home needs pyserial: {e}"
 msgstr "El reposicionamiento requiere pyserial: {e}"
 
-#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9270
+#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9256
 msgid "Home Laser?"
 msgstr "¿Reposicionar el láser?"
 
@@ -9308,7 +9308,7 @@ msgstr "Calibrar y guardar"
 msgid "Reconnect camera"
 msgstr "Reconectar cámara"
 
-#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9522
+#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9508
 msgid "Switch camera"
 msgstr "Cambiar cámara"
 
@@ -9369,7 +9369,7 @@ msgstr "Abriendo cámara..."
 msgid "Position the head"
 msgstr "Posicionar el cabezal"
 
-#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9307
+#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9293
 msgid "Home Laser ($H)"
 msgstr "Reposicionar láser ($H)"
 
@@ -9394,7 +9394,7 @@ msgstr ""
 "¿Reposicionar el láser? El cabezal irá a la esquina de origen a velocidad"
 " máxima."
 
-#: ui_dialogs.py:7332 ui_dialogs.py:9280 ui_dialogs.py:9283
+#: ui_dialogs.py:7332 ui_dialogs.py:9266 ui_dialogs.py:9269
 msgid "Homing..."
 msgstr "Reposicionando..."
 
@@ -9694,11 +9694,11 @@ msgstr "Desfase ajustado a ({x:.3f}, {y:.3f}). Pulsa Siguiente para capturar."
 msgid "Reopening camera..."
 msgstr "Reabriendo cámara..."
 
-#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9548
+#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9534
 msgid "Only One Camera"
 msgstr "Solo una cámara"
 
-#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9549
+#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9535
 msgid "Only one camera is detected."
 msgstr "Solo se detecta una cámara."
 
@@ -10052,83 +10052,67 @@ msgstr ""
 "Cierra la tapa y pulsa Sí para continuar. Pulsa No para quedarte en "
 "encuadre."
 
-#: ui_dialogs.py:9208
-msgid "Cover Is Open"
-msgstr "La tapa está abierta"
-
-#: ui_dialogs.py:9209
-msgid ""
-"The laser reports the cover is open. Starting now puts it in Door state, "
-"which needs a power cycle to clear.\n"
-"\n"
-"Close the cover, then click Yes."
-msgstr ""
-"El láser informa de que la tapa está abierta. Empezar ahora lo deja en "
-"estado Door, que solo se soluciona apagando y encendiendo la máquina.\n"
-"\n"
-"Cierra la tapa y pulsa Sí."
-
-#: ui_dialogs.py:9214
-msgid "Cover Closed?"
+#: ui_dialogs.py:9199
+msgid "Lid Closed?"
 msgstr "¿Tapa cerrada?"
 
-#: ui_dialogs.py:9215
+#: ui_dialogs.py:9200
 msgid ""
-"Is the cover closed?\n"
+"Is the laser's lid closed?\n"
 "\n"
 "Starting with it open throws the laser into an error state that needs a "
-"power cycle."
+"power cycle to clear."
 msgstr ""
-"¿Está cerrada la tapa?\n"
+"¿Está cerrada la tapa del láser?\n"
 "\n"
-"Empezar con ella abierta deja el láser en un estado de error que obliga a"
-" apagarlo y encenderlo."
+"Empezar con ella abierta deja el láser en un estado de error que solo se "
+"soluciona apagando y encendiendo la máquina."
 
-#: ui_dialogs.py:9228 ui_dialogs.py:9399
+#: ui_dialogs.py:9214 ui_dialogs.py:9385
 msgid "Finishing pass..."
 msgstr "Terminando pasada..."
 
-#: ui_dialogs.py:9232
+#: ui_dialogs.py:9218
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Solicitud de corte — terminando la pasada de encuadre actual..."
 
-#: ui_dialogs.py:9257
+#: ui_dialogs.py:9243
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Cabezal posicionado. Pulsa {label} cuando estés listo."
 
-#: ui_dialogs.py:9271
+#: ui_dialogs.py:9257
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "El reposicionamiento abortará el trabajo en curso. ¿Continuar?"
 
-#: ui_dialogs.py:9317
+#: ui_dialogs.py:9303
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Reposicionamiento completado. MPos ahora es (0, 0)."
 
-#: ui_dialogs.py:9319
+#: ui_dialogs.py:9305
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Reposicionamiento fallido: {m}"
 
-#: ui_dialogs.py:9346
+#: ui_dialogs.py:9332
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Autolocalización fallida: {e}"
 
-#: ui_dialogs.py:9348
+#: ui_dialogs.py:9334
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Yendo al BL del polígono en MPos ({x:.1f}, {y:.1f})…"
 
-#: ui_dialogs.py:9403
+#: ui_dialogs.py:9389
 msgid "Finishing current pass + centering head..."
 msgstr "Terminando la pasada actual y centrando el cabezal..."
 
-#: ui_dialogs.py:9408
+#: ui_dialogs.py:9394
 msgid "Stop?"
 msgstr "¿Detener?"
 
-#: ui_dialogs.py:9409
+#: ui_dialogs.py:9395
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -10137,29 +10121,29 @@ msgstr ""
 " búfer del planificador inmediatamente. El material en proceso puede "
 "arruinarse."
 
-#: ui_dialogs.py:9423
+#: ui_dialogs.py:9409
 msgid "Stop and close?"
 msgstr "¿Detener y cerrar?"
 
-#: ui_dialogs.py:9424
+#: ui_dialogs.py:9410
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Un trabajo sigue ejecutándose. ¿Detenerlo y cerrar la ventana?"
 
-#: ui_dialogs.py:9454 ui_dialogs.py:9464
+#: ui_dialogs.py:9440 ui_dialogs.py:9450
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Transcurrido {em}:{es:02d}"
 
-#: ui_dialogs.py:9461
+#: ui_dialogs.py:9447
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Transcurrido {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs.py:9487
+#: ui_dialogs.py:9473
 msgid "Live camera"
 msgstr "Cámara en vivo"
 
-#: ui_dialogs.py:9507
+#: ui_dialogs.py:9493
 msgid "Camera preview unavailable"
 msgstr "Vista previa de cámara no disponible"
 
@@ -10580,4 +10564,23 @@ msgstr "Vista previa de cámara no disponible"
 
 #~ msgid "Sheet Too Small"
 #~ msgstr "Hoja demasiado pequeña"
+
+#~ msgid "Cover Is Open"
+#~ msgstr "La tapa está abierta"
+
+#~ msgid ""
+#~ "The laser reports the cover is "
+#~ "open. Starting now puts it in Door"
+#~ " state, which needs a power cycle "
+#~ "to clear.\n"
+#~ "\n"
+#~ "Close the cover, then click Yes."
+#~ msgstr ""
+#~ "El láser informa de que la tapa"
+#~ " está abierta. Empezar ahora lo deja"
+#~ " en estado Door, que solo se "
+#~ "soluciona apagando y encendiendo la "
+#~ "máquina.\n"
+#~ "\n"
+#~ "Cierra la tapa y pulsa Sí."
 

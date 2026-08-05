@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-04 14:02-0400\n"
+"POT-Creation-Date: 2026-08-05 14:31-0400\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -1314,7 +1314,7 @@ msgstr "Dipendenza mancante"
 msgid "Home needs pyserial: {e}"
 msgstr "L'azzeramento richiede pyserial: {e}"
 
-#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9270
+#: main.py:2304 ui_dialogs.py:7316 ui_dialogs.py:9256
 msgid "Home Laser?"
 msgstr "Azzerare il laser?"
 
@@ -9229,7 +9229,7 @@ msgstr "Calibra e salva"
 msgid "Reconnect camera"
 msgstr "Riconnetti fotocamera"
 
-#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9522
+#: ui_dialogs.py:7137 ui_dialogs.py:8393 ui_dialogs.py:9508
 msgid "Switch camera"
 msgstr "Cambia fotocamera"
 
@@ -9291,7 +9291,7 @@ msgstr "Apertura fotocamera..."
 msgid "Position the head"
 msgstr "Posiziona la testa"
 
-#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9307
+#: ui_dialogs.py:7247 ui_dialogs.py:8885 ui_dialogs.py:9293
 msgid "Home Laser ($H)"
 msgstr "Azzeramento laser ($H)"
 
@@ -9314,7 +9314,7 @@ msgid ""
 "speed."
 msgstr "Azzerare il laser? La testa andrà all'angolo di origine a piena velocità."
 
-#: ui_dialogs.py:7332 ui_dialogs.py:9280 ui_dialogs.py:9283
+#: ui_dialogs.py:7332 ui_dialogs.py:9266 ui_dialogs.py:9269
 msgid "Homing..."
 msgstr "Azzeramento in corso..."
 
@@ -9611,11 +9611,11 @@ msgstr "Offset impostato a ({x:.3f}, {y:.3f}). Clicca Avanti per catturare."
 msgid "Reopening camera..."
 msgstr "Riapertura fotocamera..."
 
-#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9548
+#: ui_dialogs.py:7982 ui_dialogs.py:8415 ui_dialogs.py:9534
 msgid "Only One Camera"
 msgstr "Una sola fotocamera"
 
-#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9549
+#: ui_dialogs.py:7983 ui_dialogs.py:8416 ui_dialogs.py:9535
 msgid "Only one camera is detected."
 msgstr "Rilevata una sola fotocamera."
 
@@ -9969,83 +9969,67 @@ msgstr ""
 "Chiudi il coperchio, poi clicca Sì per continuare. Clicca No per restare "
 "nell'inquadratura."
 
-#: ui_dialogs.py:9208
-msgid "Cover Is Open"
-msgstr "Il coperchio è aperto"
-
-#: ui_dialogs.py:9209
-msgid ""
-"The laser reports the cover is open. Starting now puts it in Door state, "
-"which needs a power cycle to clear.\n"
-"\n"
-"Close the cover, then click Yes."
-msgstr ""
-"Il laser segnala che il coperchio è aperto. Avviare ora lo mette in stato"
-" Door, che si risolve solo spegnendo e riaccendendo la macchina.\n"
-"\n"
-"Chiudi il coperchio, poi clicca Sì."
-
-#: ui_dialogs.py:9214
-msgid "Cover Closed?"
+#: ui_dialogs.py:9199
+msgid "Lid Closed?"
 msgstr "Coperchio chiuso?"
 
-#: ui_dialogs.py:9215
+#: ui_dialogs.py:9200
 msgid ""
-"Is the cover closed?\n"
+"Is the laser's lid closed?\n"
 "\n"
 "Starting with it open throws the laser into an error state that needs a "
-"power cycle."
+"power cycle to clear."
 msgstr ""
-"Il coperchio è chiuso?\n"
+"Il coperchio del laser è chiuso?\n"
 "\n"
 "Avviare con il coperchio aperto manda il laser in stato di errore, "
 "risolvibile solo spegnendo e riaccendendo."
 
-#: ui_dialogs.py:9228 ui_dialogs.py:9399
+#: ui_dialogs.py:9214 ui_dialogs.py:9385
 msgid "Finishing pass..."
 msgstr "Completamento passata..."
 
-#: ui_dialogs.py:9232
+#: ui_dialogs.py:9218
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Richiesto taglio — completamento della passata di inquadratura..."
 
-#: ui_dialogs.py:9257
+#: ui_dialogs.py:9243
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Testa posizionata. Clicca {label} quando sei pronto."
 
-#: ui_dialogs.py:9271
+#: ui_dialogs.py:9257
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "L'azzeramento interromperà il lavoro in corso. Continuare?"
 
-#: ui_dialogs.py:9317
+#: ui_dialogs.py:9303
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Azzeramento completato. MPos ora è (0, 0)."
 
-#: ui_dialogs.py:9319
+#: ui_dialogs.py:9305
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Azzeramento fallito: {m}"
 
-#: ui_dialogs.py:9346
+#: ui_dialogs.py:9332
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Localizzazione automatica fallita: {e}"
 
-#: ui_dialogs.py:9348
+#: ui_dialogs.py:9334
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Spostamento verso il BL del poligono a MPos ({x:.1f}, {y:.1f}) …"
 
-#: ui_dialogs.py:9403
+#: ui_dialogs.py:9389
 msgid "Finishing current pass + centering head..."
 msgstr "Completamento della passata corrente e centratura della testa..."
 
-#: ui_dialogs.py:9408
+#: ui_dialogs.py:9394
 msgid "Stop?"
 msgstr "Fermare?"
 
-#: ui_dialogs.py:9409
+#: ui_dialogs.py:9395
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -10054,29 +10038,29 @@ msgstr ""
 " planner sarà svuotato immediatamente. Il materiale in lavorazione "
 "potrebbe rovinarsi."
 
-#: ui_dialogs.py:9423
+#: ui_dialogs.py:9409
 msgid "Stop and close?"
 msgstr "Fermare e chiudere?"
 
-#: ui_dialogs.py:9424
+#: ui_dialogs.py:9410
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Un lavoro è ancora in esecuzione. Fermarlo e chiudere la finestra?"
 
-#: ui_dialogs.py:9454 ui_dialogs.py:9464
+#: ui_dialogs.py:9440 ui_dialogs.py:9450
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Trascorso {em}:{es:02d}"
 
-#: ui_dialogs.py:9461
+#: ui_dialogs.py:9447
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Trascorso {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs.py:9487
+#: ui_dialogs.py:9473
 msgid "Live camera"
 msgstr "Fotocamera live"
 
-#: ui_dialogs.py:9507
+#: ui_dialogs.py:9493
 msgid "Camera preview unavailable"
 msgstr "Anteprima fotocamera non disponibile"
 
@@ -10507,4 +10491,22 @@ msgstr "Anteprima fotocamera non disponibile"
 
 #~ msgid "Sheet Too Small"
 #~ msgstr "Foglio troppo piccolo"
+
+#~ msgid "Cover Is Open"
+#~ msgstr "Il coperchio è aperto"
+
+#~ msgid ""
+#~ "The laser reports the cover is "
+#~ "open. Starting now puts it in Door"
+#~ " state, which needs a power cycle "
+#~ "to clear.\n"
+#~ "\n"
+#~ "Close the cover, then click Yes."
+#~ msgstr ""
+#~ "Il laser segnala che il coperchio "
+#~ "è aperto. Avviare ora lo mette in"
+#~ " stato Door, che si risolve solo "
+#~ "spegnendo e riaccendendo la macchina.\n"
+#~ "\n"
+#~ "Chiudi il coperchio, poi clicca Sì."
 
