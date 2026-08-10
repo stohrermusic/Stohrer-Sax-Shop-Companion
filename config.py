@@ -179,13 +179,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.65"
+APP_VERSION = "2.7"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-07-02"
+    manual = "2026-08-10"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -356,6 +356,10 @@ SIZING_PRESET_KEYS = (
     "engraving_settings_range_mode", "engraving_settings_ranges",
     "engraving_location",
     "engraving_placement_range_mode", "engraving_placement_ranges",
+    # Labeled zones (lives in this dialog). Only the three user-facing
+    # fields — gutter / border / label font are global tuning constants
+    # with no UI, so they aren't part of a preset.
+    "zone_labels_enabled", "zone_label_min_size", "zone_label_max_size",
     # Export compatibility (lives in this dialog)
     "compatibility_mode",
 )
@@ -371,6 +375,28 @@ def settings_to_sizing_preset(settings):
     for key in SIZING_PRESET_KEYS:
         if key in settings:
             out[key] = copy.deepcopy(settings[key])
+    return out
+
+
+def normalize_sizing_preset(preset):
+    """Fill in any SIZING_PRESET_KEYS a stored preset predates.
+
+    Presets are compared by exact value against a form snapshot to name the
+    active one, so every time a key is ADDED to SIZING_PRESET_KEYS, every
+    already-saved preset would stop matching and the dropdown would go
+    blank. Backfilling from DEFAULT_SETTINGS is also the right meaning: a
+    preset saved before a feature existed should read as that feature's
+    default (e.g. labeled zones off).
+
+    Unknown extra keys are dropped, so a preset written by a newer version
+    doesn't poison comparison on an older one.
+    """
+    out = {}
+    for key in SIZING_PRESET_KEYS:
+        if key in preset:
+            out[key] = copy.deepcopy(preset[key])
+        elif key in DEFAULT_SETTINGS:
+            out[key] = copy.deepcopy(DEFAULT_SETTINGS[key])
     return out
 
 
@@ -518,6 +544,26 @@ DEFAULT_SETTINGS = {
     # ENGRAVING PLACEMENT RANGE MODE
     "engraving_placement_range_mode": "universal",
     "engraving_placement_ranges": [],  # list of {"min_size", "max_size", "engraving_location": {material: {mode, value}}}
+
+    # LABELED ZONES — group same-size small pads into a bordered, labeled
+    # block on the sheet so they can be told apart when picking parts off
+    # the laser. Small pads either come off blank (the font gate in the
+    # engines drops the engraving) or carry a number that's unreadable —
+    # buried in the darts on leather, or simply too small on card/felt.
+    # The zone label lives on the WASTE, not on the part, which is the only
+    # option for small leather: its center is the sealing surface and must
+    # not be marked. Costs sheet area, so it's opt-in.
+    "zone_labels_enabled": False,
+    "zone_label_min_size": 7.0,   # inclusive, pad size in mm
+    "zone_label_max_size": 12.5,  # inclusive, pad size in mm
+    "zone_gutter_mm": 1.0,        # edge-to-edge gap between discs inside a zone
+    "zone_border_mm": 1.0,        # gap from outermost disc edge to the border
+    "zone_label_font_mm": 2.5,    # engraved zone label height
+    # Extra clearance between the engraved band outline and the nearest disc
+    # on traced polygons. Without it the line sits at the nester's own 1mm
+    # edge margin and visually crowds the outer discs.
+    "zone_edge_margin_mm": 1.5,
+    "zone_band_gap_mm": 6.0,      # moat between size bands on a traced polygon
 
     # EDGE BIAS - direction to bias circle packing toward
     # "center" (no bias), "n", "ne", "e", "se", "s", "sw", "w", "nw"

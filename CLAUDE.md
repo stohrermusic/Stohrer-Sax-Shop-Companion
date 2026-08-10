@@ -30,13 +30,14 @@ python tools/test_bugfixes.py
 python tools/test_config.py
 ```
 
-All test suites (46 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_engine_parity`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_job_history`, `test_large_batch_optimization`, `test_lid_confirm`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_serial_lookup`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`.
+All test suites (47 files): `test_audio_utils`, `test_autofit_shift`, `test_bugfixes`, `test_camera_capture`, `test_card_paper_size`, `test_compare_filters`, `test_concert_pitch`, `test_config`, `test_dart_ranges`, `test_dart_shapes`, `test_descriptor_validity`, `test_detection_fix`, `test_edge_bias`, `test_engine_parity`, `test_falcon_sender`, `test_feeds_speeds_tester`, `test_fingerprint_filtering`, `test_frame_cut_scrap`, `test_gcode_passes`, `test_gcode_presets_workflow`, `test_goodson_import`, `test_gpu_tuner`, `test_i18n`, `test_job_history`, `test_large_batch_optimization`, `test_lid_confirm`, `test_nesting_parity`, `test_pad_notes`, `test_pad_preview`, `test_polygon_parity`, `test_release_1_9`, `test_serial_lookup`, `test_sizing_presets_workflow`, `test_sizing_ranges`, `test_smoke_ui`, `test_tooling`, `test_toner_display`, `test_toner_engine`, `test_toner_full`, `test_tooltips`, `test_tuner_engine`, `test_tuner_updates`, `test_v161_compat`, `test_wav_import`, `test_wav_recording`, `test_web_pad_import`, `test_zone_labels`.
 
 **SVG↔G-code parity**: `test_engine_parity` pins the contract that the SVG/preview output and the G-code output describe the same physical object (dart wave shape, engraving label placement, engine purity). The two engines render independently and have drifted before — when touching shared geometry (wave math, placement formulas, Y-flip), run this suite and extend it for any new shared shape.
 
 **Portability notes**:
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation. Skip it in CI and clean checkouts.
 - `test_smoke_ui` constructs the full `PadSVGGeneratorApp` in a withdrawn Tk root — requires a display, so works on Windows/macOS and GitHub Actions Windows runners. On headless Linux it self-skips with a "no display" message.
+- `test_zone_labels` is headless for everything except its three `preview_*` cases, which build a real `NestingPreviewWindow` and inspect its canvas. Those self-skip without a display; the other 31 always run. Note the window calls `wait_window()` in `__init__`, so the canvas inspection must be scheduled on the parent via `after()` *before* constructing it — see `_probe_preview`.
 
 Before committing, run the suites affected by your changes. For releases, run all (minus `test_descriptor_validity` unless the WAV corpus is available). If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
 
@@ -73,6 +74,42 @@ File > Job History (Pad Maker) opens `JobHistoryWindow` (`ui_dialogs.py`) — a 
 **List columns are measured, not fixed**: `_column_widths()` sizes each column from the widest header/value at refresh time. Translated headers vary a lot ("Pads" is "Zapatillas" in Spanish), and hardcoded widths truncated them. If you add a column, add it to `_headers()` and `_cells()` together — they're zipped positionally.
 
 Tests: `tools/test_job_history.py` (storage round-trip + corruption handling, column alignment including a simulated long-translation case, and a record→reload round trip through a real form).
+
+## Labeled Zones
+
+Options > Sizing Rules > **Labeled Zones**: an opt-in toggle plus an editable pad-size range (default 7.0–12.5mm). Pads in that range are cut in bordered blocks — one block per size, grid-packed, with the size engraved along the block's top edge. Everything outside the range nests normally at full density.
+
+**Why it exists**: small discs are indistinguishable once they're off the laser — a 7.0 and a 7.5 look the same. Their own engraved number doesn't solve it: the font gate (`font_size >= radius * 0.8`) drops the engraving entirely below ~5mm, and above that the number is often unreadable — too small on card/felt, and buried in the darts on leather (every leather pad under `dart_threshold` gets darts). **The label cannot move to the middle of a small leather pad — that's the sealing surface, and those are usually octave pads.** So the label goes on the waste instead of the part, which is the only place it can go.
+
+**Cost**: zones trade sheet area for legibility, hence opt-in and the "may increase material wastage" note in the dialog. Measured on 7–12.5mm pads with a 1mm gutter, rectangular zones run 53–69% full (leather ~68%, near the `π/4 × (d/(d+g))²` ceiling for the gutter). Roughly 10–15% more sheet for a zoned batch.
+
+**Two layouts, chosen by sheet shape** (`nest_with_zones` dispatches):
+
+| Sheet | Layout | Why |
+|---|---|---|
+| Rectangle | Grid blocks shelf-packed into a band along the bottom | Denser and countable; leftover stays a plain rectangle |
+| Traced polygon | One horizontal band per size, clipped to the outline | No straight edge exists to reserve against |
+
+**Why rectangles on rectangles**: circular zones would need *no* new packing code (a zone is just a big disc to `_nest_discs`), but they're about half as dense (28–36% vs 53–69%) — eight discs is an awkward count for a circle — and a round cluster is hard to count.
+
+**Why bands on polygons**: circular containers are far too big for the real material — 8× 7mm *leather* pads need a 70mm circle, 48% of a 100×80 scrap, and 8× 12.5mm needs 97mm. Sequential per-size placement with an inflated inter-size collision radius was also tried and **measured to fail**: the 7mm group still spread 83–108mm across a 150mm scrap (baseline 84.5mm), and a wider gap made it worse. Clipping the outline to a horizontal strip (`_clip_polygon_y`, Sutherland-Hodgman) yields a band that is itself a valid polygon, so the existing polygon nester packs each size inside it unchanged.
+
+**Key invariants**:
+- `placed` keeps its plain `(pad_size, cx, cy, r)` shape. Zones travel as a **separate parallel list**, so `compute_remaining_pads`, the preview window, and job history all work untouched. Don't fold zone data into `placed`.
+- Zone dicts carry `shape`: `'rect'` (block; `x/y/w/h`) or `'poly'` (band; `points` + `label_x/label_y`). All three renderers — SVG, G-code, and the preview canvas — dispatch on it. Add a shape and you must touch all three.
+- Nothing touches the parity-pinned scan functions (`_scan_radial_*`, `_find_best_polygon_*`). Both layouts work by handing the nester a *smaller region*, never by adding obstacles. Scattering zones would leave the free area with *holes*, needing obstacle support in all six scan paths — deliberately not done.
+- **Zones stand down in scrap mode** (`main.py` passes `zones=[]`): a scrap takes only part of a size's count, so a band would have to be re-sized per piece. Revisit only on real demand — the honest use case is ~10 each of a few neighbouring octave sizes, which fits one piece.
+- Bands nest with `spacing_mm + zone_edge_margin_mm` but draw the outline at the band edge, so the engraved line clears the outer discs (2.5mm measured, vs 1.0mm without it). Band sizing **grows until the size actually places its full count** — an area estimate looks sufficient in a narrow tapering region where the discs won't actually fit.
+- On camera-captured scraps the band outline lands ~3mm inside the physical edge for free, because it clips `custom_polygon` (already inset by `camera_polygon_inset_mm`) rather than `custom_polygon_outline`. Don't "fix" this by clipping the outline. `camera_capture.inset_polygon_mm` is not usable here — it requires OpenCV, and `svg_engine` must stay dependency-light.
+- A zone that can't be placed puts its pads **back into the free nest** rather than dropping them; if they still don't fit, `can_all_pads_fit` returns False and the app reports it. Banding genuinely costs yield — 30 leather discs fit a 150×110 scrap free-nested but need 210×140 banded. That trade was accepted deliberately: this targets tiny pads, where yield is already high and demand low.
+- Borders and labels are **engraved, never cut** — a cut border would drop the zone tile through the bed slats. They're emitted as one engraving pass before any disc is cut, so the sheet is labeled before parts come loose.
+- The label is digits and `.` only. `STROKE_FONT`/`FILLED_FONT` in gcode_engine carry no `x`, so a "×10" count suffix would need a new glyph in **both** fonts.
+
+**Grid shape gotcha**: `_zone_box` scores the *full* zone including border and label strip. Scoring the bare inner grid always picks a degenerate 1×N strip — one column has the fewest gutters and so the smallest inner area — which shelf-packs badly and reads poorly. Among shapes within `ZONE_ASPECT_SLACK` of the smallest area, the squarest wins.
+
+**Preset schema**: only the three user-facing keys (`zone_labels_enabled`, `zone_label_min_size`, `zone_label_max_size`) are in `SIZING_PRESET_KEYS`; gutter/border/font are global tuning constants with no UI. Adding keys to that tuple breaks `_detect_active_preset()` for every already-saved preset, so `config.normalize_sizing_preset()` backfills missing keys from `DEFAULT_SETTINGS` before comparing — use it whenever the schema grows.
+
+Tests: `tools/test_zone_labels.py` — opt-in/regression safety (zones off must reproduce the old nester placement-for-placement), range bounds, grid shape, containment, no-overlap, fallback-not-loss, band moat separation, disc-to-outline clearance, the clip helper on concave shapes, and SVG↔G-code Y-flip agreement for **both** the block rectangle and the clipped band outline.
 
 ## Pad Preview Window
 

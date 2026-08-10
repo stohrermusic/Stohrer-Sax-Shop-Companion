@@ -11,7 +11,7 @@ import time
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, get_resonance_messages,
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets,
-    SIZING_PRESET_KEYS,
+    SIZING_PRESET_KEYS, normalize_sizing_preset,
     APP_VERSION, APP_BUILD_DATE,
     get_dart_settings_for_size, get_sizing_for_size,
 )
@@ -361,6 +361,14 @@ class OptionsWindow:
 
         self.engraving_on_var = tk.BooleanVar(value=self.settings["engraving_on"])
         self.compatibility_mode_var = tk.BooleanVar(value=self.settings.get("compatibility_mode", False))
+
+        # Labeled zones
+        self.zone_labels_enabled_var = tk.BooleanVar(
+            value=self.settings.get("zone_labels_enabled", False))
+        self.zone_label_min_var = tk.DoubleVar(
+            value=self.settings.get("zone_label_min_size", 7.0))
+        self.zone_label_max_var = tk.DoubleVar(
+            value=self.settings.get("zone_label_max_size", 12.5))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
 
@@ -1048,6 +1056,45 @@ class OptionsWindow:
 
         self._toggle_eng_placement_mode()
 
+        # --- Labeled Zones ---------------------------------------------
+        zone_frame = tk.LabelFrame(main_frame, text=_("Labeled Zones"), bg=DIALOG_BG, padx=5, pady=5)
+        zone_frame.pack(fill="x", pady=5)
+
+        zone_cb = tk.Checkbutton(
+            zone_frame, text=_("Group same-size pads into labeled zones"),
+            variable=self.zone_labels_enabled_var, bg=DIALOG_BG,
+            command=self._toggle_zone_fields)
+        zone_cb.pack(anchor='w')
+        add_tooltip(zone_cb,
+                    _("Cut small pads in bordered blocks, one per size, with "
+                      "the size engraved beside them. Small discs look alike "
+                      "and their own number is often too small to read, so "
+                      "the label goes on the sheet instead of the part."))
+
+        zone_row = tk.Frame(zone_frame, bg=DIALOG_BG)
+        zone_row.pack(anchor='w', pady=(4, 0))
+        self.zone_range_label = tk.Label(zone_row, text=_("Applies to pad sizes"), bg=DIALOG_BG)
+        self.zone_range_label.pack(side="left")
+        self.zone_min_entry = tk.Entry(zone_row, textvariable=self.zone_label_min_var, width=6)
+        self.zone_min_entry.pack(side="left", padx=4)
+        self.zone_to_label = tk.Label(zone_row, text=_("to"), bg=DIALOG_BG)
+        self.zone_to_label.pack(side="left")
+        self.zone_max_entry = tk.Entry(zone_row, textvariable=self.zone_label_max_var, width=6)
+        self.zone_max_entry.pack(side="left", padx=4)
+        self.zone_mm_label = tk.Label(zone_row, text=_("mm"), bg=DIALOG_BG)
+        self.zone_mm_label.pack(side="left")
+        add_tooltips(_("Only pads in this range are grouped into zones. "
+                       "Larger pads nest normally at full density."),
+                     self.zone_range_label, self.zone_min_entry,
+                     self.zone_to_label, self.zone_max_entry)
+
+        tk.Label(zone_frame,
+                 text=_("Zones use a grid, so they may increase material wastage."),
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
+                 justify="left").pack(anchor='w', pady=(3, 0))
+
+        self._toggle_zone_fields()
+
         export_frame = tk.LabelFrame(main_frame, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
         compat_cb = tk.Checkbutton(export_frame,
@@ -1058,6 +1105,12 @@ class OptionsWindow:
                     _("Write SVGs without explicit unit attributes. Turn on "
                     "if Inkscape (or other software) misinterprets the file "
                     "scale. LightBurn does not need this."))
+
+    def _toggle_zone_fields(self):
+        """Grey the zone size range when zones are off."""
+        state = "normal" if self.zone_labels_enabled_var.get() else "disabled"
+        for w in (self.zone_min_entry, self.zone_max_entry):
+            w.config(state=state)
 
     def _build_sizing_preset_section(self, parent):
         """Top-of-dialog preset controls: pick a preset, load, save, rename, delete."""
@@ -1619,6 +1672,11 @@ class OptionsWindow:
         # STAR ENGRAVING SAVE
         self.settings["dart_engraving_on"] = self.dart_engraving_on_var.get()
             
+        # Labeled zones
+        self.settings["zone_labels_enabled"] = self.zone_labels_enabled_var.get()
+        self.settings["zone_label_min_size"] = self.zone_label_min_var.get()
+        self.settings["zone_label_max_size"] = self.zone_label_max_var.get()
+
         # Export
         self.settings["compatibility_mode"] = self.compatibility_mode_var.get()
 
@@ -1673,6 +1731,12 @@ class OptionsWindow:
             # Revert Star Engraving
             self.dart_engraving_on_var.set(True)
 
+            # Labeled zones
+            self.zone_labels_enabled_var.set(DEFAULT_SETTINGS["zone_labels_enabled"])
+            self.zone_label_min_var.set(DEFAULT_SETTINGS["zone_label_min_size"])
+            self.zone_label_max_var.set(DEFAULT_SETTINGS["zone_label_max_size"])
+            self._toggle_zone_fields()
+
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
 
@@ -1713,6 +1777,10 @@ class OptionsWindow:
             },
             "engraving_placement_range_mode": self.eng_placement_range_mode_var.get(),
             "engraving_placement_ranges": copy.deepcopy(self.eng_placement_ranges),
+            # Labeled zones
+            "zone_labels_enabled": self.zone_labels_enabled_var.get(),
+            "zone_label_min_size": self.zone_label_min_var.get(),
+            "zone_label_max_size": self.zone_label_max_var.get(),
             # Export
             "compatibility_mode": self.compatibility_mode_var.get(),
         }
@@ -1771,6 +1839,12 @@ class OptionsWindow:
         self._refresh_eng_placement_range_combo()
         self._toggle_eng_placement_mode()
 
+        # Labeled zones
+        self.zone_labels_enabled_var.set(source.get("zone_labels_enabled", d["zone_labels_enabled"]))
+        self.zone_label_min_var.set(source.get("zone_label_min_size", d["zone_label_min_size"]))
+        self.zone_label_max_var.set(source.get("zone_label_max_size", d["zone_label_max_size"]))
+        self._toggle_zone_fields()
+
         # Export
         self.compatibility_mode_var.set(source.get("compatibility_mode", d.get("compatibility_mode", False)))
 
@@ -1791,7 +1865,10 @@ class OptionsWindow:
         # Sorted so an exact tie between two identical presets resolves the
         # same way every open, and matches the dropdown's own ordering.
         for name in sorted(self.sizing_presets):
-            if self.sizing_presets[name] == snapshot:
+            # Normalize first: a preset saved before a key was added to
+            # SIZING_PRESET_KEYS is missing it, and would never match the
+            # snapshot on exact equality.
+            if normalize_sizing_preset(self.sizing_presets[name]) == snapshot:
                 return name
         return None
 
@@ -1823,7 +1900,9 @@ class OptionsWindow:
                 parent=self.top,
             ):
                 return
-        self._apply_dict_to_form(self.sizing_presets[name])
+        # Normalize so an older preset fills its missing keys with defaults
+        # rather than leaving whatever was in the form from before.
+        self._apply_dict_to_form(normalize_sizing_preset(self.sizing_presets[name]))
         self.active_preset_name = name
         self._set_baseline_to_current()
 
@@ -6490,7 +6569,7 @@ class NestingPreviewWindow(tk.Toplevel):
     """
 
     def __init__(self, parent, placements, width_mm, height_mm, polygon=None,
-                 proceed_label=None):
+                 proceed_label=None, zones=None):
         """
         Args:
             parent: Parent tk widget
@@ -6501,6 +6580,8 @@ class NestingPreviewWindow(tk.Toplevel):
             proceed_label: Text for the confirm button (default "Save Files").
                 Frame & Cut passes "Continue →" since it streams to the
                 laser rather than writing files. result is "save" either way.
+            zones: Optional positioned zone dicts from nest_with_zones, drawn
+                as bordered labeled blocks so the preview matches the cut.
         """
         super().__init__(parent)
         self.title(_("Nesting Preview"))
@@ -6509,6 +6590,7 @@ class NestingPreviewWindow(tk.Toplevel):
         self.grab_set()
 
         self.result = None
+        self._zones = list(zones or [])
 
         # First-run tutorial (persisted in settings via parent app)
         app = getattr(parent, 'settings', None) if not isinstance(parent, dict) else None
@@ -6654,6 +6736,28 @@ class NestingPreviewWindow(tk.Toplevel):
         placed = self._placements.get(material, [])
         color = _PREVIEW_COLORS.get(material, '#888888')
         fill = self._lighten(color, 0.7)
+
+        # Zone borders and labels go under the pads, matching the cut order.
+        for zone in self._zones:
+            if zone.get('shape') == 'poly':
+                pts = []
+                for px, py in zone['points']:
+                    pts.extend([offset_x + px * scale, offset_y + py * scale])
+                cv.create_polygon(pts, outline="#B0782A", width=1, fill="#FFFDF5")
+                lx = offset_x + zone['label_x'] * scale
+                ly = offset_y + zone['label_y'] * scale
+            else:
+                zx = offset_x + zone['x'] * scale
+                zy = offset_y + zone['y'] * scale
+                zw = zone['w'] * scale
+                zh = zone['h'] * scale
+                cv.create_rectangle(zx, zy, zx + zw, zy + zh,
+                                    outline="#B0782A", width=1, fill="#FFFDF5")
+                lx = zx + zw / 2
+                ly = zy + (zone['border'] + zone['font'] / 2) * scale
+            label_px = max(7, min(14, int(zone['font'] * scale)))
+            cv.create_text(lx, ly, text=zone['label'], fill="#B0782A",
+                           font=("Helvetica", label_px, "bold"))
 
         for pad_size, cx, cy, r in placed:
             sx = offset_x + cx * scale

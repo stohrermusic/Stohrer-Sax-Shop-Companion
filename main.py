@@ -26,7 +26,7 @@ from config import (
 from i18n import init_translation
 init_translation(load_settings().get("language", "en"))
 
-from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads  # noqa: E402
+from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads_with_zones  # noqa: E402
 from gcode_engine import generate_gcode_from_placed  # noqa: E402
 from ui_dialogs import (  # noqa: E402
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
@@ -1871,7 +1871,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
                 # Nest (may re-run if user adjusts and retries)
-                placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 # Validate fit
                 if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
@@ -1883,7 +1883,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon)
+                        polygon=mat_polygon, zones=zones)
                     if preview.result != "save":
                         return  # User clicked Adjust — go back for this material
 
@@ -1895,7 +1895,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.settings["last_output_dir"] = save_dir
 
                 filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings,
+                                         polygon=mat_polygon, zones=zones)
                 generated.append(material)
                 last_placed = len(placed)
 
@@ -2666,9 +2667,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     return
                 placed, scrap_remaining = result
                 hole_dia = self.scrap_session['hole_dia']
+                # Labeled zones stand down in scrap mode: a zone is sized for
+                # a whole size's count, but a scrap only takes part of it, so
+                # the block would have to be re-sized per scrap.
+                zones = []
             else:
-                placed = nest_pads(pads, material, mat_w, mat_h, self.settings,
-                                    polygon=mat_polygon)
+                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings,
+                                                     polygon=mat_polygon)
                 if not can_all_pads_fit(pads, material, mat_w, mat_h,
                                         self.settings, polygon=mat_polygon):
                     messagebox.showerror(
@@ -2686,7 +2691,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # _frame_cut_scrap_advance), so nothing is consumed here.
             preview = NestingPreviewWindow(
                 self.root, {material: placed}, mat_w, mat_h,
-                polygon=mat_polygon, proceed_label=_("Continue →"))
+                polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones)
             if preview.result != "save":
                 return
 
@@ -2699,7 +2704,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             try:
                 generate_gcode_from_placed(
                     placed, material, mat_w, mat_h, tmp_path, hole_dia,
-                    self.settings, polygon=mat_polygon)
+                    self.settings, polygon=mat_polygon, zones=zones)
                 with open(tmp_path, 'r') as f:
                     gcode_text = f.read()
             finally:
@@ -2944,7 +2949,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             for material in supported_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
-                placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
                     size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
@@ -2954,11 +2959,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon)
+                        polygon=mat_polygon, zones=zones)
                     if preview.result != "save":
                         return
 
-                all_placed[material] = (placed, mat_w, mat_h, mat_polygon)
+                all_placed[material] = (placed, mat_w, mat_h, mat_polygon, zones)
 
             if save_dir is None:
                 save_dir = filedialog.askdirectory(title=_("Select Folder to Save G-code"), initialdir=self.settings.get("last_output_dir", ""))
@@ -2983,9 +2988,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
             last_placed = 0
             try:
-                for material, (placed, mat_w, mat_h, mat_polygon) in all_placed.items():
+                for material, (placed, mat_w, mat_h, mat_polygon, zones) in all_placed.items():
                     filename = os.path.join(save_dir, f"{base}_{material}.gcode")
-                    generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                    generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings,
+                                               polygon=mat_polygon, zones=zones)
                     last_placed = len(placed)
             finally:
                 working_popup.destroy()
