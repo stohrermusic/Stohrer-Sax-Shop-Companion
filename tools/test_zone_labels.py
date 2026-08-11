@@ -5,15 +5,25 @@ Small pads are hard to tell apart once they're off the laser: a 7.0 and a
 7.5 disc look identical, and the per-disc number is either dropped by the
 font gate or unreadable. Leather can't be marked in the middle at all —
 that's the sealing surface — so a zone puts the size on the WASTE instead:
-a bordered grid of one size, with the number engraved along its top edge.
+a compact grid of one size, a rectangle drawn round it, and the size
+engraved on it.
+
+Groups are nested as units, like oversized pads: on a rectangular sheet
+they shelf-pack into a band along the bottom, and on a traced scrap they
+tuck in wherever they fit.
 
 What these pin down:
   - zones are opt-in and change nothing when off (regression safety)
   - only in-range, fixed-quantity pads get zoned
-  - the grid is a block, not a degenerate 1xN strip
-  - no disc escapes its zone, no zone overlaps another, nothing overlaps
-  - pads are never LOST — a zone that can't be placed falls back to the
-    normal nest
+  - grids read the way you'd lay pads out by hand: 6 as 3x2, 9 as 3x3,
+    8 as an exact 4x2 rather than 3x3-with-a-hole
+  - no disc escapes its group, no group overlaps another, and groups stay
+    a visible distance apart (touching groups defeat the whole point)
+  - groups and their engraved boundaries land on material, not off the
+    scrap edge
+  - a zoned size is never cut WITHOUT its group — it's left unplaced and
+    reported instead, because an unlabeled pile is the failure this
+    feature exists to prevent
   - SVG and G-code describe the same rectangle and label (the Y-flip)
 
 No GUI — pure engine calls. Runs headless.
@@ -110,64 +120,105 @@ def test_disabled_matches_plain_nest():
         assert a == b, f"placement drift: {a} != {b}"
 
 
-def test_polygon_produces_bands_not_blocks():
-    """A traced offcut has no straight edge to reserve a rectangular band
-    against, so each size gets a horizontal band clipped to the outline."""
+def test_polygon_produces_nested_groups():
+    """On a traced scrap each zoned size becomes one group — a compact grid
+    with a rectangle round it — and the groups are nested into the shape as
+    units, rather than each claiming a full-width horizontal band."""
     s = base_settings()
     placed, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
     assert placed, "polygon nesting should still place discs"
-    assert zones, "polygon sheets should produce bands"
+    assert zones, "polygon sheets should produce groups"
     for z in zones:
-        assert z['shape'] == 'poly', f"expected a clipped band, got {z['shape']}"
-        assert len(z['points']) >= 3, "band outline is not a polygon"
+        assert z['shape'] == 'rect', f"expected a group rectangle, got {z['shape']}"
+        for key in ('x', 'y', 'w', 'h', 'cols', 'rows'):
+            assert key in z, f"group missing {key}"
 
 
 def test_polygon_zones_off_when_disabled():
     s = base_settings(enabled=False)
     placed, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
-    assert zones == [], "disabled must produce no bands on a polygon either"
+    assert zones == [], "disabled must produce no groups on a polygon either"
     assert placed
 
 
-def test_bands_are_separated_by_a_moat():
-    """Neighbouring sizes must be visibly apart — that's the whole point.
-    A 7.0 and a 7.5 disc are indistinguishable if the groups touch."""
+def test_groups_do_not_overlap_on_a_polygon():
+    """Groups are nested as units, so nothing may collide — otherwise two
+    sizes end up sharing space and the whole point is lost."""
     s = base_settings()
     _, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
-    spans = sorted((min(p[1] for p in z['points']),
-                    max(p[1] for p in z['points'])) for z in zones)
-    for (_, prev_bottom), (next_top, _) in zip(spans, spans[1:]):
-        assert next_top > prev_bottom, "bands overlap vertically"
+    for i in range(len(zones)):
+        for j in range(i + 1, len(zones)):
+            a, b = zones[i], zones[j]
+            overlap = (a['x'] < b['x'] + b['w'] and b['x'] < a['x'] + a['w']
+                       and a['y'] < b['y'] + b['h'] and b['y'] < a['y'] + a['h'])
+            assert not overlap, f"groups {a['label']} and {b['label']} overlap"
 
 
-def test_discs_clear_their_band_outline():
-    """The engraved outline must not crowd the discs — that's what the
-    enlarged edge margin buys."""
+def test_groups_are_separated_by_a_visible_gap():
+    """A 7.0 and a 7.5 disc look identical, so touching groups would be as
+    bad as no grouping at all."""
     s = base_settings()
-    margin = config.DEFAULT_SETTINGS['zone_edge_margin_mm']
+    gap = config.DEFAULT_SETTINGS['zone_band_gap_mm']
+    _, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
+    for i in range(len(zones)):
+        for j in range(i + 1, len(zones)):
+            a, b = zones[i], zones[j]
+            dx = max(b['x'] - (a['x'] + a['w']), a['x'] - (b['x'] + b['w']), 0)
+            dy = max(b['y'] - (a['y'] + a['h']), a['y'] - (b['y'] + b['h']), 0)
+            assert max(dx, dy) >= gap - 0.51, (
+                f"{a['label']} and {b['label']} are only "
+                f"{max(dx, dy):.1f}mm apart")
+
+
+def test_polygon_group_discs_stay_inside_their_rectangle():
+    s = base_settings()
     placed, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
     for z in zones:
-        poly = z['points']
-        for size, cx, cy, r in placed:
-            if size != z['size']:
-                continue
-            d = min(se._distance_point_to_segment(
-                cx, cy, poly[i][0], poly[i][1],
-                poly[(i + 1) % len(poly)][0], poly[(i + 1) % len(poly)][1])
-                for i in range(len(poly)))
-            if d - r < -1e-6:
-                continue  # disc belongs to a different band with the same size
-            assert d - r >= margin - 0.51, (
-                f"{z['label']}: disc only {d - r:.2f}mm from the outline")
+        mine = [(cx, cy, r) for sz, cx, cy, r in placed if sz == z['size']]
+        assert len(mine) == z['qty']
+        for cx, cy, r in mine:
+            assert z['x'] <= cx - r + 1e-9 and cx + r <= z['x'] + z['w'] + 1e-9, \
+                f"{z['label']}: disc escapes its group horizontally"
+            assert z['y'] <= cy - r + 1e-9 and cy + r <= z['y'] + z['h'] + 1e-9, \
+                f"{z['label']}: disc escapes its group vertically"
 
 
-def test_band_label_sits_inside_its_band():
+def test_polygon_groups_and_their_boundaries_land_on_material():
+    """Both the pads and the engraved rectangle have to be on the scrap —
+    a boundary drawn off the edge marks nothing."""
     s = base_settings()
-    _, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
+    placed, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
+    for size, cx, cy, r in placed:
+        assert se._circle_fits_in_polygon(cx, cy, r, SCRAP, 0.0), \
+            f"{size}mm disc at ({cx:.1f},{cy:.1f}) is not on the scrap"
     for z in zones:
-        ys = [p[1] for p in z['points']]
-        assert min(ys) <= z['label_y'] <= max(ys), \
-            f"{z['label']}: label outside its band vertically"
+        for px, py in ((z['x'], z['y']), (z['x'] + z['w'], z['y']),
+                       (z['x'], z['y'] + z['h']),
+                       (z['x'] + z['w'], z['y'] + z['h'])):
+            assert se._point_in_polygon(px, py, SCRAP), \
+                f"{z['label']}: group corner ({px:.1f},{py:.1f}) is off the scrap"
+
+
+def test_grid_shapes_match_how_you_would_lay_them_out():
+    """Six reads as 3x2 and nine as 3x3. Eight prefers an exact 4x2 over a
+    3x3 with a hole in it; a prime like seven takes 4x2 with one gap rather
+    than a row of seven."""
+    expected = {2: (2, 1), 4: (2, 2), 6: (3, 2), 7: (4, 2),
+                8: (4, 2), 9: (3, 3), 12: (4, 3), 16: (4, 4)}
+    for qty, want in expected.items():
+        got = se.zone_grid_candidates(qty)[0]
+        assert got == want, f"{qty} pads: expected {want}, got {got}"
+
+
+def test_grid_candidates_offer_flatter_fallbacks():
+    """An awkward scrap must be able to degrade to a flatter grid instead
+    of the size being refused outright."""
+    for qty in (6, 9, 12):
+        cands = se.zone_grid_candidates(qty)
+        assert len(cands) > 1, f"{qty}: no fallback shapes"
+        assert len(set(cands)) == len(cands), f"{qty}: duplicate shapes"
+        rows = [r for _c, r in cands]
+        assert min(rows) == 1, f"{qty}: no single-row fallback available"
 
 
 def test_clip_polygon_y():
@@ -176,98 +227,52 @@ def test_clip_polygon_y():
     ys = [p[1] for p in mid]
     assert abs(min(ys) - 2) < 1e-9 and abs(max(ys) - 8) < 1e-9, f"bad clip: {mid}"
     assert se._clip_polygon_y(square, 20, 30) == [], "clip outside should be empty"
-    # concave shapes are the normal case for a traced scrap
     concave = [(0, 0), (10, 0), (10, 10), (5, 4), (0, 10)]
     got = se._clip_polygon_y(concave, 0, 5)
     assert len(got) >= 3, "concave clip collapsed"
 
 
-def test_polygon_bands_never_silently_drop_pads():
-    """When a band can't fit, its pads go back to the normal nest below —
-    and if they still don't fit, can_all_pads_fit must report it rather
-    than the app writing a short sheet."""
-    s = base_settings()
-    tiny = [(0, 0), (60, 0), (60, 50), (0, 50)]
-    placed, _zones, fixed_placed, fixed_total = se.nest_with_zones(
-        BAND_PADS, 'leather', 0, 0, s, polygon=tiny)
-    assert fixed_total == sum(p['qty'] for p in BAND_PADS)
-    assert fixed_placed == len(placed)
-    if fixed_placed < fixed_total:
-        assert se.can_all_pads_fit(BAND_PADS, 'leather', 0, 0, s, polygon=tiny) is False
-
-
 def test_no_zoned_size_is_ever_cut_unlabeled():
-    """The failure mode that matters. If a zoned size can't get a band it
+    """The failure mode that matters. If a zoned size can't get a group it
     must NOT be quietly nested alongside the labeled ones — that produces
     exactly the unlabeled mixed pile zones exist to prevent, while the
     caller sees a full placed count and reports success."""
     s = base_settings()
     lo, hi = s['zone_label_min_size'], s['zone_label_max_size']
-    tight = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30),
-             (280, 12), (302, 40), (300, 150), (120, 158), (40, 152)]
-    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
+    tiny = [(0, 0), (70, 0), (70, 55), (0, 55)]
+    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 9},
             {'size': 7.5, 'qty': 6}, {'size': 7.0, 'qty': 6}]
     placed, zones, fixed_placed, fixed_total = se.nest_with_zones(
-        pads, 'leather', 0, 0, s, polygon=tight)
+        pads, 'leather', 0, 0, s, polygon=tiny)
 
-    banded = {z['size'] for z in zones}
+    grouped = {z['size'] for z in zones}
     cut = {size for size, _cx, _cy, _r in placed}
-    unlabeled = [sz for sz in cut if lo <= sz <= hi and sz not in banded]
-    assert not unlabeled, f"zoned sizes cut without a band: {unlabeled}"
-
-    # and the shortfall has to be visible to the caller
+    unlabeled = [sz for sz in cut if lo <= sz <= hi and sz not in grouped]
+    assert not unlabeled, f"zoned sizes cut without a group: {unlabeled}"
+    assert fixed_placed == len(placed)
     if fixed_placed < fixed_total:
-        assert se.can_all_pads_fit(pads, 'leather', 0, 0, s, polygon=tight) is False
+        assert se.can_all_pads_fit(pads, 'leather', 0, 0, s, polygon=tiny) is False
 
 
-def test_band_outline_hugs_its_discs():
-    """The grow loop stretches a band downward until the size fits, which
-    on a tapering outline can leave a very tall band around a single row.
-    The drawn boundary must be re-clipped to what the discs actually
-    occupy, or it bounds mostly empty scrap and strands the label."""
+def test_group_label_sits_in_its_own_rectangle():
     s = base_settings()
-    margin = config.DEFAULT_SETTINGS['zone_edge_margin_mm']
-    font = config.DEFAULT_SETTINGS['zone_label_font_mm']
     placed, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
     for z in zones:
-        ys = [p[1] for p in z['points']]
-        mine = [(cy, r) for sz, _cx, cy, r in placed if sz == z['size']]
-        disc_top = min(cy - r for cy, r in mine)
-        disc_bot = max(cy + r for cy, r in mine)
-        # slack above is the label strip; below is just the margin
-        assert disc_top - min(ys) <= margin + font + 1.0, \
-            f"{z['label']}: {disc_top - min(ys):.1f}mm of dead space above the discs"
-        assert max(ys) - disc_bot <= margin + 1.0, \
-            f"{z['label']}: {max(ys) - disc_bot:.1f}mm of dead space below the discs"
+        label_bottom = z['y'] + z['border'] + z['font']
+        top_disc = min(cy - r for sz, _cx, cy, r in placed if sz == z['size'])
+        assert top_disc >= label_bottom - 1e-9, \
+            f"{z['label']}: discs run into the label strip"
 
 
-def test_band_label_is_anchored_over_its_discs():
-    """A band spans the full width of the outline but its discs may sit
-    entirely to one side, so a bbox-centred label ends up stranded in
-    empty material."""
-    s = base_settings()
-    tight = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30),
-             (280, 12), (302, 40), (300, 150), (120, 158), (40, 152)]
-    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
-            {'size': 7.5, 'qty': 6}]
-    placed, zones, _, _ = se.nest_with_zones(pads, 'leather', 0, 0, s, polygon=tight)
-    assert zones
-    for z in zones:
-        xs = [cx for sz, cx, _cy, _r in placed if sz == z['size']]
-        assert min(xs) - z['disc_d'] <= z['label_x'] <= max(xs) + z['disc_d'], \
-            (f"{z['label']}: label at x={z['label_x']:.1f} is outside its "
-             f"discs ({min(xs):.1f}-{max(xs):.1f})")
-
-
-def test_polygon_svg_and_gcode_band_outlines_agree():
-    """Same Y-flip contract as the block zones, for the clipped outline."""
+def test_polygon_svg_and_gcode_groups_agree():
+    """Same Y-flip contract as the rectangular-sheet path."""
     s = base_settings()
     placed, zones = se.nest_pads_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
-    assert zones, "no bands to compare"
+    assert zones, "no groups to compare"
     flip = max(p[1] for p in SCRAP)
 
     with tempfile.TemporaryDirectory() as d:
-        gpath = os.path.join(d, 'b.gcode')
+        gpath = os.path.join(d, 'g.gcode')
         ge.generate_gcode_from_placed(placed, 'felt', 200, 200, gpath, 0, s,
                                       polygon=SCRAP, zones=zones)
         body = open(gpath, encoding='utf-8').read()
@@ -280,27 +285,30 @@ def test_polygon_svg_and_gcode_band_outlines_agree():
         ym = re.search(r'Y(-?\d+(?:\.\d+)?)', ln)
         if xm and ym:
             pts.append((float(xm.group(1)), float(ym.group(1))))
+    assert pts, "no coordinates in the G-code"
 
     for z in zones:
-        for vx, vy in z['points']:
-            want = (vx, flip - vy)
-            hit = any(abs(px - want[0]) < 0.01 and abs(py - want[1]) < 0.01
-                      for px, py in pts)
-            assert hit, (f"band {z['label']}: vertex ({want[0]:.2f},{want[1]:.2f}) "
+        want = [(z['x'], flip - (z['y'] + z['h'])),
+                (z['x'] + z['w'], flip - (z['y'] + z['h'])),
+                (z['x'] + z['w'], flip - z['y']),
+                (z['x'], flip - z['y'])]
+        for wx, wy in want:
+            hit = any(abs(px - wx) < 0.01 and abs(py - wy) < 0.01 for px, py in pts)
+            assert hit, (f"group {z['label']}: corner ({wx:.2f},{wy:.2f}) "
                          f"missing from G-code — Y-flip mismatch")
 
 
-def test_polygon_svg_has_band_polygons():
+def test_polygon_svg_has_group_rectangles():
     s = base_settings()
     with tempfile.TemporaryDirectory() as d:
-        path = os.path.join(d, 'b.svg')
+        path = os.path.join(d, 'g.svg')
         placed, zones = se.nest_pads_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
         se.generate_svg_from_placed(placed, 'felt', 200, 200, path, 0, s,
                                     polygon=SCRAP, zones=zones)
         body = open(path, encoding='utf-8').read()
-    assert '<polygon' in body, "no band outline polygon in the SVG"
+    assert '<rect' in body, "no group rectangle in the SVG"
     for z in zones:
-        assert f">{z['label']}<" in body, f"band label {z['label']} missing"
+        assert f">{z['label']}<" in body, f"group label {z['label']} missing"
 
 
 def test_max_qty_never_zoned():
@@ -622,7 +630,7 @@ def _probe_preview(placements, w_mm, h_mm, polygon, zones):
     return out
 
 
-def test_preview_draws_polygon_bands():
+def test_preview_draws_polygon_groups():
     try:
         import tkinter as tk
         tk.Tk().destroy()
@@ -633,11 +641,13 @@ def test_preview_draws_polygon_bands():
     placed, zones = se.nest_pads_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
     got = _probe_preview({'felt': placed}, 160, 120, SCRAP, zones)
     assert 'err' not in got, got.get('err')
-    # one polygon for the sheet outline, plus one per band
-    assert got['kinds'].get('polygon', 0) >= len(zones) + 1, \
-        f"band outlines missing from preview: {got['kinds']}"
+    # The scrap outline is the one polygon; each group is a rectangle.
+    assert got['kinds'].get('polygon', 0) >= 1, \
+        f"scrap outline missing from preview: {got['kinds']}"
+    assert got['kinds'].get('rectangle', 0) >= len(zones), \
+        f"group rectangles missing from preview: {got['kinds']}"
     for z in zones:
-        assert z['label'] in got['texts'], f"band label {z['label']} not drawn"
+        assert z['label'] in got['texts'], f"group label {z['label']} not drawn"
 
 
 def test_preview_draws_rect_zone_blocks():

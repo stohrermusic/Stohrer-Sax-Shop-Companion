@@ -6739,22 +6739,14 @@ class NestingPreviewWindow(tk.Toplevel):
 
         # Zone borders and labels go under the pads, matching the cut order.
         for zone in self._zones:
-            if zone.get('shape') == 'poly':
-                pts = []
-                for px, py in zone['points']:
-                    pts.extend([offset_x + px * scale, offset_y + py * scale])
-                cv.create_polygon(pts, outline="#B0782A", width=1, fill="#FFFDF5")
-                lx = offset_x + zone['label_x'] * scale
-                ly = offset_y + zone['label_y'] * scale
-            else:
-                zx = offset_x + zone['x'] * scale
-                zy = offset_y + zone['y'] * scale
-                zw = zone['w'] * scale
-                zh = zone['h'] * scale
-                cv.create_rectangle(zx, zy, zx + zw, zy + zh,
-                                    outline="#B0782A", width=1, fill="#FFFDF5")
-                lx = zx + zw / 2
-                ly = zy + (zone['border'] + zone['font'] / 2) * scale
+            zx = offset_x + zone['x'] * scale
+            zy = offset_y + zone['y'] * scale
+            zw = zone['w'] * scale
+            zh = zone['h'] * scale
+            cv.create_rectangle(zx, zy, zx + zw, zy + zh,
+                                outline="#B0782A", width=1, fill="#FFFDF5")
+            lx = zx + zw / 2
+            ly = zy + (zone['border'] + zone['font'] / 2) * scale
             label_px = max(7, min(14, int(zone['font'] * scale)))
             cv.create_text(lx, ly, text=zone['label'], fill="#B0782A",
                            font=("Helvetica", label_px, "bold"))

@@ -1110,21 +1110,15 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     for zone in (zones or []):
         font = zone['font']
         # SVG Y-down -> G-code Y-up, so every zone outline flips vertically.
-        if zone.get('shape') == 'poly':
-            pts = [(px, flip_height - py) for px, py in zone['points']]
-            zone_strokes.append(pts + [pts[0]])
-            label_cx = zone['label_x']
-            label_cy = flip_height - zone['label_y']
-        else:
-            x, y, w, h = zone['x'], zone['y'], zone['w'], zone['h']
-            y_top = flip_height - y
-            y_bot = flip_height - (y + h)
-            zone_strokes.append([(x, y_bot), (x + w, y_bot), (x + w, y_top),
-                                 (x, y_top), (x, y_bot)])
-            label_cx = x + w / 2
-            # get_text_strokes/get_filled_text_strokes are center-anchored,
-            # so this is the visual center, matching the SVG placement.
-            label_cy = flip_height - (y + zone['border'] + font / 2)
+        x, y, w, h = zone['x'], zone['y'], zone['w'], zone['h']
+        y_top = flip_height - y
+        y_bot = flip_height - (y + h)
+        zone_strokes.append([(x, y_bot), (x + w, y_bot), (x + w, y_top),
+                             (x, y_top), (x, y_bot)])
+        label_cx = x + w / 2
+        # get_text_strokes/get_filled_text_strokes are center-anchored, so
+        # this is the visual center, matching the SVG placement.
+        label_cy = flip_height - (y + zone['border'] + font / 2)
         if engraving_mode == "filled":
             zone_strokes.extend(get_filled_text_strokes(
                 zone['label'], font, label_cx, label_cy, filled_line_spacing))
