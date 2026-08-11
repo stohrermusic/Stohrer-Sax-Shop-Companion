@@ -85,6 +85,16 @@ SCRAP = [(6, 42), (34, 14), (72, 6), (112, 10), (146, 26), (158, 58),
 BAND_PADS = [{'size': 9.0, 'qty': 10}, {'size': 8.0, 'qty': 10},
              {'size': 7.0, 'qty': 10}]
 
+# A second offcut, for the 'x max' leftover tests: 254 x 162mm (10 x 6.4in).
+# Nothing here is ever bigger than 14 x 14in and is usually smaller.
+OFFCUT = [(8, 60), (70, 18), (160, 10), (240, 26), (262, 80), (250, 140),
+          (170, 172), (80, 166), (16, 130)]
+# Fill size for the 'x max' tests. Must be OUTSIDE the zone range so it
+# stays ungrouped. 18.0 is a real pad; the 4.0 this used to be is a 1.2mm
+# card disc that nobody cuts, and it made these two tests take 70 and 88
+# seconds by placing ~2900 of them.
+MAX_FILL = 18.0
+
 
 def _overlaps(placed):
     n = 0
@@ -358,39 +368,51 @@ def test_polygon_svg_has_group_rectangles():
         assert f">{z['label']}<" in body, f"group label {z['label']} missing"
 
 
-def test_max_fill_reaches_space_beside_and_above_groups():
+def test_max_fill_reaches_past_the_groups():
     """An ungrouped 'x max' has to fill the whole leftover of a scrap.
     While the layout was stacked full-width bands the leftover was the
     strip UNDER the lowest group, so a max fill placed nothing at all
-    above or beside them — most of the piece went to waste."""
+    beside them — most of the piece went to waste.
+
+    'Beside' is the sharp signal, not 'above': groups are placed
+    biggest-first scanning from the top, so they claim the topmost
+    material and there is structurally nothing above them for a pad of
+    real size. The old fixture only got pads up there because a 4.0mm
+    pad is a 1.2mm disc that fits in slivers — and no one makes those.
+    """
     s = base_settings()
-    scrap = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30), (280, 12),
-             (302, 40), (300, 150), (120, 158), (40, 152)]
-    # 4.0mm is below the zone range, so it stays ungrouped, and it's small
-    # enough to use the gaps around the groups.
     pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
-            {'size': 4.0, 'qty': 'max'}]
-    placed, zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=scrap)
+            {'size': MAX_FILL, 'qty': 'max'}]
+    placed, zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=OFFCUT)
     assert zones, "expected groups"
     g_top = min(z['y'] for z in zones)
     g_bot = max(z['y'] + z['h'] for z in zones)
-    ys = [cy for sz, _cx, cy, _r in placed if sz == 4.0]
+    ys = [cy for sz, _cx, cy, _r in placed if sz == MAX_FILL]
     assert ys, "max fill placed nothing"
-    assert sum(1 for y in ys if y < g_top) > 0, "nothing filled above the groups"
-    assert sum(1 for y in ys if g_top <= y <= g_bot) > 0, "nothing filled beside the groups"
+    assert sum(1 for y in ys if g_top <= y <= g_bot) > 0, \
+        "nothing filled beside the groups — leftovers clipped to below them?"
+
+    # The whole outline must stay available, not just the part the groups
+    # didn't want: compare against the same fill with zones switched off.
+    off = base_settings(enabled=False)
+    bare, _, _ = se._nest_discs([{'size': MAX_FILL, 'qty': 'max'}], 'card',
+                                0, 0, off, 1.0, OFFCUT)
+    assert len(ys) >= 0.85 * len(bare), (
+        f"zoned max fill placed {len(ys)} vs {len(bare)} ungrouped — the "
+        f"groups cost more room than they occupy")
 
 
 def test_max_fill_stays_out_of_group_boxes():
     """Loose pads must not land inside a labeled group's rectangle — a
     stray disc in another size's box is the confusion this prevents.
     Seeding the group's discs alone isn't enough; the whole footprint has
-    to be reserved or pads settle into the gaps between them."""
+    to be reserved or pads settle into the gaps between them. (Verified
+    to still bite: stubbing the rectangle reservation out puts 6 of these
+    pads inside a box.)"""
     s = base_settings()
-    scrap = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30), (280, 12),
-             (302, 40), (300, 150), (120, 158), (40, 152)]
     pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
-            {'size': 4.0, 'qty': 'max'}]
-    placed, zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=scrap)
+            {'size': MAX_FILL, 'qty': 'max'}]
+    placed, zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=OFFCUT)
     grouped = {z['size'] for z in zones}
     for size, cx, cy, r in placed:
         if size in grouped:
@@ -408,7 +430,7 @@ def test_preplaced_seeds_never_leak_into_results():
     back in `placed` they'd be cut."""
     s = base_settings()
     scrap = [(0, 0), (200, 0), (200, 150), (0, 150)]
-    pads = [{'size': 12.0, 'qty': 6}, {'size': 4.0, 'qty': 'max'}]
+    pads = [{'size': 12.0, 'qty': 6}, {'size': MAX_FILL, 'qty': 'max'}]
     placed, _zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=scrap)
     for entry in placed:
         assert not isinstance(entry[0], str), f"reservation seed leaked: {entry}"
