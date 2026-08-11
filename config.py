@@ -418,6 +418,28 @@ GCODE_PRESET_KEYS = (
 # in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
 GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood")
 
+# Sane ceiling for the framing S value. Framing is a positioning preview,
+# not a cut — anything approaching real engraving power would mark the
+# material the user is trying to line up.
+FRAMING_POWER_S_MAX = 150
+
+
+def get_framing_power_s(material, settings):
+    """Grbl S value to frame with for this material (0-1000 scale).
+
+    Falls back to the global ``laser_framing_power_s`` for materials with
+    no entry (e.g. 'exact_size', which the per-material dict doesn't
+    cover) and for configs written before the dict existed.
+    """
+    fallback = settings.get("laser_framing_power_s", 10)
+    by_mat = settings.get("laser_framing_power_by_material")
+    if not isinstance(by_mat, dict):
+        return fallback
+    try:
+        return int(by_mat.get(material, fallback))
+    except (TypeError, ValueError):
+        return fallback
+
 
 def material_settings_to_gcode_preset(mat_settings):
     """Pull just the G-code preset keys out of one material's settings block."""
@@ -806,7 +828,18 @@ DEFAULT_SETTINGS = {
     # the Falcon's VID/PID; if a future user runs another Grbl laser,
     # they'll set the port directly here and bypass detection.
     "falcon_serial_port_override": None,
+    # Framing runs the outline at very low power so you can see where the
+    # head will go without marking the material. How low is "visible but
+    # harmless" depends entirely on the material — 1% reads fine on card
+    # but is invisible on dark leather. laser_framing_power_s is the
+    # fallback for anything not listed (and for legacy configs); the
+    # per-material dict overrides it. Both are Grbl S values on the 0-1000
+    # scale, so 10 = 1%. Framing always uses M4 dynamic power regardless
+    # of the value — see generate_polygon_framing_gcode.
     "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
+    "laser_framing_power_by_material": {
+        "felt": 10, "card": 10, "leather": 10, "acrylic": 10, "basswood": 10,
+    },
     "laser_framing_feed": 2000,     # mm/min during framing
     # Bed dimensions in machine-mm — defaults match the Creality Falcon2
     # Pro 40W. Override here for other Grbl-compatible lasers.

@@ -372,6 +372,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 command=self._on_machine_inset_settings)
             self._machine_menu_indices['inset'] = (
                 machine_menu.index('end'))
+            machine_menu.add_command(
+                label=_("Framing Power..."),
+                command=self._on_machine_framing_power)
+            self._machine_menu_indices['framing_power'] = (
+                machine_menu.index('end'))
             machine_menu.add_separator()
             machine_menu.add_command(label=_("Home Laser"),
                                        command=self._on_machine_home_falcon)
@@ -2127,7 +2132,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             indices = self._machine_menu_indices
             try:
                 menu.entryconfig(indices['camera_cal'], state="normal")
-                for key in ('inset', 'home', 'test', 'clear', 'reset'):
+                for key in ('inset', 'framing_power', 'home', 'test',
+                            'clear', 'reset'):
                     if key in indices:
                         menu.entryconfig(indices[key], state=other_state)
             except tk.TclError:
@@ -2485,6 +2491,96 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # ToolingTabMixin) — same dialog, same flow.
         self._open_camera_calibration()
 
+    def _on_machine_framing_power(self):
+        """Per-material framing power (Grbl S, 0-1000 scale).
+
+        Framing traces the outline so you can see where the head will go
+        without marking anything. How low "visible but harmless" is
+        depends on the material — 1% reads fine on card and is invisible
+        on dark leather. Framing always uses M4 dynamic power whatever
+        the value, so the beam still drops to zero when the head stalls
+        at a vertex.
+        """
+        from config import (GCODE_PRESET_MATERIALS, FRAMING_POWER_S_MAX,
+                            get_framing_power_s, save_settings)
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Framing Power"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+        bg = self._get_theme_color() if hasattr(
+            self, '_get_theme_color') else None
+        if bg:
+            dlg.configure(bg=bg)
+
+        tk.Label(dlg, justify='left', wraplength=440, bg=bg,
+                 text=_("Laser power used for the framing pass, per "
+                        "material. Framing shows you where the cut will "
+                        "land — it should be bright enough to follow by "
+                        "eye without marking the material.\n\n"
+                        "These are Grbl S values on a 0-1000 scale, so "
+                        "10 = 1%. Dark materials like leather need more "
+                        "than card does. Raise a few points at a time: "
+                        "the value that becomes visible is usually close "
+                        "to the value that starts leaving a mark.")
+                 ).pack(padx=20, pady=(15, 10))
+
+        grid = tk.Frame(dlg, bg=bg)
+        grid.pack(padx=20, pady=(0, 10))
+        vars_by_mat = {}
+        for row, mat in enumerate(GCODE_PRESET_MATERIALS):
+            tk.Label(grid, text=mat.replace('_', ' ').title() + ":",
+                     bg=bg, anchor='e', width=12).grid(
+                row=row, column=0, sticky='e', pady=2)
+            var = tk.StringVar(value=str(get_framing_power_s(mat, self.settings)))
+            vars_by_mat[mat] = var
+            tk.Entry(grid, textvariable=var, width=8,
+                     font=("Helvetica", 11)).grid(
+                row=row, column=1, sticky='w', padx=6, pady=2)
+            pct = tk.Label(grid, text="", bg=bg, fg="#666666",
+                           font=("Helvetica", 8), width=6, anchor='w')
+            pct.grid(row=row, column=2, sticky='w')
+
+            def _sync(*_a, v=var, lbl=pct):
+                try:
+                    lbl.config(text=f"{int(v.get()) / 10:g}%")
+                except (ValueError, TypeError):
+                    lbl.config(text="—")
+            var.trace_add('write', _sync)
+            _sync()
+
+        def _ok():
+            parsed = {}
+            for mat, var in vars_by_mat.items():
+                try:
+                    v = int(float(var.get()))
+                    if not (0 <= v <= FRAMING_POWER_S_MAX):
+                        raise ValueError("out of range")
+                except (ValueError, TypeError):
+                    messagebox.showerror(
+                        _("Invalid"),
+                        _("{mat}: framing power must be a whole number "
+                          "from 0 to {max}.").format(
+                              mat=mat, max=FRAMING_POWER_S_MAX),
+                        parent=dlg)
+                    return
+                parsed[mat] = v
+            self.settings["laser_framing_power_by_material"] = parsed
+            try:
+                save_settings(self.settings)
+            except Exception as e:
+                messagebox.showerror(_("Save Failed"), str(e), parent=dlg)
+                return
+            dlg.destroy()
+
+        btn_row = tk.Frame(dlg, bg=bg)
+        btn_row.pack(pady=(0, 15))
+        tk.Button(btn_row, text=_("OK"), command=_ok, width=10).pack(
+            side='left', padx=5)
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy,
+                  width=10).pack(side='left', padx=5)
+
     def _on_machine_inset_settings(self):
         """Small dialog: edit camera_polygon_inset_mm."""
         dlg = tk.Toplevel(self.root)
@@ -2718,7 +2814,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # bbox rectangle overhangs every concave edge and tells the user
             # nothing about whether the cuts land on material. Fall back to
             # the bbox rectangle for rectangular jobs (no polygon loaded).
-            power_s = self.settings.get("laser_framing_power_s", 10)
+            from config import get_framing_power_s
+            power_s = get_framing_power_s(material, self.settings)
             feed = self.settings.get("laser_framing_feed", 2000)
             framing_lines = []
             # Frame the OUTLINE polygon (un-insetted) so the trace

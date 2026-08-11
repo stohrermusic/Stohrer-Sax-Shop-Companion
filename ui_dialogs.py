@@ -7676,9 +7676,12 @@ class CameraCalibrationDialog(tk.Toplevel):
             oy = hy - border - label_h - board_h / 2.0
             fx = ox + board_w + 2 * border
             fy = oy + board_h + 2 * border + label_h
+            from config import get_framing_power_s
             return generate_framing_gcode(
                 ox, oy, fx, fy,
-                power_s=self._settings.get("laser_framing_power_s", 10),
+                # The calibration card is engraved on basswood, so frame
+                # at basswood's power rather than the global fallback.
+                power_s=get_framing_power_s('basswood', self._settings),
                 feed=self._settings.get("laser_framing_feed", 2000),
                 return_to_origin=False,  # absolute coords; don't send
                                           # head to machine (0, 0) (=home
