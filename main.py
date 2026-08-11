@@ -2557,8 +2557,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Shown and entered as a percentage, like every other power
             # field in the app. Stored as a Grbl S value (percent x 10) —
             # see _ok() for why the stored unit doesn't change.
+            # One decimal always shown ("1.0", not "1") so it's obvious a
+            # fractional percent is accepted — the useful range is narrow
+            # and S values are integers, so 0.1% is exactly the precision
+            # available.
             pct_now = get_framing_power_s(mat, self.settings) / 10.0
-            var = tk.StringVar(value=f"{pct_now:g}")
+            var = tk.StringVar(value=f"{pct_now:.1f}")
             vars_by_mat[mat] = var
             tk.Entry(grid, textvariable=var, width=8,
                      font=("Helvetica", 11)).grid(
@@ -2569,7 +2573,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         tk.Label(dlg, bg=bg, fg="#666666", font=("Helvetica", 8),
                  text=_("Range: 0 to {max}%. Cutting power is typically "
                         "35-100%, so framing stays well below it.").format(
-                            max=f"{max_pct:g}")
+                            max=f"{max_pct:.1f}")
                  ).pack(padx=20, pady=(0, 8))
 
         def _ok():
@@ -2584,7 +2588,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                         _("Invalid"),
                         _("{mat}: framing power must be a number from "
                           "0 to {max}%.").format(
-                              mat=mat, max=f"{max_pct:g}"),
+                              mat=mat, max=f"{max_pct:.1f}"),
                         parent=dlg)
                     return
                 # Store as Grbl S (percent x 10). Kept in S rather than

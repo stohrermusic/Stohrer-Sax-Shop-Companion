@@ -158,7 +158,7 @@ def test_groups_are_separated_by_a_visible_gap():
     """A 7.0 and a 7.5 disc look identical, so touching groups would be as
     bad as no grouping at all."""
     s = base_settings()
-    gap = config.DEFAULT_SETTINGS['zone_band_gap_mm']
+    gap = config.DEFAULT_SETTINGS['zone_group_gap_mm']
     _, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
     for i in range(len(zones)):
         for j in range(i + 1, len(zones)):
@@ -168,6 +168,53 @@ def test_groups_are_separated_by_a_visible_gap():
             assert max(dx, dy) >= gap - 0.51, (
                 f"{a['label']} and {b['label']} are only "
                 f"{max(dx, dy):.1f}mm apart")
+
+
+def test_both_sheet_types_space_boxes_the_same():
+    """Same divergence class as the grid-shape rule: the gap was a 2.0
+    constant on rectangular sheets and a 6.0 setting on traced polygons,
+    so the same job spaced its boxes differently by sheet type."""
+    s = base_settings()
+    gutter, border, font, gap = se._group_metrics(s)
+    specs, _ = se.plan_zone_specs(BAND_PADS, 'felt', s)
+    rect_zones, _, _ = se._shelf_pack_zones(specs, 300.0, 200.0, group_gap=gap)
+    _, poly_zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s,
+                                             polygon=SCRAP)
+    assert rect_zones and poly_zones, "need boxes on both paths to compare"
+
+    by_label_rect = {z['label']: z for z in rect_zones}
+    for pz in poly_zones:
+        rz = by_label_rect.get(pz['label'])
+        assert rz is not None, f"{pz['label']} missing from the rect layout"
+        assert abs(rz['w'] - pz['w']) < 1e-6 and abs(rz['h'] - pz['h']) < 1e-6, (
+            f"{pz['label']}: box is {rz['w']:.2f}x{rz['h']:.2f} on a rect "
+            f"sheet but {pz['w']:.2f}x{pz['h']:.2f} on a polygon")
+        assert abs(rz['border'] - pz['border']) < 1e-6, (
+            f"{pz['label']}: border differs by sheet type")
+
+
+def test_group_gap_is_not_a_moat():
+    """The 6.0mm gap was sized to separate full-width BANDS. Once each size
+    became a box with its own border, that much space between boxes was
+    just wasted material — and on leather it cost whole groups their place
+    on the scrap."""
+    s = base_settings()
+    _gutter, border, _font, gap = se._group_metrics(s)
+    assert gap <= border * 2, (
+        f"gap {gap}mm dwarfs the {border}mm each box already carries "
+        f"inside its own border")
+    assert gap > 0, "boxes must not touch — two abutting lines read as one"
+
+    # Tighter packing must never cost placements.
+    wide = dict(s)
+    wide['zone_group_gap_mm'] = 6.0
+    _, tight_zones, tight_placed, total = se.nest_with_zones(
+        BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
+    _, wide_zones, wide_placed, _ = se.nest_with_zones(
+        BAND_PADS, 'felt', 0, 0, wide, polygon=SCRAP)
+    assert tight_placed >= wide_placed, (
+        f"tight gap placed {tight_placed}/{total} vs {wide_placed} wide")
+    assert len(tight_zones) >= len(wide_zones)
 
 
 def test_polygon_group_discs_stay_inside_their_rectangle():
@@ -666,7 +713,8 @@ def test_line_and_filled_modes_both_render_zones():
 
 def test_zone_keys_exist_in_defaults():
     for key in ('zone_labels_enabled', 'zone_label_min_size', 'zone_label_max_size',
-                'zone_gutter_mm', 'zone_border_mm', 'zone_label_font_mm'):
+                'zone_gutter_mm', 'zone_border_mm', 'zone_label_font_mm',
+                'zone_edge_margin_mm', 'zone_group_gap_mm'):
         assert key in config.DEFAULT_SETTINGS, f"{key} missing from DEFAULT_SETTINGS"
 
 

@@ -984,7 +984,11 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _disc
 # unchanged and the parity-pinned scan functions are untouched.
 
 ZONE_SHEET_MARGIN_MM = 2.0   # gap from sheet edge to the zone band
-ZONE_GAP_MM = 2.0            # gap between neighbouring zones
+
+# The gap BETWEEN group boxes is settings["zone_group_gap_mm"], shared by
+# both sheet types — see _group_metrics(). It used to be a rect-only
+# constant here (2.0) and a separate polygon-only setting (6.0), so the
+# same job produced differently-spaced boxes depending on sheet type.
 
 
 def zone_label_text(pad_size):
@@ -1108,6 +1112,22 @@ def _zone_box(qty, disc_d, gutter_mm, border_mm, font_mm, label_text,
     return cols, rows, w, h, inner_w
 
 
+def _group_metrics(settings):
+    """The four numbers that define group box geometry, read in ONE place.
+
+    Both packers (rectangular shelf-pack and polygon first-fit) must draw
+    the same box for the same job, so neither reads these keys directly.
+    They previously did, and disagreed: the border was 1.0 on rectangular
+    sheets and 1.5 on traced polygons, and the inter-box gap was 2.0 vs
+    6.0 — the same divergence class as the grid-shape rule unified in the
+    2026-08-11 audit. Returns (gutter, border, font, group_gap).
+    """
+    return (float(settings.get("zone_gutter_mm", 1.0)),
+            float(settings.get("zone_border_mm", 1.5)),
+            float(settings.get("zone_label_font_mm", 2.5)),
+            float(settings.get("zone_group_gap_mm", 1.0)))
+
+
 def plan_zone_specs(pads, material, settings):
     """Split pads into zoned groups and free pads.
 
@@ -1121,9 +1141,7 @@ def plan_zone_specs(pads, material, settings):
 
     lo = float(settings.get("zone_label_min_size", 7.0))
     hi = float(settings.get("zone_label_max_size", 12.5))
-    gutter = float(settings.get("zone_gutter_mm", 1.0))
-    border = float(settings.get("zone_border_mm", 1.0))
-    font = float(settings.get("zone_label_font_mm", 2.5))
+    gutter, border, font, _gap = _group_metrics(settings)
 
     specs, free = [], []
     for pad in pads:
@@ -1150,9 +1168,13 @@ def plan_zone_specs(pads, material, settings):
     return specs, free
 
 
-def _shelf_pack_zones(specs, width_mm, height_mm):
+def _shelf_pack_zones(specs, width_mm, height_mm, group_gap=None):
     """Shelf-pack zone rectangles into a band at the BOTTOM of the sheet
     (SVG coords, so high Y). Returns (placed_zones, band_height, dropped).
+
+    `group_gap` is the space between neighbouring boxes; callers pass the
+    value from _group_metrics so this path and the polygon path space
+    their boxes identically.
 
     A zone wider than the sheet is retried with flatter grid shapes before
     being given up on — same degrade-don't-refuse behaviour the polygon
@@ -1162,6 +1184,8 @@ def _shelf_pack_zones(specs, width_mm, height_mm):
     if not specs:
         return [], 0.0, []
 
+    if group_gap is None:
+        group_gap = 1.0
     usable_w = width_mm - 2 * ZONE_SHEET_MARGIN_MM
     shelves = []          # list of [height, [(spec, x)], used_w]
     dropped = []
@@ -1184,9 +1208,9 @@ def _shelf_pack_zones(specs, width_mm, height_mm):
             dropped.append(spec)
             continue
         for shelf in shelves:
-            need = shelf[2] + ZONE_GAP_MM + spec['w']
+            need = shelf[2] + group_gap + spec['w']
             if need <= usable_w:
-                shelf[1].append((spec, ZONE_SHEET_MARGIN_MM + shelf[2] + ZONE_GAP_MM))
+                shelf[1].append((spec, ZONE_SHEET_MARGIN_MM + shelf[2] + group_gap))
                 shelf[2] = need
                 shelf[0] = max(shelf[0], spec['h'])
                 break
@@ -1198,7 +1222,7 @@ def _shelf_pack_zones(specs, width_mm, height_mm):
     band_h = 0.0
     kept = []
     for shelf in shelves:
-        need = band_h + shelf[0] + ZONE_GAP_MM
+        need = band_h + shelf[0] + group_gap
         if need + ZONE_SHEET_MARGIN_MM > height_mm:
             dropped.extend(s for s, _ in shelf[1])
             continue
@@ -1364,10 +1388,12 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
                                    spacing_mm, polygon)
         return placed, []
 
-    group_gap = float(settings.get("zone_band_gap_mm", 6.0))
+    _gutter, border, font, group_gap = _group_metrics(settings)
+    # Box geometry uses `border` (shared with the rectangular path);
+    # `edge_margin` is a different job — extra room when testing this
+    # group's discs against the traced outline.
     edge_margin = float(settings.get("zone_edge_margin_mm", 1.5))
-    font = float(settings.get("zone_label_font_mm", 2.5))
-    label_h = font + edge_margin
+    label_h = font + border
     clearance = spacing_mm + edge_margin
     min_x, min_y, max_x, max_y = _polygon_bbox(polygon)
     step = ZONE_GRID_SEARCH_STEP_MM
@@ -1390,8 +1416,8 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
         for cols, rows in zone_grid_candidates(qty):
             grid_w = cols * disc_d + (cols - 1) * gutter
             grid_h = rows * disc_d + (rows - 1) * gutter
-            box_w = max(grid_w, _zone_text_width_mm(spec['label'], font)) + 2 * edge_margin
-            box_h = grid_h + label_h + edge_margin
+            box_w = max(grid_w, _zone_text_width_mm(spec['label'], font)) + 2 * border
+            box_h = grid_h + label_h + border
             if box_w > (max_x - min_x) or box_h > (max_y - min_y):
                 continue
 
@@ -1440,7 +1466,7 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
             'size': spec['size'],
             'qty': qty,
             'font': font,
-            'border': edge_margin,
+            'border': border,
             'gutter': gutter,
             'disc_d': disc_d,
             'cols': cols, 'rows': rows,
@@ -1481,11 +1507,15 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     Two layouts, chosen by sheet shape:
       - rectangular sheet: grid blocks shelf-packed into a band along the
         bottom, which keeps the leftover region a plain rectangle.
-      - traced polygon: one horizontal band per size, clipped to the
-        outline, each carrying its own engraved boundary.
+      - traced polygon: grid blocks first-fit into the outline as units,
+        tucking in wherever they land.
+
+    Both emit identical shape='rect' zone dicts and take their box
+    geometry from _group_metrics, so the same job draws the same boxes
+    either way.
 
     Scrap mode passes zones=[] from the caller — a scrap only takes part of
-    a size's count, so a band would have to be re-sized per piece.
+    a size's count, so a group would have to be re-sized per piece.
     """
     if not settings.get("zone_labels_enabled", False):
         placed, fp, ft = _nest_discs(pads, material, width_mm, height_mm,
@@ -1507,7 +1537,8 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
         return placed, zones, fixed_placed, fixed_total
 
     specs, free_pads = plan_zone_specs(pads, material, settings)
-    zones, band_h, dropped = _shelf_pack_zones(specs, width_mm, height_mm)
+    zones, band_h, dropped = _shelf_pack_zones(
+        specs, width_mm, height_mm, group_gap=_group_metrics(settings)[3])
 
     # A zoned size that couldn't get a group is NOT nested loose — same
     # rule as the polygon path. Cutting it anyway drops an unlabeled pile

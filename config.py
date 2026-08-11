@@ -418,10 +418,12 @@ GCODE_PRESET_KEYS = (
 # in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
 GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood")
 
-# Sane ceiling for the framing S value. Framing is a positioning preview,
-# not a cut — anything approaching real engraving power would mark the
-# material the user is trying to line up.
-FRAMING_POWER_S_MAX = 150
+# Sane ceiling for the framing S value: 30 = 3%. Framing is a positioning
+# preview, not a cut — anything approaching real engraving power would mark
+# the material the user is trying to line up. The ceiling is enforced when
+# the value is READ, not just in the dialog, so a config written under an
+# older, higher cap can't quietly frame at a marking power.
+FRAMING_POWER_S_MAX = 30
 
 
 def get_framing_power_s(material, settings):
@@ -429,16 +431,22 @@ def get_framing_power_s(material, settings):
 
     Falls back to the global ``laser_framing_power_s`` for materials with
     no entry (e.g. 'exact_size', which the per-material dict doesn't
-    cover) and for configs written before the dict existed.
+    cover) and for configs written before the dict existed. The result is
+    always clamped to 0..FRAMING_POWER_S_MAX.
     """
     fallback = settings.get("laser_framing_power_s", 10)
     by_mat = settings.get("laser_framing_power_by_material")
     if not isinstance(by_mat, dict):
-        return fallback
+        value = fallback
+    else:
+        try:
+            value = int(by_mat.get(material, fallback))
+        except (TypeError, ValueError):
+            value = fallback
     try:
-        return int(by_mat.get(material, fallback))
+        return max(0, min(int(value), FRAMING_POWER_S_MAX))
     except (TypeError, ValueError):
-        return fallback
+        return min(10, FRAMING_POWER_S_MAX)
 
 
 def material_settings_to_gcode_preset(mat_settings):
@@ -579,13 +587,20 @@ DEFAULT_SETTINGS = {
     "zone_label_min_size": 7.0,   # inclusive, pad size in mm
     "zone_label_max_size": 12.5,  # inclusive, pad size in mm
     "zone_gutter_mm": 1.0,        # edge-to-edge gap between discs inside a zone
-    "zone_border_mm": 1.0,        # gap from outermost disc edge to the border
+    # Gap from the outermost disc edge to the engraved border, both sheet
+    # types. 1.0 visually crowded the outer discs, which is what prompted
+    # the larger value.
+    "zone_border_mm": 1.5,
     "zone_label_font_mm": 2.5,    # engraved zone label height
-    # Extra clearance between the engraved band outline and the nearest disc
-    # on traced polygons. Without it the line sits at the nester's own 1mm
-    # edge margin and visually crowds the outer discs.
+    # Extra clearance used when testing a group's discs against a traced
+    # outline, on top of the nester's own spacing. Polygon path only.
     "zone_edge_margin_mm": 1.5,
-    "zone_band_gap_mm": 6.0,      # moat between size bands on a traced polygon
+    # Gap between neighbouring group boxes, both sheet types. Matched to
+    # the disc gutter: each box already carries zone_border_mm of white
+    # space inside it, so the boxes read as separate without a moat
+    # between them. This was 6.0 when each size got a full-width band and
+    # the gap had to separate strips rather than boxes.
+    "zone_group_gap_mm": 1.0,
 
     # EDGE BIAS - direction to bias circle packing toward
     # "center" (no bias), "n", "ne", "e", "se", "s", "sw", "w", "nw"

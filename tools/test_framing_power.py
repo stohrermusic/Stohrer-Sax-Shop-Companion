@@ -143,9 +143,41 @@ def test_all_preset_materials_have_an_entry():
 
 def test_ceiling_is_well_below_engraving_power():
     """Framing is a preview, not a cut. The ceiling has to stop someone
-    typing 900 and burning the piece they're lining up."""
-    assert FRAMING_POWER_S_MAX <= 200, \
+    typing 900 and burning the piece they're lining up. 3% is the whole
+    useful span — leather needs more than card, but not much more."""
+    assert FRAMING_POWER_S_MAX <= 30, \
         f"framing ceiling {FRAMING_POWER_S_MAX} is too close to cut power"
+
+
+def test_ceiling_is_enforced_when_the_value_is_read():
+    """A config written under the old 15% cap must not still frame at 15%.
+    Clamping only in the dialog would leave the stored value live for
+    anyone who never reopens it."""
+    over = {"laser_framing_power_by_material": {m: 500 for m in GCODE_PRESET_MATERIALS},
+            "laser_framing_power_s": 900}
+    for mat in GCODE_PRESET_MATERIALS + ('exact_size',):
+        got = get_framing_power_s(mat, over)
+        assert got == FRAMING_POWER_S_MAX, \
+            f"{mat}: read back S{got}, expected the S{FRAMING_POWER_S_MAX} cap"
+    assert get_framing_power_s('felt', {"laser_framing_power_s": -5}) == 0, \
+        "a negative stored value should clamp to 0, not pass through"
+    # Values inside the range are untouched.
+    ok = {"laser_framing_power_by_material": {"leather": 25}}
+    assert get_framing_power_s('leather', ok) == 25
+
+
+def test_defaults_display_with_a_decimal():
+    """Matt's ask: a field reading '1' hides that 1.5 is accepted, and the
+    whole useful range is now 0-3%, so tenths are where the tuning lives."""
+    import inspect
+    import main
+    src = inspect.getsource(main.PadSVGGeneratorApp._on_machine_framing_power)
+    assert 'f"{pct_now:.1f}"' in src, \
+        "entry should render stored power as e.g. '1.0', not '1'"
+    assert 'f"{pct_now:g}"' not in src, \
+        ":g strips the decimal, which is what hid it"
+    for s_value, shown in ((10, "1.0"), (15, "1.5"), (30, "3.0"), (0, "0.0")):
+        assert f"{s_value / 10.0:.1f}" == shown
 
 
 # --------------------------------------------------------------------------
