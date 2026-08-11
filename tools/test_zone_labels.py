@@ -341,16 +341,37 @@ def test_range_bounds_inclusive():
 # --------------------------------------------------------------------------
 
 def test_grid_is_a_block_not_a_strip():
-    """Scoring the bare inner grid always picks a 1xN strip (fewest gutters).
-    The border and label must be in the decision, or zones come out as long
-    thin ribbons that shelf-pack badly and are awkward to count."""
+    """No zone may come out as a long thin ribbon — those shelf-pack badly
+    and are impossible to count."""
     for mat in ('card', 'felt', 'leather'):
         _, zones, _, _ = se.nest_with_zones(PADS, mat, 300.0, 300.0, base_settings())
         for z in zones:
-            assert z['cols'] > 1 and z['rows'] > 1 or z['qty'] <= 3, (
+            assert z['cols'] > 1 and z['rows'] > 1 or z['qty'] <= 2, (
                 f"{mat} {z['label']}: degenerate {z['cols']}x{z['rows']} grid")
             aspect = max(z['w'], z['h']) / min(z['w'], z['h'])
             assert aspect < 6.0, f"{mat} {z['label']}: aspect {aspect:.1f} too extreme"
+
+
+def test_both_sheet_types_pick_the_same_grid():
+    """One rule, both paths. These disagreed once — a rectangular sheet
+    scored zone area on its own and produced 6 as 2x3, 8 as 2x4, and a
+    prime like 7 as a 1x7 column, while a traced scrap gave 3x2, 4x2 and
+    4x2. Six pads should read as 3x2 wherever they're cut."""
+    s = base_settings(lo=3.0, hi=30.0)
+    for qty in (2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 20):
+        specs, _ = se.plan_zone_specs([{'size': 10.0, 'qty': qty}], 'card', s)
+        rect = (specs[0]['cols'], specs[0]['rows'])
+        poly = se.zone_grid_candidates(qty)[0]
+        assert rect == poly, (
+            f"{qty} pads: rectangular sheet gives {rect}, polygon gives {poly}")
+
+
+def test_no_quantity_produces_a_single_file_strip():
+    """A prime count used to fall through to 1xN on the rectangular path.
+    Nothing from 2 to 30 may produce a single row or column."""
+    for qty in range(3, 31):
+        cols, rows = se.zone_grid_candidates(qty)[0]
+        assert cols > 1 and rows > 1, f"{qty} pads -> degenerate {cols}x{rows}"
 
 
 def test_discs_stay_inside_their_zone():
@@ -435,14 +456,38 @@ def test_every_pad_is_accounted_for():
     assert fixed_placed == fixed_total == sum(p['qty'] for p in PADS)
 
 
-def test_unplaceable_zone_falls_back_instead_of_losing_pads():
-    """A zone wider than the sheet can't be placed. Those pads must go back
-    into the normal nest, not vanish."""
+def test_wide_zone_degrades_to_a_flatter_grid():
+    """A block too wide for the sheet should try narrower shapes before
+    giving up, rather than refusing the size outright."""
     s = base_settings()
+    pads = [{'size': 12.0, 'qty': 12}]
+    # 4x3 (the preferred shape) is ~50mm wide, so 45mm forces a fallback
+    # while still leaving room for the narrower 3x4.
+    _, zones, _, _ = se.nest_with_zones(pads, 'card', 45.0, 400.0, s)
+    assert zones, "a narrower grid should have fitted"
+    z = zones[0]
+    assert z['w'] <= 45.0, "placed a zone wider than the sheet"
+    assert (z['cols'], z['rows']) != se.zone_grid_candidates(12)[0], \
+        "expected a fallback shape, not the preferred one"
+
+
+def test_rect_sheet_never_cuts_a_zoned_size_unlabeled():
+    """Same rule as the polygon path. A zone that can't be placed must
+    leave its pads uncut and reported, not nested loose beside the
+    labeled ones."""
+    s = base_settings()
+    lo, hi = s['zone_label_min_size'], s['zone_label_max_size']
     pads = [{'size': 12.0, 'qty': 40}]
-    narrow = 40.0
-    placed, zones, _, _ = se.nest_with_zones(pads, 'card', narrow, 400.0, s)
-    assert _counts(placed).get(12.0, 0) > 0, "pads vanished when the zone didn't fit"
+    narrow = 30.0
+    placed, zones, fixed_placed, fixed_total = se.nest_with_zones(
+        pads, 'card', narrow, 400.0, s)
+    grouped = {z['size'] for z in zones}
+    cut = {size for size, _cx, _cy, _r in placed}
+    unlabeled = [sz for sz in cut if lo <= sz <= hi and sz not in grouped]
+    assert not unlabeled, f"zoned sizes cut without a group: {unlabeled}"
+    assert fixed_total == 40, f"dropped pads must still be counted: {fixed_total}"
+    if fixed_placed < fixed_total:
+        assert se.can_all_pads_fit(pads, 'card', narrow, 400.0, s) is False
     for z in zones:
         assert z['w'] <= narrow, "a zone wider than the sheet was placed anyway"
 

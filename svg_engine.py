@@ -990,7 +990,6 @@ def _zone_text_width_mm(text, font_size_mm):
     return w * font_size_mm
 
 
-ZONE_ASPECT_SLACK = 1.05  # accept 5% extra area to get a squarer zone
 ZONE_GRID_SEARCH_STEP_MM = 2.0  # scan step when placing a grid in a polygon
 
 
@@ -1074,34 +1073,26 @@ def _place_grid_in_polygon(polygon, qty, disc_d, gutter_mm, clearance_mm,
     return None
 
 
-def _zone_box(qty, disc_d, gutter_mm, border_mm, font_mm, label_text):
-    """Choose the grid shape for qty equal discs and return the full zone
-    geometry: (cols, rows, w, h, inner_w).
+def _zone_box(qty, disc_d, gutter_mm, border_mm, font_mm, label_text,
+              shape=None):
+    """Full zone geometry for qty equal discs: (cols, rows, w, h, inner_w).
 
-    The border and the label strip must be part of the decision. Scoring on
-    the bare inner grid always picks a 1xN strip — a single column has the
-    fewest gutters and so the smallest inner area — but adding a border to
-    a long thin block costs far more perimeter than adding it to a squarish
-    one, and a tall strip shelf-packs badly and is awkward to count.
+    The grid shape comes from ``zone_grid_candidates`` — the single source
+    of truth for both sheet types — so six pads read as 3x2 whether they
+    land on a rectangular sheet or a traced scrap. This used to score
+    zone area independently here, which quietly disagreed with the polygon
+    path (6 as 2x3, 8 as 2x4, and a prime like 7 as a 1x7 column).
 
-    Among shapes within ZONE_ASPECT_SLACK of the smallest area, the squarest
-    wins, so near-ties resolve toward blocks rather than strips.
+    ``shape`` forces a specific (cols, rows) so a caller can walk the
+    candidate list when the preferred block won't fit the material.
     """
+    cols, rows = shape if shape else zone_grid_candidates(qty)[0]
     text_w = _zone_text_width_mm(label_text, font_mm)
-    cands = []
-    for cols in range(1, max(1, qty) + 1):
-        rows = math.ceil(qty / cols)
-        inner_w = cols * disc_d + (cols - 1) * gutter_mm
-        inner_h = rows * disc_d + (rows - 1) * gutter_mm
-        w = max(inner_w, text_w) + 2 * border_mm
-        h = inner_h + font_mm + 2 * border_mm
-        cands.append((w * h, max(w, h) / max(min(w, h), 1e-9),
-                      cols, rows, w, h, inner_w))
-
-    min_area = min(c[0] for c in cands)
-    close = [c for c in cands if c[0] <= min_area * ZONE_ASPECT_SLACK]
-    best = min(close, key=lambda c: (c[1], c[0]))
-    return best[2], best[3], best[4], best[5], best[6]
+    inner_w = cols * disc_d + (cols - 1) * gutter_mm
+    inner_h = rows * disc_d + (rows - 1) * gutter_mm
+    w = max(inner_w, text_w) + 2 * border_mm
+    h = inner_h + font_mm + 2 * border_mm
+    return cols, rows, w, h, inner_w
 
 
 def plan_zone_specs(pads, material, settings):
@@ -1150,8 +1141,10 @@ def _shelf_pack_zones(specs, width_mm, height_mm):
     """Shelf-pack zone rectangles into a band at the BOTTOM of the sheet
     (SVG coords, so high Y). Returns (placed_zones, band_height, dropped).
 
-    Zones that don't fit are returned in `dropped` so the caller can put
-    those pads back into the normal nest rather than losing them.
+    A zone wider than the sheet is retried with flatter grid shapes before
+    being given up on — same degrade-don't-refuse behaviour the polygon
+    path uses. Whatever still can't be placed comes back in `dropped`; the
+    caller must NOT quietly nest those pads loose (see nest_with_zones).
     """
     if not specs:
         return [], 0.0, []
@@ -1161,6 +1154,19 @@ def _shelf_pack_zones(specs, width_mm, height_mm):
     dropped = []
 
     for spec in specs:
+        if spec['w'] > usable_w:
+            # Preferred block is too wide — walk to a narrower shape.
+            for shape in zone_grid_candidates(spec['qty'])[1:]:
+                cols, rows, w, h, inner_w = _zone_box(
+                    spec['qty'], spec['disc_d'], spec['gutter'],
+                    spec['border'], spec['font'], spec['label'], shape=shape)
+                if w <= usable_w:
+                    spec = dict(spec, cols=cols, rows=rows, w=w, h=h,
+                                inner_w=inner_w)
+                    break
+            else:
+                dropped.append(spec)
+                continue
         if spec['w'] > usable_w:
             dropped.append(spec)
             continue
@@ -1450,9 +1456,13 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     specs, free_pads = plan_zone_specs(pads, material, settings)
     zones, band_h, dropped = _shelf_pack_zones(specs, width_mm, height_mm)
 
-    # Anything that couldn't be zoned goes back into the normal nest.
-    for spec in dropped:
-        free_pads.append({'size': spec['size'], 'qty': spec['qty']})
+    # A zoned size that couldn't get a group is NOT nested loose — same
+    # rule as the polygon path. Cutting it anyway drops an unlabeled pile
+    # of small discs beside the labeled ones (the exact confusion zones
+    # exist to prevent) while the caller sees a full count and reports
+    # success. Counting it in fixed_total but not fixed_placed makes
+    # can_all_pads_fit() surface the shortfall instead.
+    dropped_qty = sum(spec['qty'] for spec in dropped)
 
     placed = []
     zoned_total = 0
@@ -1472,7 +1482,7 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     else:
         fp = ft = 0
 
-    return placed, zones, fp + zoned_total, ft + zoned_total
+    return placed, zones, fp + zoned_total, ft + zoned_total + dropped_qty
 
 
 def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None):
