@@ -311,6 +311,62 @@ def test_polygon_svg_has_group_rectangles():
         assert f">{z['label']}<" in body, f"group label {z['label']} missing"
 
 
+def test_max_fill_reaches_space_beside_and_above_groups():
+    """An ungrouped 'x max' has to fill the whole leftover of a scrap.
+    While the layout was stacked full-width bands the leftover was the
+    strip UNDER the lowest group, so a max fill placed nothing at all
+    above or beside them — most of the piece went to waste."""
+    s = base_settings()
+    scrap = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30), (280, 12),
+             (302, 40), (300, 150), (120, 158), (40, 152)]
+    # 4.0mm is below the zone range, so it stays ungrouped, and it's small
+    # enough to use the gaps around the groups.
+    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
+            {'size': 4.0, 'qty': 'max'}]
+    placed, zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=scrap)
+    assert zones, "expected groups"
+    g_top = min(z['y'] for z in zones)
+    g_bot = max(z['y'] + z['h'] for z in zones)
+    ys = [cy for sz, _cx, cy, _r in placed if sz == 4.0]
+    assert ys, "max fill placed nothing"
+    assert sum(1 for y in ys if y < g_top) > 0, "nothing filled above the groups"
+    assert sum(1 for y in ys if g_top <= y <= g_bot) > 0, "nothing filled beside the groups"
+
+
+def test_max_fill_stays_out_of_group_boxes():
+    """Loose pads must not land inside a labeled group's rectangle — a
+    stray disc in another size's box is the confusion this prevents.
+    Seeding the group's discs alone isn't enough; the whole footprint has
+    to be reserved or pads settle into the gaps between them."""
+    s = base_settings()
+    scrap = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30), (280, 12),
+             (302, 40), (300, 150), (120, 158), (40, 152)]
+    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
+            {'size': 4.0, 'qty': 'max'}]
+    placed, zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=scrap)
+    grouped = {z['size'] for z in zones}
+    for size, cx, cy, r in placed:
+        if size in grouped:
+            continue
+        for z in zones:
+            dx = max(z['x'] - cx, 0, cx - (z['x'] + z['w']))
+            dy = max(z['y'] - cy, 0, cy - (z['y'] + z['h']))
+            assert math.hypot(dx, dy) - r >= -1e-6, (
+                f"{size}mm pad at ({cx:.1f},{cy:.1f}) intrudes into group "
+                f"{z['label']}")
+
+
+def test_preplaced_seeds_never_leak_into_results():
+    """The reservation circles are space markers, not pads. If they came
+    back in `placed` they'd be cut."""
+    s = base_settings()
+    scrap = [(0, 0), (200, 0), (200, 150), (0, 150)]
+    pads = [{'size': 12.0, 'qty': 6}, {'size': 4.0, 'qty': 'max'}]
+    placed, _zones, _, _ = se.nest_with_zones(pads, 'card', 0, 0, s, polygon=scrap)
+    for entry in placed:
+        assert not isinstance(entry[0], str), f"reservation seed leaked: {entry}"
+
+
 def test_max_qty_never_zoned():
     """'max' pads have no fixed count, so they can't be gridded."""
     s = base_settings()

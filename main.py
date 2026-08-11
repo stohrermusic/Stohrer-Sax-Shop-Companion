@@ -1650,6 +1650,27 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showerror(_("Error"), _("Only one pad size can use 'max' quantity at a time."))
             return None
 
+        # A labeled group is a fixed grid, so it needs a fixed count —
+        # "max" has none. Refuse rather than silently cutting that size
+        # loose and unlabeled, which is the exact confusion zones exist
+        # to prevent. Filling the leftover space with an ungrouped size
+        # still works; it's only a max on a GROUPED size that can't.
+        if self.settings.get("zone_labels_enabled", False) and max_pads:
+            lo = float(self.settings.get("zone_label_min_size", 7.0))
+            hi = float(self.settings.get("zone_label_max_size", 12.5))
+            clash = [p['size'] for p in max_pads if lo <= p['size'] <= hi]
+            if clash:
+                size = f"{clash[0]:g}"
+                messagebox.showerror(
+                    _("Can't group a 'max' size"),
+                    _("{size} mm is set to 'max', but Labeled Zones is "
+                      "grouping {lo}–{hi} mm. A group needs a fixed "
+                      "count to lay out.\n\n"
+                      "Give {size} a quantity, or use 'max' on a size "
+                      "outside that range to fill the rest.").format(
+                          size=size, lo=f"{lo:g}", hi=f"{hi:g}"))
+                return None
+
         if self.settings.get("engraving_on", True):
             oversized_engravings = check_for_oversized_engravings(pads, self.material_vars, self.settings)
             if oversized_engravings and self.settings.get("show_engraving_warning", True):

@@ -268,7 +268,8 @@ def _scan_radial(dia, r_val, placed_list, target_x, target_y,
                                 width_mm, height_mm, spacing_mm)
 
 
-def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, _discs_override=None):
+def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, _discs_override=None,
+                preplaced=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
     Discs that couldn't be placed are omitted from the result.
@@ -286,7 +287,8 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     if polygon:
         return _nest_discs_polygon(pads, material, settings, polygon,
                                     spacing_mm,
-                                    _discs_override=_discs_override)
+                                    _discs_override=_discs_override,
+                                    preplaced=preplaced)
 
     # Separate fixed and max pads
     fixed_pads = [p for p in pads if p['qty'] != 'max']
@@ -303,7 +305,13 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
             for _ in range(qty):
                 discs.append((pad_size, diameter))
 
-    placed = []
+    # Seeding `placed` marks space as already taken without contributing
+    # to the result: the scan functions collision-check against this list
+    # unchanged, so no scan math (and no parity contract) is touched. The
+    # caller strips the seeds back out. Used to keep pads out of areas a
+    # labeled group already owns.
+    n_pre = len(preplaced or [])
+    placed = list(preplaced or [])
     fixed_total = len(discs)
     fixed_placed = 0
 
@@ -404,7 +412,8 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
             else:
                 break  # No more room for max pads
 
-    return placed, fixed_placed, fixed_total
+    # Drop the seeds — they were space reservations, not results.
+    return placed[n_pre:], fixed_placed, fixed_total
 
 
 # ==========================================
@@ -833,7 +842,8 @@ def _find_best_polygon_small(*args, **kwargs):
     return _find_best_polygon_small_python(*args, **kwargs)
 
 
-def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _discs_override=None):
+def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _discs_override=None,
+                        preplaced=None):
     """
     Smart circle-packing algorithm for polygon boundaries.
 
@@ -860,7 +870,9 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _disc
             for _ in range(qty):
                 discs.append((pad_size, diameter))
         discs.sort(key=lambda x: -x[1])  # Largest first
-    placed = []
+    # See _nest_discs for why seeding `placed` is safe.
+    n_pre = len(preplaced or [])
+    placed = list(preplaced or [])
     fixed_total = len(discs)
     fixed_placed = 0
 
@@ -945,7 +957,8 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _disc
             else:
                 break  # No more room for max pads
 
-    return placed, fixed_placed, fixed_total
+    # Drop the seeds — they were space reservations, not results.
+    return placed[n_pre:], fixed_placed, fixed_total
 
 
 # ==========================================
@@ -1291,6 +1304,37 @@ def _rect_fits_in_polygon(x0, y0, x1, y1, polygon, clearance_mm):
     return True
 
 
+def _cover_rect_with_circles(x0, y0, x1, y1, target_r=12.0):
+    """Circles that fully cover a rectangle, as (tag, cx, cy, r) tuples.
+
+    Used to reserve a placed group's footprint when nesting the leftover
+    pads: the nester only collision-checks circles, so a rectangle has to
+    be expressed as circles to keep loose pads out of a labeled group's
+    box. Seeding the discs alone isn't enough — a pad would happily land
+    in a gap inside someone else's group.
+
+    The grid is sized so each circle covers its cell's half-diagonal,
+    which guarantees coverage and overhangs the rectangle by a couple of
+    millimetres. That overhang is harmless: it just keeps loose pads from
+    crowding the engraved boundary.
+    """
+    w = max(x1 - x0, 1e-6)
+    h = max(y1 - y0, 1e-6)
+    step = max(target_r, 1e-6) * math.sqrt(2)
+    nx = max(1, int(math.ceil(w / step)))
+    ny = max(1, int(math.ceil(h / step)))
+    cw, ch = w / nx, h / ny
+    r = 0.5 * math.hypot(cw, ch)
+    out = []
+    for j in range(ny):
+        for i in range(nx):
+            out.append(("_zone_reserved",
+                        x0 + (i + 0.5) * cw,
+                        y0 + (j + 0.5) * ch,
+                        r))
+    return out
+
+
 def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
     """Nest labeled GROUPS into a traced outline.
 
@@ -1404,15 +1448,24 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
             'x': bx, 'y': by, 'w': bw, 'h': bh,
         })
 
-    # Unzoned sizes fill whatever the groups left. Zoned sizes that
-    # couldn't get a group are NOT nested here — see nest_with_zones.
+    # Unzoned sizes fill whatever the groups left — anywhere in the
+    # scrap, not just below them. Groups nest in 2D, so restricting the
+    # leftovers to the strip under the lowest group (which is what this
+    # did while the layout was stacked full-width bands) stranded most of
+    # the piece: an "x max" fill placed nothing at all above the groups.
+    # Reserving each group's footprint as cover circles lets the normal
+    # nester use the whole outline while keeping loose pads out of the
+    # labeled boxes.
+    #
+    # Zoned sizes that couldn't get a group are NOT nested here — see
+    # nest_with_zones.
     if free_pads:
-        floor = max((t[3] for t in taken), default=min_y)
-        region = _clip_polygon_y(polygon, floor + group_gap, max_y)
-        if len(region) >= 3:
-            rest, _, _ = _nest_discs(free_pads, material, 0, 0, settings,
-                                     spacing_mm, region)
-            placed.extend(rest)
+        reserved = []
+        for tx0, ty0, tx1, ty1 in taken:
+            reserved.extend(_cover_rect_with_circles(tx0, ty0, tx1, ty1))
+        rest, _, _ = _nest_discs(free_pads, material, 0, 0, settings,
+                                 spacing_mm, polygon, preplaced=reserved)
+        placed.extend(rest)
 
     return placed, zones
 
