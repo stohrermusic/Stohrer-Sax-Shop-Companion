@@ -168,6 +168,29 @@ def test_calibration_frames_at_basswood_power():
         "calibration framing should use basswood's power (the card material)"
 
 
+def test_dialog_talks_in_percent_but_stores_s():
+    """S values are meaningless to a user — every other power field in the
+    app is a percentage. The dialog reads and writes percent; the stored
+    unit stays Grbl S, because reinterpreting the existing key's 10 as
+    '10%' would raise everyone's framing power tenfold."""
+    import inspect
+    import main
+    src = inspect.getsource(main.PadSVGGeneratorApp._on_machine_framing_power)
+    assert 'pct * 10' in src.replace('  ', ' '), \
+        "dialog should convert entered percent back to a Grbl S value"
+    assert '/ 10.0' in src, "dialog should display stored S as a percent"
+    assert 'FRAMING_POWER_S_MAX / 10' in src, \
+        "the entry range should be expressed in percent too"
+
+
+def test_percent_round_trip_is_exact_at_the_defaults():
+    """1% must survive display->edit->store as exactly S10, not S9 or S11."""
+    for s_value in (0, 10, 25, 30, 100, FRAMING_POWER_S_MAX):
+        pct = s_value / 10.0
+        assert int(round(pct * 10)) == s_value, \
+            f"S{s_value} does not round-trip through percent"
+
+
 def test_menu_item_is_wired_and_gated():
     import inspect
     import main

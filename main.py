@@ -2514,16 +2514,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if bg:
             dlg.configure(bg=bg)
 
+        max_pct = FRAMING_POWER_S_MAX / 10.0
         tk.Label(dlg, justify='left', wraplength=440, bg=bg,
                  text=_("Laser power used for the framing pass, per "
                         "material. Framing shows you where the cut will "
                         "land — it should be bright enough to follow by "
                         "eye without marking the material.\n\n"
-                        "These are Grbl S values on a 0-1000 scale, so "
-                        "10 = 1%. Dark materials like leather need more "
-                        "than card does. Raise a few points at a time: "
-                        "the value that becomes visible is usually close "
-                        "to the value that starts leaving a mark.")
+                        "Dark materials like leather need more than card "
+                        "does. Raise it a little at a time: the power "
+                        "that becomes visible is usually close to the "
+                        "power that starts leaving a mark.")
                  ).pack(padx=20, pady=(15, 10))
 
         grid = tk.Frame(dlg, bg=bg)
@@ -2533,39 +2533,45 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             tk.Label(grid, text=mat.replace('_', ' ').title() + ":",
                      bg=bg, anchor='e', width=12).grid(
                 row=row, column=0, sticky='e', pady=2)
-            var = tk.StringVar(value=str(get_framing_power_s(mat, self.settings)))
+            # Shown and entered as a percentage, like every other power
+            # field in the app. Stored as a Grbl S value (percent x 10) —
+            # see _ok() for why the stored unit doesn't change.
+            pct_now = get_framing_power_s(mat, self.settings) / 10.0
+            var = tk.StringVar(value=f"{pct_now:g}")
             vars_by_mat[mat] = var
             tk.Entry(grid, textvariable=var, width=8,
                      font=("Helvetica", 11)).grid(
                 row=row, column=1, sticky='w', padx=6, pady=2)
-            pct = tk.Label(grid, text="", bg=bg, fg="#666666",
-                           font=("Helvetica", 8), width=6, anchor='w')
-            pct.grid(row=row, column=2, sticky='w')
+            tk.Label(grid, text="%", bg=bg).grid(row=row, column=2,
+                                                 sticky='w')
 
-            def _sync(*_a, v=var, lbl=pct):
-                try:
-                    lbl.config(text=f"{int(v.get()) / 10:g}%")
-                except (ValueError, TypeError):
-                    lbl.config(text="—")
-            var.trace_add('write', _sync)
-            _sync()
+        tk.Label(dlg, bg=bg, fg="#666666", font=("Helvetica", 8),
+                 text=_("Range: 0 to {max}%. Cutting power is typically "
+                        "35-100%, so framing stays well below it.").format(
+                            max=f"{max_pct:g}")
+                 ).pack(padx=20, pady=(0, 8))
 
         def _ok():
             parsed = {}
             for mat, var in vars_by_mat.items():
                 try:
-                    v = int(float(var.get()))
-                    if not (0 <= v <= FRAMING_POWER_S_MAX):
+                    pct = float(var.get())
+                    if not (0 <= pct <= max_pct):
                         raise ValueError("out of range")
                 except (ValueError, TypeError):
                     messagebox.showerror(
                         _("Invalid"),
-                        _("{mat}: framing power must be a whole number "
-                          "from 0 to {max}.").format(
-                              mat=mat, max=FRAMING_POWER_S_MAX),
+                        _("{mat}: framing power must be a number from "
+                          "0 to {max}%.").format(
+                              mat=mat, max=f"{max_pct:g}"),
                         parent=dlg)
                     return
-                parsed[mat] = v
+                # Store as Grbl S (percent x 10). Kept in S rather than
+                # migrating the setting to percent because the existing
+                # key already holds S values: reinterpreting a stored 10
+                # as 10% would silently raise everyone's framing power
+                # tenfold, and a botched migration here burns material.
+                parsed[mat] = int(round(pct * 10))
             self.settings["laser_framing_power_by_material"] = parsed
             try:
                 save_settings(self.settings)
