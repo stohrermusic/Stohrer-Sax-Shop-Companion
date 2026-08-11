@@ -8748,8 +8748,7 @@ class FalconRunDialog(tk.Toplevel):
                   show_pause_resume=True, show_cut_button=True,
                   stop_needs_confirm=True, done_button_label=None,
                   require_jog_first=False,
-                  auto_locate_target=None, is_homed=False,
-                  confirm_lid_on_advance=False):
+                  auto_locate_target=None, is_homed=False):
         super().__init__(parent)
         self.title(title or _("Sending to Falcon"))
         self.configure(bg=DIALOG_BG)
@@ -8806,10 +8805,6 @@ class FalconRunDialog(tk.Toplevel):
         # button text describes what happens next, not just that this
         # dialog goes away.
         self._done_button_label = done_button_label or _("Close")
-        # Ask "is the cover closed?" before the advance button hands off
-        # to a step that fires the laser. Off by default: for most
-        # callers the advance button is just "Close" on a finished job.
-        self._confirm_lid_on_advance = confirm_lid_on_advance
         # MANUAL-mode safety gate: the post-stream done button stays
         # disabled until the user clicks at least one jog button. Used
         # by the "jog to material position" step so the user can't
@@ -9248,27 +9243,33 @@ class FalconRunDialog(tk.Toplevel):
             self._final_reason = "error"
 
     def _remind_lid_closed(self):
-        """Plain OK-only popup shown at every "about to fire the laser"
-        boundary — Start Frame, Cut, and Done-during-framing-only-loop.
+        """Plain OK-only popup shown once, before the cut.
+
         Not a yes/no gate; there's nothing to decline, clicking the
         (only) button is what lets the caller proceed. An open lid
-        wedges the next stream because Grbl blocks motion in Door
-        state (no error returned, just an unresponsive controller),
-        which costs a laser power cycle AND an app restart to recover.
+        wedges the stream because Grbl blocks motion in Door state (no
+        error returned, just an unresponsive controller), which costs a
+        laser power cycle AND an app restart to recover.
 
-        This used to try to detect the door via Grbl status (Door state
-        or a Pn: 'D' pin) and only ask when it couldn't tell. Retired
-        after live-hardware testing on 2026-08-05 found the Falcon2 Pro
-        40W (ESP32-S3 controller) never sends a Pn: field at all, lid
-        open or closed — so detection was unverifiable across Falcon
-        models and dead code on the one machine tested. Same reminder
-        every time is simpler and honest about what the app knows.
+        It used to fire at three boundaries — Start Frame, Cut, and Done
+        during a framing-only loop. That was two too many: framing runs
+        at low power and the framing "Done" path only lets the current
+        pass finish, so neither is about to start burning. Asking twice
+        in one Frame & Cut run trained the user to click it away, which
+        defeats the point. Cut is the boundary that matters.
+
+        It also used to try to detect the door via Grbl status (Door
+        state or a Pn: 'D' pin) and only ask when it couldn't tell.
+        Retired after live-hardware testing on 2026-08-05 found the
+        Falcon2 Pro 40W (ESP32-S3 controller) never sends a Pn: field at
+        all, lid open or closed — so detection was unverifiable across
+        Falcon models and dead code on the one machine tested. Same
+        reminder every time is simpler and honest about what the app
+        knows.
         """
         messagebox.showinfo(
             _("Lid Closed?"),
-            _("Is the laser's lid closed?\n\nStarting with it open "
-              "throws the laser into an error state that needs a "
-              "power cycle to clear."),
+            _("Is the lid closed?"),
             parent=self)
 
     def _on_cut_clicked(self):
@@ -9423,9 +9424,11 @@ class FalconRunDialog(tk.Toplevel):
         _final_reason is already 'complete' from _on_done — leave it
         alone and just destroy so the caller proceeds. Routing this
         through _on_close_window would cancel via the jog-only mode
-        path."""
-        if self._confirm_lid_on_advance:
-            self._remind_lid_closed()
+        path.
+
+        No lid reminder here: advancing from the jog dialog starts
+        framing, which runs at low power. The reminder belongs on the
+        cut."""
         self.destroy()
 
     def _on_stop_clicked(self):
@@ -9445,7 +9448,8 @@ class FalconRunDialog(tk.Toplevel):
         # reset. Same mechanism as the Cut button uses.
         graceful = self._loop and not self._show_cut_button
         if graceful:
-            self._remind_lid_closed()
+            # No lid reminder: this only lets the in-flight framing pass
+            # finish and then exits. Nothing new is about to fire.
             self._cut_requested = True
             try:
                 self._stop_btn.config(state='disabled',

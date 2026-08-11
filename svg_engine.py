@@ -1243,15 +1243,37 @@ def _nest_polygon_bands(pads, material, settings, polygon, spacing_mm):
 
         h, outline, got = best
         if len(got) < qty:
-            # Whatever didn't fit this band goes back to the normal nest
-            # below rather than being dropped.
             unbanded.append({'size': spec['size'], 'qty': qty - len(got)})
         if not got:
             unbanded[-1] = {'size': spec['size'], 'qty': qty}
             continue
 
         placed.extend(got)
+
+        # Shrink the band onto the discs that actually landed. The grow
+        # loop above stretches the strip downward until the size fits,
+        # which on a tapering outline can mean a very tall band holding a
+        # single row way off to one side — the drawn boundary then bounds
+        # mostly empty scrap, the label floats far from its pads, and the
+        # next band starts needlessly low. Re-clipping to the discs' real
+        # extent fixes all three at once and frees the slack for the
+        # bands below.
+        disc_top = min(cy - r for _s, _cx, cy, r in got)
+        disc_bot = max(cy + r for _s, _cx, cy, r in got)
+        tight_top = max(y, disc_top - edge_margin - font)
+        tight_bot = min(y + h, disc_bot + edge_margin)
+        tight = _clip_polygon_y(polygon, tight_top, tight_bot)
+        if len(tight) >= 3:
+            outline = tight
+        else:
+            tight_top, tight_bot = y, y + h
+
         ox0, oy0, ox1, _oy1 = _polygon_bbox(outline)
+        # Anchor the label over the discs, not over the band's bounding
+        # box: a band spans the full width of the outline but its discs
+        # may sit entirely to one side, which strands a bbox-centred
+        # label in empty material.
+        disc_cx = sum(cx for _s, cx, _cy, _r in got) / len(got)
         zones.append({
             'shape': 'poly',
             'points': outline,
@@ -1261,18 +1283,27 @@ def _nest_polygon_bands(pads, material, settings, polygon, spacing_mm):
             'font': font,
             'border': edge_margin,
             'disc_d': disc_d,
-            'label_x': (ox0 + ox1) / 2,
+            'label_x': min(max(disc_cx, ox0 + font), ox1 - font),
             'label_y': oy0 + edge_margin + font / 2,
             'x': ox0, 'y': oy0,
         })
-        y += h + band_gap
+        y = tight_bot + band_gap
 
-    # Everything unzoned nests in what's left below the last band.
-    leftover = free_pads + unbanded
-    if leftover and y < max_y:
+    # Sizes that are out of the zone range nest normally in what's left
+    # below the last band.
+    #
+    # `unbanded` — zoned sizes that couldn't get a band — is deliberately
+    # NOT nested here. Cutting them anyway would drop an unlabeled group
+    # of small discs next to the labeled ones, which is precisely the
+    # confusion zones exist to prevent, and the caller would see a full
+    # placed count and report success. Leaving them unplaced makes
+    # can_all_pads_fit() report the shortfall so the user can widen the
+    # range, use a bigger piece, or turn zones off — a visible refusal
+    # beats a silent unlabeled pile.
+    if free_pads and y < max_y:
         region = _clip_polygon_y(polygon, y, max_y)
         if region:
-            rest, _, _ = _nest_discs(leftover, material, 0, 0, settings,
+            rest, _, _ = _nest_discs(free_pads, material, 0, 0, settings,
                                      spacing_mm, region)
             placed.extend(rest)
 

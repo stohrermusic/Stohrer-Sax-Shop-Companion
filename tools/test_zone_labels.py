@@ -196,6 +196,69 @@ def test_polygon_bands_never_silently_drop_pads():
         assert se.can_all_pads_fit(BAND_PADS, 'leather', 0, 0, s, polygon=tiny) is False
 
 
+def test_no_zoned_size_is_ever_cut_unlabeled():
+    """The failure mode that matters. If a zoned size can't get a band it
+    must NOT be quietly nested alongside the labeled ones — that produces
+    exactly the unlabeled mixed pile zones exist to prevent, while the
+    caller sees a full placed count and reports success."""
+    s = base_settings()
+    lo, hi = s['zone_label_min_size'], s['zone_label_max_size']
+    tight = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30),
+             (280, 12), (302, 40), (300, 150), (120, 158), (40, 152)]
+    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
+            {'size': 7.5, 'qty': 6}, {'size': 7.0, 'qty': 6}]
+    placed, zones, fixed_placed, fixed_total = se.nest_with_zones(
+        pads, 'leather', 0, 0, s, polygon=tight)
+
+    banded = {z['size'] for z in zones}
+    cut = {size for size, _cx, _cy, _r in placed}
+    unlabeled = [sz for sz in cut if lo <= sz <= hi and sz not in banded]
+    assert not unlabeled, f"zoned sizes cut without a band: {unlabeled}"
+
+    # and the shortfall has to be visible to the caller
+    if fixed_placed < fixed_total:
+        assert se.can_all_pads_fit(pads, 'leather', 0, 0, s, polygon=tight) is False
+
+
+def test_band_outline_hugs_its_discs():
+    """The grow loop stretches a band downward until the size fits, which
+    on a tapering outline can leave a very tall band around a single row.
+    The drawn boundary must be re-clipped to what the discs actually
+    occupy, or it bounds mostly empty scrap and strands the label."""
+    s = base_settings()
+    margin = config.DEFAULT_SETTINGS['zone_edge_margin_mm']
+    font = config.DEFAULT_SETTINGS['zone_label_font_mm']
+    placed, zones, _, _ = se.nest_with_zones(BAND_PADS, 'felt', 0, 0, s, polygon=SCRAP)
+    for z in zones:
+        ys = [p[1] for p in z['points']]
+        mine = [(cy, r) for sz, _cx, cy, r in placed if sz == z['size']]
+        disc_top = min(cy - r for cy, r in mine)
+        disc_bot = max(cy + r for cy, r in mine)
+        # slack above is the label strip; below is just the margin
+        assert disc_top - min(ys) <= margin + font + 1.0, \
+            f"{z['label']}: {disc_top - min(ys):.1f}mm of dead space above the discs"
+        assert max(ys) - disc_bot <= margin + 1.0, \
+            f"{z['label']}: {max(ys) - disc_bot:.1f}mm of dead space below the discs"
+
+
+def test_band_label_is_anchored_over_its_discs():
+    """A band spans the full width of the outline but its discs may sit
+    entirely to one side, so a bbox-centred label ends up stranded in
+    empty material."""
+    s = base_settings()
+    tight = [(10, 120), (60, 88), (150, 60), (200, 52), (250, 30),
+             (280, 12), (302, 40), (300, 150), (120, 158), (40, 152)]
+    pads = [{'size': 12.0, 'qty': 6}, {'size': 8.5, 'qty': 6},
+            {'size': 7.5, 'qty': 6}]
+    placed, zones, _, _ = se.nest_with_zones(pads, 'leather', 0, 0, s, polygon=tight)
+    assert zones
+    for z in zones:
+        xs = [cx for sz, cx, _cy, _r in placed if sz == z['size']]
+        assert min(xs) - z['disc_d'] <= z['label_x'] <= max(xs) + z['disc_d'], \
+            (f"{z['label']}: label at x={z['label_x']:.1f} is outside its "
+             f"discs ({min(xs):.1f}-{max(xs):.1f})")
+
+
 def test_polygon_svg_and_gcode_band_outlines_agree():
     """Same Y-flip contract as the block zones, for the clipped outline."""
     s = base_settings()

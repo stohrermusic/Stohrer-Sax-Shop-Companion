@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-08-10 14:04-0400\n"
+"POT-Creation-Date: 2026-08-11 10:39-0400\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -183,16 +183,16 @@ msgstr ""
 "Veuillez renseigner au minimum la marque, le modèle et la taille avant "
 "d'enregistrer."
 
-#: library_features.py:317 main.py:3208
+#: library_features.py:317 main.py:3205
 msgid "Overwrite"
 msgstr "Écraser"
 
-#: library_features.py:317 main.py:3208
+#: library_features.py:317 main.py:3205
 #, python-brace-format
 msgid "A set named '{name}' already exists in this library. Overwrite it?"
 msgstr "Un jeu nommé « {name} » existe déjà dans cette bibliothèque. L'écraser ?"
 
-#: library_features.py:323 main.py:3233
+#: library_features.py:323 main.py:3230
 msgid "Preset Saved"
 msgstr "Préréglage enregistré"
 
@@ -201,7 +201,7 @@ msgstr "Préréglage enregistré"
 msgid "Preset '{name}' saved successfully to '{active_library}'."
 msgstr "Préréglage « {name} » enregistré avec succès dans « {active_library} »."
 
-#: library_features.py:369 library_features.py:422 main.py:3154 main.py:3271
+#: library_features.py:369 library_features.py:422 main.py:3151 main.py:3268
 msgid "Delete Library"
 msgstr "Supprimer la bibliothèque"
 
@@ -210,7 +210,7 @@ msgstr "Supprimer la bibliothèque"
 msgid "Are you sure you want to delete the empty library '{selected_lib}'?"
 msgstr "Voulez-vous vraiment supprimer la bibliothèque vide « {selected_lib} » ?"
 
-#: library_features.py:374 main.py:3276
+#: library_features.py:374 main.py:3273
 msgid "Library Deleted"
 msgstr "Bibliothèque supprimée"
 
@@ -219,16 +219,16 @@ msgstr "Bibliothèque supprimée"
 msgid "Library '{selected_lib}' deleted."
 msgstr "Bibliothèque « {selected_lib} » supprimée."
 
-#: library_features.py:381 library_features.py:389 main.py:3283 main.py:3291
-#: main.py:3306
+#: library_features.py:381 library_features.py:389 main.py:3280 main.py:3288
+#: main.py:3303
 msgid "Delete Error"
 msgstr "Erreur de suppression"
 
-#: library_features.py:381 main.py:3283
+#: library_features.py:381 main.py:3280
 msgid "Please load a set to delete."
 msgstr "Veuillez charger un jeu à supprimer."
 
-#: library_features.py:389 main.py:3291
+#: library_features.py:389 main.py:3288
 msgid ""
 "Cannot delete from 'All Libraries' view. Please select the specific "
 "library first."
@@ -249,7 +249,7 @@ msgstr ""
 "Voulez-vous vraiment supprimer le jeu « {selected_preset} » de la "
 "bibliothèque « {selected_lib} » ?"
 
-#: library_features.py:403 main.py:3304
+#: library_features.py:403 main.py:3301
 msgid "Preset Deleted"
 msgstr "Préréglage supprimé"
 
@@ -262,17 +262,17 @@ msgstr "Préréglage « {selected_preset} » supprimé."
 msgid "Import Key Height Sets"
 msgstr "Importer des jeux de hauteurs de clés"
 
-#: library_features.py:441 library_features.py:881 main.py:3326
+#: library_features.py:441 library_features.py:881 main.py:3323
 #: ui_dialogs.py:1996 ui_dialogs.py:2015 ui_dialogs.py:2948
 msgid "JSON files"
 msgstr "Fichiers JSON"
 
-#: library_features.py:441 library_features.py:881 main.py:3326
+#: library_features.py:441 library_features.py:881 main.py:3323
 #: ui_dialogs.py:1996 ui_dialogs.py:2015 ui_dialogs.py:2948
 msgid "All files"
 msgstr "Tous les fichiers"
 
-#: library_features.py:462 library_features.py:988 main.py:3346 main.py:3429
+#: library_features.py:462 library_features.py:988 main.py:3343 main.py:3426
 #: toner_tab.py:5527 toner_tab.py:5682 ui_dialogs.py:2023 ui_dialogs.py:2026
 #: ui_dialogs.py:3060 ui_dialogs.py:3173
 msgid "Import Error"
@@ -287,7 +287,7 @@ msgstr ""
 "Impossible d'importer les jeux de hauteurs :\n"
 "{e}"
 
-#: library_features.py:477 library_features.py:822 main.py:3363
+#: library_features.py:477 library_features.py:822 main.py:3360
 msgid "Connection Error"
 msgstr "Erreur de connexion"
 
@@ -302,7 +302,7 @@ msgstr ""
 "\n"
 "{e}"
 
-#: library_features.py:481 library_features.py:826 main.py:3367
+#: library_features.py:481 library_features.py:826 main.py:3364
 msgid "Data Error"
 msgstr "Erreur de données"
 
@@ -318,7 +318,7 @@ msgstr ""
 "{e}"
 
 #: library_features.py:486 library_features.py:499 library_features.py:524
-#: library_features.py:831 library_features.py:873 main.py:3372
+#: library_features.py:831 library_features.py:873 main.py:3369
 #: toner_tab.py:4812 toner_tab.py:5533
 msgid "No Data"
 msgstr "Aucune donnée"
@@ -346,7 +346,7 @@ msgstr ""
 "\n"
 "Écraser avec la dernière version du web ?"
 
-#: library_features.py:521 library_features.py:870 main.py:3425
+#: library_features.py:521 library_features.py:870 main.py:3422
 #: toner_tab.py:5718 ui_dialogs.py:3062 ui_dialogs.py:3170 ui_dialogs.py:3175
 msgid "Import Complete"
 msgstr "Importation terminée"
@@ -697,23 +697,23 @@ msgstr "À propos"
 msgid "Pad Maker"
 msgstr "Fabrication de tampons"
 
-#: main.py:509 main.py:3697 ui_dialogs.py:4983 ui_dialogs.py:5356
+#: main.py:509 main.py:3694 ui_dialogs.py:4983 ui_dialogs.py:5356
 msgid "Key Height Library"
 msgstr "Bibliothèque de hauteurs"
 
-#: main.py:514 main.py:3698 ui_dialogs.py:4984 ui_dialogs.py:5364
+#: main.py:514 main.py:3695 ui_dialogs.py:4984 ui_dialogs.py:5364
 msgid "Serial Lookup"
 msgstr "Recherche de n° de série"
 
-#: main.py:519 main.py:3699 ui_dialogs.py:4985 ui_dialogs.py:5369
+#: main.py:519 main.py:3696 ui_dialogs.py:4985 ui_dialogs.py:5369
 msgid "Screw Specs"
 msgstr "Spécifications de vis"
 
-#: main.py:523 main.py:3700 ui_dialogs.py:4986
+#: main.py:523 main.py:3697 ui_dialogs.py:4986
 msgid "Tooling"
 msgstr "Outillage"
 
-#: main.py:528 main.py:3701 ui_dialogs.py:4987 ui_dialogs.py:5495
+#: main.py:528 main.py:3698 ui_dialogs.py:4987 ui_dialogs.py:5495
 msgid "Tuner"
 msgstr "Accordeur"
 
@@ -725,7 +725,7 @@ msgstr "Analyseur d'harmoniques (bêta)"
 msgid "Enter pad sizes (e.g. 42.0x3):"
 msgstr "Saisissez les tailles de tampons (ex. 42.0x3) :"
 
-#: main.py:643 main.py:3148 main.py:3236
+#: main.py:643 main.py:3145 main.py:3233
 msgid "Load Pad Preset"
 msgstr "Charger un préréglage de tampons"
 
@@ -737,7 +737,7 @@ msgstr "Enregistrer comme préréglage"
 msgid "View Notes"
 msgstr "Voir les notes"
 
-#: main.py:657 main.py:3156 toner_tab.py:2049 ui_dialogs.py:1970
+#: main.py:657 main.py:3153 toner_tab.py:2049 ui_dialogs.py:1970
 #: ui_dialogs.py:1974 ui_dialogs.py:1980 ui_dialogs.py:4732 ui_dialogs.py:4738
 #: ui_dialogs.py:4744
 msgid "Delete Preset"
@@ -763,12 +763,12 @@ msgstr "Personnalisé :"
 msgid "Sheet Size"
 msgstr "Taille de feuille"
 
-#: main.py:709 main.py:4001
+#: main.py:709 main.py:3998
 #, python-brace-format
 msgid "Width ({units}):"
 msgstr "Largeur ({units}) :"
 
-#: main.py:715 main.py:4002
+#: main.py:715 main.py:3999
 #, python-brace-format
 msgid "Height ({units}):"
 msgstr "Hauteur ({units}) :"
@@ -988,7 +988,7 @@ msgstr ""
 "\n"
 "S'applique à toutes les chutes restantes de la session."
 
-#: main.py:1379 main.py:1396 main.py:2969 tooling_tab.py:1167
+#: main.py:1379 main.py:1396 main.py:2966 tooling_tab.py:1167
 msgid "Select Folder to Save G-code"
 msgstr "Sélectionner le dossier d'enregistrement du G-code"
 
@@ -1030,7 +1030,7 @@ msgstr ""
 "Plus petit tampon restant : {min_pad_size} mm\n"
 "Essayez une chute plus grande."
 
-#: main.py:1445 main.py:2014 main.py:3087 tooling_tab.py:1137
+#: main.py:1445 main.py:2014 main.py:3084 tooling_tab.py:1137
 #: tooling_tab.py:1209
 msgid "Session Complete!"
 msgstr "Session terminée !"
@@ -1043,16 +1043,16 @@ msgstr "Progression du mode chutes"
 msgid "Remaining"
 msgstr "Restants"
 
-#: main.py:1494 main.py:1906 main.py:3008 main.py:3010 main.py:3012
+#: main.py:1494 main.py:1906 main.py:3005 main.py:3007 main.py:3009
 #: toner_tab.py:2785 tooling_tab.py:947 tooling_tab.py:993 tooling_tab.py:1264
 #: tooling_tab.py:1894 tooling_tab.py:1933 tooling_tab.py:1958
-#: tooling_tab.py:1992 ui_dialogs.py:8912
+#: tooling_tab.py:1992 ui_dialogs.py:8907
 msgid "Done"
 msgstr "Terminé"
 
 #: main.py:1505 toner_tab.py:1638 toner_tab.py:4797 toner_tab.py:5105
 #: tooling_tab.py:1273 tuner_tab.py:1257 ui_dialogs.py:5029 ui_dialogs.py:6274
-#: ui_dialogs.py:7118 ui_dialogs.py:8411 ui_dialogs.py:8808 ui_dialogs.py:9016
+#: ui_dialogs.py:7118 ui_dialogs.py:8411 ui_dialogs.py:8807 ui_dialogs.py:9011
 msgid "Close"
 msgstr "Fermer"
 
@@ -1198,7 +1198,7 @@ msgstr ""
 "La forme personnalisée de ce travail n'a pas été restaurée — dessinez ou "
 "capturez la pièce que vous coupez maintenant."
 
-#: main.py:1853 main.py:2935
+#: main.py:1853 main.py:2932
 msgid "No Materials Selected"
 msgstr "Aucun matériau sélectionné"
 
@@ -1206,11 +1206,11 @@ msgstr "Aucun matériau sélectionné"
 msgid "Please select at least one material."
 msgstr "Veuillez sélectionner au moins un matériau."
 
-#: main.py:1860 main.py:2941
+#: main.py:1860 main.py:2938
 msgid "Preview"
 msgstr "Aperçu"
 
-#: main.py:1861 main.py:2942
+#: main.py:1861 main.py:2939
 msgid ""
 "Preview works with one material at a time.\n"
 "Please select a single material to preview its layout."
@@ -1219,19 +1219,19 @@ msgstr ""
 "Veuillez sélectionner un unique matériau pour prévisualiser sa "
 "disposition."
 
-#: main.py:1878 main.py:2955
+#: main.py:1878 main.py:2952
 msgid "paper"
 msgstr "papier"
 
-#: main.py:1878 main.py:2955
+#: main.py:1878 main.py:2952
 msgid "sheet"
 msgstr "feuille"
 
-#: main.py:1879 main.py:2680 main.py:2956 tooling_tab.py:929 tooling_tab.py:973
+#: main.py:1879 main.py:2680 main.py:2953 tooling_tab.py:929 tooling_tab.py:973
 msgid "Nesting Error"
 msgstr "Erreur d'imbrication"
 
-#: main.py:1879 main.py:2956
+#: main.py:1879 main.py:2953
 #, python-brace-format
 msgid "Could not fit all '{material}' pieces on the specified {size_desc} size."
 msgstr ""
@@ -1246,7 +1246,7 @@ msgstr "Sélectionner le dossier d'enregistrement des SVG"
 msgid "SVG files generated successfully."
 msgstr "Fichiers SVG générés avec succès."
 
-#: main.py:1910 main.py:2023 main.py:2905 main.py:3016 main.py:3096
+#: main.py:1910 main.py:2023 main.py:2902 main.py:3013 main.py:3093
 msgid "An Error Occurred"
 msgstr "Une erreur s'est produite"
 
@@ -1261,7 +1261,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:1928 main.py:3034
+#: main.py:1928 main.py:3031
 msgid "Scrap Mode Error"
 msgstr "Erreur du mode chutes"
 
@@ -1269,7 +1269,7 @@ msgstr "Erreur du mode chutes"
 msgid "Please select exactly one material for scrap mode."
 msgstr "Veuillez sélectionner un seul matériau pour le mode chutes."
 
-#: main.py:2015 main.py:3088
+#: main.py:2015 main.py:3085
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1282,7 +1282,7 @@ msgstr ""
 "Tous les tampons sont placés ! Session terminée.\n"
 "Fichiers enregistrés dans : {save_dir}"
 
-#: main.py:2023 main.py:3096
+#: main.py:2023 main.py:3093
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -1320,7 +1320,7 @@ msgstr "Dépendance manquante"
 msgid "Home needs pyserial: {e}"
 msgstr "L'origine requiert pyserial : {e}"
 
-#: main.py:2305 ui_dialogs.py:7420 ui_dialogs.py:9324
+#: main.py:2305 ui_dialogs.py:7420 ui_dialogs.py:9325
 msgid "Home Laser?"
 msgstr "Origine du laser ?"
 
@@ -1547,17 +1547,17 @@ msgstr "Échec de l'enregistrement"
 msgid "Save"
 msgstr "Enregistrer"
 
-#: main.py:2547 main.py:3541 main.py:3636 main.py:3864 main.py:3919
+#: main.py:2547 main.py:3538 main.py:3633 main.py:3861 main.py:3916
 #: toner_tab.py:1481 toner_tab.py:1758 toner_tab.py:1972 toner_tab.py:2038
 #: toner_tab.py:2203 toner_tab.py:2306 toner_tab.py:3543 toner_tab.py:5372
 #: toner_tab.py:5502 toner_tab.py:5663 ui_dialogs.py:285 ui_dialogs.py:2511
 #: ui_dialogs.py:2627 ui_dialogs.py:2659 ui_dialogs.py:3214 ui_dialogs.py:3416
 #: ui_dialogs.py:4130 ui_dialogs.py:6179 ui_dialogs.py:7257 ui_dialogs.py:8500
-#: ui_dialogs.py:8932
+#: ui_dialogs.py:8927
 msgid "Cancel"
 msgstr "Annuler"
 
-#: main.py:2558 ui_dialogs.py:9035
+#: main.py:2558 ui_dialogs.py:9030
 msgid "Homing"
 msgstr "Homing"
 
@@ -1621,18 +1621,18 @@ msgstr ""
 msgid "Start Frame →"
 msgstr "Démarrer l'encadrement →"
 
-#: main.py:2860
+#: main.py:2857
 msgid "Framing — verify cut area, jog if needed, click Cut when ready"
 msgstr ""
 "Encadrement — vérifiez la zone de coupe, jog si besoin, cliquez sur "
 "Couper quand prêt"
 
-#: main.py:2873
+#: main.py:2870
 #, python-brace-format
 msgid "Cutting — {m}"
 msgstr "Coupe — {m}"
 
-#: main.py:2906
+#: main.py:2903
 #, python-brace-format
 msgid ""
 "Something went wrong during Frame & Cut:\n"
@@ -1643,21 +1643,21 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2935
+#: main.py:2932
 msgid "Please select at least one material (G-code not supported for Exact Size)."
 msgstr ""
 "Veuillez sélectionner au moins un matériau (le G-code n'est pas pris en "
 "charge pour Taille exacte)."
 
-#: main.py:2976
+#: main.py:2973
 msgid "Working"
 msgstr "Traitement"
 
-#: main.py:2986
+#: main.py:2983
 msgid "Generating G-code..."
 msgstr "Génération du G-code…"
 
-#: main.py:3008
+#: main.py:3005
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
@@ -1667,7 +1667,7 @@ msgstr ""
 "\n"
 "Carte SD éjectée en toute sécurité — vous pouvez la retirer !"
 
-#: main.py:3010
+#: main.py:3007
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
@@ -1677,11 +1677,11 @@ msgstr ""
 "\n"
 "Veuillez éjecter la carte SD en toute sécurité avant de la retirer."
 
-#: main.py:3012
+#: main.py:3009
 msgid "G-code files generated successfully."
 msgstr "Fichiers G-code générés avec succès."
 
-#: main.py:3016
+#: main.py:3013
 #, python-brace-format
 msgid ""
 "Something went wrong during G-code generation:\n"
@@ -1692,7 +1692,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:3035
+#: main.py:3032
 msgid ""
 "Please select exactly one material for scrap mode.\n"
 "(G-code not supported for Exact Size)"
@@ -1700,31 +1700,31 @@ msgstr ""
 "Veuillez sélectionner un seul matériau pour le mode chutes.\n"
 "(G-code non pris en charge pour Taille exacte)"
 
-#: main.py:3181
+#: main.py:3178
 msgid "Library Name"
 msgstr "Nom de la bibliothèque"
 
-#: main.py:3182
+#: main.py:3179
 msgid "Enter a library name to save to:"
 msgstr "Saisissez le nom de la bibliothèque dans laquelle enregistrer :"
 
-#: main.py:3195 main.py:3199
+#: main.py:3192 main.py:3196
 msgid "Save Pad Preset"
 msgstr "Enregistrer le préréglage de tampons"
 
-#: main.py:3195
+#: main.py:3192
 msgid "Enter a name for this preset:"
 msgstr "Saisissez un nom pour ce préréglage :"
 
-#: main.py:3199
+#: main.py:3196
 msgid "Cannot save an empty list."
 msgstr "Impossible d'enregistrer une liste vide."
 
-#: main.py:3221
+#: main.py:3218
 msgid "Duplicate Detected"
 msgstr "Doublon détecté"
 
-#: main.py:3222
+#: main.py:3219
 #, python-brace-format
 msgid ""
 "This pad list is identical to '{pname}' in '{lib}'.\n"
@@ -1735,26 +1735,26 @@ msgstr ""
 "\n"
 "Enregistrer quand même ?"
 
-#: main.py:3233
+#: main.py:3230
 #, python-brace-format
 msgid "Preset '{name}' saved successfully."
 msgstr "Préréglage « {name} » enregistré avec succès."
 
-#: main.py:3272
+#: main.py:3269
 #, python-brace-format
 msgid "Are you sure you want to delete the empty library '{lib}'?"
 msgstr "Voulez-vous vraiment supprimer la bibliothèque vide « {lib} » ?"
 
-#: main.py:3276
+#: main.py:3273
 #, python-brace-format
 msgid "Library '{lib}' deleted."
 msgstr "Bibliothèque « {lib} » supprimée."
 
-#: main.py:3294
+#: main.py:3291
 msgid "Delete Pad Preset"
 msgstr "Supprimer le préréglage de tampons"
 
-#: main.py:3294
+#: main.py:3291
 #, python-brace-format
 msgid ""
 "Are you sure you want to delete the preset '{preset}' from the '{lib}' "
@@ -1763,28 +1763,28 @@ msgstr ""
 "Voulez-vous vraiment supprimer le préréglage « {preset} » de la "
 "bibliothèque « {lib} » ?"
 
-#: main.py:3304
+#: main.py:3301
 #, python-brace-format
 msgid "Preset '{preset}' deleted."
 msgstr "Préréglage « {preset} » supprimé."
 
-#: main.py:3306
+#: main.py:3303
 msgid "Could not find the preset to delete."
 msgstr "Impossible de trouver le préréglage à supprimer."
 
-#: main.py:3312
+#: main.py:3309
 msgid "Notes"
 msgstr "Notes"
 
-#: main.py:3312
+#: main.py:3309
 msgid "No preset loaded."
 msgstr "Aucun préréglage chargé."
 
-#: main.py:3325
+#: main.py:3322
 msgid "Import Pad Presets"
 msgstr "Importer des préréglages de tampons"
 
-#: main.py:3346
+#: main.py:3343
 #, python-brace-format
 msgid ""
 "Could not import pad presets:\n"
@@ -1793,7 +1793,7 @@ msgstr ""
 "Impossible d'importer les préréglages de tampons :\n"
 "{error}"
 
-#: main.py:3364
+#: main.py:3361
 #, python-brace-format
 msgid ""
 "Could not fetch pad sets from stohrermusic.com:\n"
@@ -1804,7 +1804,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:3368
+#: main.py:3365
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -1815,19 +1815,19 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:3372
+#: main.py:3369
 msgid "No pad set data found on the server."
 msgstr "Aucun jeu de tampons trouvé sur le serveur."
 
-#: main.py:3380
+#: main.py:3377
 msgid "Select Folder with Settings"
 msgstr "Sélectionner le dossier contenant les paramètres"
 
-#: main.py:3388
+#: main.py:3385
 msgid "No Settings Found"
 msgstr "Aucun paramètre trouvé"
 
-#: main.py:3389
+#: main.py:3386
 msgid ""
 "No config files found in the selected folder.\n"
 "\n"
@@ -1839,7 +1839,7 @@ msgstr ""
 "Recherche de : app_settings.json, pad_presets.json, sizing_presets.json, "
 "key_height_library.json, screw_specs.json, toner_data.json"
 
-#: main.py:3395
+#: main.py:3392
 #, python-brace-format
 msgid ""
 "The following files will be imported and will REPLACE your current "
@@ -1856,11 +1856,11 @@ msgstr ""
 "\n"
 "Voulez-vous vraiment continuer ?"
 
-#: main.py:3399
+#: main.py:3396
 msgid "Confirm Import"
 msgstr "Confirmer l'importation"
 
-#: main.py:3426
+#: main.py:3423
 #, python-brace-format
 msgid ""
 "Successfully imported {count} file(s).\n"
@@ -1871,7 +1871,7 @@ msgstr ""
 "\n"
 "Importé(s) : {files}"
 
-#: main.py:3429
+#: main.py:3426
 #, python-brace-format
 msgid ""
 "Could not import settings:\n"
@@ -1880,23 +1880,23 @@ msgstr ""
 "Impossible d'importer les paramètres :\n"
 "{error}"
 
-#: main.py:3450 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:945
+#: main.py:3447 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:945
 msgid "Felt"
 msgstr "Feutre"
 
-#: main.py:3450 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:946
+#: main.py:3447 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:946
 msgid "Card"
 msgstr "Carton"
 
-#: main.py:3450 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:943
+#: main.py:3447 tooling_tab.py:366 tooling_tab.py:432 ui_dialogs.py:943
 msgid "Leather"
 msgstr "Cuir"
 
-#: main.py:3462 main.py:3474 main.py:3534 toner_tab.py:1061
+#: main.py:3459 main.py:3471 main.py:3531 toner_tab.py:1061
 msgid "Input Device"
 msgstr "Périphérique d'entrée"
 
-#: main.py:3463
+#: main.py:3460
 msgid ""
 "On Linux, audio input is locked to the system default.\n"
 "\n"
@@ -1910,19 +1910,19 @@ msgstr ""
 "système\n"
 "(PulseAudio ou PipeWire)."
 
-#: main.py:3470
+#: main.py:3467
 msgid "No Devices"
 msgstr "Aucun périphérique"
 
-#: main.py:3470 toner_tab.py:1103
+#: main.py:3467 toner_tab.py:1103
 msgid "No audio input devices found."
 msgstr "Aucun périphérique d'entrée audio trouvé."
 
-#: main.py:3483
+#: main.py:3480
 msgid "Select audio input device:"
 msgstr "Sélectionnez le périphérique d'entrée audio :"
 
-#: main.py:3485
+#: main.py:3482
 msgid ""
 "Showing devices with 44.1 kHz+ sample rate.\n"
 "Bluetooth headsets are excluded (sample rate too low)."
@@ -1930,24 +1930,24 @@ msgstr ""
 "Affichage des périphériques à 44,1 kHz et plus.\n"
 "Les casques Bluetooth sont exclus (taux d'échantillonnage trop faible)."
 
-#: main.py:3490 main.py:3493 tuner_tab.py:1136 tuner_tab.py:1139
+#: main.py:3487 main.py:3490 tuner_tab.py:1136 tuner_tab.py:1139
 msgid "System Default"
 msgstr "Par défaut système"
 
-#: main.py:3535
+#: main.py:3532
 #, python-brace-format
 msgid "Audio input set to: {dev_name}"
 msgstr "Entrée audio définie sur : {dev_name}"
 
-#: main.py:3539 main.py:3634 main.py:3917 ui_dialogs.py:283 ui_dialogs.py:4128
+#: main.py:3536 main.py:3631 main.py:3914 ui_dialogs.py:283 ui_dialogs.py:4128
 msgid "Apply"
 msgstr "Appliquer"
 
-#: main.py:3547
+#: main.py:3544
 msgid "Capture Threshold"
 msgstr "Seuil de capture"
 
-#: main.py:3556
+#: main.py:3553
 msgid ""
 "Set the minimum signal level to trigger capture.\n"
 "Raise the threshold if chair noises or breathing\n"
@@ -1957,19 +1957,19 @@ msgstr ""
 "Augmentez le seuil si les bruits de chaise ou la respiration\n"
 "déclenchent de fausses captures."
 
-#: main.py:3565
+#: main.py:3562
 msgid "Current level:"
 msgstr "Niveau actuel :"
 
-#: main.py:3580
+#: main.py:3577
 msgid "Threshold:"
 msgstr "Seuil :"
 
-#: main.py:3644 main.py:3653 main.py:3909 main.py:3912
+#: main.py:3641 main.py:3650 main.py:3906 main.py:3909
 msgid "Feature Set"
 msgstr "Fonctionnalités"
 
-#: main.py:3655
+#: main.py:3652
 msgid ""
 "Choose which tabs to show.\n"
 "The Pad Maker is always on."
@@ -1977,23 +1977,23 @@ msgstr ""
 "Choisissez les onglets à afficher.\n"
 "La Fabrication de tampons est toujours active."
 
-#: main.py:3660
+#: main.py:3657
 msgid "Language"
 msgstr "Langue"
 
-#: main.py:3677
+#: main.py:3674
 msgid " (restart to apply)"
 msgstr " (redémarrer pour appliquer)"
 
-#: main.py:3681
+#: main.py:3678
 msgid "Tool Tips"
 msgstr "Infobulles"
 
-#: main.py:3685
+#: main.py:3682
 msgid "Show tool tips when hovering over settings"
 msgstr "Afficher les infobulles au survol des paramètres"
 
-#: main.py:3688
+#: main.py:3685
 msgid ""
 "\n"
 "Tabs"
@@ -2001,11 +2001,11 @@ msgstr ""
 "\n"
 "Onglets"
 
-#: main.py:3704 ui_dialogs.py:4988
+#: main.py:3701 ui_dialogs.py:4988
 msgid "Toner"
 msgstr "Analyseur d'harmoniques"
 
-#: main.py:3714
+#: main.py:3711
 msgid ""
 "\n"
 "Experimental / In Progress"
@@ -2013,19 +2013,19 @@ msgstr ""
 "\n"
 "Expérimental / En cours"
 
-#: main.py:3733
+#: main.py:3730
 msgid "Machine menu (direct Falcon serial control)"
 msgstr "Menu Machine (contrôle série direct du Falcon)"
 
-#: main.py:3740
+#: main.py:3737
 msgid "Toner — Beta Notice"
 msgstr "Analyseur d'harmoniques — Avis bêta"
 
-#: main.py:3750
+#: main.py:3747
 msgid "Harmonic Tone Analyzer"
 msgstr "Analyseur d'harmoniques"
 
-#: main.py:3769
+#: main.py:3766
 msgid ""
 "This feature is in beta. Run it in full screen.\n"
 "\n"
@@ -2151,7 +2151,7 @@ msgstr ""
 "WAV que vous souhaitez partager) dans le dossier partagé ci-dessous :\n"
 "\n"
 
-#: main.py:3847
+#: main.py:3844
 msgid ""
 "\n"
 "This feature is in active development. Please contact me with "
@@ -2163,23 +2163,23 @@ msgstr ""
 "contacter pour toute suggestion, question ou problème. En cas de bug, les"
 " captures d'écran sont extrêmement utiles.\n"
 
-#: main.py:3862
+#: main.py:3859
 msgid "I Understand — Enable Toner"
 msgstr "J'ai compris — Activer l'Analyseur"
 
-#: main.py:3910
+#: main.py:3907
 msgid "Restart the app for the language change to take effect."
 msgstr "Redémarrez l'application pour appliquer le changement de langue."
 
-#: main.py:3913
+#: main.py:3910
 msgid "Changes will take effect next time you open the app."
 msgstr "Les modifications prendront effet au prochain démarrage de l'app."
 
-#: main.py:3950
+#: main.py:3947
 msgid "Log File"
 msgstr "Fichier journal"
 
-#: main.py:3950
+#: main.py:3947
 #, python-brace-format
 msgid ""
 "No log file found.\n"
@@ -2188,11 +2188,11 @@ msgstr ""
 "Aucun fichier journal trouvé.\n"
 "Emplacement attendu : {log_path}"
 
-#: main.py:4041
+#: main.py:4038
 msgid "Unexpected Error"
 msgstr "Erreur inattendue"
 
-#: main.py:4042
+#: main.py:4039
 #, python-brace-format
 msgid ""
 "{exc_type}: {exc_value}\n"
@@ -2208,7 +2208,7 @@ msgstr ""
 msgid "IN TUNE"
 msgstr "JUSTE"
 
-#: toner_tab.py:365 toner_tab.py:2495 toner_tab.py:2799 ui_dialogs.py:8898
+#: toner_tab.py:365 toner_tab.py:2495 toner_tab.py:2799 ui_dialogs.py:8893
 msgid "Pause"
 msgstr "Pause"
 
@@ -2612,7 +2612,7 @@ msgstr ""
 "{skipped} notes graves ignorées — sous la plage de détection pour {sax}.\n"
 "La calibration couvrira {total} notes."
 
-#: toner_tab.py:2144 ui_dialogs.py:8913
+#: toner_tab.py:2144 ui_dialogs.py:8908
 msgid "Stop"
 msgstr "Arrêter"
 
@@ -2785,7 +2785,7 @@ msgstr "Reprendre la capture"
 msgid "Resumed..."
 msgstr "Reprise…"
 
-#: toner_tab.py:2806 ui_dialogs.py:8901
+#: toner_tab.py:2806 ui_dialogs.py:8896
 msgid "Resume"
 msgstr "Reprendre"
 
@@ -9383,7 +9383,7 @@ msgstr "Calibrer et enregistrer"
 msgid "Reconnect camera"
 msgstr "Reconnecter la caméra"
 
-#: ui_dialogs.py:7241 ui_dialogs.py:8497 ui_dialogs.py:9575
+#: ui_dialogs.py:7241 ui_dialogs.py:8497 ui_dialogs.py:9579
 msgid "Switch camera"
 msgstr "Changer de caméra"
 
@@ -9446,7 +9446,7 @@ msgstr "Ouverture de la caméra..."
 msgid "Position the head"
 msgstr "Positionner la tête"
 
-#: ui_dialogs.py:7351 ui_dialogs.py:8989 ui_dialogs.py:9361
+#: ui_dialogs.py:7351 ui_dialogs.py:8984 ui_dialogs.py:9362
 msgid "Home Laser ($H)"
 msgstr "Origine du laser ($H)"
 
@@ -9454,7 +9454,7 @@ msgstr "Origine du laser ($H)"
 msgid "MPos: --"
 msgstr "MPos : --"
 
-#: ui_dialogs.py:7359 ui_dialogs.py:8961
+#: ui_dialogs.py:7359 ui_dialogs.py:8956
 msgid "Step (mm):"
 msgstr "Pas (mm) :"
 
@@ -9471,7 +9471,7 @@ msgstr ""
 "Faire l'origine du laser ? La tête se déplacera vers le coin d'origine à "
 "pleine vitesse."
 
-#: ui_dialogs.py:7436 ui_dialogs.py:9334 ui_dialogs.py:9337
+#: ui_dialogs.py:7436 ui_dialogs.py:9335 ui_dialogs.py:9338
 msgid "Homing..."
 msgstr "Origine en cours..."
 
@@ -9766,11 +9766,11 @@ msgstr "Décalage défini à ({x:.3f}, {y:.3f}). Cliquez Suivant pour capturer."
 msgid "Reopening camera..."
 msgstr "Réouverture de la caméra..."
 
-#: ui_dialogs.py:8086 ui_dialogs.py:8519 ui_dialogs.py:9601
+#: ui_dialogs.py:8086 ui_dialogs.py:8519 ui_dialogs.py:9605
 msgid "Only One Camera"
 msgstr "Une seule caméra"
 
-#: ui_dialogs.py:8087 ui_dialogs.py:8520 ui_dialogs.py:9602
+#: ui_dialogs.py:8087 ui_dialogs.py:8520 ui_dialogs.py:9606
 msgid "Only one camera is detected."
 msgstr "Une seule caméra détectée."
 
@@ -9962,120 +9962,120 @@ msgstr "Détecté : polygone à {n} sommets, {w:.0f} × {h:.0f} mm bbox"
 msgid "No scrap detected — place a piece on the bed."
 msgstr "Aucune chute détectée — pose une pièce sur le plateau."
 
-#: ui_dialogs.py:8754 ui_dialogs.py:8850
+#: ui_dialogs.py:8753 ui_dialogs.py:8845
 msgid "Sending to Falcon"
 msgstr "Envoi au Falcon"
 
-#: ui_dialogs.py:8860
+#: ui_dialogs.py:8855
 #, python-brace-format
 msgid "Position the head, then click {label}."
 msgstr "Positionnez la tête, puis cliquez sur {label}."
 
-#: ui_dialogs.py:8863
+#: ui_dialogs.py:8858
 msgid "Connecting ..."
 msgstr "Connexion ..."
 
-#: ui_dialogs.py:8882
+#: ui_dialogs.py:8877
 #, python-brace-format
 msgid "Line 0 / {n}"
 msgstr "Ligne 0 / {n}"
 
-#: ui_dialogs.py:8886
+#: ui_dialogs.py:8881
 msgid "Elapsed 0:00"
 msgstr "Écoulé 0:00"
 
-#: ui_dialogs.py:8941
+#: ui_dialogs.py:8936
 msgid "Looks Good — Cut!"
 msgstr "Ça va — couper !"
 
-#: ui_dialogs.py:8952
+#: ui_dialogs.py:8947
 msgid "Nudge head"
 msgstr "Déplacer la tête"
 
-#: ui_dialogs.py:8999
+#: ui_dialogs.py:8994
 msgid "Try Auto Locate"
 msgstr "Essayer la localisation auto"
 
-#: ui_dialogs.py:9013
+#: ui_dialogs.py:9008
 msgid "Running ..."
 msgstr "En cours ..."
 
-#: ui_dialogs.py:9015
+#: ui_dialogs.py:9010
 #, python-brace-format
 msgid "Failed to start: {e}"
 msgstr "Échec du démarrage : {e}"
 
-#: ui_dialogs.py:9029
+#: ui_dialogs.py:9024
 msgid "Idle"
 msgstr "Inactif"
 
-#: ui_dialogs.py:9030
+#: ui_dialogs.py:9025
 msgid "Running"
 msgstr "En cours"
 
-#: ui_dialogs.py:9031
+#: ui_dialogs.py:9026
 msgid "Paused (feed hold)"
 msgstr "En pause (feed hold)"
 
-#: ui_dialogs.py:9032
+#: ui_dialogs.py:9027
 msgid "ALARM"
 msgstr "ALARME"
 
-#: ui_dialogs.py:9033
+#: ui_dialogs.py:9028
 msgid "Safety door open"
 msgstr "Porte de sécurité ouverte"
 
-#: ui_dialogs.py:9034
+#: ui_dialogs.py:9029
 msgid "Jogging"
 msgstr "Jog en cours"
 
-#: ui_dialogs.py:9036
+#: ui_dialogs.py:9031
 msgid "Sleeping"
 msgstr "En veille"
 
-#: ui_dialogs.py:9055
+#: ui_dialogs.py:9050
 #, python-brace-format
 msgid "Line {s} / {t}  ({pct:.0f}%)"
 msgstr "Ligne {s} / {t}  ({pct:.0f} %)"
 
-#: ui_dialogs.py:9059
+#: ui_dialogs.py:9054
 #, python-brace-format
 msgid "Error: {m}"
 msgstr "Erreur : {m}"
 
-#: ui_dialogs.py:9063
+#: ui_dialogs.py:9058
 #, python-brace-format
 msgid "ALARM: {m}"
 msgstr "ALARME : {m}"
 
-#: ui_dialogs.py:9077
+#: ui_dialogs.py:9072
 #, python-brace-format
 msgid "Pass {n} complete — waiting for Idle..."
 msgstr "Passe {n} terminée — attente d'Idle..."
 
-#: ui_dialogs.py:9100
+#: ui_dialogs.py:9095
 msgid "Complete ✓"
 msgstr "Terminé ✓"
 
-#: ui_dialogs.py:9102
+#: ui_dialogs.py:9097
 msgid "Stopped"
 msgstr "Arrêté"
 
-#: ui_dialogs.py:9107
+#: ui_dialogs.py:9102
 msgid "unknown error"
 msgstr "erreur inconnue"
 
-#: ui_dialogs.py:9112
+#: ui_dialogs.py:9107
 #, python-brace-format
 msgid "Stopped on error: {e}"
 msgstr "Arrêté sur erreur : {e}"
 
-#: ui_dialogs.py:9114
+#: ui_dialogs.py:9109
 #, python-brace-format
 msgid "  — {d}"
 msgstr "  — {d}"
 
-#: ui_dialogs.py:9116
+#: ui_dialogs.py:9111
 #, python-brace-format
 msgid ""
 "\n"
@@ -10084,87 +10084,79 @@ msgstr ""
 "\n"
 "Ligne en échec {n} : {l}"
 
-#: ui_dialogs.py:9148
+#: ui_dialogs.py:9143
 #, python-brace-format
 msgid "Jog the head to your material's bottom-left corner, then click {label}."
 msgstr "Déplacez la tête au coin bas-gauche du matériau, puis cliquez sur {label}."
 
-#: ui_dialogs.py:9214
+#: ui_dialogs.py:9209
 #, python-brace-format
 msgid "Timed out waiting for Idle (state={s})"
 msgstr "Délai d'attente d'Idle dépassé (état={s})"
 
-#: ui_dialogs.py:9239
+#: ui_dialogs.py:9234
 #, python-brace-format
 msgid "Regenerate failed: {e}"
 msgstr "Échec de la régénération : {e}"
 
-#: ui_dialogs.py:9246
+#: ui_dialogs.py:9241
 #, python-brace-format
 msgid "Restart failed: {e}"
 msgstr "Échec du redémarrage : {e}"
 
-#: ui_dialogs.py:9268
+#: ui_dialogs.py:9271
 msgid "Lid Closed?"
 msgstr "Capot fermé ?"
 
-#: ui_dialogs.py:9269
-msgid ""
-"Is the laser's lid closed?\n"
-"\n"
-"Starting with it open throws the laser into an error state that needs a "
-"power cycle to clear."
-msgstr ""
-"Le capot du laser est-il fermé ?\n"
-"\n"
-"Démarrer avec le capot ouvert met le laser en état d'erreur, qui oblige à"
-" l'éteindre et le rallumer."
+#: ui_dialogs.py:9272
+msgid "Is the lid closed?"
+msgstr "Le capot est-il fermé ?"
 
-#: ui_dialogs.py:9282 ui_dialogs.py:9452
+#: ui_dialogs.py:9283 ui_dialogs.py:9456
 msgid "Finishing pass..."
 msgstr "Fin de la passe..."
 
-#: ui_dialogs.py:9286
+#: ui_dialogs.py:9287
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Coupe demandée — fin de la passe d'encadrement en cours..."
 
-#: ui_dialogs.py:9311
+#: ui_dialogs.py:9312
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Tête positionnée. Cliquez {label} quand vous êtes prêt."
 
-#: ui_dialogs.py:9325
+#: ui_dialogs.py:9326
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "L'origine va interrompre le job en cours. Continuer ?"
 
-#: ui_dialogs.py:9371
+#: ui_dialogs.py:9372
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Origine terminée. MPos est maintenant (0, 0)."
 
-#: ui_dialogs.py:9373
+#: ui_dialogs.py:9374
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Échec de l'origine : {m}"
 
-#: ui_dialogs.py:9400
+#: ui_dialogs.py:9401
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Échec de la localisation auto : {e}"
 
-#: ui_dialogs.py:9402
+#: ui_dialogs.py:9403
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Déplacement vers le BL du polygone à MPos ({x:.1f}, {y:.1f}) …"
 
-#: ui_dialogs.py:9456
+#: ui_dialogs.py:9460
 msgid "Finishing current pass + centering head..."
 msgstr "Fin de la passe en cours et centrage de la tête..."
 
-#: ui_dialogs.py:9461
+#: ui_dialogs.py:9465
 msgid "Stop?"
 msgstr "Arrêter ?"
 
-#: ui_dialogs.py:9462
+#: ui_dialogs.py:9466
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -10172,29 +10164,29 @@ msgstr ""
 "Arrêter le travail ? Cela fera un soft-reset du laser et videra "
 "immédiatement le buffer du planner. Le matériau en cours peut être abîmé."
 
-#: ui_dialogs.py:9476
+#: ui_dialogs.py:9480
 msgid "Stop and close?"
 msgstr "Arrêter et fermer ?"
 
-#: ui_dialogs.py:9477
+#: ui_dialogs.py:9481
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Un travail est toujours en cours. L'arrêter et fermer la fenêtre ?"
 
-#: ui_dialogs.py:9507 ui_dialogs.py:9517
+#: ui_dialogs.py:9511 ui_dialogs.py:9521
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Écoulé {em}:{es:02d}"
 
-#: ui_dialogs.py:9514
+#: ui_dialogs.py:9518
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Écoulé {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs.py:9540
+#: ui_dialogs.py:9544
 msgid "Live camera"
 msgstr "Caméra en direct"
 
-#: ui_dialogs.py:9560
+#: ui_dialogs.py:9564
 msgid "Camera preview unavailable"
 msgstr "Aperçu caméra indisponible"
 
@@ -10672,4 +10664,17 @@ msgstr "Aperçu caméra indisponible"
 #~ "Fermez le capot, puis cliquez sur "
 #~ "Oui pour continuer. Cliquez sur Non "
 #~ "pour rester dans l'encadrement."
+
+#~ msgid ""
+#~ "Is the laser's lid closed?\n"
+#~ "\n"
+#~ "Starting with it open throws the "
+#~ "laser into an error state that "
+#~ "needs a power cycle to clear."
+#~ msgstr ""
+#~ "Le capot du laser est-il fermé ?\n"
+#~ "\n"
+#~ "Démarrer avec le capot ouvert met "
+#~ "le laser en état d'erreur, qui "
+#~ "oblige à l'éteindre et le rallumer."
 
