@@ -8742,7 +8742,7 @@ class FalconRunDialog(tk.Toplevel):
                   on_finished=None, loop=False, gcode_provider=None,
                   show_pause_resume=True, show_cut_button=True,
                   stop_needs_confirm=True, done_button_label=None,
-                  require_jog_first=False,
+                  require_jog_first=False, remind_lid_on_advance=False,
                   auto_locate_target=None, is_homed=False):
         super().__init__(parent)
         self.title(title or _("Sending to Falcon"))
@@ -8800,6 +8800,10 @@ class FalconRunDialog(tk.Toplevel):
         # button text describes what happens next, not just that this
         # dialog goes away.
         self._done_button_label = done_button_label or _("Close")
+        # Set by callers whose advance button starts a pass that FIRES
+        # THE LASER (Frame & Cut's "Start Frame →"). The dialog can't
+        # know what happens after it closes, so the caller declares it.
+        self._remind_lid_on_advance = bool(remind_lid_on_advance)
         # MANUAL-mode safety gate: the post-stream done button stays
         # disabled until the user clicks at least one jog button. Used
         # by the "jog to material position" step so the user can't
@@ -9246,12 +9250,23 @@ class FalconRunDialog(tk.Toplevel):
         error returned, just an unresponsive controller), which costs a
         laser power cycle AND an app restart to recover.
 
-        It used to fire at three boundaries — Start Frame, Cut, and Done
-        during a framing-only loop. That was two too many: framing runs
-        at low power and the framing "Done" path only lets the current
-        pass finish, so neither is about to start burning. Asking twice
-        in one Frame & Cut run trained the user to click it away, which
-        defeats the point. Cut is the boundary that matters.
+        It fires once per Frame & Cut run, on **Start Frame** — the
+        boundary where the laser first comes on. Framing runs at low
+        power, but low power is still power: Grbl enters Door state the
+        moment the beam is asked for with the lid up, so the alarm lands
+        at the framing pass, not at the cut.
+
+        This took two corrections to get right. It originally fired at
+        three boundaries (Start Frame, Cut, and Done during a framing-
+        only loop), which trained the user to click it away. On
+        2026-08-11 it was cut back to one — but to the *cut*, on the
+        reasoning that framing "isn't about to start burning." That
+        reasoning confused marking the material with energising the
+        laser. By the time the cut prompt appears the user has already
+        hit the alarm and needs a laser power cycle and an app restart.
+        Moved to Start Frame on 2026-08-18 after Matt hit it in the
+        shop. Once framing is running the lid is demonstrably shut, so
+        the cut needs no second prompt.
 
         It also used to try to detect the door via Grbl status (Door
         state or a Pn: 'D' pin) and only ask when it couldn't tell.
@@ -9270,8 +9285,11 @@ class FalconRunDialog(tk.Toplevel):
     def _on_cut_clicked(self):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
         request; the current pass will be allowed to finish, then the
-        loop exits cleanly with reason='complete'."""
-        self._remind_lid_closed()
+        loop exits cleanly with reason='complete'.
+
+        No lid reminder here: framing has been running, so the lid is
+        already shut. The reminder lives on Start Frame, where the
+        laser first comes on."""
         self._cut_requested = True
         try:
             self._cut_btn.config(state='disabled',
@@ -9421,9 +9439,12 @@ class FalconRunDialog(tk.Toplevel):
         through _on_close_window would cancel via the jog-only mode
         path.
 
-        No lid reminder here: advancing from the jog dialog starts
-        framing, which runs at low power. The reminder belongs on the
-        cut."""
+        Callers that advance straight into a laser-firing pass set
+        remind_lid_on_advance, which puts the lid reminder here — the
+        framing pass energises the laser, and an open lid at that
+        moment costs a power cycle plus an app restart."""
+        if self._remind_lid_on_advance:
+            self._remind_lid_closed()
         self.destroy()
 
     def _on_stop_clicked(self):

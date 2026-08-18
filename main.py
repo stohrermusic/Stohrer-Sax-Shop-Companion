@@ -2934,6 +2934,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 show_pause_resume=False, show_cut_button=False,
                 stop_needs_confirm=False,
                 done_button_label=_("Start Frame →"),
+                remind_lid_on_advance=True,
                 auto_locate_target=auto_locate_target,
                 is_homed=self._falcon_homed_this_session)
             if jog_dlg._final_reason != "complete":
