@@ -4,11 +4,16 @@ Tests for the laser lid reminder (FalconRunDialog._remind_lid_closed).
 Firing the laser with the lid open drops the Falcon into Door/Alarm state,
 which costs a machine power cycle AND an app restart before SSC sees the
 laser again. FalconRunDialog shows a plain "Is the lid closed?" reminder --
-a single-OK popup, not a yes/no gate -- at every boundary that hands off to
-something that fires the laser: Start Frame (the jog-to-position dialog's
-advance button, gated by confirm_lid_on_advance), Cut ("Looks Good — Cut!"
-during a loop with a cut button), and Done during a framing-only loop (no
-cut button -- e.g. Camera Calibration's continuous framing trace).
+a single-OK popup, not a yes/no gate -- at exactly ONE boundary: **Start
+Frame**, the jog-to-position dialog's advance button, opted into by the
+caller via remind_lid_on_advance.
+
+Start Frame is where the laser first comes on. Framing runs at low power,
+but low power still energises the beam, so Grbl enters Door state right
+there. It briefly prompted on the *cut* instead (2026-08-11), on the
+reasoning that framing "isn't about to start burning" -- that confused
+marking the material with firing the laser, and by the time the cut prompt
+appeared the user had already eaten the alarm. Corrected 2026-08-18.
 
 All three used to be gated by _is_door_open(), which read Grbl's status for
 Door state or a Pn: 'D' pin and only asked when it couldn't tell. Retired
@@ -153,19 +158,30 @@ def main_test():
     # Start Frame → (_on_advance_clicked)
     # ------------------------------------------------------------
 
-    def advance_never_prompts():
-        # Start Frame hands off to the framing loop, which runs at low
-        # power. Prompting here made Frame & Cut ask twice in one run,
-        # which just trains the user to click it away.
-        d = make_dialog()
+    def advance_prompts_when_the_caller_opts_in():
+        # Start Frame hands off to the framing loop, which FIRES THE
+        # LASER. An open lid here is the alarm Matt hit in the shop.
+        d = make_dialog(_remind_lid_on_advance=True)
         with PatchShowInfo() as p:
             d._on_advance_clicked()
-        assert not p.calls, f"advance must not prompt: {p.calls}"
-        assert d._destroyed == 1, "dialog should close straight through"
-    check("Advance (Start Frame) closes with no prompt", advance_never_prompts)
+        assert len(p.calls) == 1, f"Start Frame must prompt once: {p.calls}"
+        assert d._destroyed == 1, "dialog should still close"
+    check("Advance (Start Frame) prompts when the caller opts in",
+          advance_prompts_when_the_caller_opts_in)
+
+    def advance_stays_silent_by_default():
+        # The same button on a dialog whose next step doesn't fire the
+        # laser (plain "Close" after a finished stream) must not ask.
+        d = make_dialog(_remind_lid_on_advance=False)
+        with PatchShowInfo() as p:
+            d._on_advance_clicked()
+        assert not p.calls, f"plain advance must not prompt: {p.calls}"
+        assert d._destroyed == 1
+    check("Advance stays silent when the caller did not opt in",
+          advance_stays_silent_by_default)
 
     def stop_button_finished_path_does_not_prompt():
-        d = make_dialog(_finished=True)
+        d = make_dialog(_finished=True, _remind_lid_on_advance=False)
         with PatchShowInfo() as p:
             d._on_stop_clicked()
         assert not p.calls, f"finished-Stop must not prompt: {p.calls}"
@@ -177,14 +193,17 @@ def main_test():
     # Cut ("Looks Good — Cut!")
     # ------------------------------------------------------------
 
-    def cut_click_shows_reminder():
+    def cut_click_does_not_prompt():
+        # By the cut, framing has been running -- the lid is
+        # demonstrably shut. Asking again is the second prompt that
+        # trains the user to dismiss it.
         d = make_dialog(_cut_btn=FakeWidget(), _state_var=FakeWidget())
         with PatchShowInfo() as p:
             d._on_cut_clicked()
-        assert len(p.calls) == 1, f"expected one reminder, got {len(p.calls)}"
+        assert not p.calls, f"cut must not prompt again: {p.calls}"
         assert d._cut_requested is True
-    check("Cut click shows the reminder and flags the cut request",
-          cut_click_shows_reminder)
+    check("Cut click flags the request without prompting again",
+          cut_click_does_not_prompt)
 
     # ------------------------------------------------------------
     # Done during a framing-only loop (no cut button)
@@ -202,10 +221,10 @@ def main_test():
     check("Graceful Done (framing-only loop) does not prompt",
           graceful_stop_does_not_remind)
 
-    def cut_is_the_only_reminder_in_a_frame_and_cut_run():
-        # The whole point of the change: one prompt per run, on the cut.
+    def start_frame_is_the_only_reminder_in_a_frame_and_cut_run():
+        # One prompt per run, at the boundary that fires the laser.
         prompts = []
-        jog = make_dialog()
+        jog = make_dialog(_remind_lid_on_advance=True)
         with PatchShowInfo() as p:
             jog._on_advance_clicked()          # Start Frame
         prompts += p.calls
@@ -216,8 +235,8 @@ def main_test():
         prompts += p.calls
         assert len(prompts) == 1, \
             f"a Frame & Cut run must prompt exactly once, got {len(prompts)}"
-    check("A full Frame & Cut run prompts exactly once (on the cut)",
-          cut_is_the_only_reminder_in_a_frame_and_cut_run)
+    check("A full Frame & Cut run prompts exactly once (on Start Frame)",
+          start_frame_is_the_only_reminder_in_a_frame_and_cut_run)
 
     def aggressive_stop_does_not_remind():
         # Cut-context Stop is an abort, not a "fires the laser" handoff --
@@ -241,28 +260,36 @@ def main_test():
     # Wiring
     # ------------------------------------------------------------
 
-    def only_the_cut_path_calls_the_reminder():
+    def only_the_advance_path_calls_the_reminder():
         import inspect
         src = inspect.getsource(FalconRunDialog)
-        # One definition plus exactly one call site (_on_cut_clicked).
+        # One definition plus exactly one call site (_on_advance_clicked).
         assert src.count("_remind_lid_closed") == 2, (
-            "the lid reminder should have exactly one call site (the cut); "
-            f"found {src.count('_remind_lid_closed') - 1}")
+            "the lid reminder should have exactly one call site (Start "
+            f"Frame); found {src.count('_remind_lid_closed') - 1}")
+        adv_src = inspect.getsource(FalconRunDialog._on_advance_clicked)
+        assert "_remind_lid_closed" in adv_src, \
+            "the Start Frame path must remind"
         cut_src = inspect.getsource(FalconRunDialog._on_cut_clicked)
-        assert "_remind_lid_closed" in cut_src, "the cut path must still remind"
-    check("Only the cut path calls the reminder", only_the_cut_path_calls_the_reminder)
+        assert "_remind_lid_closed" not in cut_src, \
+            "the cut must not prompt a second time"
+    check("Only the Start Frame path calls the reminder",
+          only_the_advance_path_calls_the_reminder)
 
-    def advance_flag_is_gone():
+    def frame_and_cut_opts_into_the_advance_prompt():
         import inspect
         import main
         sig = inspect.signature(FalconRunDialog.__init__)
-        assert 'confirm_lid_on_advance' not in sig.parameters, \
-            "the advance-prompt flag should have been removed, not left unused"
+        assert 'remind_lid_on_advance' in sig.parameters, \
+            "the advance-prompt flag must exist"
+        assert sig.parameters['remind_lid_on_advance'].default is False, \
+            "the flag must be opt-in: only laser-firing advances prompt"
         src = inspect.getsource(main.PadSVGGeneratorApp.on_frame_and_cut)
-        assert "confirm_lid_on_advance" not in src, \
-            "Frame & Cut still passes the retired flag"
+        assert "remind_lid_on_advance=True" in src, \
+            "Frame & Cut's jog dialog must opt into the lid reminder"
         assert "Start Frame" in src, "expected the jog dialog in this method"
-    check("The advance-prompt flag is gone from both sides", advance_flag_is_gone)
+    check("Frame & Cut opts into the Start Frame reminder",
+          frame_and_cut_opts_into_the_advance_prompt)
 
     def old_names_are_gone():
         # Regression guard: the detection-based helpers should not come back.
