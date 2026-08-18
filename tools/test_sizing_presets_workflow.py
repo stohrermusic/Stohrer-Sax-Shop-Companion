@@ -147,6 +147,93 @@ def main():
             presets.pop("Custom", None)
     check("Save Preset success resets baseline + active name", save_preset_resets_baseline)
 
+    def window_for(s):
+        w = OptionsWindow(
+            root, StubApp(), s, lambda: None, lambda: None,
+            sizing_presets=presets,
+            sizing_presets_save_callback=save_cb,
+        )
+        w.top.withdraw()
+        return w
+
+    def open_names_matching_preset():
+        # Settings equal to the "Default" preset: the dropdown should name
+        # it on open rather than sitting blank while the values are loaded.
+        w = make_window()
+        try:
+            assert w.active_preset_name == "Default", \
+                f"expected 'Default', got {w.active_preset_name!r}"
+            assert w.preset_combo.get() == "Default", \
+                f"combo should show 'Default', shows {w.preset_combo.get()!r}"
+        finally:
+            w.top.destroy()
+    check("Open names the preset matching current settings", open_names_matching_preset)
+
+    def open_blank_when_nothing_matches():
+        odd = copy.deepcopy(DEFAULT_SETTINGS)
+        odd["felt_offset"] = 12.345  # matches no saved preset
+        w = window_for(odd)
+        try:
+            assert w.active_preset_name is None, \
+                f"expected None, got {w.active_preset_name!r}"
+            assert w.preset_combo.get() == "", \
+                f"combo should be blank, shows {w.preset_combo.get()!r}"
+        finally:
+            w.top.destroy()
+    check("Open leaves the dropdown blank when nothing matches", open_blank_when_nothing_matches)
+
+    def open_names_non_default_preset():
+        custom = copy.deepcopy(DEFAULT_SETTINGS)
+        custom["felt_offset"] = 0.9
+        presets["Thin Felt"] = settings_to_sizing_preset(custom)
+        w = window_for(custom)
+        try:
+            assert w.active_preset_name == "Thin Felt", \
+                f"expected 'Thin Felt', got {w.active_preset_name!r}"
+            assert w.preset_combo.get() == "Thin Felt"
+            # The other preset must not be picked up by mistake.
+            assert "Default" in presets
+        finally:
+            w.top.destroy()
+            presets.pop("Thin Felt", None)
+    check("Open names a non-Default preset when its values are loaded", open_names_non_default_preset)
+
+    def detect_is_deterministic_on_ties():
+        # Two presets holding identical values: the pick must be stable
+        # across opens, not dependent on dict insertion order.
+        presets["Zed Copy"] = copy.deepcopy(presets["Default"])
+        presets["Alpha Copy"] = copy.deepcopy(presets["Default"])
+        try:
+            picks = set()
+            for _i in range(3):
+                w = window_for(copy.deepcopy(settings))
+                try:
+                    picks.add(w.active_preset_name)
+                finally:
+                    w.top.destroy()
+            assert len(picks) == 1, f"tie resolved inconsistently: {picks}"
+            assert picks == {"Alpha Copy"}, \
+                f"expected the first name in sort order, got {picks}"
+        finally:
+            presets.pop("Zed Copy", None)
+            presets.pop("Alpha Copy", None)
+    check("Detection is deterministic when two presets tie", detect_is_deterministic_on_ties)
+
+    def detect_survives_empty_library():
+        empty = {}
+        w = OptionsWindow(
+            root, StubApp(), copy.deepcopy(settings), lambda: None, lambda: None,
+            sizing_presets=empty,
+            sizing_presets_save_callback=save_cb,
+        )
+        w.top.withdraw()
+        try:
+            assert w.active_preset_name is None
+            assert w.preset_combo.get() == ""
+        finally:
+            w.top.destroy()
+    check("Empty preset library opens cleanly with no active name", detect_survives_empty_library)
+
     def save_dialog_disables_overwrite_when_empty():
         # No existing presets -> overwrite radio + combo should be disabled,
         # and the dialog should default to "new" mode.

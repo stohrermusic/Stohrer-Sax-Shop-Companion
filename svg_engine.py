@@ -268,7 +268,8 @@ def _scan_radial(dia, r_val, placed_list, target_x, target_y,
                                 width_mm, height_mm, spacing_mm)
 
 
-def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, _discs_override=None):
+def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, _discs_override=None,
+                preplaced=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
     Discs that couldn't be placed are omitted from the result.
@@ -286,7 +287,8 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     if polygon:
         return _nest_discs_polygon(pads, material, settings, polygon,
                                     spacing_mm,
-                                    _discs_override=_discs_override)
+                                    _discs_override=_discs_override,
+                                    preplaced=preplaced)
 
     # Separate fixed and max pads
     fixed_pads = [p for p in pads if p['qty'] != 'max']
@@ -303,7 +305,13 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
             for _ in range(qty):
                 discs.append((pad_size, diameter))
 
-    placed = []
+    # Seeding `placed` marks space as already taken without contributing
+    # to the result: the scan functions collision-check against this list
+    # unchanged, so no scan math (and no parity contract) is touched. The
+    # caller strips the seeds back out. Used to keep pads out of areas a
+    # labeled group already owns.
+    n_pre = len(preplaced or [])
+    placed = list(preplaced or [])
     fixed_total = len(discs)
     fixed_placed = 0
 
@@ -404,7 +412,8 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
             else:
                 break  # No more room for max pads
 
-    return placed, fixed_placed, fixed_total
+    # Drop the seeds — they were space reservations, not results.
+    return placed[n_pre:], fixed_placed, fixed_total
 
 
 # ==========================================
@@ -833,7 +842,8 @@ def _find_best_polygon_small(*args, **kwargs):
     return _find_best_polygon_small_python(*args, **kwargs)
 
 
-def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _discs_override=None):
+def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _discs_override=None,
+                        preplaced=None):
     """
     Smart circle-packing algorithm for polygon boundaries.
 
@@ -860,7 +870,9 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _disc
             for _ in range(qty):
                 discs.append((pad_size, diameter))
         discs.sort(key=lambda x: -x[1])  # Largest first
-    placed = []
+    # See _nest_discs for why seeding `placed` is safe.
+    n_pre = len(preplaced or [])
+    placed = list(preplaced or [])
     fixed_total = len(discs)
     fixed_placed = 0
 
@@ -945,11 +957,621 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _disc
             else:
                 break  # No more room for max pads
 
-    return placed, fixed_placed, fixed_total
+    # Drop the seeds — they were space reservations, not results.
+    return placed[n_pre:], fixed_placed, fixed_total
+
+
+# ==========================================
+# LABELED ZONES
+# ==========================================
+# Small pads are hard to tell apart once they're off the laser: a 7.0 and a
+# 7.5 disc look identical, and the per-disc number is either dropped by the
+# font gate or unreadable (buried in the darts on leather, too small on
+# card/felt). Leather can't be marked in the middle at all — that's the
+# sealing surface — so the only place a usable label can go is the waste.
+#
+# A zone is a bordered rectangle holding every disc of one pad size in a
+# grid, with the size engraved along its top edge. Zones are shelf-packed
+# into a band along the bottom of the sheet; everything outside the zone
+# size range nests normally in the rectangle above, at full density.
+#
+# Rectangles beat circles about 2:1 on fill for the sizes this targets
+# (53-69% vs 28-36% measured on 7-12.5mm pads), which is why the zone is a
+# grid and not a cluster. A grid is also countable, which is the point.
+#
+# The band deliberately avoids needing obstacle support in the scan paths:
+# the leftover region stays a plain rectangle, so _nest_discs handles it
+# unchanged and the parity-pinned scan functions are untouched.
+
+ZONE_SHEET_MARGIN_MM = 2.0   # gap from sheet edge to the zone band
+
+# The gap BETWEEN group boxes is settings["zone_group_gap_mm"], shared by
+# both sheet types — see _group_metrics(). It used to be a rect-only
+# constant here (2.0) and a separate polygon-only setting (6.0), so the
+# same job produced differently-spaced boxes depending on sheet type.
+
+
+def zone_label_text(pad_size):
+    """Label for a zone of the given pad size. Digits and '.' only —
+    STROKE_FONT/FILLED_FONT in gcode_engine carry no 'x', so a count
+    suffix would need a new glyph in both fonts."""
+    return f"{pad_size:.1f}".rstrip('0').rstrip('.')
+
+
+def _zone_text_width_mm(text, font_size_mm):
+    """Estimate engraved text width. Mirrors the per-disc auto-fit
+    convention in _render_svg_discs so the two agree."""
+    w = sum(0.3 if c == '.' else 0.6 for c in text)
+    if len(text) > 1:
+        w += 0.1 * (len(text) - 1)
+    return w * font_size_mm
+
+
+ZONE_GRID_SEARCH_STEP_MM = 2.0  # scan step when placing a grid in a polygon
+
+
+def zone_grid_candidates(qty):
+    """(cols, rows) options for qty discs, most block-like first.
+
+    A grid is what makes a zone countable, which is the whole point — six
+    pads should read as 3x2 and nine as 3x3, not as a long row.
+
+    Scored as ``aspect + empty_slots``: squareness matters, but a grid
+    with holes in it doesn't read as a block, so a gap costs about as much
+    as one step of elongation. That lands 6 on 3x2, 9 on 3x3 and 8 on 4x2
+    (exact) rather than 3x3-with-a-hole, while still giving a prime like 7
+    a 4x2 with one gap instead of a row of seven. Ties break toward fewer
+    holes, then wider-than-tall (a row-major block reads more naturally
+    than its transpose).
+
+    Callers try these in order so a compact block that won't fit the
+    material can fall back to a flatter one rather than failing outright.
+    """
+    out = []
+    for cols in range(1, max(1, qty) + 1):
+        rows = math.ceil(qty / cols)
+        aspect = max(cols, rows) / min(cols, rows)
+        holes = cols * rows - qty
+        out.append((round(aspect + holes, 6), holes,
+                    0 if cols >= rows else 1, cols, rows))
+    out.sort()
+    # Drop duplicates that arise when several cols give the same shape.
+    seen, shapes = set(), []
+    for _a, _e, _t, cols, rows in out:
+        if (cols, rows) not in seen:
+            seen.add((cols, rows))
+            shapes.append((cols, rows))
+    return shapes
+
+
+def _grid_positions(cols, rows, qty, disc_d, gutter_mm, left, top):
+    """Disc centers for a cols x rows block whose bounding box starts at
+    (left, top). Row-major, so a partial last row fills left to right."""
+    out = []
+    for row in range(rows):
+        for col in range(cols):
+            if len(out) >= qty:
+                return out
+            out.append((left + disc_d / 2 + col * (disc_d + gutter_mm),
+                        top + disc_d / 2 + row * (disc_d + gutter_mm)))
+    return out
+
+
+def _place_grid_in_polygon(polygon, qty, disc_d, gutter_mm, clearance_mm,
+                           y_from, y_to, label_h):
+    """Find somewhere in the polygon (within y_from..y_to) for a compact
+    grid of qty equal discs.
+
+    Returns (positions, cols, rows, block_top, block_bottom) or None.
+    Shapes are tried most-block-like first, so an awkward scrap degrades
+    to a flatter grid instead of refusing the size entirely.
+    """
+    min_x, _min_y, max_x, _max_y = _polygon_bbox(polygon)
+    step = ZONE_GRID_SEARCH_STEP_MM
+
+    for cols, rows in zone_grid_candidates(qty):
+        block_w = cols * disc_d + (cols - 1) * gutter_mm
+        block_h = rows * disc_d + (rows - 1) * gutter_mm
+        if block_w > (max_x - min_x) or (block_h + label_h) > (y_to - y_from):
+            continue
+
+        top = y_from + label_h
+        while top + block_h <= y_to + 1e-9:
+            left = min_x
+            while left + block_w <= max_x + 1e-9:
+                pts = _grid_positions(cols, rows, qty, disc_d, gutter_mm,
+                                      left, top)
+                if all(_circle_fits_in_polygon(px, py, disc_d / 2, polygon,
+                                               clearance_mm)
+                       for px, py in pts):
+                    return pts, cols, rows, top - label_h, top + block_h
+                left += step
+            top += step
+    return None
+
+
+def _zone_box(qty, disc_d, gutter_mm, border_mm, font_mm, label_text,
+              shape=None):
+    """Full zone geometry for qty equal discs: (cols, rows, w, h, inner_w).
+
+    The grid shape comes from ``zone_grid_candidates`` — the single source
+    of truth for both sheet types — so six pads read as 3x2 whether they
+    land on a rectangular sheet or a traced scrap. This used to score
+    zone area independently here, which quietly disagreed with the polygon
+    path (6 as 2x3, 8 as 2x4, and a prime like 7 as a 1x7 column).
+
+    ``shape`` forces a specific (cols, rows) so a caller can walk the
+    candidate list when the preferred block won't fit the material.
+    """
+    cols, rows = shape if shape else zone_grid_candidates(qty)[0]
+    text_w = _zone_text_width_mm(label_text, font_mm)
+    inner_w = cols * disc_d + (cols - 1) * gutter_mm
+    inner_h = rows * disc_d + (rows - 1) * gutter_mm
+    w = max(inner_w, text_w) + 2 * border_mm
+    h = inner_h + font_mm + 2 * border_mm
+    return cols, rows, w, h, inner_w
+
+
+def _group_metrics(settings):
+    """The four numbers that define group box geometry, read in ONE place.
+
+    Both packers (rectangular shelf-pack and polygon first-fit) must draw
+    the same box for the same job, so neither reads these keys directly.
+    They previously did, and disagreed: the border was 1.0 on rectangular
+    sheets and 1.5 on traced polygons, and the inter-box gap was 2.0 vs
+    6.0 — the same divergence class as the grid-shape rule unified in the
+    2026-08-11 audit. Returns (gutter, border, font, group_gap).
+    """
+    return (float(settings.get("zone_gutter_mm", 1.0)),
+            float(settings.get("zone_border_mm", 1.5)),
+            float(settings.get("zone_label_font_mm", 2.5)),
+            float(settings.get("zone_group_gap_mm", 1.0)))
+
+
+def plan_zone_specs(pads, material, settings):
+    """Split pads into zoned groups and free pads.
+
+    Returns (zone_specs, free_pads). Each spec is a dict describing one
+    zone's geometry; nothing is positioned yet. Pads outside the size
+    range — and 'max'-quantity pads, which have no fixed count to grid —
+    pass through untouched as free pads.
+    """
+    if not settings.get("zone_labels_enabled", False):
+        return [], list(pads)
+
+    lo = float(settings.get("zone_label_min_size", 7.0))
+    hi = float(settings.get("zone_label_max_size", 12.5))
+    gutter, border, font, _gap = _group_metrics(settings)
+
+    specs, free = [], []
+    for pad in pads:
+        size, qty = pad['size'], pad['qty']
+        if qty == 'max' or not (lo <= size <= hi) or qty < 1:
+            free.append(pad)
+            continue
+
+        disc_d = get_disc_diameter(size, material, settings)
+        text = zone_label_text(size)
+        cols, rows, w, h, inner_w = _zone_box(qty, disc_d, gutter, border,
+                                              font, text)
+
+        specs.append({
+            'size': size, 'qty': qty, 'disc_d': disc_d,
+            'cols': cols, 'rows': rows,
+            'w': w, 'h': h,
+            'inner_w': inner_w, 'label': text,
+            'font': font, 'border': border, 'gutter': gutter,
+        })
+
+    # Widest first: shelf packing wastes less when tall rows are built first.
+    specs.sort(key=lambda s: (-s['h'], -s['w']))
+    return specs, free
+
+
+def _shelf_pack_zones(specs, width_mm, height_mm, group_gap=None):
+    """Shelf-pack zone rectangles into a band at the BOTTOM of the sheet
+    (SVG coords, so high Y). Returns (placed_zones, band_height, dropped).
+
+    `group_gap` is the space between neighbouring boxes; callers pass the
+    value from _group_metrics so this path and the polygon path space
+    their boxes identically.
+
+    A zone wider than the sheet is retried with flatter grid shapes before
+    being given up on — same degrade-don't-refuse behaviour the polygon
+    path uses. Whatever still can't be placed comes back in `dropped`; the
+    caller must NOT quietly nest those pads loose (see nest_with_zones).
+    """
+    if not specs:
+        return [], 0.0, []
+
+    if group_gap is None:
+        group_gap = 1.0
+    usable_w = width_mm - 2 * ZONE_SHEET_MARGIN_MM
+    shelves = []          # list of [height, [(spec, x)], used_w]
+    dropped = []
+
+    for spec in specs:
+        if spec['w'] > usable_w:
+            # Preferred block is too wide — walk to a narrower shape.
+            for shape in zone_grid_candidates(spec['qty'])[1:]:
+                cols, rows, w, h, inner_w = _zone_box(
+                    spec['qty'], spec['disc_d'], spec['gutter'],
+                    spec['border'], spec['font'], spec['label'], shape=shape)
+                if w <= usable_w:
+                    spec = dict(spec, cols=cols, rows=rows, w=w, h=h,
+                                inner_w=inner_w)
+                    break
+            else:
+                dropped.append(spec)
+                continue
+        if spec['w'] > usable_w:
+            dropped.append(spec)
+            continue
+        for shelf in shelves:
+            need = shelf[2] + group_gap + spec['w']
+            if need <= usable_w:
+                shelf[1].append((spec, ZONE_SHEET_MARGIN_MM + shelf[2] + group_gap))
+                shelf[2] = need
+                shelf[0] = max(shelf[0], spec['h'])
+                break
+        else:
+            shelves.append([spec['h'], [(spec, ZONE_SHEET_MARGIN_MM)], spec['w']])
+
+    # Drop whole shelves that would overflow the sheet height. Keep the
+    # sheet usable rather than refusing to generate anything.
+    band_h = 0.0
+    kept = []
+    for shelf in shelves:
+        need = band_h + shelf[0] + group_gap
+        if need + ZONE_SHEET_MARGIN_MM > height_mm:
+            dropped.extend(s for s, _ in shelf[1])
+            continue
+        kept.append((shelf, band_h))
+        band_h = need
+
+    if not kept:
+        return [], 0.0, dropped
+
+    band_h += ZONE_SHEET_MARGIN_MM
+    band_top = height_mm - band_h
+
+    placed_zones = []
+    for shelf, offset in kept:
+        for spec, x in shelf[1]:
+            placed_zones.append(dict(spec, shape='rect', x=x,
+                                     y=band_top + offset + ZONE_SHEET_MARGIN_MM))
+
+    return placed_zones, band_h, dropped
+
+
+def zone_disc_positions(zone):
+    """Disc centers for one placed zone, left-to-right then top-to-bottom.
+
+    The label occupies the top strip inside the border, so the grid starts
+    below it.
+    """
+    d = zone['disc_d']
+    gutter = zone['gutter']
+    border = zone['border']
+    # Center the grid horizontally — the zone may be wider than the grid
+    # when the label forced it wider.
+    x0 = zone['x'] + (zone['w'] - zone['inner_w']) / 2 + d / 2
+    y0 = zone['y'] + border + zone['font'] + d / 2
+
+    out = []
+    placed = 0
+    for row in range(zone['rows']):
+        for col in range(zone['cols']):
+            if placed >= zone['qty']:
+                return out
+            out.append((x0 + col * (d + gutter), y0 + row * (d + gutter)))
+            placed += 1
+    return out
+
+
+def _clip_polygon_y(polygon, y0, y1):
+    """Sutherland-Hodgman clip of a polygon to the horizontal strip y0..y1.
+
+    Returns [] when nothing survives. Handles concave outlines, which is
+    the normal case for a traced scrap.
+    """
+    def _half(pts, keep, y_line):
+        out = []
+        n = len(pts)
+        for i in range(n):
+            ax, ay = pts[i]
+            bx, by = pts[(i + 1) % n]
+            keep_a, keep_b = keep(ay), keep(by)
+            if keep_a:
+                out.append((ax, ay))
+            if keep_a != keep_b and by != ay:
+                t = (y_line - ay) / (by - ay)
+                out.append((ax + t * (bx - ax), y_line))
+        return out
+
+    pts = _half(list(polygon), lambda y: y >= y0, y0)
+    if len(pts) < 3:
+        return []
+    pts = _half(pts, lambda y: y <= y1, y1)
+    return pts if len(pts) >= 3 else []
+
+
+def _polygon_bbox(polygon):
+    xs = [p[0] for p in polygon]
+    ys = [p[1] for p in polygon]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _rect_fits_in_polygon(x0, y0, x1, y1, polygon, clearance_mm):
+    """Is the whole axis-aligned rectangle inside the polygon?
+
+    Corners plus samples along each edge, so a concave notch biting into
+    the middle of an edge is caught. Used to keep a group's engraved
+    boundary on material rather than off the scrap edge.
+    """
+    steps = 8
+    pts = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    for i in range(1, steps):
+        t = i / steps
+        pts += [(x0 + (x1 - x0) * t, y0), (x0 + (x1 - x0) * t, y1),
+                (x0, y0 + (y1 - y0) * t), (x1, y0 + (y1 - y0) * t)]
+    for px, py in pts:
+        if not _point_in_polygon(px, py, polygon):
+            return False
+        if clearance_mm > 0:
+            n = len(polygon)
+            for i in range(n):
+                ax, ay = polygon[i]
+                bx, by = polygon[(i + 1) % n]
+                if _distance_point_to_segment(px, py, ax, ay, bx, by) < clearance_mm:
+                    return False
+    return True
+
+
+def _cover_rect_with_circles(x0, y0, x1, y1, target_r=12.0):
+    """Circles that fully cover a rectangle, as (tag, cx, cy, r) tuples.
+
+    Used to reserve a placed group's footprint when nesting the leftover
+    pads: the nester only collision-checks circles, so a rectangle has to
+    be expressed as circles to keep loose pads out of a labeled group's
+    box. Seeding the discs alone isn't enough — a pad would happily land
+    in a gap inside someone else's group.
+
+    The grid is sized so each circle covers its cell's half-diagonal,
+    which guarantees coverage and overhangs the rectangle by a couple of
+    millimetres. That overhang is harmless: it just keeps loose pads from
+    crowding the engraved boundary.
+    """
+    w = max(x1 - x0, 1e-6)
+    h = max(y1 - y0, 1e-6)
+    step = max(target_r, 1e-6) * math.sqrt(2)
+    nx = max(1, int(math.ceil(w / step)))
+    ny = max(1, int(math.ceil(h / step)))
+    cw, ch = w / nx, h / ny
+    r = 0.5 * math.hypot(cw, ch)
+    out = []
+    for j in range(ny):
+        for i in range(nx):
+            out.append(("_zone_reserved",
+                        x0 + (i + 0.5) * cw,
+                        y0 + (j + 0.5) * ch,
+                        r))
+    return out
+
+
+def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
+    """Nest labeled GROUPS into a traced outline.
+
+    Each zoned size becomes one group: a compact grid of its pads with a
+    rectangle drawn round it and the size engraved on it. The groups are
+    then nested into the scrap as units — first-fit, scanning top-left to
+    bottom-right — so they tuck in wherever they fit rather than each
+    claiming a full-width horizontal band.
+
+    This replaced a one-band-per-size layout that stacked full-width
+    strips down the scrap. Stacking was ruinous once the pads were
+    gridded: grids stack rows, so two of them ate a 146mm scrap whole and
+    the remaining sizes had nowhere to go (15 of 25 pads placed on a real
+    piece). Packed as units the same four groups occupy 207 x 54mm and
+    all 25 pads fit.
+
+    Nothing here touches the parity-pinned scan functions: groups are
+    positioned by this first-fit scan, and whatever is left over for
+    unzoned sizes is handed to the normal nester as a plain clipped
+    region.
+
+    Returns (placed, zones).
+    """
+    specs, free_pads = plan_zone_specs(pads, material, settings)
+    if not specs:
+        placed, _, _ = _nest_discs(pads, material, 0, 0, settings,
+                                   spacing_mm, polygon)
+        return placed, []
+
+    _gutter, border, font, group_gap = _group_metrics(settings)
+    # Box geometry uses `border` (shared with the rectangular path);
+    # `edge_margin` is a different job — extra room when testing this
+    # group's discs against the traced outline.
+    edge_margin = float(settings.get("zone_edge_margin_mm", 1.5))
+    label_h = font + border
+    clearance = spacing_mm + edge_margin
+    min_x, min_y, max_x, max_y = _polygon_bbox(polygon)
+    step = ZONE_GRID_SEARCH_STEP_MM
+
+    # Biggest first: the roomy parts of a scrap get claimed before the
+    # small groups fill in around them.
+    specs.sort(key=lambda s: -(s['disc_d'] * max(1, s['qty'])))
+
+    placed = []
+    zones = []
+    taken = []          # placed group rects, for overlap rejection
+    unplaced = []
+
+    for spec in specs:
+        disc_d = spec['disc_d']
+        qty = spec['qty']
+        gutter = spec['gutter']
+        spot = None
+
+        for cols, rows in zone_grid_candidates(qty):
+            grid_w = cols * disc_d + (cols - 1) * gutter
+            grid_h = rows * disc_d + (rows - 1) * gutter
+            box_w = max(grid_w, _zone_text_width_mm(spec['label'], font)) + 2 * border
+            box_h = grid_h + label_h + border
+            if box_w > (max_x - min_x) or box_h > (max_y - min_y):
+                continue
+
+            y0 = min_y
+            while y0 + box_h <= max_y + 1e-9 and spot is None:
+                x0 = min_x
+                while x0 + box_w <= max_x + 1e-9:
+                    # Cheap rejections first: the disc test is the
+                    # expensive one and rarely needs to run.
+                    if any(not (x0 + box_w + group_gap <= t[0]
+                                or t[2] + group_gap <= x0
+                                or y0 + box_h + group_gap <= t[1]
+                                or t[3] + group_gap <= y0)
+                           for t in taken):
+                        x0 += step
+                        continue
+                    if not _rect_fits_in_polygon(x0, y0, x0 + box_w,
+                                                 y0 + box_h, polygon,
+                                                 spacing_mm):
+                        x0 += step
+                        continue
+                    gx = x0 + (box_w - grid_w) / 2
+                    gy = y0 + label_h
+                    pts = _grid_positions(cols, rows, qty, disc_d, gutter,
+                                          gx, gy)
+                    if all(_circle_fits_in_polygon(px, py, disc_d / 2,
+                                                   polygon, clearance)
+                           for px, py in pts):
+                        spot = (pts, cols, rows, x0, y0, box_w, box_h)
+                        break
+                    x0 += step
+                y0 += step
+            if spot is not None:
+                break
+
+        if spot is None:
+            unplaced.append({'size': spec['size'], 'qty': qty})
+            continue
+
+        pts, cols, rows, bx, by, bw, bh = spot
+        taken.append((bx, by, bx + bw, by + bh))
+        placed.extend((spec['size'], px, py, disc_d / 2) for px, py in pts)
+        zones.append({
+            'shape': 'rect',
+            'label': spec['label'],
+            'size': spec['size'],
+            'qty': qty,
+            'font': font,
+            'border': border,
+            'gutter': gutter,
+            'disc_d': disc_d,
+            'cols': cols, 'rows': rows,
+            'inner_w': cols * disc_d + (cols - 1) * gutter,
+            'x': bx, 'y': by, 'w': bw, 'h': bh,
+        })
+
+    # Unzoned sizes fill whatever the groups left — anywhere in the
+    # scrap, not just below them. Groups nest in 2D, so restricting the
+    # leftovers to the strip under the lowest group (which is what this
+    # did while the layout was stacked full-width bands) stranded most of
+    # the piece: an "x max" fill placed nothing at all above the groups.
+    # Reserving each group's footprint as cover circles lets the normal
+    # nester use the whole outline while keeping loose pads out of the
+    # labeled boxes.
+    #
+    # Zoned sizes that couldn't get a group are NOT nested here — see
+    # nest_with_zones.
+    if free_pads:
+        reserved = []
+        for tx0, ty0, tx1, ty1 in taken:
+            reserved.extend(_cover_rect_with_circles(tx0, ty0, tx1, ty1))
+        rest, _, _ = _nest_discs(free_pads, material, 0, 0, settings,
+                                 spacing_mm, polygon, preplaced=reserved)
+        placed.extend(rest)
+
+    return placed, zones
+
+
+def nest_with_zones(pads, material, width_mm, height_mm, settings,
+                    spacing_mm=1.0, polygon=None):
+    """Nest with labeled zones when enabled, else fall back to _nest_discs.
+
+    Returns (placed, zones, fixed_placed, fixed_total) where `placed` keeps
+    the plain (pad_size, cx, cy, r) shape every other caller expects, and
+    `zones` is a parallel list of positioned zone dicts for the renderers.
+
+    Two layouts, chosen by sheet shape:
+      - rectangular sheet: grid blocks shelf-packed into a band along the
+        bottom, which keeps the leftover region a plain rectangle.
+      - traced polygon: grid blocks first-fit into the outline as units,
+        tucking in wherever they land.
+
+    Both emit identical shape='rect' zone dicts and take their box
+    geometry from _group_metrics, so the same job draws the same boxes
+    either way.
+
+    Scrap mode passes zones=[] from the caller — a scrap only takes part of
+    a size's count, so a group would have to be re-sized per piece.
+    """
+    if not settings.get("zone_labels_enabled", False):
+        placed, fp, ft = _nest_discs(pads, material, width_mm, height_mm,
+                                     settings, spacing_mm, polygon)
+        return placed, [], fp, ft
+
+    if polygon:
+        placed, zones = _nest_polygon_groups(pads, material, settings,
+                                             polygon, spacing_mm)
+        wanted = {}
+        for pad in pads:
+            if pad['qty'] != 'max':
+                wanted[pad['size']] = wanted.get(pad['size'], 0) + pad['qty']
+        got = {}
+        for size, _cx, _cy, _r in placed:
+            got[size] = got.get(size, 0) + 1
+        fixed_total = sum(wanted.values())
+        fixed_placed = sum(min(got.get(sz, 0), n) for sz, n in wanted.items())
+        return placed, zones, fixed_placed, fixed_total
+
+    specs, free_pads = plan_zone_specs(pads, material, settings)
+    zones, band_h, dropped = _shelf_pack_zones(
+        specs, width_mm, height_mm, group_gap=_group_metrics(settings)[3])
+
+    # A zoned size that couldn't get a group is NOT nested loose — same
+    # rule as the polygon path. Cutting it anyway drops an unlabeled pile
+    # of small discs beside the labeled ones (the exact confusion zones
+    # exist to prevent) while the caller sees a full count and reports
+    # success. Counting it in fixed_total but not fixed_placed makes
+    # can_all_pads_fit() surface the shortfall instead.
+    dropped_qty = sum(spec['qty'] for spec in dropped)
+
+    placed = []
+    zoned_total = 0
+    for zone in zones:
+        r = zone['disc_d'] / 2
+        for cx, cy in zone_disc_positions(zone):
+            placed.append((zone['size'], cx, cy, r))
+        zoned_total += zone['qty']
+
+    # Free pads nest in the rectangle above the band. No translation is
+    # needed because the band sits at the bottom.
+    free_h = height_mm - band_h
+    if free_pads and free_h > 0:
+        free_placed, fp, ft = _nest_discs(free_pads, material, width_mm,
+                                          free_h, settings, spacing_mm)
+        placed.extend(free_placed)
+    else:
+        fp = ft = 0
+
+    return placed, zones, fp + zoned_total, ft + zoned_total + dropped_qty
 
 
 def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None):
-    placed, fixed_placed, fixed_total = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
+    _placed, _zones, fixed_placed, fixed_total = nest_with_zones(
+        pads, material, width_mm, height_mm, settings, polygon=polygon)
     # Check if all fixed-quantity pads fit (max pads are flexible by definition)
     return fixed_placed == fixed_total
 
@@ -1086,6 +1708,45 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                                  fill=layer_colors[f'{material}_engraving']))
 
 
+def _render_svg_zones(dwg, zones, material, settings, compatibility_mode, stroke_w):
+    """Draw zone borders and labels on the engraving layer.
+
+    Border and label share the engraving color: the border is scored, not
+    cut, so the sheet stays in one piece and no part can drop early.
+    """
+    if not zones:
+        return
+
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    color = layer_colors[f'{material}_engraving']
+
+    for zone in zones:
+        font = zone['font']
+        # SVG text y is a baseline; the disc engraving path converts a visual
+        # center the same way, so the two agree.
+        label_cx = zone['x'] + zone['w'] / 2
+        label_cy = zone['y'] + zone['border'] + font / 2
+        label_y = label_cy + font * 0.35
+
+        if compatibility_mode:
+            dwg.add(dwg.rect(insert=(zone['x'], zone['y']),
+                             size=(zone['w'], zone['h']), stroke=color,
+                             fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.rect(insert=(f"{zone['x']}mm", f"{zone['y']}mm"),
+                             size=(f"{zone['w']}mm", f"{zone['h']}mm"), stroke=color,
+                             fill='none', stroke_width=stroke_w))
+
+        if compatibility_mode:
+            dwg.add(dwg.text(zone['label'], insert=(label_cx, label_y),
+                             text_anchor="middle", font_size=font, fill=color))
+        else:
+            dwg.add(dwg.text(zone['label'],
+                             insert=(f"{label_cx}mm", f"{label_y}mm"),
+                             text_anchor="middle", font_size=f"{font}mm",
+                             fill=color))
+
+
 def _create_svg_drawing(filename, width_mm, height_mm, settings):
     """Create an SVG drawing with the correct settings."""
     compatibility_mode = settings.get("compatibility_mode", False)
@@ -1098,20 +1759,33 @@ def _create_svg_drawing(filename, width_mm, height_mm, settings):
     return dwg, compatibility_mode, stroke_w
 
 
+def nest_pads_with_zones(pads, material, width_mm, height_mm, settings, polygon=None):
+    """Nest and return (placed, zones).
+
+    Preferred entry point for the preview + generate flow, since the zone
+    rectangles have to survive all the way to the renderers. `zones` is
+    empty whenever labeled zones are off or the sheet is a custom polygon.
+    """
+    placed, zones, _, _ = nest_with_zones(pads, material, width_mm, height_mm,
+                                          settings, polygon=polygon)
+    return placed, zones
+
+
 def nest_pads(pads, material, width_mm, height_mm, settings, polygon=None):
     """Run the nesting algorithm and return placed disc positions.
 
-    Returns list of (pad_size, cx, cy, r) tuples. Used by the preview
-    window to show the layout before committing to file generation.
+    Returns list of (pad_size, cx, cy, r) tuples. Kept for callers that
+    don't render zone borders; use nest_pads_with_zones when they matter.
     """
-    placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
-    return placed
+    return nest_pads_with_zones(pads, material, width_mm, height_mm,
+                                settings, polygon=polygon)[0]
 
 
 def generate_svg(pads, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
-    placed, _, _ = _nest_discs(pads, material, width_mm, height_mm, settings, polygon=polygon)
+    placed, zones = nest_pads_with_zones(pads, material, width_mm, height_mm, settings, polygon=polygon)
     dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
     _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w)
+    _render_svg_zones(dwg, zones, material, settings, compatibility_mode, stroke_w)
     dwg.save()
 
 
@@ -1247,7 +1921,8 @@ def _multistart_nest(pads, material, width_mm, height_mm, settings, polygon=None
     return best_placed or []
 
 
-def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, hole_dia_preset, settings, polygon=None):
+def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, hole_dia_preset, settings,
+                             polygon=None, zones=None):
     """
     Generate SVG from pre-computed placed discs.
 
@@ -1262,9 +1937,12 @@ def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, ho
         hole_dia_preset: Hole diameter setting
         settings: App settings dict
         polygon: Optional (unused, for API consistency)
+        zones: Optional list of positioned zone dicts from nest_with_zones.
+            Omitted by callers that never enabled labeled zones.
     """
     dwg, compatibility_mode, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
     _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w)
+    _render_svg_zones(dwg, zones, material, settings, compatibility_mode, stroke_w)
     dwg.save()
 
 

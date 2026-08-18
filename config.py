@@ -179,13 +179,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.63"
+APP_VERSION = "2.7"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-07-02"
+    manual = "2026-08-10"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -333,6 +333,12 @@ SCREW_SPECS_FILE = os.path.join(_CONFIG_DIR, "screw_specs.json")
 TONER_DATA_FILE = os.path.join(_CONFIG_DIR, "toner_data.json")
 SIZING_PRESET_FILE = os.path.join(_CONFIG_DIR, "sizing_presets.json")
 GCODE_PRESET_FILE = os.path.join(_CONFIG_DIR, "gcode_presets.json")
+JOB_HISTORY_FILE = os.path.join(_CONFIG_DIR, "job_history.json")
+
+# How many past jobs to keep. Each entry is small (a pad list plus a
+# handful of scalars), so a few hundred costs well under a megabyte and
+# covers a busy shop for a long time.
+JOB_HISTORY_LIMIT = 300
 
 # Settings keys captured by a sizing-rules preset (everything in the
 # Options > Sizing Rules dialog).
@@ -350,6 +356,10 @@ SIZING_PRESET_KEYS = (
     "engraving_settings_range_mode", "engraving_settings_ranges",
     "engraving_location",
     "engraving_placement_range_mode", "engraving_placement_ranges",
+    # Labeled zones (lives in this dialog). Only the three user-facing
+    # fields — gutter / border / label font are global tuning constants
+    # with no UI, so they aren't part of a preset.
+    "zone_labels_enabled", "zone_label_min_size", "zone_label_max_size",
     # Export compatibility (lives in this dialog)
     "compatibility_mode",
 )
@@ -365,6 +375,28 @@ def settings_to_sizing_preset(settings):
     for key in SIZING_PRESET_KEYS:
         if key in settings:
             out[key] = copy.deepcopy(settings[key])
+    return out
+
+
+def normalize_sizing_preset(preset):
+    """Fill in any SIZING_PRESET_KEYS a stored preset predates.
+
+    Presets are compared by exact value against a form snapshot to name the
+    active one, so every time a key is ADDED to SIZING_PRESET_KEYS, every
+    already-saved preset would stop matching and the dropdown would go
+    blank. Backfilling from DEFAULT_SETTINGS is also the right meaning: a
+    preset saved before a feature existed should read as that feature's
+    default (e.g. labeled zones off).
+
+    Unknown extra keys are dropped, so a preset written by a newer version
+    doesn't poison comparison on an older one.
+    """
+    out = {}
+    for key in SIZING_PRESET_KEYS:
+        if key in preset:
+            out[key] = copy.deepcopy(preset[key])
+        elif key in DEFAULT_SETTINGS:
+            out[key] = copy.deepcopy(DEFAULT_SETTINGS[key])
     return out
 
 
@@ -385,6 +417,36 @@ GCODE_PRESET_KEYS = (
 # All materials a G-code preset can be saved/loaded for. Top-level keys
 # in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
 GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood")
+
+# Sane ceiling for the framing S value: 30 = 3%. Framing is a positioning
+# preview, not a cut — anything approaching real engraving power would mark
+# the material the user is trying to line up. The ceiling is enforced when
+# the value is READ, not just in the dialog, so a config written under an
+# older, higher cap can't quietly frame at a marking power.
+FRAMING_POWER_S_MAX = 30
+
+
+def get_framing_power_s(material, settings):
+    """Grbl S value to frame with for this material (0-1000 scale).
+
+    Falls back to the global ``laser_framing_power_s`` for materials with
+    no entry (e.g. 'exact_size', which the per-material dict doesn't
+    cover) and for configs written before the dict existed. The result is
+    always clamped to 0..FRAMING_POWER_S_MAX.
+    """
+    fallback = settings.get("laser_framing_power_s", 10)
+    by_mat = settings.get("laser_framing_power_by_material")
+    if not isinstance(by_mat, dict):
+        value = fallback
+    else:
+        try:
+            value = int(by_mat.get(material, fallback))
+        except (TypeError, ValueError):
+            value = fallback
+    try:
+        return max(0, min(int(value), FRAMING_POWER_S_MAX))
+    except (TypeError, ValueError):
+        return min(10, FRAMING_POWER_S_MAX)
 
 
 def material_settings_to_gcode_preset(mat_settings):
@@ -512,6 +574,33 @@ DEFAULT_SETTINGS = {
     # ENGRAVING PLACEMENT RANGE MODE
     "engraving_placement_range_mode": "universal",
     "engraving_placement_ranges": [],  # list of {"min_size", "max_size", "engraving_location": {material: {mode, value}}}
+
+    # LABELED ZONES — group same-size small pads into a bordered, labeled
+    # block on the sheet so they can be told apart when picking parts off
+    # the laser. Small pads either come off blank (the font gate in the
+    # engines drops the engraving) or carry a number that's unreadable —
+    # buried in the darts on leather, or simply too small on card/felt.
+    # The zone label lives on the WASTE, not on the part, which is the only
+    # option for small leather: its center is the sealing surface and must
+    # not be marked. Costs sheet area, so it's opt-in.
+    "zone_labels_enabled": False,
+    "zone_label_min_size": 7.0,   # inclusive, pad size in mm
+    "zone_label_max_size": 12.5,  # inclusive, pad size in mm
+    "zone_gutter_mm": 1.0,        # edge-to-edge gap between discs inside a zone
+    # Gap from the outermost disc edge to the engraved border, both sheet
+    # types. 1.0 visually crowded the outer discs, which is what prompted
+    # the larger value.
+    "zone_border_mm": 1.5,
+    "zone_label_font_mm": 2.5,    # engraved zone label height
+    # Extra clearance used when testing a group's discs against a traced
+    # outline, on top of the nester's own spacing. Polygon path only.
+    "zone_edge_margin_mm": 1.5,
+    # Gap between neighbouring group boxes, both sheet types. Matched to
+    # the disc gutter: each box already carries zone_border_mm of white
+    # space inside it, so the boxes read as separate without a moat
+    # between them. This was 6.0 when each size got a full-width band and
+    # the gap had to separate strips rather than boxes.
+    "zone_group_gap_mm": 1.0,
 
     # EDGE BIAS - direction to bias circle packing toward
     # "center" (no bias), "n", "ne", "e", "se", "s", "sw", "w", "nw"
@@ -754,7 +843,18 @@ DEFAULT_SETTINGS = {
     # the Falcon's VID/PID; if a future user runs another Grbl laser,
     # they'll set the port directly here and bypass detection.
     "falcon_serial_port_override": None,
+    # Framing runs the outline at very low power so you can see where the
+    # head will go without marking the material. How low is "visible but
+    # harmless" depends entirely on the material — 1% reads fine on card
+    # but is invisible on dark leather. laser_framing_power_s is the
+    # fallback for anything not listed (and for legacy configs); the
+    # per-material dict overrides it. Both are Grbl S values on the 0-1000
+    # scale, so 10 = 1%. Framing always uses M4 dynamic power regardless
+    # of the value — see generate_polygon_framing_gcode.
     "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
+    "laser_framing_power_by_material": {
+        "felt": 10, "card": 10, "leather": 10, "acrylic": 10, "basswood": 10,
+    },
     "laser_framing_feed": 2000,     # mm/min during framing
     # Bed dimensions in machine-mm — defaults match the Creality Falcon2
     # Pro 40W. Override here for other Grbl-compatible lasers.
@@ -1053,3 +1153,58 @@ def save_presets(presets, file_path):
         from tkinter import messagebox
         messagebox.showerror(_("Error Saving Preset"), str(e))
         return False
+
+
+# ==========================================
+# JOB HISTORY
+# ==========================================
+# A log of pad jobs that reached an output stage — SVG written, G-code
+# written, or streamed to the laser. Purely a record: nothing in the
+# generation path reads it back, so a failure here must never take a
+# cut job down with it (every entry point swallows its errors and logs).
+
+def load_job_history():
+    """Return the job history as a list, newest first. Never raises."""
+    if not os.path.exists(JOB_HISTORY_FILE):
+        return []
+    try:
+        with open(JOB_HISTORY_FILE, 'r') as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, TypeError, ValueError, OSError):
+        _preserve_corrupt_file(JOB_HISTORY_FILE)
+        return []
+
+    # Stored as {"version": 1, "jobs": [...]} so the file can grow
+    # metadata later; tolerate a bare list too.
+    if isinstance(data, dict):
+        data = data.get("jobs", [])
+    if not isinstance(data, list):
+        return []
+    return [j for j in data if isinstance(j, dict)]
+
+
+def save_job_history(jobs):
+    """Persist the job history (trimmed to JOB_HISTORY_LIMIT). Returns bool.
+
+    Unlike save_presets() this stays silent on failure — history is a
+    convenience log, and a modal error box in the middle of a laser run
+    would be worse than the lost entry.
+    """
+    try:
+        _write_json_atomic(JOB_HISTORY_FILE, {
+            "version": 1,
+            "jobs": list(jobs)[:JOB_HISTORY_LIMIT],
+        })
+        return True
+    except Exception:
+        logging.getLogger(__name__).exception("Could not save job history")
+        return False
+
+
+def append_job_history(entry):
+    """Add one job to the front of the history. Returns the trimmed list."""
+    jobs = load_job_history()
+    jobs.insert(0, entry)
+    del jobs[JOB_HISTORY_LIMIT:]
+    save_job_history(jobs)
+    return jobs

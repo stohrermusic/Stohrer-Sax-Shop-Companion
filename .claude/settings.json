@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/git-sync-check.sh\"",
+            "shell": "bash",
+            "timeout": 30,
+            "statusMessage": "Checking git sync with origin..."
+          }
+        ]
+      }
+    ]
+  }
+}

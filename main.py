@@ -5,12 +5,15 @@ import json
 import sys
 import subprocess
 import time
+import datetime
+import logging
 
 # --- Local Imports ---
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
+    append_job_history, load_job_history, save_job_history,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices,
     setup_logging, get_log_file,
@@ -23,14 +26,15 @@ from config import (
 from i18n import init_translation
 init_translation(load_settings().get("language", "en"))
 
-from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads  # noqa: E402
+from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads_with_zones  # noqa: E402
 from gcode_engine import generate_gcode_from_placed  # noqa: E402
 from ui_dialogs import (  # noqa: E402
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
     ImportPresetsWindow, ExportPresetsWindow, WebImportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
-    UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow
+    UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow,
+    JobHistoryWindow
 )
 from library_features import LibraryFeaturesMixin  # noqa: E402
 from tooling_tab import ToolingTabMixin  # noqa: E402
@@ -328,6 +332,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label=_("Import Matt's Pad Sets"), command=self.on_import_matts_pad_sets)
         pad_file_menu.add_separator()
+        pad_file_menu.add_command(label=_("Job History..."), command=self.open_job_history)
+        pad_file_menu.add_separator()
         pad_file_menu.add_command(label=_("Import Settings from Folder..."), command=self.on_import_settings_folder)
         pad_file_menu.add_separator()
         pad_file_menu.add_command(label=_("Feature Set..."), command=self._open_feature_set)
@@ -365,6 +371,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 label=_("Camera-Polygon Inset Margin..."),
                 command=self._on_machine_inset_settings)
             self._machine_menu_indices['inset'] = (
+                machine_menu.index('end'))
+            machine_menu.add_command(
+                label=_("Framing Power..."),
+                command=self._on_machine_framing_power)
+            self._machine_menu_indices['framing_power'] = (
                 machine_menu.index('end'))
             machine_menu.add_separator()
             machine_menu.add_command(label=_("Home Laser"),
@@ -1639,6 +1650,27 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showerror(_("Error"), _("Only one pad size can use 'max' quantity at a time."))
             return None
 
+        # A labeled group is a fixed grid, so it needs a fixed count —
+        # "max" has none. Refuse rather than silently cutting that size
+        # loose and unlabeled, which is the exact confusion zones exist
+        # to prevent. Filling the leftover space with an ungrouped size
+        # still works; it's only a max on a GROUPED size that can't.
+        if self.settings.get("zone_labels_enabled", False) and max_pads:
+            lo = float(self.settings.get("zone_label_min_size", 7.0))
+            hi = float(self.settings.get("zone_label_max_size", 12.5))
+            clash = [p['size'] for p in max_pads if lo <= p['size'] <= hi]
+            if clash:
+                size = f"{clash[0]:g}"
+                messagebox.showerror(
+                    _("Can't group a 'max' size"),
+                    _("{size} mm is set to 'max', but Labeled Zones is "
+                      "grouping {lo}–{hi} mm. A group needs a fixed "
+                      "count to lay out.\n\n"
+                      "Give {size} a quantity, or use 'max' on a size "
+                      "outside that range to fill the rest.").format(
+                          size=size, lo=f"{lo:g}", hi=f"{hi:g}"))
+                return None
+
         if self.settings.get("engraving_on", True):
             oversized_engravings = check_for_oversized_engravings(pads, self.material_vars, self.settings)
             if oversized_engravings and self.settings.get("show_engraving_warning", True):
@@ -1692,6 +1724,139 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return card_paper_dims[0], card_paper_dims[1], None
         return width_mm, height_mm, self.custom_polygon
 
+    def _record_job(self, output, materials, pads, params, placed_count=None,
+                    scrap_num=None, save_dir=None, status="complete"):
+        """Log a job that reached an output stage to the history file.
+
+        `output` is "svg", "gcode", or "laser". Call this only once real
+        output exists — files on disk, or G-code streamed to the machine.
+
+        Swallows every error on purpose: the history is a convenience
+        log, and nothing downstream reads it back, so a bad write must
+        never turn a successful cut into an error dialog.
+        """
+        try:
+            requested = sum(p['qty'] for p in pads if isinstance(p.get('qty'), int))
+            has_max = any(p.get('qty') == 'max' for p in pads)
+
+            entry = {
+                "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                "output": output,
+                "status": status,
+                "materials": list(materials),
+                # Raw text as typed — this is what gets restored, so the
+                # user gets their list back exactly (including "x max").
+                "pad_text": self.pad_entry.get("1.0", tk.END).strip(),
+                "pads": [{"size": p.get('size'), "qty": p.get('qty')} for p in pads],
+                "requested_count": requested,
+                "has_max": has_max,
+                # Discs actually placed on the sheet. Differs from
+                # requested when a "max" line filled the leftover space,
+                # and is the per-scrap subset in scrap mode.
+                "placed_count": placed_count,
+                "base": params.get('base'),
+                "units": self.settings.get('units'),
+                "sheet_w": self.width_entry.get().strip(),
+                "sheet_h": self.height_entry.get().strip(),
+                "sheet_w_mm": params.get('width_mm'),
+                "sheet_h_mm": params.get('height_mm'),
+                "card_paper": bool(params.get('card_paper_dims')),
+                "hole_option": self.hole_var.get(),
+                "custom_hole": self.custom_hole_entry.get().strip(),
+                "scrap_num": scrap_num,
+                "save_dir": save_dir,
+                "preset_library": self.pad_preset_loaded_library,
+                "preset_name": self.pad_preset_loaded_name,
+                # Recorded for display only. The shape itself isn't
+                # restorable in any meaningful way — a camera-captured
+                # polygon is anchored to a scrap that's now been cut up.
+                "polygon_vertices": len(self.custom_polygon) if self.custom_polygon else 0,
+            }
+            append_job_history(entry)
+        except Exception:
+            logging.getLogger(__name__).exception("Could not record job history")
+
+    def open_job_history(self):
+        """File > Job History — browse past jobs, optionally reload one."""
+        dlg = JobHistoryWindow(self.root, load_job_history(), save_job_history)
+        if dlg.result:
+            self._load_job_into_form(dlg.result)
+
+    def _load_job_into_form(self, job):
+        """Restore a history entry's inputs into the Pad Maker form.
+
+        Restores what the user typed: pad list, materials, sheet size,
+        center hole, base filename. Deliberately does NOT touch sizing
+        rules, G-code settings, or the custom polygon — those are
+        current-state settings the user may have tuned since, and a
+        camera-captured polygon is anchored to a scrap that no longer
+        exists.
+        """
+        # A live scrap session owns its own pad list and locks the
+        # material checkboxes; loading over the top would desync them.
+        if self.scrap_session.get('active'):
+            messagebox.showwarning(
+                _("Scrap Session Active"),
+                _("Finish or clear the current scrap session before "
+                  "loading a job from history."))
+            return
+
+        self.pad_entry.delete("1.0", tk.END)
+        self.pad_entry.insert(tk.END, job.get("pad_text", ""))
+        self._auto_resize_pad_entry()
+
+        # Loading a job is not loading a preset — drop the preset link
+        # so the Notes button doesn't point at an unrelated preset.
+        self.pad_preset_loaded_library = None
+        self.pad_preset_loaded_name = None
+        self.pad_notes_btn.config(state="disabled")
+
+        mats = job.get("materials") or []
+        if mats:
+            for m, var in self.material_vars.items():
+                var.set(m in mats)
+
+        # Sheet size is stored in mm as well as as-typed. Restore the
+        # typed text when the units still match, otherwise convert —
+        # units are a Sizing Rules setting and loading a job must not
+        # silently change them.
+        units = self.settings.get('units', 'in')
+        w_txt, h_txt = None, None
+        if job.get("units") == units and job.get("sheet_w") and job.get("sheet_h"):
+            w_txt, h_txt = job["sheet_w"], job["sheet_h"]
+        else:
+            w_mm, h_mm = job.get("sheet_w_mm"), job.get("sheet_h_mm")
+            if isinstance(w_mm, (int, float)) and isinstance(h_mm, (int, float)):
+                per_unit = {'in': 25.4, 'cm': 10.0, 'mm': 1.0}.get(units, 25.4)
+                w_txt = f"{w_mm / per_unit:g}"
+                h_txt = f"{h_mm / per_unit:g}"
+        if w_txt is not None:
+            self.width_entry.delete(0, tk.END)
+            self.width_entry.insert(0, w_txt)
+            self.height_entry.delete(0, tk.END)
+            self.height_entry.insert(0, h_txt)
+
+        if job.get("hole_option"):
+            self.hole_var.set(job["hole_option"])
+        if job.get("custom_hole"):
+            self.custom_hole_entry.config(state='normal')
+            self.custom_hole_entry.delete(0, tk.END)
+            self.custom_hole_entry.insert(0, job["custom_hole"])
+        self.toggle_custom_hole_entry()
+
+        if job.get("base"):
+            self.filename_entry.delete(0, tk.END)
+            self.filename_entry.insert(0, job["base"])
+
+        # The one thing that can't come back — say so rather than let
+        # the user assume the scrap shape came along with the numbers.
+        if job.get("polygon_vertices"):
+            messagebox.showinfo(
+                _("Job Loaded"),
+                _("Pad list, materials and sheet size are back.\n\n"
+                  "The custom shape from that job wasn't restored — "
+                  "draw or capture the piece you're cutting now."))
+
     def on_generate_svg(self):
         """Generate SVG files."""
         # --- Scrap Mode ---
@@ -1724,13 +1889,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 return
 
             save_dir = None
+            generated = []      # materials actually written, for the history log
+            last_placed = 0
 
             # Process each material (with optional per-material preview)
             for material in selected_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
                 # Nest (may re-run if user adjusts and retries)
-                placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 # Validate fit
                 if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
@@ -1742,7 +1909,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon)
+                        polygon=mat_polygon, zones=zones)
                     if preview.result != "save":
                         return  # User clicked Adjust — go back for this material
 
@@ -1754,8 +1921,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.settings["last_output_dir"] = save_dir
 
                 filename = os.path.join(save_dir, f"{base}_{material}.svg")
-                generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                generate_svg_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings,
+                                         polygon=mat_polygon, zones=zones)
+                generated.append(material)
+                last_placed = len(placed)
 
+            self._record_job("svg", generated, pads, params,
+                             placed_count=last_placed, save_dir=save_dir)
             save_settings(self.settings)
             messagebox.showinfo(_("Done"), _("SVG files generated successfully."))
 
@@ -1849,6 +2021,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Generate SVG from placed discs
             generate_svg_from_placed(placed, material, mat_w, mat_h, filename,
                                      hole_dia, self.settings, polygon=mat_polygon)
+
+            self._record_job("svg", [material], pads, params,
+                             placed_count=len(placed), scrap_num=scrap_num,
+                             save_dir=save_dir)
 
             # Update session with remaining pads
             self.scrap_session['remaining_pads'] = remaining
@@ -1977,7 +2153,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             indices = self._machine_menu_indices
             try:
                 menu.entryconfig(indices['camera_cal'], state="normal")
-                for key in ('inset', 'home', 'test', 'clear', 'reset'):
+                for key in ('inset', 'framing_power', 'home', 'test',
+                            'clear', 'reset'):
                     if key in indices:
                         menu.entryconfig(indices[key], state=other_state)
             except tk.TclError:
@@ -2335,6 +2512,106 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # ToolingTabMixin) — same dialog, same flow.
         self._open_camera_calibration()
 
+    def _on_machine_framing_power(self):
+        """Per-material framing power (Grbl S, 0-1000 scale).
+
+        Framing traces the outline so you can see where the head will go
+        without marking anything. How low "visible but harmless" is
+        depends on the material — 1% reads fine on card and is invisible
+        on dark leather. Framing always uses M4 dynamic power whatever
+        the value, so the beam still drops to zero when the head stalls
+        at a vertex.
+        """
+        from config import (GCODE_PRESET_MATERIALS, FRAMING_POWER_S_MAX,
+                            get_framing_power_s, save_settings)
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Framing Power"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+        bg = self._get_theme_color() if hasattr(
+            self, '_get_theme_color') else None
+        if bg:
+            dlg.configure(bg=bg)
+
+        max_pct = FRAMING_POWER_S_MAX / 10.0
+        tk.Label(dlg, justify='left', wraplength=440, bg=bg,
+                 text=_("Laser power used for the framing pass, per "
+                        "material. Framing shows you where the cut will "
+                        "land — it should be bright enough to follow by "
+                        "eye without marking the material.\n\n"
+                        "Dark materials like leather need more than card "
+                        "does. Raise it a little at a time: the power "
+                        "that becomes visible is usually close to the "
+                        "power that starts leaving a mark.")
+                 ).pack(padx=20, pady=(15, 10))
+
+        grid = tk.Frame(dlg, bg=bg)
+        grid.pack(padx=20, pady=(0, 10))
+        vars_by_mat = {}
+        for row, mat in enumerate(GCODE_PRESET_MATERIALS):
+            tk.Label(grid, text=mat.replace('_', ' ').title() + ":",
+                     bg=bg, anchor='e', width=12).grid(
+                row=row, column=0, sticky='e', pady=2)
+            # Shown and entered as a percentage, like every other power
+            # field in the app. Stored as a Grbl S value (percent x 10) —
+            # see _ok() for why the stored unit doesn't change.
+            # One decimal always shown ("1.0", not "1") so it's obvious a
+            # fractional percent is accepted — the useful range is narrow
+            # and S values are integers, so 0.1% is exactly the precision
+            # available.
+            pct_now = get_framing_power_s(mat, self.settings) / 10.0
+            var = tk.StringVar(value=f"{pct_now:.1f}")
+            vars_by_mat[mat] = var
+            tk.Entry(grid, textvariable=var, width=8,
+                     font=("Helvetica", 11)).grid(
+                row=row, column=1, sticky='w', padx=6, pady=2)
+            tk.Label(grid, text="%", bg=bg).grid(row=row, column=2,
+                                                 sticky='w')
+
+        tk.Label(dlg, bg=bg, fg="#666666", font=("Helvetica", 8),
+                 text=_("Range: 0 to {max}%. Cutting power is typically "
+                        "35-100%, so framing stays well below it.").format(
+                            max=f"{max_pct:.1f}")
+                 ).pack(padx=20, pady=(0, 8))
+
+        def _ok():
+            parsed = {}
+            for mat, var in vars_by_mat.items():
+                try:
+                    pct = float(var.get())
+                    if not (0 <= pct <= max_pct):
+                        raise ValueError("out of range")
+                except (ValueError, TypeError):
+                    messagebox.showerror(
+                        _("Invalid"),
+                        _("{mat}: framing power must be a number from "
+                          "0 to {max}%.").format(
+                              mat=mat, max=f"{max_pct:.1f}"),
+                        parent=dlg)
+                    return
+                # Store as Grbl S (percent x 10). Kept in S rather than
+                # migrating the setting to percent because the existing
+                # key already holds S values: reinterpreting a stored 10
+                # as 10% would silently raise everyone's framing power
+                # tenfold, and a botched migration here burns material.
+                parsed[mat] = int(round(pct * 10))
+            self.settings["laser_framing_power_by_material"] = parsed
+            try:
+                save_settings(self.settings)
+            except Exception as e:
+                messagebox.showerror(_("Save Failed"), str(e), parent=dlg)
+                return
+            dlg.destroy()
+
+        btn_row = tk.Frame(dlg, bg=bg)
+        btn_row.pack(pady=(0, 15))
+        tk.Button(btn_row, text=_("OK"), command=_ok, width=10).pack(
+            side='left', padx=5)
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy,
+                  width=10).pack(side='left', padx=5)
+
     def _on_machine_inset_settings(self):
         """Small dialog: edit camera_polygon_inset_mm."""
         dlg = tk.Toplevel(self.root)
@@ -2517,9 +2794,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     return
                 placed, scrap_remaining = result
                 hole_dia = self.scrap_session['hole_dia']
+                # Labeled zones stand down in scrap mode: a zone is sized for
+                # a whole size's count, but a scrap only takes part of it, so
+                # the block would have to be re-sized per scrap.
+                zones = []
             else:
-                placed = nest_pads(pads, material, mat_w, mat_h, self.settings,
-                                    polygon=mat_polygon)
+                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings,
+                                                     polygon=mat_polygon)
                 if not can_all_pads_fit(pads, material, mat_w, mat_h,
                                         self.settings, polygon=mat_polygon):
                     messagebox.showerror(
@@ -2537,7 +2818,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # _frame_cut_scrap_advance), so nothing is consumed here.
             preview = NestingPreviewWindow(
                 self.root, {material: placed}, mat_w, mat_h,
-                polygon=mat_polygon, proceed_label=_("Continue →"))
+                polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones)
             if preview.result != "save":
                 return
 
@@ -2550,7 +2831,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             try:
                 generate_gcode_from_placed(
                     placed, material, mat_w, mat_h, tmp_path, hole_dia,
-                    self.settings, polygon=mat_polygon)
+                    self.settings, polygon=mat_polygon, zones=zones)
                 with open(tmp_path, 'r') as f:
                     gcode_text = f.read()
             finally:
@@ -2564,7 +2845,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # bbox rectangle overhangs every concave edge and tells the user
             # nothing about whether the cuts land on material. Fall back to
             # the bbox rectangle for rectangular jobs (no polygon loaded).
-            power_s = self.settings.get("laser_framing_power_s", 10)
+            from config import get_framing_power_s
+            power_s = get_framing_power_s(material, self.settings)
             feed = self.settings.get("laser_framing_feed", 2000)
             framing_lines = []
             # Frame the OUTLINE polygon (un-insetted) so the trace
@@ -2715,6 +2997,20 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
 
+                # Log it before the scrap bookkeeping below, which can
+                # sit on a modal dialog. Stopped and errored cuts are
+                # logged too, with their status — the material still
+                # went under the laser, and knowing a job was cut short
+                # is exactly what you want when pads come up missing.
+                # scrap_count is bumped by _frame_cut_scrap_advance, so
+                # the number this cut belongs to is one past it.
+                self._record_job(
+                    "laser", [material], pads, params,
+                    placed_count=len(placed),
+                    scrap_num=(self.scrap_session['scrap_count'] + 1
+                               if scrap_mode else None),
+                    status=cut_dlg._final_reason or "stopped")
+
                 # Scrap mode: commit this scrap (decrement remaining,
                 # offer continue/recapture) only once the cut has
                 # streamed to completion. A stopped or errored cut
@@ -2778,7 +3074,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             for material in supported_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
-                placed = nest_pads(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
                     size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
@@ -2788,11 +3084,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon)
+                        polygon=mat_polygon, zones=zones)
                     if preview.result != "save":
                         return
 
-                all_placed[material] = (placed, mat_w, mat_h, mat_polygon)
+                all_placed[material] = (placed, mat_w, mat_h, mat_polygon, zones)
 
             if save_dir is None:
                 save_dir = filedialog.askdirectory(title=_("Select Folder to Save G-code"), initialdir=self.settings.get("last_output_dir", ""))
@@ -2815,13 +3111,18 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             tk.Label(working_popup, text=_("Generating G-code..."), bg=popup_bg, font=("Helvetica", 12)).pack(expand=True)
             working_popup.update()
 
+            last_placed = 0
             try:
-                for material, (placed, mat_w, mat_h, mat_polygon) in all_placed.items():
+                for material, (placed, mat_w, mat_h, mat_polygon, zones) in all_placed.items():
                     filename = os.path.join(save_dir, f"{base}_{material}.gcode")
-                    generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings, polygon=mat_polygon)
+                    generate_gcode_from_placed(placed, material, mat_w, mat_h, filename, hole_dia, self.settings,
+                                               polygon=mat_polygon, zones=zones)
+                    last_placed = len(placed)
             finally:
                 working_popup.destroy()
 
+            self._record_job("gcode", list(all_placed.keys()), pads, params,
+                             placed_count=last_placed, save_dir=save_dir)
             save_settings(self.settings)
 
             # Auto-eject SD card if checkbox is checked and destination is removable
@@ -2892,6 +3193,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # Generate G-code from placed discs
             generate_gcode_from_placed(placed, material, mat_w, mat_h, filename,
                                        hole_dia, self.settings, polygon=mat_polygon)
+
+            self._record_job("gcode", [material], pads, params,
+                             placed_count=len(placed), scrap_num=scrap_num,
+                             save_dir=save_dir)
 
             # Update session with remaining pads
             self.scrap_session['remaining_pads'] = remaining

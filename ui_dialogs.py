@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import copy
+import datetime
 import math
 import random
 import json
@@ -10,7 +11,7 @@ import time
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, get_resonance_messages,
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets,
-    SIZING_PRESET_KEYS,
+    SIZING_PRESET_KEYS, normalize_sizing_preset,
     APP_VERSION, APP_BUILD_DATE,
     get_dart_settings_for_size, get_sizing_for_size,
 )
@@ -360,6 +361,14 @@ class OptionsWindow:
 
         self.engraving_on_var = tk.BooleanVar(value=self.settings["engraving_on"])
         self.compatibility_mode_var = tk.BooleanVar(value=self.settings.get("compatibility_mode", False))
+
+        # Labeled zones
+        self.zone_labels_enabled_var = tk.BooleanVar(
+            value=self.settings.get("zone_labels_enabled", False))
+        self.zone_label_min_var = tk.DoubleVar(
+            value=self.settings.get("zone_label_min_size", 7.0))
+        self.zone_label_max_var = tk.DoubleVar(
+            value=self.settings.get("zone_label_max_size", 12.5))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
 
@@ -413,6 +422,13 @@ class OptionsWindow:
         # the baseline after Load and Save Preset so post-load edits are
         # what register as dirty.
         self._baseline = self._capture_form_to_dict()
+
+        # Detect whether the starting values match a saved preset, so the
+        # dropdown names what's loaded instead of looking empty.
+        match = self._detect_active_preset()
+        if match is not None:
+            self.active_preset_name = match
+            self._refresh_sizing_preset_combo(select=match)
 
     # ------------------------------------------------------------------
     # Dirty / baseline tracking
@@ -1040,6 +1056,45 @@ class OptionsWindow:
 
         self._toggle_eng_placement_mode()
 
+        # --- Labeled Zones ---------------------------------------------
+        zone_frame = tk.LabelFrame(main_frame, text=_("Labeled Zones"), bg=DIALOG_BG, padx=5, pady=5)
+        zone_frame.pack(fill="x", pady=5)
+
+        zone_cb = tk.Checkbutton(
+            zone_frame, text=_("Group same-size pads into labeled zones"),
+            variable=self.zone_labels_enabled_var, bg=DIALOG_BG,
+            command=self._toggle_zone_fields)
+        zone_cb.pack(anchor='w')
+        add_tooltip(zone_cb,
+                    _("Cut small pads in bordered blocks, one per size, with "
+                      "the size engraved beside them. Small discs look alike "
+                      "and their own number is often too small to read, so "
+                      "the label goes on the sheet instead of the part."))
+
+        zone_row = tk.Frame(zone_frame, bg=DIALOG_BG)
+        zone_row.pack(anchor='w', pady=(4, 0))
+        self.zone_range_label = tk.Label(zone_row, text=_("Applies to pad sizes"), bg=DIALOG_BG)
+        self.zone_range_label.pack(side="left")
+        self.zone_min_entry = tk.Entry(zone_row, textvariable=self.zone_label_min_var, width=6)
+        self.zone_min_entry.pack(side="left", padx=4)
+        self.zone_to_label = tk.Label(zone_row, text=_("to"), bg=DIALOG_BG)
+        self.zone_to_label.pack(side="left")
+        self.zone_max_entry = tk.Entry(zone_row, textvariable=self.zone_label_max_var, width=6)
+        self.zone_max_entry.pack(side="left", padx=4)
+        self.zone_mm_label = tk.Label(zone_row, text=_("mm"), bg=DIALOG_BG)
+        self.zone_mm_label.pack(side="left")
+        add_tooltips(_("Only pads in this range are grouped into zones. "
+                       "Larger pads nest normally at full density."),
+                     self.zone_range_label, self.zone_min_entry,
+                     self.zone_to_label, self.zone_max_entry)
+
+        tk.Label(zone_frame,
+                 text=_("Zones use a grid, so they may increase material wastage."),
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
+                 justify="left").pack(anchor='w', pady=(3, 0))
+
+        self._toggle_zone_fields()
+
         export_frame = tk.LabelFrame(main_frame, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
         compat_cb = tk.Checkbutton(export_frame,
@@ -1050,6 +1105,12 @@ class OptionsWindow:
                     _("Write SVGs without explicit unit attributes. Turn on "
                     "if Inkscape (or other software) misinterprets the file "
                     "scale. LightBurn does not need this."))
+
+    def _toggle_zone_fields(self):
+        """Grey the zone size range when zones are off."""
+        state = "normal" if self.zone_labels_enabled_var.get() else "disabled"
+        for w in (self.zone_min_entry, self.zone_max_entry):
+            w.config(state=state)
 
     def _build_sizing_preset_section(self, parent):
         """Top-of-dialog preset controls: pick a preset, load, save, rename, delete."""
@@ -1611,6 +1672,11 @@ class OptionsWindow:
         # STAR ENGRAVING SAVE
         self.settings["dart_engraving_on"] = self.dart_engraving_on_var.get()
             
+        # Labeled zones
+        self.settings["zone_labels_enabled"] = self.zone_labels_enabled_var.get()
+        self.settings["zone_label_min_size"] = self.zone_label_min_var.get()
+        self.settings["zone_label_max_size"] = self.zone_label_max_var.get()
+
         # Export
         self.settings["compatibility_mode"] = self.compatibility_mode_var.get()
 
@@ -1665,6 +1731,12 @@ class OptionsWindow:
             # Revert Star Engraving
             self.dart_engraving_on_var.set(True)
 
+            # Labeled zones
+            self.zone_labels_enabled_var.set(DEFAULT_SETTINGS["zone_labels_enabled"])
+            self.zone_label_min_var.set(DEFAULT_SETTINGS["zone_label_min_size"])
+            self.zone_label_max_var.set(DEFAULT_SETTINGS["zone_label_max_size"])
+            self._toggle_zone_fields()
+
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
 
@@ -1705,6 +1777,10 @@ class OptionsWindow:
             },
             "engraving_placement_range_mode": self.eng_placement_range_mode_var.get(),
             "engraving_placement_ranges": copy.deepcopy(self.eng_placement_ranges),
+            # Labeled zones
+            "zone_labels_enabled": self.zone_labels_enabled_var.get(),
+            "zone_label_min_size": self.zone_label_min_var.get(),
+            "zone_label_max_size": self.zone_label_max_var.get(),
             # Export
             "compatibility_mode": self.compatibility_mode_var.get(),
         }
@@ -1763,8 +1839,38 @@ class OptionsWindow:
         self._refresh_eng_placement_range_combo()
         self._toggle_eng_placement_mode()
 
+        # Labeled zones
+        self.zone_labels_enabled_var.set(source.get("zone_labels_enabled", d["zone_labels_enabled"]))
+        self.zone_label_min_var.set(source.get("zone_label_min_size", d["zone_label_min_size"]))
+        self.zone_label_max_var.set(source.get("zone_label_max_size", d["zone_label_max_size"]))
+        self._toggle_zone_fields()
+
         # Export
         self.compatibility_mode_var.set(source.get("compatibility_mode", d.get("compatibility_mode", False)))
+
+    def _detect_active_preset(self):
+        """Find a saved preset whose values match the form's current snapshot.
+
+        Applied settings always come from a preset — Apply refuses to commit
+        edits that aren't captured in one — so on open this names the preset
+        the user is actually working in. Returns the name, or None when the
+        values match nothing saved (e.g. a hand-edited config).
+        """
+        if not self.sizing_presets:
+            return None
+        try:
+            snapshot = self._capture_form_to_dict()
+        except tk.TclError:
+            return None
+        # Sorted so an exact tie between two identical presets resolves the
+        # same way every open, and matches the dropdown's own ordering.
+        for name in sorted(self.sizing_presets):
+            # Normalize first: a preset saved before a key was added to
+            # SIZING_PRESET_KEYS is missing it, and would never match the
+            # snapshot on exact equality.
+            if normalize_sizing_preset(self.sizing_presets[name]) == snapshot:
+                return name
+        return None
 
     def _refresh_sizing_preset_combo(self, select=None):
         names = sorted(self.sizing_presets.keys())
@@ -1794,7 +1900,9 @@ class OptionsWindow:
                 parent=self.top,
             ):
                 return
-        self._apply_dict_to_form(self.sizing_presets[name])
+        # Normalize so an older preset fills its missing keys with defaults
+        # rather than leaving whatever was in the form from before.
+        self._apply_dict_to_form(normalize_sizing_preset(self.sizing_presets[name]))
         self.active_preset_name = name
         self._set_baseline_to_current()
 
@@ -5173,6 +5281,27 @@ class UserGuideWindow(tk.Toplevel):
                       "to optimize irregular scrap pieces."))
         self._blank()
 
+        self._h2(_("Job History"))
+        self._body(_("File > Job History lists every batch that made it to an output "
+                    "stage — SVG written, G-code written, or streamed to the "
+                    "laser. Newest first, with what you'd need to identify a job: "
+                    "date, output type, material, pad count, and sheet size."))
+        self._bullet(_("Select a row to see the full pad list, center hole, base "
+                      "filename, output folder, and which preset it came from"))
+        self._bullet(_("\"Load into Pad Maker\" puts the pad list, materials, sheet "
+                      "size, center hole and filename back into the form — handy "
+                      "for re-cutting a set you've done before"))
+        self._bullet(_("Loading a job leaves your sizing rules and G-code settings "
+                      "alone, and does not restore a custom polygon shape (a "
+                      "camera-captured scrap no longer exists to cut)"))
+        self._bullet(_("Laser runs that were stopped or errored are logged too, "
+                      "marked with a * — so missing pads have an explanation"))
+        self._bullet(_("In scrap mode each scrap is logged separately, numbered to "
+                      "match the session"))
+        self._bullet(_("Delete single entries or clear the whole log; it holds the "
+                      "last 300 jobs"))
+        self._blank()
+
         self._h2(_("Machine Integration (experimental, opt-in)"))
         self._body(_("File > Feature Set > \"Experimental: machine integration\" enables "
                     "direct USB serial control of a Grbl-compatible laser (Creality "
@@ -6062,6 +6191,364 @@ class PadNotesWindow(tk.Toplevel):
         self.destroy()
 
 
+class JobHistoryWindow(tk.Toplevel):
+    """Browse past pad jobs that reached an output stage.
+
+    `jobs` is the list from config.load_job_history() (newest first);
+    `save_history` is config.save_job_history, called after a delete so
+    the trimmed list hits disk. On close, `self.result` holds the job
+    the user chose to reload, or None.
+    """
+
+    # Column widths are measured from the content at refresh time rather
+    # than hardcoded: translated headers and values vary a lot in length
+    # ("Pads" is "Zapatillas" in Spanish), and a fixed width would either
+    # truncate them or leave the Sheet column ragged.
+    _MAX_COL = 30      # safety cap so one corrupt entry can't span the pane
+    _COL_GAP = 2
+
+    def __init__(self, parent, jobs, save_history):
+        super().__init__(parent)
+        self.title(_("Job History"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.grab_set()
+        self.geometry("820x560")
+        self.minsize(640, 420)
+
+        self.jobs = list(jobs)
+        self._save_history = save_history
+        self.result = None
+
+        tk.Label(self, text=_("Past Jobs"), bg=DIALOG_BG,
+                 font=("Helvetica", 14, "bold")).pack(pady=(12, 0))
+        tk.Label(self,
+                 text=_("Every batch that was written to file or sent to the "
+                        "laser, newest first.\n"
+                        "A * on the output means that laser run ended early."),
+                 bg=DIALOG_BG, font=("Helvetica", 9),
+                 justify="center").pack(pady=(2, 8))
+
+        # --- Job list ---
+        list_frame = tk.Frame(self, bg=DIALOG_BG)
+        list_frame.pack(fill="both", expand=True, padx=12)
+
+        self.header_label = tk.Label(list_frame, text="", bg=DIALOG_BG,
+                                     anchor="w", font=("Courier", 9, "bold"))
+        self.header_label.pack(fill="x")
+
+        inner = tk.Frame(list_frame, bg=DIALOG_BG)
+        inner.pack(fill="both", expand=True)
+        self.listbox = tk.Listbox(inner, font=("Courier", 9),
+                                  activestyle="dotbox", exportselection=False)
+        self.listbox.pack(side="left", fill="both", expand=True)
+        scroll = tk.Scrollbar(inner, command=self.listbox.yview)
+        scroll.pack(side="right", fill="y")
+        self.listbox.config(yscrollcommand=scroll.set)
+        self.listbox.bind("<<ListboxSelect>>", lambda e: self._on_select())
+        self.listbox.bind("<Double-Button-1>", lambda e: self.on_load())
+
+        # --- Detail pane ---
+        detail_frame = tk.Frame(self, bg=DIALOG_BG)
+        detail_frame.pack(fill="both", expand=True, padx=12, pady=(8, 0))
+        self.detail = tk.Text(detail_frame, height=9, wrap="word",
+                              font=("Helvetica", 9), bg=DIALOG_BG,
+                              relief="flat", padx=6, pady=4, state="disabled")
+        d_scroll = tk.Scrollbar(detail_frame, command=self.detail.yview)
+        self.detail.configure(yscrollcommand=d_scroll.set)
+        d_scroll.pack(side="right", fill="y")
+        self.detail.pack(side="left", fill="both", expand=True)
+
+        # --- Buttons ---
+        btns = tk.Frame(self, bg=DIALOG_BG)
+        btns.pack(fill="x", padx=12, pady=12)
+        self.load_btn = tk.Button(btns, text=_("Load into Pad Maker"),
+                                  command=self.on_load, state="disabled",
+                                  font=("Helvetica", 10, "bold"))
+        self.load_btn.pack(side="left")
+        self.delete_btn = tk.Button(btns, text=_("Delete Entry"),
+                                    command=self.on_delete, state="disabled")
+        self.delete_btn.pack(side="left", padx=6)
+        tk.Button(btns, text=_("Clear History"),
+                  command=self.on_clear).pack(side="left")
+        tk.Button(btns, text=_("Close"), command=self.destroy,
+                  width=10).pack(side="right")
+
+        add_tooltip(self.load_btn,
+                    _("Put this job's pad list, materials, sheet size and "
+                      "filename back into the form so you can run it again. "
+                      "Sizing rules and custom shapes aren't changed."))
+        add_tooltip(self.delete_btn, _("Remove just this job from the history."))
+
+        self._refresh_list()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.wait_window(self)
+
+    # ---------- formatting ----------
+
+    @staticmethod
+    def _when(job):
+        """'2026-08-01 14:22' from the stored ISO timestamp."""
+        raw = job.get("timestamp") or ""
+        try:
+            return datetime.datetime.fromisoformat(raw).strftime("%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            return raw[:16]
+
+    @staticmethod
+    def _output_label(job):
+        """Short output description, flagged when a laser run was cut short."""
+        out = job.get("output")
+        if out == "laser":
+            if job.get("status") not in (None, "complete"):
+                return _("Laser*")
+            return _("Laser")
+        if out == "gcode":
+            return _("G-code")
+        if out == "svg":
+            return _("SVG")
+        return out or "?"
+
+    @staticmethod
+    def _materials_label(job):
+        # Same display transform as the Materials checkboxes on the tab,
+        # so a Spanish user reads "Cuero" here and "Cuero" there.
+        mats = job.get("materials") or []
+        if not mats:
+            return "-"
+        return "+".join(_(m.replace('_', ' ').capitalize()) for m in mats)
+
+    def _materials_short(self, job):
+        """Material names for the list column, or a count once the join
+        gets unwieldy ('felt+card+leather+exact size' crowds out the rest
+        of the row, and the detail pane spells it out anyway)."""
+        mats = job.get("materials") or []
+        if len(mats) > 2:
+            return ngettext("{n} material", "{n} materials",
+                            len(mats)).format(n=len(mats))
+        return self._materials_label(job)
+
+    @staticmethod
+    def _pad_count(job):
+        """Discs on the sheet, falling back to what was asked for.
+
+        placed_count is the truth for a 'max' fill or a scrap subset;
+        older/partial entries may only have the requested total.
+        """
+        n = job.get("placed_count")
+        if not isinstance(n, int) or n <= 0:
+            n = job.get("requested_count")
+        return n if isinstance(n, int) else 0
+
+    def _sheet_label(self, job):
+        w, h, u = job.get("sheet_w"), job.get("sheet_h"), job.get("units")
+        if w and h:
+            return f"{w} x {h} {u or ''}".strip()
+        w_mm, h_mm = job.get("sheet_w_mm"), job.get("sheet_h_mm")
+        if isinstance(w_mm, (int, float)) and isinstance(h_mm, (int, float)):
+            return f"{w_mm:g} x {h_mm:g} mm"
+        return "-"
+
+    @staticmethod
+    def _headers():
+        return [_("When"), _("Output"), _("Material"), _("Pads"), _("Sheet")]
+
+    def _cells(self, job):
+        """The five column values for one job, unpadded."""
+        pads = self._pad_count(job)
+        pad_txt = ngettext("{n} pad", "{n} pads", pads).format(n=pads)
+        if job.get("scrap_num"):
+            pad_txt += f" #{job['scrap_num']}"
+        return [
+            self._when(job),
+            self._output_label(job),
+            self._materials_short(job),
+            pad_txt,
+            self._sheet_label(job),
+        ]
+
+    def _column_widths(self, jobs):
+        """Width per column: the widest of header and values, capped."""
+        rows = [self._headers()] + [self._cells(j) for j in jobs]
+        return [min(max(len(r[i]) for r in rows) + self._COL_GAP, self._MAX_COL)
+                for i in range(len(self._headers()))]
+
+    def _join(self, cells, widths):
+        """Pad each cell to its column width; the last one runs free."""
+        out = []
+        for i, cell in enumerate(cells):
+            cell = str(cell)
+            if i == len(cells) - 1:
+                out.append(cell)
+                break
+            if len(cell) >= widths[i]:
+                cell = cell[:widths[i] - 1]
+            out.append(cell.ljust(widths[i]))
+        return "".join(out)
+
+    def _row_text(self, job, widths=None):
+        cells = self._cells(job)
+        if widths is None:
+            widths = self._column_widths([job])
+        return self._join(cells, widths)
+
+    # ---------- list / detail ----------
+
+    def _refresh_list(self, keep_index=None):
+        self.listbox.delete(0, tk.END)
+        widths = self._column_widths(self.jobs)
+        self.header_label.config(text=self._join(self._headers(), widths))
+
+        if not self.jobs:
+            self.listbox.insert(tk.END, _("  (no jobs yet — generate or cut "
+                                          "something and it'll show up here)"))
+            self.listbox.config(state="disabled")
+            self._set_detail("")
+            self.load_btn.config(state="disabled")
+            self.delete_btn.config(state="disabled")
+            return
+
+        self.listbox.config(state="normal")
+        for job in self.jobs:
+            self.listbox.insert(tk.END, self._row_text(job, widths))
+
+        if keep_index is not None and self.jobs:
+            idx = min(keep_index, len(self.jobs) - 1)
+            self.listbox.selection_set(idx)
+            self.listbox.see(idx)
+        self._on_select()
+
+    def _selected_job(self):
+        if not self.jobs:
+            return None
+        sel = self.listbox.curselection()
+        if not sel or sel[0] >= len(self.jobs):
+            return None
+        return self.jobs[sel[0]]
+
+    def _set_detail(self, text):
+        self.detail.config(state="normal")
+        self.detail.delete("1.0", tk.END)
+        self.detail.insert("1.0", text)
+        self.detail.config(state="disabled")
+
+    def _on_select(self):
+        job = self._selected_job()
+        state = "normal" if job else "disabled"
+        self.load_btn.config(state=state)
+        self.delete_btn.config(state=state)
+        self._set_detail(self._detail_text(job) if job else "")
+
+    def _detail_text(self, job):
+        lines = []
+        out = job.get("output")
+        if out == "laser":
+            what = _("Sent to the laser")
+            status = job.get("status")
+            if status and status != "complete":
+                what += _(" — run ended early ({status})").format(status=status)
+        elif out == "gcode":
+            what = _("G-code files written")
+        elif out == "svg":
+            what = _("SVG files written")
+        else:
+            what = str(out)
+        lines.append(f"{self._when(job)}  —  {what}")
+
+        if job.get("scrap_num"):
+            lines.append(_("Scrap piece #{n} of a scrap-mode session").format(
+                n=job["scrap_num"]))
+
+        lines.append(_("Material: {m}").format(m=self._materials_label(job)))
+
+        pads = self._pad_count(job)
+        pad_line = ngettext("{n} pad on the sheet", "{n} pads on the sheet",
+                            pads).format(n=pads)
+        if job.get("has_max"):
+            pad_line += _(" (a 'max' line filled the leftover space)")
+        lines.append(pad_line)
+
+        sheet = _("Sheet: {s}").format(s=self._sheet_label(job))
+        if job.get("card_paper"):
+            sheet += _(" (card used the paper size setting)")
+        lines.append(sheet)
+
+        hole = job.get("hole_option")
+        if hole == "Custom":
+            lines.append(_("Center hole: {v}mm (custom)").format(
+                v=job.get("custom_hole", "?")))
+        elif hole:
+            lines.append(_("Center hole: {v}").format(v=hole))
+
+        if job.get("base"):
+            lines.append(_("Filename: {b}").format(b=job["base"]))
+        if job.get("save_dir"):
+            lines.append(_("Saved to: {d}").format(d=job["save_dir"]))
+        if job.get("preset_name"):
+            lines.append(_("From preset: [{lib}] {name}").format(
+                lib=job.get("preset_library", "?"), name=job["preset_name"]))
+        if job.get("polygon_vertices"):
+            lines.append(ngettext(
+                "Custom shape: {n} point (not restored on load)",
+                "Custom shape: {n} points (not restored on load)",
+                job["polygon_vertices"]).format(n=job["polygon_vertices"]))
+
+        pad_text = job.get("pad_text")
+        if pad_text:
+            lines.append("")
+            # One comma-joined run rather than one line per size — a
+            # 20-size tenor set would otherwise push everything else out
+            # of the pane. The Text widget word-wraps it.
+            entries = [ln.strip() for ln in pad_text.splitlines() if ln.strip()]
+            lines.append(_("Pad list: {list}").format(list=", ".join(entries)))
+
+        return "\n".join(lines)
+
+    # ---------- actions ----------
+
+    def on_load(self):
+        job = self._selected_job()
+        if not job:
+            return
+        if not messagebox.askyesno(
+                _("Load Job"),
+                _("Replace what's currently in the Pad Maker form with this "
+                  "job?\n\n{when} — {mats}\n\nYour sizing rules and G-code "
+                  "settings stay as they are.").format(
+                      when=self._when(job),
+                      mats=self._materials_label(job))):
+            return
+        self.result = job
+        self.destroy()
+
+    def on_delete(self):
+        job = self._selected_job()
+        if not job:
+            return
+        idx = self.listbox.curselection()[0]
+        if not messagebox.askyesno(
+                _("Delete Entry"),
+                _("Remove this job from the history?\n\n"
+                  "{row}").format(row=self._row_text(job).strip())):
+            return
+        del self.jobs[idx]
+        self._save_history(self.jobs)
+        self._refresh_list(keep_index=idx)
+
+    def on_clear(self):
+        if not self.jobs:
+            return
+        if not messagebox.askyesno(
+                _("Clear History"),
+                _("Delete all {n} jobs from the history?\n\n"
+                  "This only clears the log — your presets and files are "
+                  "untouched.").format(n=len(self.jobs))):
+            return
+        self.jobs = []
+        self._save_history(self.jobs)
+        self._refresh_list()
+
+
 # Material colors for preview
 _PREVIEW_COLORS = {
     'felt': '#4488CC',
@@ -6082,7 +6569,7 @@ class NestingPreviewWindow(tk.Toplevel):
     """
 
     def __init__(self, parent, placements, width_mm, height_mm, polygon=None,
-                 proceed_label=None):
+                 proceed_label=None, zones=None):
         """
         Args:
             parent: Parent tk widget
@@ -6093,6 +6580,8 @@ class NestingPreviewWindow(tk.Toplevel):
             proceed_label: Text for the confirm button (default "Save Files").
                 Frame & Cut passes "Continue →" since it streams to the
                 laser rather than writing files. result is "save" either way.
+            zones: Optional positioned zone dicts from nest_with_zones, drawn
+                as bordered labeled blocks so the preview matches the cut.
         """
         super().__init__(parent)
         self.title(_("Nesting Preview"))
@@ -6101,6 +6590,7 @@ class NestingPreviewWindow(tk.Toplevel):
         self.grab_set()
 
         self.result = None
+        self._zones = list(zones or [])
 
         # First-run tutorial (persisted in settings via parent app)
         app = getattr(parent, 'settings', None) if not isinstance(parent, dict) else None
@@ -6246,6 +6736,20 @@ class NestingPreviewWindow(tk.Toplevel):
         placed = self._placements.get(material, [])
         color = _PREVIEW_COLORS.get(material, '#888888')
         fill = self._lighten(color, 0.7)
+
+        # Zone borders and labels go under the pads, matching the cut order.
+        for zone in self._zones:
+            zx = offset_x + zone['x'] * scale
+            zy = offset_y + zone['y'] * scale
+            zw = zone['w'] * scale
+            zh = zone['h'] * scale
+            cv.create_rectangle(zx, zy, zx + zw, zy + zh,
+                                outline="#B0782A", width=1, fill="#FFFDF5")
+            lx = zx + zw / 2
+            ly = zy + (zone['border'] + zone['font'] / 2) * scale
+            label_px = max(7, min(14, int(zone['font'] * scale)))
+            cv.create_text(lx, ly, text=zone['label'], fill="#B0782A",
+                           font=("Helvetica", label_px, "bold"))
 
         for pad_size, cx, cy, r in placed:
             sx = offset_x + cx * scale
@@ -7164,9 +7668,12 @@ class CameraCalibrationDialog(tk.Toplevel):
             oy = hy - border - label_h - board_h / 2.0
             fx = ox + board_w + 2 * border
             fy = oy + board_h + 2 * border + label_h
+            from config import get_framing_power_s
             return generate_framing_gcode(
                 ox, oy, fx, fy,
-                power_s=self._settings.get("laser_framing_power_s", 10),
+                # The calibration card is engraved on basswood, so frame
+                # at basswood's power rather than the global fallback.
+                power_s=get_framing_power_s('basswood', self._settings),
                 feed=self._settings.get("laser_framing_feed", 2000),
                 return_to_origin=False,  # absolute coords; don't send
                                           # head to machine (0, 0) (=home
@@ -8730,51 +9237,41 @@ class FalconRunDialog(tk.Toplevel):
             self._finished = True
             self._final_reason = "error"
 
-    def _is_door_open(self):
-        """True if Grbl currently reports the safety door is open.
+    def _remind_lid_closed(self):
+        """Plain OK-only popup shown once, before the cut.
 
-        Reads the cached status (set by the on_status callbacks at
-        STATUS_POLL_HZ during streaming) — no synchronous get_status
-        call, so this stays non-blocking and doesn't race the
-        streamer for the serial port. Cache is at most ~250ms stale
-        during active framing, which is fine for a "is the door open
-        right now?" confirmation.
+        Not a yes/no gate; there's nothing to decline, clicking the
+        (only) button is what lets the caller proceed. An open lid
+        wedges the stream because Grbl blocks motion in Door state (no
+        error returned, just an unresponsive controller), which costs a
+        laser power cycle AND an app restart to recover.
+
+        It used to fire at three boundaries — Start Frame, Cut, and Done
+        during a framing-only loop. That was two too many: framing runs
+        at low power and the framing "Done" path only lets the current
+        pass finish, so neither is about to start burning. Asking twice
+        in one Frame & Cut run trained the user to click it away, which
+        defeats the point. Cut is the boundary that matters.
+
+        It also used to try to detect the door via Grbl status (Door
+        state or a Pn: 'D' pin) and only ask when it couldn't tell.
+        Retired after live-hardware testing on 2026-08-05 found the
+        Falcon2 Pro 40W (ESP32-S3 controller) never sends a Pn: field at
+        all, lid open or closed — so detection was unverifiable across
+        Falcon models and dead code on the one machine tested. Same
+        reminder every time is simpler and honest about what the app
+        knows.
         """
-        st = self._sender.status or {}
-        if st.get('state') == 'Door':
-            return True
-        # Grbl 1.1 Pn: field reports active input pins. 'D' = door.
-        pins = st.get('pins') or ''
-        if 'D' in pins:
-            return True
-        return False
-
-    def _confirm_door_closed(self):
-        """If the door is open, pop a confirmation. Returns True if it
-        is safe to proceed (door closed OR user explicitly accepted
-        the warning), False if the user backed out.
-
-        Used at every "leaving the framing dialog into something that
-        fires the laser" boundary — without this, an open lid silently
-        wedges the next stream because Grbl blocks motion in Door
-        state (no error returned, just an unresponsive controller)."""
-        if not self._is_door_open():
-            return True
-        return messagebox.askyesno(
-            _("Lid Appears Open"),
-            _("The laser is reporting that the safety lid is open. "
-              "Grbl blocks motion in Door state, so the next step "
-              "won't fire until the lid is closed.\n\n"
-              "Close the lid, then click Yes to continue. Click No "
-              "to stay in framing."),
+        messagebox.showinfo(
+            _("Lid Closed?"),
+            _("Is the lid closed?"),
             parent=self)
 
     def _on_cut_clicked(self):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
         request; the current pass will be allowed to finish, then the
         loop exits cleanly with reason='complete'."""
-        if not self._confirm_door_closed():
-            return
+        self._remind_lid_closed()
         self._cut_requested = True
         try:
             self._cut_btn.config(state='disabled',
@@ -8922,7 +9419,11 @@ class FalconRunDialog(tk.Toplevel):
         _final_reason is already 'complete' from _on_done — leave it
         alone and just destroy so the caller proceeds. Routing this
         through _on_close_window would cancel via the jog-only mode
-        path."""
+        path.
+
+        No lid reminder here: advancing from the jog dialog starts
+        framing, which runs at low power. The reminder belongs on the
+        cut."""
         self.destroy()
 
     def _on_stop_clicked(self):
@@ -8931,8 +9432,10 @@ class FalconRunDialog(tk.Toplevel):
             # step" path (e.g. the "Start Frame →" button on the jog-
             # to-position dialog). _final_reason is already "complete"
             # from _on_done — leave it alone and just destroy so the
-            # caller proceeds to the next step.
-            self.destroy()
+            # caller proceeds to the next step. Delegate rather than
+            # destroy() directly so the cover check can't be skipped
+            # if the _on_done button rewire ever failed.
+            self._on_advance_clicked()
             return
         # Graceful "Done" path (framing context, no cut button): let
         # the current pass finish — its trailing G0 moves the head
@@ -8940,8 +9443,8 @@ class FalconRunDialog(tk.Toplevel):
         # reset. Same mechanism as the Cut button uses.
         graceful = self._loop and not self._show_cut_button
         if graceful:
-            if not self._confirm_door_closed():
-                return
+            # No lid reminder: this only lets the in-flight framing pass
+            # finish and then exits. Nothing new is about to fire.
             self._cut_requested = True
             try:
                 self._stop_btn.config(state='disabled',

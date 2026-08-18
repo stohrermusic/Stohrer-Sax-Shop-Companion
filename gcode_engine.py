@@ -861,7 +861,7 @@ def can_generate_gcode(material):
 
 
 def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
-                                hole_dia, settings, polygon=None):
+                                hole_dia, settings, polygon=None, zones=None):
     """
     Generate G-code file from pre-computed placed discs.
 
@@ -877,12 +877,15 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         settings: App settings dictionary
         polygon: Optional polygon shape; when provided, its bounding box height
                  is used for Y-flip instead of sheet_height_mm
+        zones: Optional list of positioned zone dicts from nest_with_zones.
+            Borders and labels are engraved (never cut), so the sheet stays
+            in one piece and no part can drop out early.
     """
     from svg_engine import get_felt_thickness_mm
     from config import (get_dart_settings_for_size, get_sizing_for_size,
                         get_engraving_settings_for_size, get_engraving_placement_for_size)
 
-    if not placed:
+    if not placed and not zones:
         return
 
     # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom
@@ -1099,6 +1102,35 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         'leather': ('C05', 'C03', 'C02'),
     }
     eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
+
+    # Zone borders + labels go down first, as one engraving pass, so the
+    # sheet is labeled before any part is cut loose. They're not per-disc,
+    # so they sit outside both grouping modes.
+    zone_strokes = []
+    for zone in (zones or []):
+        font = zone['font']
+        # SVG Y-down -> G-code Y-up, so every zone outline flips vertically.
+        x, y, w, h = zone['x'], zone['y'], zone['w'], zone['h']
+        y_top = flip_height - y
+        y_bot = flip_height - (y + h)
+        zone_strokes.append([(x, y_bot), (x + w, y_bot), (x + w, y_top),
+                             (x, y_top), (x, y_bot)])
+        label_cx = x + w / 2
+        # get_text_strokes/get_filled_text_strokes are center-anchored, so
+        # this is the visual center, matching the SVG placement.
+        label_cy = flip_height - (y + zone['border'] + font / 2)
+        if engraving_mode == "filled":
+            zone_strokes.extend(get_filled_text_strokes(
+                zone['label'], font, label_cx, label_cy, filled_line_spacing))
+        else:
+            zone_strokes.extend(get_text_strokes(
+                zone['label'], font, label_cx, label_cy))
+
+    if zone_strokes:
+        gcode_lines.extend(generate_gcode_layer(
+            zone_strokes, engraving_speed, engraving_power, eng_layer,
+            overscan_mm=overscan_mm, air_assist=air_assist_engraving,
+            passes=engraving_passes))
 
     if cut_grouping == "pad":
         # Per-pad grouping: engrave + hole + cut for each disc

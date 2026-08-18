@@ -595,10 +595,23 @@ class LibraryFeaturesMixin:
         title_label = tk.Label(main_frame, text=_("Screw & Rod Specifications"), font=("Helvetica", 16, "bold"), bg=self.root.cget('bg'))
         title_label.pack(pady=(0, 15))
 
+        # Getting-started hint: shown only when the library is empty (e.g. a fresh
+        # install has no screw_specs.json yet). Packed/unpacked by update_screw_maker_list().
+        self.screw_empty_hint = tk.Label(
+            main_frame,
+            text=_("No specs loaded yet. Use File > Import Matt's Specs to download the reference "
+                   "library from stohrermusic.com, or choose (add new) below to enter your own."),
+            font=("Helvetica", 11, "italic"),
+            bg=self.root.cget('bg'),
+            wraplength=640,
+            justify="center",
+        )
+
         # --- Controls Frame ---
         controls_frame = tk.Frame(main_frame, bg=self.root.cget('bg'))
         controls_frame.pack(fill='x', pady=5)
         controls_frame.columnconfigure(1, weight=1)
+        self.screw_controls_frame = controls_frame
 
         # Maker Dropdown
         tk.Label(controls_frame, text=_("Manufacturer:"), font=("Helvetica", 12), bg=self.root.cget('bg')).grid(row=0, column=0, sticky='e', padx=10, pady=5)
@@ -686,6 +699,15 @@ class LibraryFeaturesMixin:
         makers = sorted(list(self.screw_data.keys()))
         # Add the "(add new)" option at the very top
         self.screw_maker_dropdown['values'] = ["(add new)"] + makers
+
+        # Show the getting-started hint only while the library is empty. Guarded with
+        # hasattr because this can be called after an import even when the Screw Specs
+        # tab was never built (it's a hideable tab).
+        if hasattr(self, "screw_empty_hint"):
+            if makers:
+                self.screw_empty_hint.pack_forget()
+            else:
+                self.screw_empty_hint.pack(before=self.screw_controls_frame, pady=(0, 10))
         
     def on_screw_maker_change(self, event=None):
         maker = self.screw_maker_var.get()
