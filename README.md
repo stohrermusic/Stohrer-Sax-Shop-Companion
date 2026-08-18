@@ -26,6 +26,7 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
   - Preview, edge bias, and custom polygons all work together in scrap mode
   - **Large-batch optimization** (≥75 pads): opt-in multistart greedy that tries multiple disc orderings per scrap and keeps the best result. Typically fits 5–15% more pads on dense batches.
 - Max fill mode — use `18.0 x max` to fill remaining space with a size
+- **Labeled Zones (beta)** — optionally cut small pads (7.0–12.5 mm by default) in bordered blocks, one per size, with the size engraved on the sheet next to them. A 7.0 and a 7.5 disc are indistinguishable once they're off the laser, and the number engraved on the pad itself is too small to read — so the label goes on the waste instead of the part. Off by default; it trades some material for legibility.
 
 #### Sizing & Engraving
 - Per-size-range settings for sizing rules, dart/star cuts, engraving, and placement
@@ -45,6 +46,7 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Notes field for annotating presets
 - Import Matt's Pad Sets from [stohrermusic.com](https://www.stohrermusic.com/articles/pad-sets-library/)
 - Import/export for sharing with colleagues
+- **Job History** (File > Job History) — a log of every batch that reached an output stage, with its pad list, materials, and sheet size. Load a past job back into the form to re-cut it.
 
 #### Machine Integration (experimental, opt-in)
 
@@ -57,7 +59,7 @@ Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W t
 - **Live camera overlay** in the polygon-draw dialog — trace your scrap by eye on top of the live camera image at 1:1 scale.
 - **Frame & Cut** — a third button next to Generate SVG / Generate G-code. Generates the G-code in memory, positions the head (Home Laser, jog buttons, optional "Try Auto Locate"), low-power framing pass for verification, then streams the cut. Pause / Resume / Stop in real time.
 - **Inset Margin** — adds a safety margin to placement on scraps so you don't accidentally clip an edge. Frame still traces the actual scrap outline; cuts respect the safety boundary.
-- **Machine menu** (Options > Machine): Home Laser, Test Connection, Clear Errors, Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin.
+- **Machine menu** (Options > Machine): Home Laser, Test Connection, Clear Errors, Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin, Framing Power.
 
 ### Key Height Library
 - Store and organize key height measurements by instrument
