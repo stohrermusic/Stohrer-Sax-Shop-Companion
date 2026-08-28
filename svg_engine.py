@@ -1057,39 +1057,6 @@ def _grid_positions(cols, rows, qty, disc_d, gutter_mm, left, top):
     return out
 
 
-def _place_grid_in_polygon(polygon, qty, disc_d, gutter_mm, clearance_mm,
-                           y_from, y_to, label_h):
-    """Find somewhere in the polygon (within y_from..y_to) for a compact
-    grid of qty equal discs.
-
-    Returns (positions, cols, rows, block_top, block_bottom) or None.
-    Shapes are tried most-block-like first, so an awkward scrap degrades
-    to a flatter grid instead of refusing the size entirely.
-    """
-    min_x, _min_y, max_x, _max_y = _polygon_bbox(polygon)
-    step = ZONE_GRID_SEARCH_STEP_MM
-
-    for cols, rows in zone_grid_candidates(qty):
-        block_w = cols * disc_d + (cols - 1) * gutter_mm
-        block_h = rows * disc_d + (rows - 1) * gutter_mm
-        if block_w > (max_x - min_x) or (block_h + label_h) > (y_to - y_from):
-            continue
-
-        top = y_from + label_h
-        while top + block_h <= y_to + 1e-9:
-            left = min_x
-            while left + block_w <= max_x + 1e-9:
-                pts = _grid_positions(cols, rows, qty, disc_d, gutter_mm,
-                                      left, top)
-                if all(_circle_fits_in_polygon(px, py, disc_d / 2, polygon,
-                                               clearance_mm)
-                       for px, py in pts):
-                    return pts, cols, rows, top - label_h, top + block_h
-                left += step
-            top += step
-    return None
-
-
 def _zone_box(qty, disc_d, gutter_mm, border_mm, font_mm, label_text,
               shape=None):
     """Full zone geometry for qty equal discs: (cols, rows, w, h, inner_w).
@@ -1204,9 +1171,6 @@ def _shelf_pack_zones(specs, width_mm, height_mm, group_gap=None):
             else:
                 dropped.append(spec)
                 continue
-        if spec['w'] > usable_w:
-            dropped.append(spec)
-            continue
         for shelf in shelves:
             need = shelf[2] + group_gap + spec['w']
             if need <= usable_w:
@@ -1405,7 +1369,6 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
     placed = []
     zones = []
     taken = []          # placed group rects, for overlap rejection
-    unplaced = []
 
     for spec in specs:
         disc_d = spec['disc_d']
@@ -1454,7 +1417,8 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
                 break
 
         if spot is None:
-            unplaced.append({'size': spec['size'], 'qty': qty})
+            # Not nested loose (see nest_with_zones); the shortfall
+            # surfaces through the wanted/got counting there.
             continue
 
         pts, cols, rows, bx, by, bw, bh = spot
@@ -1564,7 +1528,12 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
                                           free_h, settings, spacing_mm)
         placed.extend(free_placed)
     else:
-        fp = ft = 0
+        # No room above the band (it can consume the sheet exactly).
+        # Nothing free is placed, but the fixed quantities still count
+        # toward the total so can_all_pads_fit surfaces the shortfall
+        # instead of the pads silently vanishing from both tallies.
+        fp = 0
+        ft = sum(p['qty'] for p in free_pads if p['qty'] != 'max')
 
     return placed, zones, fp + zoned_total, ft + zoned_total + dropped_qty
 
@@ -1764,7 +1733,9 @@ def nest_pads_with_zones(pads, material, width_mm, height_mm, settings, polygon=
 
     Preferred entry point for the preview + generate flow, since the zone
     rectangles have to survive all the way to the renderers. `zones` is
-    empty whenever labeled zones are off or the sheet is a custom polygon.
+    empty whenever labeled zones are off; both sheet types emit them when
+    enabled (shelf-packed band on rectangles, first-fit groups in a
+    traced polygon). Scrap mode passes zones=[] at its own call site.
     """
     placed, zones, _, _ = nest_with_zones(pads, material, width_mm, height_mm,
                                           settings, polygon=polygon)
