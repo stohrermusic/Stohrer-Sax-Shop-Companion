@@ -16,6 +16,7 @@ from config import (
     get_dart_settings_for_size, get_sizing_for_size,
 )
 from svg_engine import (
+    placed_disc_area,
     get_disc_diameter, get_felt_thickness_mm, _wave_value,
     feeds_speeds_label_geometry,
 )
@@ -5254,8 +5255,9 @@ class UserGuideWindow(tk.Toplevel):
                       "from camera (when calibrated)."))
         self._bullet(_("Files named _scrap1, _scrap2, etc."))
         self._bullet(_("With 75+ pads, an opt-in popup offers \"large-batch optimization\": "
-                      "the nester tries multiple disc orderings per scrap and keeps the best "
-                      "result. Costs extra compute, fits more pads."))
+                      "the nester tries multiple disc orderings per scrap and keeps the one "
+                      "that uses the most material. Costs extra compute; never uses less of "
+                      "a scrap than the standard nest."))
         self._blank()
 
         self._h2(_("Edge Bias"))
@@ -6789,7 +6791,7 @@ class NestingPreviewWindow(tk.Toplevel):
                 area -= pts[j][0] * pts[i][1]
             sheet_area = abs(area) / 2
 
-        pad_area = sum(3.14159 * r * r for _, _, _, r in placed)
+        pad_area = placed_disc_area(placed)   # same figure the optimizer ranks by
         usage_pct = pad_area / sheet_area * 100 if sheet_area > 0 else 0
 
         cv.create_text(cw - margin, ch - 5,

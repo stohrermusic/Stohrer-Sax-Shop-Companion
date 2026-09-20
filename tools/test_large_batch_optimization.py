@@ -2,8 +2,10 @@
 Sanity tests for the scrap-mode large-batch optimizer.
 
 Verifies that:
-  - try_nest_partial(optimize=True) returns same or more pads than the
-    default greedy on representative large pad sets.
+  - try_nest_partial(optimize=True) uses at least as much material as
+    the default greedy on representative large pad sets. It ranks by
+    disc area (the preview's "% used"), NOT pad count — count picked
+    smallest-first and lost 10-15% of the sheet (2026-09-20).
   - Reproducible across runs (seeded RNG).
   - Doesn't crash on edge cases (empty pads, tiny scraps, polygon shapes).
 """
@@ -14,7 +16,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from svg_engine import try_nest_partial, _multistart_nest  # noqa: E402
+from svg_engine import (  # noqa: E402
+    try_nest_partial, _multistart_nest, _nest_discs, get_disc_diameter,
+    placed_disc_area,
+)
 from config import DEFAULT_SETTINGS  # noqa: E402
 
 passed = 0
@@ -57,8 +62,8 @@ print(f"Optimized: {len(placed_opt)} placed in {t_opt:.2f}s")
 print(f"Improvement: +{len(placed_opt) - len(placed_default)} pads "
       f"({100 * (len(placed_opt) - len(placed_default)) / max(len(placed_default), 1):.1f}%)")
 
-check("optimize=True placed >= default",
-       len(placed_opt) >= len(placed_default))
+check("optimize=True uses at least as much material as default",
+      placed_disc_area(placed_opt) >= placed_disc_area(placed_default) - 1e-9)
 check("optimize=True placed at least something", any_opt)
 check("optimize=True returned consistent remaining count",
        sum(p['qty'] for p in remaining_opt) == 100 - len(placed_opt))
@@ -67,7 +72,7 @@ check("optimize=True returned consistent remaining count",
 placed_opt2, _, _ = try_nest_partial(
     large_pads, 'felt', 400.0, 415.0, settings, optimize=True)
 check("optimize=True is reproducible (same RNG seed)",
-       len(placed_opt) == len(placed_opt2))
+      placed_opt == placed_opt2)
 
 # Tight case: pad set DENSER than what fits easily on the sheet.
 # This is where multistart actually pays off vs. default greedy.
@@ -87,8 +92,8 @@ print("\nDense case (75 pads on 250x250mm):")
 print(f"  default:   {len(placed_dense_d)} placed in {t_dd:.2f}s")
 print(f"  optimized: {len(placed_dense_o)} placed in {t_do:.2f}s")
 print(f"  delta: +{len(placed_dense_o) - len(placed_dense_d)} pads")
-check("dense case: optimize >= default",
-       len(placed_dense_o) >= len(placed_dense_d))
+check("dense case: optimize uses >= material of default",
+      placed_disc_area(placed_dense_o) >= placed_disc_area(placed_dense_d) - 1e-9)
 
 # Polygon path
 A4 = [(0.0, 0.0), (210.0, 0.0), (210.0, 297.0), (0.0, 297.0)]
@@ -101,8 +106,38 @@ placed_poly_opt, _, _ = try_nest_partial(
 
 print(f"\nA4 polygon default: {len(placed_poly_default)} placed")
 print(f"A4 polygon optimized: {len(placed_poly_opt)} placed")
-check("polygon optimize=True placed >= polygon default",
-       len(placed_poly_opt) >= len(placed_poly_default))
+check("polygon optimize=True uses >= material of polygon default",
+      placed_disc_area(placed_poly_opt) >= placed_disc_area(placed_poly_default) - 1e-9)
+
+# ---------------------------------------------------------------------
+# Count and usage disagree. On this leather scrap smallest-first places
+# the most pads but by a wide margin the least material; largest-first
+# places fewer, bigger discs. The optimizer used to pick by count and
+# handed back the worse layout (Matt saw 63% vs 70% on a real leather
+# scrap, 2026-09-20). It must pick by usage, the number the preview
+# prints, so it can never do worse than the standard nest.
+# ---------------------------------------------------------------------
+mixed_pads = [{'size': 9.0, 'qty': 30}, {'size': 30.0, 'qty': 8}, {'size': 45.0, 'qty': 4}]
+SCRAP = [(0.0, 0.0), (160.0, 0.0), (160.0, 120.0), (0.0, 120.0)]
+_base = [(p['size'], get_disc_diameter(p['size'], 'leather', settings))
+         for p in mixed_pads for _ in range(p['qty'])]
+by_count = _nest_discs(mixed_pads, 'leather', 160.0, 120.0, settings, polygon=SCRAP,
+                       _discs_override=sorted(_base, key=lambda d: d[1]))[0]
+standard, _, _ = try_nest_partial(mixed_pads, 'leather', 160.0, 120.0, settings,
+                                  polygon=SCRAP, optimize=False)
+chosen, _, _ = try_nest_partial(mixed_pads, 'leather', 160.0, 120.0, settings,
+                                polygon=SCRAP, optimize=True)
+_sheet = 160.0 * 120.0
+print(f"\nMixed leather scrap: smallest-first {len(by_count)} pads / "
+      f"{100 * placed_disc_area(by_count) / _sheet:.1f}% used; standard {len(standard)} pads / "
+      f"{100 * placed_disc_area(standard) / _sheet:.1f}%; optimizer {len(chosen)} pads / "
+      f"{100 * placed_disc_area(chosen) / _sheet:.1f}%")
+check("fixture is a real disagreement: smallest-first has more pads but less material",
+      len(by_count) > len(standard) and placed_disc_area(by_count) < placed_disc_area(standard))
+check("optimizer never uses less material than the standard nest",
+      placed_disc_area(chosen) >= placed_disc_area(standard) - 1e-9)
+check("optimizer did not fall for the pad count",
+      placed_disc_area(chosen) > placed_disc_area(by_count))
 
 # Edge case: small pad set (below threshold) — optimization still works
 # but doesn't add value

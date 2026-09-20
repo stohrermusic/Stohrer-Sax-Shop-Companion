@@ -1905,10 +1905,10 @@ def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None
         settings: App settings dict
         polygon: Optional polygon coordinates for irregular shapes
         optimize: If True, run multistart greedy — try several disc
-            orderings and return the best result. Costs ~5x compute
-            (typically 5-30s for ≥75 pads) but often fits 5-15% more
-            pads per scrap. Used by the "large batch optimization"
-            opt-in flow in scrap mode.
+            orderings and keep the layout that uses the most material,
+            never less than the standard nest. Costs ~5x compute
+            (typically 5-30s for ≥75 pads). Used by the "large batch
+            optimization" opt-in flow in scrap mode.
 
     Returns:
         (placed, remaining_pads, any_placed)
@@ -1928,9 +1928,19 @@ def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None
     return placed, remaining, any_placed
 
 
+def placed_disc_area(placed):
+    """Total disc area of a placement, in mm².
+
+    This is the numerator of the "% used" figure the nesting preview
+    prints, so anything that ranks layouts ranks by this — not by pad
+    count, which rewards many small discs over a well-used sheet.
+    """
+    return sum(math.pi * r * r for _, _, _, r in placed)
+
+
 def _multistart_nest(pads, material, width_mm, height_mm, settings, polygon=None):
     """Multistart greedy nesting: try the default ordering plus several
-    alternatives, return whichever fit the most pads.
+    alternatives, return whichever uses the most material.
 
     The greedy nester is a "local-search" algorithm — each disc placement
     is locally optimal but the OVERALL packing can be suboptimal because
@@ -1945,8 +1955,14 @@ def _multistart_nest(pads, material, width_mm, height_mm, settings, polygon=None
          packing or has many small features).
       3-5. Random shuffles with a fixed seed (reproducible across runs).
 
-    Returns the placed list with the most discs; ties broken by the
-    first ordering that achieved that count.
+    Returns the placement with the largest total disc area — the "% used"
+    the preview prints — with ties going to the higher pad count, then to
+    the first ordering. It used to pick by pad COUNT, which systematically
+    chose smallest-first: more, smaller discs, with the big ones left for
+    a later scrap. That read 51% used instead of 66% on a leather test
+    scrap and 63% instead of 70% on Matt's bench (2026-09-20). Largest-
+    first is always among the candidates, so by this measure the result
+    can never be worse than the standard nest.
     """
     import random
 
@@ -1971,12 +1987,14 @@ def _multistart_nest(pads, material, width_mm, height_mm, settings, polygon=None
         orderings.append(shuffled)
 
     best_placed = None
+    best_key = None
     for ordering in orderings:
         placed, _fp, _ft = _nest_discs(
             pads, material, width_mm, height_mm, settings,
             polygon=polygon, _discs_override=ordering)
-        if best_placed is None or len(placed) > len(best_placed):
-            best_placed = placed
+        key = (placed_disc_area(placed), len(placed))
+        if best_key is None or key > best_key:
+            best_placed, best_key = placed, key
     return best_placed or []
 
 

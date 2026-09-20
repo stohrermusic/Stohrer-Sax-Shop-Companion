@@ -1404,10 +1404,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             _("You have {n} pads remaining in this scrap session.\n\n"
               "Use large-batch optimization for this session?\n\n"
               "The nester will try several pad orderings per scrap and "
-              "keep the best result. Typically fits 5-15% more pads per "
-              "scrap on large batches, but adds ~5-30 seconds of compute "
-              "per scrap.\n\nApplies to every remaining scrap in this "
-              "session.").format(n=total))
+              "keep the layout that uses the most material. It never uses "
+              "less of a scrap than the standard nest, and adds ~5-30 "
+              "seconds of compute per scrap.\n\nApplies to every "
+              "remaining scrap in this session.").format(n=total))
         self.scrap_session['optimize'] = bool(answer)
 
     def _scrap_begin_partial(self, pads, hole_dia, material, mat_w, mat_h,
