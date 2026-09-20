@@ -216,6 +216,73 @@ def main_test():
     check("'max' still fills the first scrap only (pre-existing, unchanged)",
           t_max_first_scrap_only_unchanged)
 
+    # ================================================================
+    # End to end through the real Generate button path: type in the pad
+    # box, Generate with scrap mode on, edit the box, Generate again.
+    # Only the file/folder dialogs and message boxes are stubbed.
+    # ================================================================
+    import shutil
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="ssc_scrap_")
+    jobs = []
+    a._record_job = lambda output, materials, pads, params, **k: jobs.append(
+        (output, k.get('placed_count'), k.get('scrap_num')))
+    main.save_settings = lambda s: None          # never touch the real config
+    main.filedialog.askdirectory = lambda **k: tmp
+    a.settings['units'] = 'mm'
+    a.settings['show_engraving_warning'] = False
+    a.preview_var.set(False)
+    a.custom_polygon = None
+    a.scrap_mode_var.set(True)
+
+    def set_box(text):
+        a.pad_entry.delete("1.0", tk.END)
+        a.pad_entry.insert("1.0", text)
+
+    def set_sheet(w, h):
+        a.width_entry.delete(0, tk.END)
+        a.width_entry.insert(0, str(w))
+        a.height_entry.delete(0, tk.END)
+        a.height_entry.insert(0, str(h))
+
+    def select_only(material):
+        for m, v in a.material_vars.items():
+            v.set(m == material)
+
+    def e2e(generate, ext):
+        reset_session()
+        jobs.clear()
+        for f in os.listdir(tmp):
+            os.remove(os.path.join(tmp, f))
+        select_only('felt')
+        a.filename_entry.delete(0, tk.END)
+        a.filename_entry.insert(0, "live")
+        set_box("16.0 x 60")
+        set_sheet(SMALL, SMALL)
+        generate()
+        assert a.scrap_session['active'], "first Generate should start the session"
+        assert a.scrap_session['scrap_count'] == 1, jobs
+        n1 = jobs[-1][1]
+        assert 0 < n1 < 60, f"scrap 1 placed {n1}"
+        # The user edits the box between scraps: a new size, and a bigger piece.
+        set_box("16.0 x 60\n11.0 x 4")
+        set_sheet(BIG, BIG)
+        generate()
+        assert a.scrap_session['scrap_count'] == 2, jobs
+        assert jobs[-1][1] == 60 - n1 + 4, \
+            f"scrap 2 placed {jobs[-1][1]}, expected {60 - n1 + 4}"
+        assert a.scrap_session['remaining_pads'] == []
+        assert a.scrap_session['done'] == {16.0: 60, 11.0: 4}, a.scrap_session['done']
+        names = sorted(os.listdir(tmp))
+        assert names == [f"live_felt_scrap1{ext}", f"live_felt_scrap2{ext}"], names
+        assert all(os.path.getsize(os.path.join(tmp, n)) > 0 for n in names)
+
+    check("End to end: Generate G-code, edit the box, Generate again",
+          lambda: e2e(a.on_generate_gcode, ".gcode"))
+    check("End to end: Generate SVG, edit the box, Generate again",
+          lambda: e2e(a.on_generate_svg, ".svg"))
+    shutil.rmtree(tmp, ignore_errors=True)
+
     try:
         root.destroy()
     except Exception:
