@@ -18,6 +18,8 @@
 
 Key difference: dart ranges return None on no match (opt-in), while the other three always return a dict (every pad needs values).
 
+**Engraving font ranges and engraving placement ranges are two separate lists** (`engraving_settings_ranges` vs `engraving_placement_ranges`), each with its own Universal / Per Size Range switch in the Sizing Rules dialog, one section apart. That split is deliberate (the boundaries need not match, and both are in `SIZING_PRESET_KEYS`), but it hides the second one: a user set up font-size ranges, found no placement fields there, and asked for placement to be added to ranges on 2026-09-18 when it already existed a section down. The font-size range editor now carries a one-line pointer to the placement section. Don't merge the two lists to "fix" this — it's a preset-schema change that breaks every saved preset.
+
 **Darted leather engraving**: Leather pads with darts use the `darted_leather` key in `engraving_location` for placement (default 2.5mm from outside), separate from regular `leather` placement. The dart config's `engraving_on` flag still controls whether darted leather is engraved at all.
 
 ## Nesting
