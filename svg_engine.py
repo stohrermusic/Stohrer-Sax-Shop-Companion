@@ -268,6 +268,133 @@ def _scan_radial(dia, r_val, placed_list, target_x, target_y,
                                 width_mm, height_mm, spacing_mm)
 
 
+def _scan_linear_python(dia, r_val, placed_list, width_mm, height_mm, spacing_mm,
+                        scan_x_reversed, scan_y_reversed, x_primary):
+    """Reference Python implementation of the linear (cardinal / no-bias) scan.
+
+    Walks the sheet at 1 mm steps from the biased edge -- y-outer / x-inner,
+    or x-outer / y-inner for the east/west biases -- and returns the first
+    cell whose disc collides with nothing in ``placed_list``. Preserved
+    verbatim from the pre-vectorization closure inside _nest_discs: it is
+    the parity reference for _scan_linear_numpy and the runtime fallback
+    when numpy is unavailable.
+    """
+    if scan_y_reversed:
+        y_start = height_mm - spacing_mm - dia
+        y_ok = lambda yv: yv >= spacing_mm
+        y_step = -1
+    else:
+        y_start = spacing_mm
+        y_ok = lambda yv: yv + dia + spacing_mm <= height_mm
+        y_step = 1
+
+    if scan_x_reversed:
+        x_start = width_mm - spacing_mm - dia
+        x_ok = lambda xv: xv >= spacing_mm
+        x_step = -1
+    else:
+        x_start = spacing_mm
+        x_ok = lambda xv: xv + dia + spacing_mm <= width_mm
+        x_step = 1
+
+    if x_primary:
+        x = x_start
+        while x_ok(x):
+            y = y_start
+            while y_ok(y):
+                cx, cy = x + r_val, y + r_val
+                is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
+                if not is_collision:
+                    return (cx, cy)
+                y += y_step
+            x += x_step
+    else:
+        y = y_start
+        while y_ok(y):
+            x = x_start
+            while x_ok(x):
+                cx, cy = x + r_val, y + r_val
+                is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
+                if not is_collision:
+                    return (cx, cy)
+                x += x_step
+            y += y_step
+    return None
+
+
+def _linear_axis_cells(extent_mm, dia, spacing_mm, reversed_scan):
+    """The 1 mm cell origins the Python reference visits along one axis.
+
+    Returns (visit, ascending): ``visit`` in scan order, ``ascending`` the
+    same values low-to-high (the layout _build_occupancy_grid needs). Both
+    are None when not even one disc fits. A forward scan starts at
+    spacing_mm and runs while ``v + dia + spacing_mm <= extent``; a reversed
+    scan starts at ``extent - spacing_mm - dia`` and runs while
+    ``v >= spacing_mm`` -- the two grids are anchored at opposite edges and
+    only coincide when the free span is a whole number of millimetres.
+    """
+    eps = 1e-9
+    far = extent_mm - spacing_mm - dia
+    if far < spacing_mm - eps:
+        return None, None
+    n = int(math.floor(far - spacing_mm + eps)) + 1
+    if n <= 0:
+        return None, None
+    if reversed_scan:
+        visit = far - _np.arange(n, dtype=_np.float64)
+        return visit, visit[::-1]
+    visit = spacing_mm + _np.arange(n, dtype=_np.float64)
+    return visit, visit
+
+
+def _scan_linear_numpy(dia, r_val, placed_list, width_mm, height_mm, spacing_mm,
+                       scan_x_reversed, scan_y_reversed, x_primary):
+    """Vectorized linear scan. Identical results to _scan_linear_python.
+
+    Builds the occupancy mask once over the whole candidate grid (per-pad
+    work limited to each pad's exclusion bounding box), flips the axes into
+    the reference's visit order, and takes the first free cell -- exactly
+    the cell the Python loop would have returned on.
+
+    Until this existed the cardinal and "off" biases were the one scan
+    still running the pure-Python loop: O(cells x placed) per disc, which
+    on a 15.5" square felt sheet with ~120 pads took minutes on the Tk main
+    thread. Windows reported the app as hung and users force-closed it.
+    """
+    xs_visit, xs_asc = _linear_axis_cells(width_mm, dia, spacing_mm, scan_x_reversed)
+    ys_visit, ys_asc = _linear_axis_cells(height_mm, dia, spacing_mm, scan_y_reversed)
+    if xs_visit is None or ys_visit is None:
+        return None
+
+    occupied = _build_occupancy_grid(xs_asc + r_val, ys_asc + r_val, r_val,
+                                     placed_list, spacing_mm)
+    # Reorder the ascending (n_y, n_x) grid into the reference's visit order.
+    if scan_y_reversed:
+        occupied = occupied[::-1, :]
+    if scan_x_reversed:
+        occupied = occupied[:, ::-1]
+    if x_primary:
+        occupied = occupied.T          # x-outer / y-inner
+    free = ~occupied
+    if not free.any():
+        return None
+    flat_idx = int(_np.argmax(free.ravel()))
+    if x_primary:
+        n_y = ys_visit.shape[0]
+        xi, yi = flat_idx // n_y, flat_idx % n_y
+    else:
+        n_x = xs_visit.shape[0]
+        yi, xi = flat_idx // n_x, flat_idx % n_x
+    return (float(xs_visit[xi]) + r_val, float(ys_visit[yi]) + r_val)
+
+
+def _scan_linear(*args, **kwargs):
+    """Dispatch to the numpy-vectorized scan if available, else Python."""
+    if _HAS_NUMPY:
+        return _scan_linear_numpy(*args, **kwargs)
+    return _scan_linear_python(*args, **kwargs)
+
+
 def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, _discs_override=None,
                 preplaced=None):
     """
@@ -347,48 +474,9 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
             return _scan_radial(dia, r_val, placed_list, target_x, target_y,
                                 width_mm, height_mm, spacing_mm)
 
-        # Cardinal directions: linear scan
-        if scan_y_reversed:
-            y_start = height_mm - spacing_mm - dia
-            y_ok = lambda yv: yv >= spacing_mm
-            y_step = -1
-        else:
-            y_start = spacing_mm
-            y_ok = lambda yv: yv + dia + spacing_mm <= height_mm
-            y_step = 1
-
-        if scan_x_reversed:
-            x_start = width_mm - spacing_mm - dia
-            x_ok = lambda xv: xv >= spacing_mm
-            x_step = -1
-        else:
-            x_start = spacing_mm
-            x_ok = lambda xv: xv + dia + spacing_mm <= width_mm
-            x_step = 1
-
-        if x_primary:
-            x = x_start
-            while x_ok(x):
-                y = y_start
-                while y_ok(y):
-                    cx, cy = x + r_val, y + r_val
-                    is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
-                    if not is_collision:
-                        return (cx, cy)
-                    y += y_step
-                x += x_step
-        else:
-            y = y_start
-            while y_ok(y):
-                x = x_start
-                while x_ok(x):
-                    cx, cy = x + r_val, y + r_val
-                    is_collision = any((cx - px)**2 + (cy - py)**2 < (r_val + pr + spacing_mm)**2 for _, px, py, pr in placed_list)
-                    if not is_collision:
-                        return (cx, cy)
-                    x += x_step
-                y += y_step
-        return None
+        # Cardinal directions and "off": linear scan from the biased edge
+        return _scan_linear(dia, r_val, placed_list, width_mm, height_mm, spacing_mm,
+                            scan_x_reversed, scan_y_reversed, x_primary)
 
     # Place fixed pads
     for pad_size, dia in discs:

@@ -26,7 +26,7 @@ from config import (
 from i18n import init_translation
 init_translation(load_settings().get("language", "en"))
 
-from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads_with_zones  # noqa: E402
+from svg_engine import check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_with_zones  # noqa: E402
 from gcode_engine import generate_gcode_from_placed  # noqa: E402
 from ui_dialogs import (  # noqa: E402
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
@@ -1896,11 +1896,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             for material in selected_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
-                # Nest (may re-run if user adjusts and retries)
-                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                # Nest once (may re-run if user adjusts and retries). The same
+                # pass reports whether every fixed-quantity pad landed, so
+                # there is no second nest just to validate the fit.
+                placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 # Validate fit
-                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                if fixed_placed != fixed_total:
                     size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
                     messagebox.showerror(_("Nesting Error"), _("Could not fit all '{material}' pieces on the specified {size_desc} size.").format(material=material.replace('_', ' '), size_desc=size_desc))
                     return
@@ -2799,10 +2802,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # the block would have to be re-sized per scrap.
                 zones = []
             else:
-                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings,
-                                                     polygon=mat_polygon)
-                if not can_all_pads_fit(pads, material, mat_w, mat_h,
-                                        self.settings, polygon=mat_polygon):
+                # One nest; its fixed counts are the fit check.
+                placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                if fixed_placed != fixed_total:
                     messagebox.showerror(
                         _("Nesting Error"),
                         _("Could not fit all '{m}' pieces in the available "
@@ -3075,9 +3078,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             for material in supported_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
-                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                # One nest; its fixed counts are the fit check.
+                placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
-                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                if fixed_placed != fixed_total:
                     size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
                     messagebox.showerror(_("Nesting Error"), _("Could not fit all '{material}' pieces on the specified {size_desc} size.").format(material=material.replace('_', ' '), size_desc=size_desc))
                     return
