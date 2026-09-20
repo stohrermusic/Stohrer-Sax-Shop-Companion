@@ -372,9 +372,14 @@ def _run_generation(app, tk, method_name, out_dir):
         'showinfo': main_mod.messagebox.showinfo,
         'showerror': main_mod.messagebox.showerror,
         'showwarning': main_mod.messagebox.showwarning,
+        'save_settings': main_mod.save_settings,
     }
     errors = []
     main_mod.filedialog.askdirectory = fake_askdirectory
+    # The generate flows end with save_settings(); left live, this test
+    # wrote the temp output folder into the REAL app_settings.json as
+    # last_output_dir (seen 2026-09-20). Never let a test touch it.
+    main_mod.save_settings = lambda s: None
     main_mod.messagebox.showinfo = lambda *a, **k: None
     main_mod.messagebox.showerror = lambda *a, **k: errors.append(a)
     main_mod.messagebox.showwarning = lambda *a, **k: errors.append(a)
@@ -385,6 +390,7 @@ def _run_generation(app, tk, method_name, out_dir):
         main_mod.messagebox.showinfo = stubs['showinfo']
         main_mod.messagebox.showerror = stubs['showerror']
         main_mod.messagebox.showwarning = stubs['showwarning']
+        main_mod.save_settings = stubs['save_settings']
     assert not errors, f"{method_name} reported an error: {errors}"
 
 
