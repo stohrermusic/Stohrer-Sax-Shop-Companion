@@ -1262,6 +1262,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'save_dir': '',
             'hole_dia': 0,
             'optimize': None,
+            'done': {},
         }
         self._unlock_material_selection()
         self._close_remaining_pads_window()
@@ -1327,9 +1328,61 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # (prompt on first scrap with ≥ LARGE_BATCH_THRESHOLD pads
             # remaining), True/False = user's session-level answer.
             'optimize': None,
+            # Per-size tally of pads already cut. The pad list itself is
+            # live (re-read every Generate); this is the only thing the
+            # session has to remember about it.
+            'done': {},
         }
         self._lock_material_selection(material)
         self._open_remaining_pads_window()
+
+    def _scrap_pads_for_this_scrap(self, pads):
+        """Reconcile the pad list in the box with what this session has
+        already cut, and return the list to nest on this scrap.
+
+        The pad list stays live for the whole session. The session only
+        remembers, per size, how many pads are already cut ('done'), so
+        remaining is "what the box says now" minus that tally -- a size
+        added, raised, lowered or removed mid-session simply shows up on
+        the next scrap, and lowering below the cut count clamps to zero.
+        Until 2026-09-20 the session copied the list at its start and
+        ignored the box until it ended; a user who added sizes to fill a
+        half-empty last scrap got a scrap without them and no message.
+
+        Duplicate lines for one size are merged. A 'max' entry keeps its
+        existing behaviour: nested on the first scrap only.
+        """
+        session = self.scrap_session
+        done = session.setdefault('done', {})
+        wanted = {}
+        for p in pads:
+            if p['qty'] != 'max':
+                wanted[p['size']] = wanted.get(p['size'], 0) + p['qty']
+        session['original_pads'] = [{'size': s, 'qty': q} for s, q in wanted.items()]
+        remaining = [{'size': s, 'qty': q - done.get(s, 0)}
+                     for s, q in wanted.items() if q - done.get(s, 0) > 0]
+        session['remaining_pads'] = remaining
+        if session['scrap_count'] == 0:
+            return remaining + [p for p in pads if p['qty'] == 'max']
+        return remaining
+
+    def _scrap_record_result(self, remaining):
+        """Credit a finished scrap to the session: add what it placed to
+        the per-size 'done' tally and store the new remaining list.
+
+        The credit is the drop from the pre-scrap list (still sitting in
+        remaining_pads) to `remaining`, so this has to run before anything
+        else overwrites remaining_pads. All three commit sites (SVG,
+        G-code, Frame & Cut) go through here.
+        """
+        session = self.scrap_session
+        done = session.setdefault('done', {})
+        after = {p['size']: p['qty'] for p in remaining}
+        for p in session['remaining_pads']:
+            cut = p['qty'] - after.get(p['size'], 0)
+            if cut > 0:
+                done[p['size']] = done.get(p['size'], 0) + cut
+        session['remaining_pads'] = remaining
 
     LARGE_BATCH_THRESHOLD = 75  # remaining-pad count above which the
                                 # optimization opt-in popup appears
@@ -1404,7 +1457,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     return None
                 self.settings["last_output_dir"] = save_dir
                 self.scrap_session['save_dir'] = save_dir
-            pads = self.scrap_session['remaining_pads']
+
+        # The box is live: nest what it says now, minus what's already cut.
+        pads = self._scrap_pads_for_this_scrap(pads)
 
         if not pads:
             messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
@@ -1441,7 +1496,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """
         self.scrap_session['scrap_count'] += 1
         scrap_num = self.scrap_session['scrap_count']
-        self.scrap_session['remaining_pads'] = remaining
+        self._scrap_record_result(remaining)
         self._update_scrap_status_display()
         self._update_remaining_pads_window()
 
@@ -1528,16 +1583,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             scraps = self.scrap_session.get('scrap_count', 0)
             material = self.scrap_session.get('material', '')
 
-            # Calculate done pads (original - remaining)
-            remaining_by_size = {p['size']: p['qty'] for p in remaining_pads}
-            done_pads = []
-            for orig in original_pads:
-                size = orig['size']
-                orig_qty = orig['qty']
-                remaining_qty = remaining_by_size.get(size, 0)
-                done_qty = orig_qty - remaining_qty
-                if done_qty > 0:
-                    done_pads.append({'size': size, 'qty': done_qty})
+            # Done comes from the session's own tally, not original minus
+            # remaining: the list is live, so a size lowered below what's
+            # already cut would otherwise under-report.
+            done_pads = [{'size': s, 'qty': q}
+                         for s, q in self.scrap_session.get('done', {}).items() if q > 0]
 
             total_remaining = sum(p['qty'] for p in remaining_pads)
             total_done = sum(p['qty'] for p in done_pads)
@@ -1981,9 +2031,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                         _("Current session is for {material}.\n"
                         "Clear session to switch materials.").format(material=self.scrap_session['material']))
                     return
-                # Use remaining pads from session
-                pads = self.scrap_session['remaining_pads']
                 hole_dia = self.scrap_session['hole_dia']
+
+            # The box is live: nest what it says now, minus what's already cut.
+            pads = self._scrap_pads_for_this_scrap(pads)
 
             if not pads:
                 messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
@@ -2029,8 +2080,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                              placed_count=len(placed), scrap_num=scrap_num,
                              save_dir=save_dir)
 
-            # Update session with remaining pads
-            self.scrap_session['remaining_pads'] = remaining
+            # Credit this scrap to the session's done tally
+            self._scrap_record_result(remaining)
             self._update_scrap_status_display()
             self._update_remaining_pads_window()
 
@@ -3204,8 +3255,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                              placed_count=len(placed), scrap_num=scrap_num,
                              save_dir=save_dir)
 
-            # Update session with remaining pads
-            self.scrap_session['remaining_pads'] = remaining
+            # Credit this scrap to the session's done tally
+            self._scrap_record_result(remaining)
             self._update_scrap_status_display()
             self._update_remaining_pads_window()
 
