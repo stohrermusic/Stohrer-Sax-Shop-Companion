@@ -1738,6 +1738,40 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return card_paper_dims[0], card_paper_dims[1], None
         return width_mm, height_mm, self.custom_polygon
 
+    def _keep_last_cut_gcode(self, lines, material, scrap_num, g92, flip_height,
+                             polygon, disc_count):
+        """Keep a copy of the G-code Frame & Cut actually streamed, plus one
+        log line describing its frame.
+
+        The temp file the cut is generated into is deleted as soon as it's
+        read, which left nothing to audit when a user reported labels
+        landing outside their discs (2026-09-20). This is app.log for the
+        machine: the exact lines the Falcon received, overwritten on every
+        cut, at <config dir>/last_frame_cut.gcode. Swallows every error;
+        bookkeeping must never stop a cut.
+        """
+        import logging
+        try:
+            from config import get_config_dir
+            path = os.path.join(get_config_dir(), "last_frame_cut.gcode")
+            with open(path, "w") as f:
+                f.write("\n".join(lines))
+            if polygon:
+                xs = [p[0] for p in polygon]
+                ys = [p[1] for p in polygon]
+                bbox = f"{max(xs) - min(xs):.1f}x{max(ys) - min(ys):.1f}"
+            else:
+                bbox = "none"
+            logging.warning(
+                "frame&cut %s scrap %s: %d discs, %d lines, G92 X%.3f Y%.3f, "
+                "flip %s, polygon bbox %s, kept at %s",
+                material, scrap_num if scrap_num else "-", disc_count, len(lines),
+                g92[0], g92[1],
+                f"{flip_height:.1f}" if flip_height is not None else "sheet",
+                bbox, path)
+        except Exception:
+            logging.exception("could not keep the last cut G-code")
+
     def _record_job(self, output, materials, pads, params, placed_count=None,
                     scrap_num=None, save_dir=None, status="complete"):
         """Log a job that reached an output stage to the history file.
@@ -2841,10 +2875,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
                                               mode='w') as tmp:
                 tmp_path = tmp.name
+            # The cut streams into the SAME work frame as the framing pass,
+            # and framing flips the scrap OUTLINE with the outline's height.
+            # A camera-captured polygon is inset from that outline, so the
+            # generator's default (flip with the polygon it's given, i.e.
+            # the inset) put every disc `inset` mm toward the machine front
+            # of where the frame showed it. Flip with the outline instead.
+            _flip_source = self.custom_polygon_outline or self.custom_polygon
+            flip_height_mm = (max(p[1] for p in _flip_source)
+                              if _flip_source and len(_flip_source) >= 3
+                              else None)
             try:
                 generate_gcode_from_placed(
                     placed, material, mat_w, mat_h, tmp_path, hole_dia,
-                    self.settings, polygon=mat_polygon, zones=zones)
+                    self.settings, polygon=mat_polygon, zones=zones,
+                    flip_height_mm=flip_height_mm)
                 with open(tmp_path, 'r') as f:
                     gcode_text = f.read()
             finally:
@@ -3007,6 +3052,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # Cut uses the same G92 offset as framing so the cut
                 # placements align with the LB-vertex jog convention.
                 cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
+                self._keep_last_cut_gcode(
+                    cut_lines, material,
+                    (self.scrap_session['scrap_count'] + 1) if scrap_mode else None,
+                    (g92_x, g92_y), flip_height_mm, mat_polygon, len(placed))
                 cut_dlg = FalconRunDialog(
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
