@@ -71,7 +71,7 @@ def main_test():
         a.scrap_session = {
             'active': False, 'original_pads': [], 'remaining_pads': [],
             'scrap_count': 0, 'material': None, 'save_dir': '',
-            'hole_dia': 0, 'optimize': None,
+            'hole_dia': 0,
         }
         continue_calls.clear()
         info_msgs.clear()

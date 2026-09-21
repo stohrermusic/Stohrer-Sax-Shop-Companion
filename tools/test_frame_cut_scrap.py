@@ -71,7 +71,7 @@ def main_test():
     main.messagebox.showinfo = lambda *a_, **k: info_msgs.append((a_, k))
     main.messagebox.showwarning = lambda *a_, **k: warn_msgs.append((a_, k))
     main.messagebox.showerror = lambda *a_, **k: error_msgs.append((a_, k))
-    main.messagebox.askyesno = lambda *a_, **k: False  # never opt into optimize
+    main.messagebox.askyesno = lambda *a_, **k: False  # no yes/no prompts in these flows
 
     def set_askdir(value):
         askdir_calls.clear()
@@ -85,7 +85,7 @@ def main_test():
         a.scrap_session = {
             'active': False, 'original_pads': [], 'remaining_pads': [],
             'scrap_count': 0, 'material': None, 'save_dir': '',
-            'hole_dia': 0, 'optimize': None,
+            'hole_dia': 0,
         }
 
     def clear_msgs():

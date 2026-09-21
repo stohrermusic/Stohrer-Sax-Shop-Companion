@@ -395,8 +395,7 @@ def _scan_linear(*args, **kwargs):
     return _scan_linear_python(*args, **kwargs)
 
 
-def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, _discs_override=None,
-                preplaced=None):
+def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, preplaced=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
     Discs that couldn't be placed are omitted from the result.
@@ -404,33 +403,22 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     If polygon is provided (list of (x,y) tuples in mm), uses polygon nesting instead of rectangle.
 
     Supports 'max' quantity: fixed-qty pads are placed first, then max pads fill remaining space.
-
-    ``_discs_override`` (internal): if provided, skip the default build-+
-    -sort step and use this pre-ordered list of (pad_size, diameter)
-    tuples for the fixed-pad placement. Used by the multistart optimizer
-    (try_nest_partial(optimize=True)) to try the same set of pads in
-    different orderings and pick the best result.
     """
     if polygon:
         return _nest_discs_polygon(pads, material, settings, polygon,
-                                    spacing_mm,
-                                    _discs_override=_discs_override,
-                                    preplaced=preplaced)
+                                    spacing_mm, preplaced=preplaced)
 
     # Separate fixed and max pads
     fixed_pads = [p for p in pads if p['qty'] != 'max']
     max_pads = [p for p in pads if p['qty'] == 'max']
 
-    if _discs_override is not None:
-        discs = list(_discs_override)
-    else:
-        # Build disc list from fixed pads
-        discs = []
-        for pad in fixed_pads:
-            pad_size, qty = pad['size'], pad['qty']
-            diameter = get_disc_diameter(pad_size, material, settings)
-            for _ in range(qty):
-                discs.append((pad_size, diameter))
+    # Build disc list from fixed pads
+    discs = []
+    for pad in fixed_pads:
+        pad_size, qty = pad['size'], pad['qty']
+        diameter = get_disc_diameter(pad_size, material, settings)
+        for _ in range(qty):
+            discs.append((pad_size, diameter))
 
     # Seeding `placed` marks space as already taken without contributing
     # to the result: the scan functions collision-check against this list
@@ -445,13 +433,12 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     # Edge bias scan direction
     edge_bias = settings.get("edge_bias", "center")
 
-    if _discs_override is None:
-        # Corner bias: smallest first (small discs nestle into corners efficiently).
-        # All others: largest first (standard greedy circle packing).
-        if edge_bias in ("nw", "ne", "sw", "se"):
-            discs.sort(key=lambda x: x[1])
-        else:
-            discs.sort(key=lambda x: -x[1])
+    # Corner bias: smallest first (small discs nestle into corners efficiently).
+    # All others: largest first (standard greedy circle packing).
+    if edge_bias in ("nw", "ne", "sw", "se"):
+        discs.sort(key=lambda x: x[1])
+    else:
+        discs.sort(key=lambda x: -x[1])
     scan_y_reversed = edge_bias in ("s", "se", "sw")
     scan_x_reversed = edge_bias in ("e", "ne", "se")
     is_radial = edge_bias in ("center", "ne", "nw", "se", "sw")
@@ -930,8 +917,7 @@ def _find_best_polygon_small(*args, **kwargs):
     return _find_best_polygon_small_python(*args, **kwargs)
 
 
-def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _discs_override=None,
-                        preplaced=None):
+def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, preplaced=None):
     """
     Smart circle-packing algorithm for polygon boundaries.
 
@@ -941,23 +927,18 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, _disc
     Supports 'max' quantity: fixed-qty pads are placed first, then max pads fill remaining space.
 
     Returns list of placed discs as (pad_size, cx, cy, r).
-
-    ``_discs_override``: see _nest_discs.
     """
     # Separate fixed and max pads
     fixed_pads = [p for p in pads if p['qty'] != 'max']
     max_pads = [p for p in pads if p['qty'] == 'max']
 
-    if _discs_override is not None:
-        discs = list(_discs_override)
-    else:
-        discs = []
-        for pad in fixed_pads:
-            pad_size, qty = pad['size'], pad['qty']
-            diameter = get_disc_diameter(pad_size, material, settings)
-            for _ in range(qty):
-                discs.append((pad_size, diameter))
-        discs.sort(key=lambda x: -x[1])  # Largest first
+    discs = []
+    for pad in fixed_pads:
+        pad_size, qty = pad['size'], pad['qty']
+        diameter = get_disc_diameter(pad_size, material, settings)
+        for _ in range(qty):
+            discs.append((pad_size, diameter))
+    discs.sort(key=lambda x: -x[1])  # Largest first
     # See _nest_discs for why seeding `placed` is safe.
     n_pre = len(preplaced or [])
     placed = list(preplaced or [])
@@ -1891,7 +1872,7 @@ def compute_remaining_pads(original_pads, placed):
     return remaining
 
 
-def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None, optimize=False):
+def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None):
     """
     Attempt to place as many pads as possible, return placed and remaining.
 
@@ -1904,98 +1885,33 @@ def try_nest_partial(pads, material, width_mm, height_mm, settings, polygon=None
         width_mm, height_mm: Scrap dimensions in mm
         settings: App settings dict
         polygon: Optional polygon coordinates for irregular shapes
-        optimize: If True, run multistart greedy — try several disc
-            orderings and keep the layout that uses the most material,
-            never less than the standard nest. Costs ~5x compute
-            (typically 5-30s for ≥75 pads). Used by the "large batch
-            optimization" opt-in flow in scrap mode.
 
     Returns:
         (placed, remaining_pads, any_placed)
         - placed: [(pad_size, cx, cy, r), ...] - what was placed
         - remaining_pads: [{'size': float, 'qty': int}, ...] - what's left
         - any_placed: bool - True if at least one pad was placed
+
+    There is deliberately no ordering search here. A multistart
+    "large-batch optimization" (five disc orderings, best by material
+    used) shipped in v2.5 and was removed on 2026-09-20: on Matt's real
+    lists it moved usage by 0-1.3%, because the gaps left between big
+    discs are smaller than the smallest pad in the list, and putting
+    small sizes in the list fills them with plain largest-first anyway.
+    Not worth a prompt and a second code path.
     """
-    if optimize:
-        placed = _multistart_nest(
-            pads, material, width_mm, height_mm, settings, polygon=polygon)
-    else:
-        placed, _fixed_placed, _fixed_total = _nest_discs(
-            pads, material, width_mm, height_mm, settings, polygon=polygon
-        )
+    placed, _fixed_placed, _fixed_total = _nest_discs(
+        pads, material, width_mm, height_mm, settings, polygon=polygon
+    )
     remaining = compute_remaining_pads(pads, placed)
     any_placed = len(placed) > 0
     return placed, remaining, any_placed
 
 
 def placed_disc_area(placed):
-    """Total disc area of a placement, in mm².
-
-    This is the numerator of the "% used" figure the nesting preview
-    prints, so anything that ranks layouts ranks by this — not by pad
-    count, which rewards many small discs over a well-used sheet.
-    """
+    """Total disc area of a placement, in mm² — the numerator of the
+    "% used" figure the nesting preview prints."""
     return sum(math.pi * r * r for _, _, _, r in placed)
-
-
-def _multistart_nest(pads, material, width_mm, height_mm, settings, polygon=None):
-    """Multistart greedy nesting: try the default ordering plus several
-    alternatives, return whichever uses the most material.
-
-    The greedy nester is a "local-search" algorithm — each disc placement
-    is locally optimal but the OVERALL packing can be suboptimal because
-    earlier placements constrain later ones. Trying a handful of input
-    orderings is the cheapest way to escape local optima: each ordering
-    explores a different region of the solution space, and on large pad
-    sets the best of 5 typically beats the default by 5-15%.
-
-    Orderings tried:
-      1. Largest first (the current default; near-optimal for most cases).
-      2. Smallest first (sometimes wins when scrap shape favors corner-
-         packing or has many small features).
-      3-5. Random shuffles with a fixed seed (reproducible across runs).
-
-    Returns the placement with the largest total disc area — the "% used"
-    the preview prints — with ties going to the higher pad count, then to
-    the first ordering. It used to pick by pad COUNT, which systematically
-    chose smallest-first: more, smaller discs, with the big ones left for
-    a later scrap. That read 51% used instead of 66% on a leather test
-    scrap and 63% instead of 70% on Matt's bench (2026-09-20). Largest-
-    first is always among the candidates, so by this measure the result
-    can never be worse than the standard nest.
-    """
-    import random
-
-    fixed_pads = [p for p in pads if p['qty'] != 'max']
-
-    # Build the base disc list once; orderings are permutations of this.
-    base_discs = []
-    for pad in fixed_pads:
-        pad_size, qty = pad['size'], pad['qty']
-        diameter = get_disc_diameter(pad_size, material, settings)
-        for _ in range(qty):
-            base_discs.append((pad_size, diameter))
-
-    orderings = [
-        sorted(base_discs, key=lambda d: -d[1]),  # largest first
-        sorted(base_discs, key=lambda d: d[1]),   # smallest first
-    ]
-    rng = random.Random(0)  # reproducible
-    for _ in range(3):
-        shuffled = list(base_discs)
-        rng.shuffle(shuffled)
-        orderings.append(shuffled)
-
-    best_placed = None
-    best_key = None
-    for ordering in orderings:
-        placed, _fp, _ft = _nest_discs(
-            pads, material, width_mm, height_mm, settings,
-            polygon=polygon, _discs_override=ordering)
-        key = (placed_disc_area(placed), len(placed))
-        if best_key is None or key > best_key:
-            best_placed, best_key = placed, key
-    return best_placed or []
 
 
 def generate_svg_from_placed(placed, material, width_mm, height_mm, filename, hole_dia_preset, settings,

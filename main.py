@@ -1261,7 +1261,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': None,
             'save_dir': '',
             'hole_dia': 0,
-            'optimize': None,
             'done': {},
         }
         self._unlock_material_selection()
@@ -1324,10 +1323,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': material,
             'save_dir': save_dir,
             'hole_dia': hole_dia,
-            # Large-batch optimization opt-in. None = not yet asked
-            # (prompt on first scrap with ≥ LARGE_BATCH_THRESHOLD pads
-            # remaining), True/False = user's session-level answer.
-            'optimize': None,
             # Per-size tally of pads already cut. The pad list itself is
             # live (re-read every Generate); this is the only thing the
             # session has to remember about it.
@@ -1384,32 +1379,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 done[p['size']] = done.get(p['size'], 0) + cut
         session['remaining_pads'] = remaining
 
-    LARGE_BATCH_THRESHOLD = 75  # remaining-pad count above which the
-                                # optimization opt-in popup appears
-
-    def _maybe_prompt_large_batch_optimization(self, pads):
-        """If this scrap qualifies (≥ threshold pads remaining) AND the
-        user hasn't been asked yet this session, ask once. Mutates
-        scrap_session['optimize'] with the answer. Subsequent scraps
-        in the same session use the same answer with no further prompt.
-        """
-        if self.scrap_session.get('optimize') is not None:
-            return  # already asked + answered
-        total = sum(p.get('qty', 0) for p in pads
-                    if isinstance(p.get('qty'), int))
-        if total < self.LARGE_BATCH_THRESHOLD:
-            return  # not enough pads to bother
-        answer = messagebox.askyesno(
-            _("Large Batch Optimization"),
-            _("You have {n} pads remaining in this scrap session.\n\n"
-              "Use large-batch optimization for this session?\n\n"
-              "The nester will try several pad orderings per scrap and "
-              "keep the layout that uses the most material. It never uses "
-              "less of a scrap than the standard nest, and adds ~5-30 "
-              "seconds of compute per scrap.\n\nApplies to every "
-              "remaining scrap in this session.").format(n=total))
-        self.scrap_session['optimize'] = bool(answer)
-
     def _scrap_begin_partial(self, pads, hole_dia, material, mat_w, mat_h,
                              mat_polygon, ask_save_dir):
         """Shared scrap-mode front half: start or continue the session,
@@ -1465,14 +1434,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
             return None
 
-        # Large-batch optimization opt-in (prompted once per session,
-        # only on scraps with >= LARGE_BATCH_THRESHOLD pads remaining).
-        self._maybe_prompt_large_batch_optimization(pads)
-        _optimize = bool(self.scrap_session.get('optimize'))
-
         placed, remaining, any_placed = try_nest_partial(
             pads, material, mat_w, mat_h, self.settings,
-            polygon=mat_polygon, optimize=_optimize)
+            polygon=mat_polygon)
 
         if not any_placed:
             min_pad_size = min(p['size'] for p in pads)
@@ -2040,15 +2004,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
                 return
 
-            # Large-batch optimization opt-in (prompted once per session,
-            # only on scraps with ≥ LARGE_BATCH_THRESHOLD pads remaining).
-            self._maybe_prompt_large_batch_optimization(pads)
-            _optimize = bool(self.scrap_session.get('optimize'))
-
             # Attempt partial placement
             placed, remaining, any_placed = try_nest_partial(
                 pads, material, mat_w, mat_h, self.settings,
-                polygon=mat_polygon, optimize=_optimize)
+                polygon=mat_polygon)
 
             if not any_placed:
                 min_pad_size = min(p['size'] for p in pads)

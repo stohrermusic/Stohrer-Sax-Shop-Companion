@@ -5254,10 +5254,6 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Between scraps: keep the loaded shape, unload it, or re-capture "
                       "from camera (when calibrated)."))
         self._bullet(_("Files named _scrap1, _scrap2, etc."))
-        self._bullet(_("With 75+ pads, an opt-in popup offers \"large-batch optimization\": "
-                      "the nester tries multiple disc orderings per scrap and keeps the one "
-                      "that uses the most material. Costs extra compute; never uses less of "
-                      "a scrap than the standard nest."))
         self._blank()
 
         self._h2(_("Edge Bias"))
