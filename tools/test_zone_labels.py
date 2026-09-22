@@ -617,6 +617,28 @@ def test_rect_sheet_never_cuts_a_zoned_size_unlabeled():
         assert z['w'] <= narrow, "a zone wider than the sheet was placed anyway"
 
 
+def test_full_band_sheet_still_counts_free_pads():
+    """When the band consumes the sheet exactly (free_h == 0), free pads
+    have nowhere to go — they must still be COUNTED in fixed_total so
+    can_all_pads_fit reports the shortfall, instead of the pads silently
+    vanishing from both tallies and the job claiming success."""
+    s = base_settings()
+    zoned = {'size': 10.0, 'qty': 4}
+    free = {'size': 24.0, 'qty': 2}
+    specs, _ = se.plan_zone_specs([zoned], 'card', s)
+    gap = float(s.get('zone_group_gap_mm', 1.0))
+    # Height sized so the band fits exactly and nothing is left above it.
+    h_exact = specs[0]['h'] + gap + se.ZONE_SHEET_MARGIN_MM
+    _placed, zones, fixed_placed, fixed_total = se.nest_with_zones(
+        [zoned, free], 'card', 200.0, h_exact, s)
+    assert zones, "the zone band should still fit on the exact-height sheet"
+    assert fixed_total == 6, \
+        f"free pads dropped from fixed_total: {fixed_total} (expected 6)"
+    assert fixed_placed == 4, \
+        f"expected only the zoned pads placed: {fixed_placed} (expected 4)"
+    assert se.can_all_pads_fit([zoned, free], 'card', 200.0, h_exact, s) is False
+
+
 def test_can_all_pads_fit_still_works():
     s = base_settings()
     assert se.can_all_pads_fit(PADS, 'card', W, H, s) is True

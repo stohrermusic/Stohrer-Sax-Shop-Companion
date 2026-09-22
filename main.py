@@ -26,7 +26,7 @@ from config import (
 from i18n import init_translation
 init_translation(load_settings().get("language", "en"))
 
-from svg_engine import can_all_pads_fit, check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_pads_with_zones  # noqa: E402
+from svg_engine import check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_with_zones  # noqa: E402
 from gcode_engine import generate_gcode_from_placed  # noqa: E402
 from ui_dialogs import (  # noqa: E402
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
@@ -1261,7 +1261,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': None,
             'save_dir': '',
             'hole_dia': 0,
-            'optimize': None,
+            'done': {},
         }
         self._unlock_material_selection()
         self._close_remaining_pads_window()
@@ -1323,39 +1323,61 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': material,
             'save_dir': save_dir,
             'hole_dia': hole_dia,
-            # Large-batch optimization opt-in. None = not yet asked
-            # (prompt on first scrap with ≥ LARGE_BATCH_THRESHOLD pads
-            # remaining), True/False = user's session-level answer.
-            'optimize': None,
+            # Per-size tally of pads already cut. The pad list itself is
+            # live (re-read every Generate); this is the only thing the
+            # session has to remember about it.
+            'done': {},
         }
         self._lock_material_selection(material)
         self._open_remaining_pads_window()
 
-    LARGE_BATCH_THRESHOLD = 75  # remaining-pad count above which the
-                                # optimization opt-in popup appears
+    def _scrap_pads_for_this_scrap(self, pads):
+        """Reconcile the pad list in the box with what this session has
+        already cut, and return the list to nest on this scrap.
 
-    def _maybe_prompt_large_batch_optimization(self, pads):
-        """If this scrap qualifies (≥ threshold pads remaining) AND the
-        user hasn't been asked yet this session, ask once. Mutates
-        scrap_session['optimize'] with the answer. Subsequent scraps
-        in the same session use the same answer with no further prompt.
+        The pad list stays live for the whole session. The session only
+        remembers, per size, how many pads are already cut ('done'), so
+        remaining is "what the box says now" minus that tally -- a size
+        added, raised, lowered or removed mid-session simply shows up on
+        the next scrap, and lowering below the cut count clamps to zero.
+        Until 2026-09-20 the session copied the list at its start and
+        ignored the box until it ended; a user who added sizes to fill a
+        half-empty last scrap got a scrap without them and no message.
+
+        Duplicate lines for one size are merged. A 'max' entry keeps its
+        existing behaviour: nested on the first scrap only.
         """
-        if self.scrap_session.get('optimize') is not None:
-            return  # already asked + answered
-        total = sum(p.get('qty', 0) for p in pads
-                    if isinstance(p.get('qty'), int))
-        if total < self.LARGE_BATCH_THRESHOLD:
-            return  # not enough pads to bother
-        answer = messagebox.askyesno(
-            _("Large Batch Optimization"),
-            _("You have {n} pads remaining in this scrap session.\n\n"
-              "Use large-batch optimization for this session?\n\n"
-              "The nester will try several pad orderings per scrap and "
-              "keep the best result. Typically fits 5-15% more pads per "
-              "scrap on large batches, but adds ~5-30 seconds of compute "
-              "per scrap.\n\nApplies to every remaining scrap in this "
-              "session.").format(n=total))
-        self.scrap_session['optimize'] = bool(answer)
+        session = self.scrap_session
+        done = session.setdefault('done', {})
+        wanted = {}
+        for p in pads:
+            if p['qty'] != 'max':
+                wanted[p['size']] = wanted.get(p['size'], 0) + p['qty']
+        session['original_pads'] = [{'size': s, 'qty': q} for s, q in wanted.items()]
+        remaining = [{'size': s, 'qty': q - done.get(s, 0)}
+                     for s, q in wanted.items() if q - done.get(s, 0) > 0]
+        session['remaining_pads'] = remaining
+        if session['scrap_count'] == 0:
+            return remaining + [p for p in pads if p['qty'] == 'max']
+        return remaining
+
+    def _scrap_record_result(self, remaining):
+        """Credit a finished scrap to the session: add what it placed to
+        the per-size 'done' tally and store the new remaining list.
+
+        The credit is the drop from the pre-scrap list (still sitting in
+        remaining_pads) to `remaining`, so this has to run before anything
+        else overwrites remaining_pads. All three commit sites (SVG,
+        G-code, Frame & Cut) go through here.
+        """
+        session = self.scrap_session
+        done = session.setdefault('done', {})
+        after = {p['size']: p['qty'] for p in remaining}
+        for p in session['remaining_pads']:
+            cut = p['qty'] - after.get(p['size'], 0)
+            if cut > 0:
+                done[p['size']] = done.get(p['size'], 0) + cut
+        session['remaining_pads'] = remaining
 
     def _scrap_begin_partial(self, pads, hole_dia, material, mat_w, mat_h,
                              mat_polygon, ask_save_dir):
@@ -1404,20 +1426,17 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     return None
                 self.settings["last_output_dir"] = save_dir
                 self.scrap_session['save_dir'] = save_dir
-            pads = self.scrap_session['remaining_pads']
+
+        # The box is live: nest what it says now, minus what's already cut.
+        pads = self._scrap_pads_for_this_scrap(pads)
 
         if not pads:
             messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
             return None
 
-        # Large-batch optimization opt-in (prompted once per session,
-        # only on scraps with >= LARGE_BATCH_THRESHOLD pads remaining).
-        self._maybe_prompt_large_batch_optimization(pads)
-        _optimize = bool(self.scrap_session.get('optimize'))
-
         placed, remaining, any_placed = try_nest_partial(
             pads, material, mat_w, mat_h, self.settings,
-            polygon=mat_polygon, optimize=_optimize)
+            polygon=mat_polygon)
 
         if not any_placed:
             min_pad_size = min(p['size'] for p in pads)
@@ -1441,7 +1460,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """
         self.scrap_session['scrap_count'] += 1
         scrap_num = self.scrap_session['scrap_count']
-        self.scrap_session['remaining_pads'] = remaining
+        self._scrap_record_result(remaining)
         self._update_scrap_status_display()
         self._update_remaining_pads_window()
 
@@ -1528,16 +1547,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             scraps = self.scrap_session.get('scrap_count', 0)
             material = self.scrap_session.get('material', '')
 
-            # Calculate done pads (original - remaining)
-            remaining_by_size = {p['size']: p['qty'] for p in remaining_pads}
-            done_pads = []
-            for orig in original_pads:
-                size = orig['size']
-                orig_qty = orig['qty']
-                remaining_qty = remaining_by_size.get(size, 0)
-                done_qty = orig_qty - remaining_qty
-                if done_qty > 0:
-                    done_pads.append({'size': size, 'qty': done_qty})
+            # Done comes from the session's own tally, not original minus
+            # remaining: the list is live, so a size lowered below what's
+            # already cut would otherwise under-report.
+            done_pads = [{'size': s, 'qty': q}
+                         for s, q in self.scrap_session.get('done', {}).items() if q > 0]
 
             total_remaining = sum(p['qty'] for p in remaining_pads)
             total_done = sum(p['qty'] for p in done_pads)
@@ -1724,6 +1738,40 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return card_paper_dims[0], card_paper_dims[1], None
         return width_mm, height_mm, self.custom_polygon
 
+    def _keep_last_cut_gcode(self, lines, material, scrap_num, g92, flip_height,
+                             polygon, disc_count):
+        """Keep a copy of the G-code Frame & Cut actually streamed, plus one
+        log line describing its frame.
+
+        The temp file the cut is generated into is deleted as soon as it's
+        read, which left nothing to audit when a user reported labels
+        landing outside their discs (2026-09-20). This is app.log for the
+        machine: the exact lines the Falcon received, overwritten on every
+        cut, at <config dir>/last_frame_cut.gcode. Swallows every error;
+        bookkeeping must never stop a cut.
+        """
+        import logging
+        try:
+            from config import get_config_dir
+            path = os.path.join(get_config_dir(), "last_frame_cut.gcode")
+            with open(path, "w") as f:
+                f.write("\n".join(lines))
+            if polygon:
+                xs = [p[0] for p in polygon]
+                ys = [p[1] for p in polygon]
+                bbox = f"{max(xs) - min(xs):.1f}x{max(ys) - min(ys):.1f}"
+            else:
+                bbox = "none"
+            logging.warning(
+                "frame&cut %s scrap %s: %d discs, %d lines, G92 X%.3f Y%.3f, "
+                "flip %s, polygon bbox %s, kept at %s",
+                material, scrap_num if scrap_num else "-", disc_count, len(lines),
+                g92[0], g92[1],
+                f"{flip_height:.1f}" if flip_height is not None else "sheet",
+                bbox, path)
+        except Exception:
+            logging.exception("could not keep the last cut G-code")
+
     def _record_job(self, output, materials, pads, params, placed_count=None,
                     scrap_num=None, save_dir=None, status="complete"):
         """Log a job that reached an output stage to the history file.
@@ -1896,11 +1944,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             for material in selected_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
-                # Nest (may re-run if user adjusts and retries)
-                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                # Nest once (may re-run if user adjusts and retries). The same
+                # pass reports whether every fixed-quantity pad landed, so
+                # there is no second nest just to validate the fit.
+                placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
                 # Validate fit
-                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                if fixed_placed != fixed_total:
                     size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
                     messagebox.showerror(_("Nesting Error"), _("Could not fit all '{material}' pieces on the specified {size_desc} size.").format(material=material.replace('_', ' '), size_desc=size_desc))
                     return
@@ -1978,23 +2029,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                         _("Current session is for {material}.\n"
                         "Clear session to switch materials.").format(material=self.scrap_session['material']))
                     return
-                # Use remaining pads from session
-                pads = self.scrap_session['remaining_pads']
                 hole_dia = self.scrap_session['hole_dia']
+
+            # The box is live: nest what it says now, minus what's already cut.
+            pads = self._scrap_pads_for_this_scrap(pads)
 
             if not pads:
                 messagebox.showinfo(_("Session Complete"), _("All pads have been placed!"))
                 return
 
-            # Large-batch optimization opt-in (prompted once per session,
-            # only on scraps with ≥ LARGE_BATCH_THRESHOLD pads remaining).
-            self._maybe_prompt_large_batch_optimization(pads)
-            _optimize = bool(self.scrap_session.get('optimize'))
-
             # Attempt partial placement
             placed, remaining, any_placed = try_nest_partial(
                 pads, material, mat_w, mat_h, self.settings,
-                polygon=mat_polygon, optimize=_optimize)
+                polygon=mat_polygon)
 
             if not any_placed:
                 min_pad_size = min(p['size'] for p in pads)
@@ -2026,8 +2073,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                              placed_count=len(placed), scrap_num=scrap_num,
                              save_dir=save_dir)
 
-            # Update session with remaining pads
-            self.scrap_session['remaining_pads'] = remaining
+            # Credit this scrap to the session's done tally
+            self._scrap_record_result(remaining)
             self._update_scrap_status_display()
             self._update_remaining_pads_window()
 
@@ -2799,10 +2846,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # the block would have to be re-sized per scrap.
                 zones = []
             else:
-                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings,
-                                                     polygon=mat_polygon)
-                if not can_all_pads_fit(pads, material, mat_w, mat_h,
-                                        self.settings, polygon=mat_polygon):
+                # One nest; its fixed counts are the fit check.
+                placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                if fixed_placed != fixed_total:
                     messagebox.showerror(
                         _("Nesting Error"),
                         _("Could not fit all '{m}' pieces in the available "
@@ -2828,10 +2875,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
                                               mode='w') as tmp:
                 tmp_path = tmp.name
+            # The cut streams into the SAME work frame as the framing pass,
+            # and framing flips the scrap OUTLINE with the outline's height.
+            # A camera-captured polygon is inset from that outline, so the
+            # generator's default (flip with the polygon it's given, i.e.
+            # the inset) put every disc `inset` mm toward the machine front
+            # of where the frame showed it. Flip with the outline instead.
+            _flip_source = self.custom_polygon_outline or self.custom_polygon
+            flip_height_mm = (max(p[1] for p in _flip_source)
+                              if _flip_source and len(_flip_source) >= 3
+                              else None)
             try:
                 generate_gcode_from_placed(
                     placed, material, mat_w, mat_h, tmp_path, hole_dia,
-                    self.settings, polygon=mat_polygon, zones=zones)
+                    self.settings, polygon=mat_polygon, zones=zones,
+                    flip_height_mm=flip_height_mm)
                 with open(tmp_path, 'r') as f:
                     gcode_text = f.read()
             finally:
@@ -2994,6 +3052,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # Cut uses the same G92 offset as framing so the cut
                 # placements align with the LB-vertex jog convention.
                 cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
+                self._keep_last_cut_gcode(
+                    cut_lines, material,
+                    (self.scrap_session['scrap_count'] + 1) if scrap_mode else None,
+                    (g92_x, g92_y), flip_height_mm, mat_polygon, len(placed))
                 cut_dlg = FalconRunDialog(
                     self.root, sender, cut_lines,
                     title=_("Cutting — {m}").format(m=material))
@@ -3075,9 +3137,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             for material in supported_materials:
                 mat_w, mat_h, mat_polygon = self._get_material_dimensions(material, width_mm, height_mm, card_paper_dims)
 
-                placed, zones = nest_pads_with_zones(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+                # One nest; its fixed counts are the fit check.
+                placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
 
-                if not can_all_pads_fit(pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon):
+                if fixed_placed != fixed_total:
                     size_desc = _("paper") if (material == "card" and card_paper_dims) else _("sheet")
                     messagebox.showerror(_("Nesting Error"), _("Could not fit all '{material}' pieces on the specified {size_desc} size.").format(material=material.replace('_', ' '), size_desc=size_desc))
                     return
@@ -3199,8 +3263,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                              placed_count=len(placed), scrap_num=scrap_num,
                              save_dir=save_dir)
 
-            # Update session with remaining pads
-            self.scrap_session['remaining_pads'] = remaining
+            # Credit this scrap to the session's done tally
+            self._scrap_record_result(remaining)
             self._update_scrap_status_display()
             self._update_remaining_pads_window()
 

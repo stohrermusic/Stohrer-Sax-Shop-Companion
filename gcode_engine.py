@@ -861,7 +861,8 @@ def can_generate_gcode(material):
 
 
 def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
-                                hole_dia, settings, polygon=None, zones=None):
+                                hole_dia, settings, polygon=None, zones=None,
+                                flip_height_mm=None):
     """
     Generate G-code file from pre-computed placed discs.
 
@@ -888,9 +889,19 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     if not placed and not zones:
         return
 
-    # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom
-    # When a polygon is used, its bounding box defines the coordinate space
-    if polygon:
+    # Flip Y coordinates for G-code: SVG uses Y=0 at top, G-code uses Y=0 at bottom.
+    # When a polygon is used, its bounding box defines the coordinate space.
+    #
+    # flip_height_mm overrides that. Frame & Cut needs it: the cut is streamed
+    # into the same work frame as the framing pass, and the framing pass flips
+    # the scrap's OUTLINE with the outline's height. A camera-captured polygon
+    # is inset from that outline, so flipping the cut with the inset's own
+    # height landed every disc `inset` mm toward the machine front of where
+    # the frame showed it (5 mm on a 5 mm inset: the front row on the edge).
+    # Found 2026-09-20; pinned by tools/test_frame_cut_alignment.py.
+    if flip_height_mm is not None:
+        flip_height = flip_height_mm
+    elif polygon:
         flip_height = max(p[1] for p in polygon)
     else:
         flip_height = sheet_height_mm

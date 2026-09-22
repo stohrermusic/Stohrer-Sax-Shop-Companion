@@ -24,7 +24,6 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Custom polygon shapes for irregular leather skins and scrap pieces (free vertex placement, grid auto-sized to your laser bed)
 - Scrap mode — place pads across multiple pieces, tracking remaining between sheets
   - Preview, edge bias, and custom polygons all work together in scrap mode
-  - **Large-batch optimization** (≥75 pads): opt-in multistart greedy that tries multiple disc orderings per scrap and keeps the best result. Typically fits 5–15% more pads on dense batches.
 - Max fill mode — use `18.0 x max` to fill remaining space with a size
 - **Labeled Zones (beta)** — optionally cut small pads (7.0–12.5 mm by default) in bordered blocks, one per size, with the size engraved on the sheet next to them. A 7.0 and a 7.5 disc are indistinguishable once they're off the laser, and the number engraved on the pad itself is too small to read — so the label goes on the waste instead of the part. Off by default; it trades some material for legibility.
 
