@@ -901,20 +901,8 @@ class OptionsWindow:
                 mat_lbl, mat_ent,
             )
 
-        # Placement has its own range list one section down. Say so here,
-        # because this is where people look for it: a user set up font-size
-        # ranges, saw no placement fields, and asked for placement "to be
-        # moved into the range part" (2026-09-18) -- it was already there.
-        esr_hint = tk.Label(
-            self.eng_settings_range_frame,
-            text=_("Placement (distance from edge, or centered) has its own "
-                   "size ranges in the Engraving Placement section below."),
-            bg=DIALOG_BG, fg="#555555", font=("Helvetica", 8, "italic"),
-            wraplength=420, justify="left", anchor="w")
-        esr_hint.grid(row=5, column=0, columnspan=2, sticky='w', pady=(4, 0))
-
         esr_btn = tk.Frame(self.eng_settings_range_frame, bg=DIALOG_BG)
-        esr_btn.grid(row=6, column=0, columnspan=2, sticky='ew', pady=5)
+        esr_btn.grid(row=5, column=0, columnspan=2, sticky='ew', pady=5)
         esr_add = tk.Button(esr_btn, text=_("Add Range"), command=self._add_eng_settings_range)
         esr_add.pack(side="left", padx=2)
         esr_upd = tk.Button(esr_btn, text=_("Update"), command=self._update_eng_settings_range)
