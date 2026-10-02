@@ -26,7 +26,7 @@ except (ImportError, OSError):
     np = None
     sd = None
 
-from audio_utils import AudioRingBuffer  # noqa: E402 — shared with tuner_engine
+from audio_utils import AudioRingBuffer, hann_peak_freq  # noqa: E402 — shared with tuner_engine
 
 
 # ============================================
@@ -60,9 +60,10 @@ SUBHARM_PROMINENCE_STRICT = 1.5
 SUBHARM_PROMINENCE_RELAXED = 1.3
 # Noise floor multiplier for harmonic series verification peaks
 HARMONIC_VERIFY_NOISE_MULT = 3.0
-# Required harmonic matches for low divisors (2-3)
+# Required harmonic matches for low divisors (2-3), counting the sub-harmonic's
+# own peak; the rest must come from multiples coprime to the divisor
 HARMONIC_MATCHES_LOW = 2
-# Required harmonic matches for high divisors (4-5)
+# Required harmonic matches for high divisors (4-5), same counting
 HARMONIC_MATCHES_HIGH = 3
 # Octave jump hysteresis: new peak must be this much stronger to override previous
 OCTAVE_HYSTERESIS_FACTOR = 1.5
@@ -585,6 +586,10 @@ class TonerEngine:
             lo = max(1, sub_bin - spread)
             hi = min(len(mags) - 2, sub_bin + spread)
             local_peak = lo + int(np.argmax(mags[lo:hi + 1]))
+            # The search window can reach below the floor; a "fundamental"
+            # under MIN_FUNDAMENTAL_HZ is not one.
+            if local_peak < min_bin:
+                continue
             local_mag = float(mags[local_peak])
 
             # Sub-harmonic must be above noise floor. For higher divisors
@@ -602,9 +607,19 @@ class TonerEngine:
             # Verify harmonic series: check that multiples of the
             # sub-harmonic also have peaks. For higher divisors, check
             # more multiples and require more matches.
+            #
+            # Only multiples coprime to the divisor count. The others land
+            # on the strongest peak (mult == divisor) or on its own harmonic
+            # series (/2 x4 is the strongest's H2; /4 x2 and x6 are the /2
+            # candidate's H1 and H3), which are there whether or not the
+            # candidate is real — counting them let any noise bump at half
+            # a note pass as its fundamental. The candidate's own peak was
+            # already checked above, so the requirement drops by one.
             harmonics_found = 0
             check_mults = [2, 3, 4] if divisor <= 3 else [2, 3, 4, 5, 6]
             for mult in check_mults:
+                if math.gcd(mult, divisor) != 1:
+                    continue
                 h_bin = int(round(local_peak * mult))
                 if h_bin >= len(mags) - 1:
                     continue
@@ -614,7 +629,7 @@ class TonerEngine:
                 if h_peak_mag > noise_floor * HARMONIC_VERIFY_NOISE_MULT:
                     harmonics_found += 1
 
-            required = HARMONIC_MATCHES_LOW if divisor <= 3 else HARMONIC_MATCHES_HIGH
+            required = (HARMONIC_MATCHES_LOW if divisor <= 3 else HARMONIC_MATCHES_HIGH) - 1
             if harmonics_found >= required:
                 # Prefer the lowest sub-harmonic (deepest fundamental)
                 if best_candidate is None or local_peak < best_candidate:
@@ -623,17 +638,9 @@ class TonerEngine:
         if best_candidate is not None:
             candidate_bin = best_candidate
 
-        # Parabolic interpolation on the candidate
+        # Candidate's frequency from the Hann peak estimator
         if 0 < candidate_bin < len(mags) - 1:
-            alpha = float(mags[candidate_bin - 1])
-            beta = float(mags[candidate_bin])
-            gamma = float(mags[candidate_bin + 1])
-            denom = alpha - 2 * beta + gamma
-            if abs(denom) > 1e-10 and beta > 0:
-                p = 0.5 * (alpha - gamma) / denom
-                new_freq = (candidate_bin + p) * bin_freq
-            else:
-                new_freq = candidate_bin * bin_freq
+            new_freq = hann_peak_freq(mags, candidate_bin, bin_freq)
         else:
             new_freq = candidate_bin * bin_freq
 
@@ -697,7 +704,10 @@ class TonerEngine:
             local_peak_bin = search_lo + int(np.argmax(mags[search_lo:search_hi + 1]))
             peak_mag = float(mags[local_peak_bin])
 
-            # Parabolic interpolation for frequency and amplitude
+            # Amplitude: parabolic interpolation on the linear magnitudes.
+            # Deliberately unchanged when the frequency read moved to the
+            # Hann estimator (2026-10-02), so harmonics_db stays comparable
+            # with every capture already stored.
             if local_peak_bin > 0 and local_peak_bin < len(mags) - 1:
                 alpha = float(mags[local_peak_bin - 1])
                 beta = float(mags[local_peak_bin])
@@ -705,15 +715,10 @@ class TonerEngine:
                 denom = alpha - 2 * beta + gamma
                 if abs(denom) > 1e-10 and beta > 0:
                     p = 0.5 * (alpha - gamma) / denom
-                    actual_freq = (local_peak_bin + p) * bin_freq
-                    # Amplitude correction: interpolated peak magnitude
                     corrected = beta - 0.25 * (alpha - gamma) * p
                     if corrected > 0:
                         peak_mag = corrected
-                else:
-                    actual_freq = local_peak_bin * bin_freq
-            else:
-                actual_freq = local_peak_bin * bin_freq
+            actual_freq = hann_peak_freq(mags, local_peak_bin, bin_freq)
 
             # dB relative to fundamental (set after first pass)
             if n == 1:
