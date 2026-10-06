@@ -134,6 +134,24 @@ jobs:
           python -m maturin build --release --manifest-path tuner_renderer/Cargo.toml
           pip install --find-links tuner_renderer/target/wheels tuner_render
 
+      # The only place CI has the GPU wheel. Runners have a software adapter
+      # (Windows: Basic Render Driver) or no Vulkan at all (Linux), so this
+      # exercises the "software adapter / init failure -> canvas" fallbacks
+      # for real; the GPU draw path itself only runs on a machine with a GPU.
+      - name: Tuner suites with the GPU wheel
+        if: matrix.full_build && !startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          pip install -r requirements.txt
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get install -y xvfb
+            xvfb-run -a python tools/test_gpu_tuner.py
+            xvfb-run -a python tools/test_tuner_canvas.py
+          else
+            python tools/test_gpu_tuner.py
+            python tools/test_tuner_canvas.py
+          fi
+
       - name: Build with PyInstaller
         run: python build.py
 
@@ -252,6 +270,62 @@ jobs:
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:APP_VERSION" installer.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The installer is what every Windows user runs, and nothing had ever
+      # run it. Install silently, launch the INSTALLED copy with --selftest,
+      # check the Start Menu shortcut, uninstall silently, and make sure the
+      # user's config folder was left alone.
+      - name: Installer round-trip (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\SaxShopCompanion-Windows-Setup-*.exe | Select-Object -First 1
+          $cfg = "$env:APPDATA\StohrerSaxShopCompanion"
+          New-Item -ItemType Directory -Force $cfg | Out-Null
+          Set-Content "$cfg\marker.txt" "keep me"
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit $($p.ExitCode)" }
+          $exe = "${env:ProgramFiles}\SaxShopCompanion\SaxShopCompanion.exe"
+          if (-not (Test-Path $exe)) { throw "installed exe missing at $exe" }
+          $r = Start-Process -FilePath $exe -ArgumentList "--selftest" -Wait -PassThru
+          if ($r.ExitCode -ne 0) { throw "installed copy's selftest exit $($r.ExitCode)" }
+          $lnk = "${env:ProgramData}\Microsoft\Windows\Start Menu\Programs\Stohrer Sax Shop Companion\Stohrer Sax Shop Companion.lnk"
+          if (-not (Test-Path $lnk)) { throw "Start Menu shortcut missing: $lnk" }
+          $unins = Get-ChildItem "${env:ProgramFiles}\SaxShopCompanion\unins*.exe" | Select-Object -First 1
+          $u = Start-Process -FilePath $unins.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstaller exit $($u.ExitCode)" }
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Test-Path $exe) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+          if (Test-Path $exe) { throw "exe still present 60 s after uninstall" }
+          if (-not (Test-Path "$cfg\marker.txt")) { throw "uninstall removed the user's config folder" }
+          Write-Host "install -> installed selftest -> Start Menu shortcut -> uninstall OK; config folder preserved"
+
+      # Screenshot tour in German — the longest language, so clipped or
+      # overflowing translated labels show up here. Windows build, so Matt
+      # sees the cream theme he knows. Never fails the build.
+      - name: Screenshot tour in German (Windows)
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\tour-de-profile","$env:RUNNER_TEMP\tour-de" | Out-Null
+          Set-Content -Encoding utf8 "$env:RUNNER_TEMP\tour-de-profile\app_settings.json" '{"language": "de", "toner_unlocked": true, "visible_tabs": {"Toner": true}}'
+          $env:SAXSHOP_CONFIG_DIR = "$env:RUNNER_TEMP\tour-de-profile"
+          $p = Start-Process -FilePath "dist\SaxShopCompanion.exe" -ArgumentList "--tour","all","--shots","$env:RUNNER_TEMP\tour-de" -PassThru
+          $deadline = (Get-Date).AddSeconds(180)
+          while (-not (Test-Path "$env:RUNNER_TEMP\tour-de\tour-done.txt") -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 3 }
+          Stop-Process -Id $p.Id -ErrorAction SilentlyContinue
+          Get-Content "$env:RUNNER_TEMP\tour-de\tour-done.txt" -ErrorAction SilentlyContinue
+          Get-ChildItem "$env:RUNNER_TEMP\tour-de"
+
+      - name: Upload Windows German tour
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: win-tour-de
+          path: ${{ runner.temp }}/tour-de/
+          if-no-files-found: ignore
 
       # Rename artifacts for release. Windows ships only the Inno Setup
       # installer — the bare PyInstaller .exe is no longer published.
