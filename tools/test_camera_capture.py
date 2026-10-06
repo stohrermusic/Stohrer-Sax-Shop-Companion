@@ -172,22 +172,35 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
     image_size = (640, 480)
     detections = []
-    # Translate the card to several positions inside the frame. Position
-    # variation alone is enough for the synthetic case since the card
-    # has no perspective distortion to solve for.
-    max_x = 640 - cw
-    max_y = 480 - ch
-    positions = [
-        (0, 0), (max_x, 0), (0, max_y), (max_x, max_y),
-        (max_x // 2, 0), (max_x // 2, max_y),
-        (0, max_y // 2), (max_x, max_y // 2),
-    ]
-    for tx, ty in positions:
-        if tx + cw > 640 or ty + ch > 480:
-            continue
-        canvas = np.full((480, 640), 128, dtype=np.uint8)
-        canvas[ty:ty + ch, tx:tx + cw] = card_gray
-        c, ids = cam.detect_charuco(canvas, board)
+    # A synthetic pinhole camera (known K, no distortion) looking at the
+    # card from ten tilted poses. The previous fixture translated the
+    # same fronto-parallel card around the frame, which cannot determine
+    # a focal length — with OpenCV 5 calibrateCamera diverged on it
+    # (fx ~ 9e17, rms 1e10 px) where 4.x had happened to land somewhere
+    # small. Real views make this a real test: the recovered K must match
+    # the one that made the images.
+    import math
+    MM_PER_PX = 25.4 / 20.0          # the card was rendered at 20 dpi
+    TRUE_FX = 800.0
+    K_true = np.array([[TRUE_FX, 0.0, 320.0], [0.0, TRUE_FX, 240.0], [0.0, 0.0, 1.0]])
+    # card pixel -> board-plane mm, centred on the card
+    S = np.array([[MM_PER_PX, 0.0, -cw / 2 * MM_PER_PX],
+                  [0.0, MM_PER_PX, -ch / 2 * MM_PER_PX],
+                  [0.0, 0.0, 1.0]])
+
+    def pinhole_view(rx_deg, ry_deg, tx, ty, tz):
+        R, _ = cv2.Rodrigues(np.array([math.radians(rx_deg), math.radians(ry_deg), 0.0]))
+        E = np.column_stack([R[:, 0], R[:, 1], np.array([tx, ty, tz])])
+        H = K_true @ E @ S
+        return cv2.warpPerspective(card_gray, H / H[2, 2], image_size,
+                                   borderValue=128, flags=cv2.INTER_LINEAR)
+
+    poses = [(0, 0, 0, 0, 650), (15, 0, 30, -20, 650), (-14, 0, -40, 15, 710),
+             (0, 16, 20, 30, 680), (0, -18, -30, -30, 650), (12, 12, 50, 10, 730),
+             (-10, 15, -50, -15, 690), (16, -12, 10, 40, 750), (-15, -12, -20, 35, 670),
+             (8, 18, 40, -40, 710)]
+    for pose in poses:
+        c, ids = cam.detect_charuco(pinhole_view(*pose), board)
         if c is not None and len(c) >= 4:
             detections.append((c, ids))
 
@@ -206,6 +219,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
         # No real distortion, so reprojection error should be tiny
         check("rms_reprojection_error_px < 1 px on undistorted synthetic",
               calib['rms_reprojection_error_px'] < 1.0)
+        K_est = np.array(calib['camera_matrix'])
+        check(f"recovers the focal length (fx {K_est[0, 0]:.1f}, fy {K_est[1, 1]:.1f} vs {TRUE_FX:.0f}; 2 %)",
+              abs(K_est[0, 0] - TRUE_FX) < 0.02 * TRUE_FX and abs(K_est[1, 1] - TRUE_FX) < 0.02 * TRUE_FX)
+        check(f"recovers the principal point ({K_est[0, 2]:.1f}, {K_est[1, 2]:.1f} vs 320, 240; 3 px)",
+              abs(K_est[0, 2] - 320.0) < 3.0 and abs(K_est[1, 2] - 240.0) < 3.0)
         check("homography_px_to_machine_mm shape is 3x3",
               len(calib['homography_px_to_machine_mm']) == 3
               and len(calib['homography_px_to_machine_mm'][0]) == 3)

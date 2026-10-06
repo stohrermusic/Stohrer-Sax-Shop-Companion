@@ -360,17 +360,31 @@ print("\n--- Reference Player API ---")
 player = ReferencePlayer()
 test("Player not playing initially", not player.is_playing)
 
-# We can't test actual audio output without speakers, but test the API
-started = player.play(440.0, "pure")
-test("Player.play() returns True", started)
-test("Player is_playing after play()", player.is_playing)
+# Opening an output stream needs an output device. CI runners (and some
+# headless boxes) have none, and play() correctly returns False there —
+# that's the fallback working, not a bug, so skip rather than fail.
+try:
+    import sounddevice as _sd
+    _sd.query_devices(kind='output')
+    _has_output = True
+except Exception as _e:  # noqa: BLE001 — PortAudioError or no sounddevice
+    _has_output = False
+    print(f"  SKIP: no audio output device here ({type(_e).__name__}); "
+          "player start tests skipped")
+if _has_output:
+    started = player.play(440.0, "pure")
+    test("Player.play() returns True", started)
+    test("Player is_playing after play()", player.is_playing)
+else:
+    test("Player.play() returns False with no output device", not player.play(440.0, "pure"))
 
 player.stop()
 test("Player not playing after stop()", not player.is_playing)
 
 # Rich waveform
-started_rich = player.play(440.0, "rich")
-test("Rich waveform starts", started_rich)
+if _has_output:
+    started_rich = player.play(440.0, "rich")
+    test("Rich waveform starts", started_rich)
 player.stop()
 
 # ============================================
