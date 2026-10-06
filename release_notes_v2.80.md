@@ -1,6 +1,6 @@
-# v2.80 — Leather locator marks, a steadier tuner, and a real Mac shakedown
+# v2.80 — Leather locator marks, tuner accuracy, Mac testing
 
-Sax Shop Companion is a desktop toolkit for saxophone repair techs: it generates SVG and G-code for laser-cutting pad materials, packs dies and die holders, keeps reference libraries for key heights, serial numbers, and screw specs, and includes a chromatic strobe tuner and a harmonic tone analyzer. v2.80 adds engraved locator marks for centering felt on small leather pads, tidies the Sizing Rules dialog, makes the strobe stand still on an in-tune low note, fixes three error paths that showed an "Unexpected Error" instead of a plain message (one of which kept the Tone Analyzer's Analyze window from opening), and — for the first time — has been put through every tab and dialog on real macOS machines, with the two things that found getting fixed.
+Sax Shop Companion is a desktop toolkit for saxophone repair techs: it generates SVG and G-code for laser-cutting pad materials, packs dies and die holders, keeps reference libraries for key heights, serial numbers, and screw specs, and includes a chromatic strobe tuner and a harmonic tone analyzer. v2.80 adds engraved locator marks for centering felt on small leather pads, tidies the Sizing Rules dialog, improves tuner accuracy, fixes a handful of error paths that showed an "Unexpected Error" instead of a plain message, and has been tested on real Macs for the first time.
 
 ## Pad Maker
 
@@ -55,7 +55,7 @@ Sax Shop Companion is a desktop toolkit for saxophone repair techs: it generates
 ## Chromatic Strobe Tuner
 
 - 12-wheel stroboscopic chromatic tuner.
-- **(new) An in-tune note stands still, in every register.** The pitch reading used to drift with the note: an exactly in-tune A2 read almost 8 cents flat (and the wheel turned), while A4 was about a cent off. Every note from E2 up now reads within a fraction of a cent, so the wheel stops where the pitch is, and the cents number and VU needle track how far off you are evenly from the low register up.
+- **(new) Tuner accuracy improved.** Low notes used to read a few cents flat; every note now reads within a fraction of a cent, so an in-tune note stands still.
 - GPU-accelerated rendering via Rust/wgpu on Windows and Linux — 60–120 fps; automatic CPU fallback if GPU unavailable. **(new)** Big or high-DPI windows no longer knock the tuner back to the slow canvas renderer (a 2048-pixel surface limit was being hit at 150%+ display scaling on a wide window); frames are presented without stalling the rest of the app on every refresh; and if the GPU path ever does fail mid-run, the tab switches to the canvas and says so instead of going dark.
 - macOS always uses the canvas renderer — Tk on macOS doesn't expose a native view the GPU renderer can draw into, so Macs are canvas-only by design. Fully functional, just capped at canvas frame rates.
 - Per-ring octave brightness from real spectral data.
@@ -69,7 +69,7 @@ Sax Shop Companion is a desktop toolkit for saxophone repair techs: it generates
 A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental and overtones of your sound and lets you compare setups (horn, mouthpiece, reed, mic, mic placement, embouchure) over time.
 
 - Live spectrum (FFT) and Bars (per-harmonic) views, linear or dB scale.
-- Detects fundamental pitch, extracts up to 20 harmonics. **(new)** Pitch is read more precisely (within a fraction of a cent rather than up to 3–4), and some notes that were read an octave low — mostly ones with a quiet fundamental and a strong second harmonic — now read at the right octave. Harmonic levels, and therefore every descriptor and every stored capture, are unchanged.
+- Detects fundamental pitch, extracts up to 20 harmonics. **(new)** Pitch accuracy improved, and some notes that read an octave low now read correctly. Harmonic levels and stored captures are unchanged.
 - Intonation gauge with cents readout and ±4¢ "in tune" lamp.
 - Auto-transposition by saxophone type with concert pitch toggle.
 - Spectrum overlay: load any preset as a ghost overlay on the live spectrum.
@@ -81,7 +81,7 @@ A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental a
   - Mutate Preset for A/B testing (duplicate with one variable changed).
   - Sandbox mode for non-sax instruments and experimental setups.
   - All captures stored in concert pitch for cross-instrument comparison.
-- **Analyze tool** — single preset detail, two-preset delta, multi-preset spread analysis. **(new)** It opens again. Since the translated releases, File > Analyze failed on its first line with an "Unexpected Error" — a stray throwaway variable had shadowed the translation function inside it. Sorry about that one; there's now an automated check that no function in the app can do it again.
+- **Analyze tool** — single preset detail, two-preset delta, multi-preset spread analysis. **(new)** Fixed: File > Analyze had failed to open with an "Unexpected Error" since the translated releases.
   - Difference charts and harmonic-range interpretation (H1-H4 ≈ bore, H7-H13 ≈ neck/mpc, broadband ≈ mpc/player).
   - 2D Character Map (warmth × complexity), bars/line chart toggle, click-to-highlight across legend / chart / map.
   - Population percentiles by sax type.
@@ -92,7 +92,7 @@ A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental a
 
 ## Cross-platform & General
 
-- **(new) Tested on real Macs, every tab and dialog.** I don't own a Mac, and until now no Mac-specific code in this app had ever been run anywhere. Every release is now put through the full test suite on Apple Silicon and Intel macOS machines (and Windows and Linux), the built app is launched and walked through all seven tabs and every settings dialog, and I look at the pictures. Two things that found are fixed in this release: with the Tone Analyzer enabled, the seven tab labels were clipped ("Pad Mak… Toner (bet") because the window was too narrow for macOS's wider font — the window now sizes itself to its tabs — and the Sizing Rules dialog clipped the end of its preset bar for the same reason.
+- **(new) Tested on real Macs.** Every release now runs the full test suite on Apple Silicon and Intel macOS (plus Windows and Linux), and the built app is launched and walked through every tab and dialog. Two Mac layout bugs found that way are fixed: clipped tab labels with the Tone Analyzer enabled, and a clipped preset bar in Sizing Rules.
 - **Machine integration available on Windows, macOS, and Linux** — pyserial works cross-platform. Off by default everywhere; opt in via File > Feature Set if you have a Grbl machine.
 - **Fully translated** — the entire UI is localized into Spanish, German, French, and Italian. Sax-craft terminology (pad / zapatilla / tampon / Polster / tampone; basswood / tilo / tilleul / Lindenholz / tiglio; etc.) kept consistent across locales, and all four catalogs are at 100%.
 - **macOS** — dual builds: Apple Silicon (full features) and Intel (no audio features). Native dark/light mode support. Cmd-Q (and the app menu's Quit) saves your settings on the way out. The microphone and camera permission prompts appear correctly as of v2.63 (every earlier Apple Silicon build had a code-signing packaging bug that made macOS silently deny access without ever asking — see Upgrading below if an older build already bit you). The macOS download is ~68 MB rather than the old 258 MB.
@@ -107,7 +107,7 @@ A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental a
 
 ## Known limitations
 
-- **Leather Locator Marks are marked beta.** They came in as a request from another tech, the geometry is tested against the felt the app actually cuts, and the layout is proven on every platform — but nobody has yet cut leather with them and pressed a pad. Whether a laser line reads clearly on the fuzzy flesh side is the open question, and the answer depends on your leather and your power. Try one sheet before you count on it, and please report what you see. In G-code they engrave at the leather engraving settings; if that's too light or too heavy, use the SVG output, where they have their own layer.
+- **(new) Leather Locator Marks are marked beta.** The geometry is tested, but nobody has yet cut leather with them and pressed a pad, and whether a laser line reads clearly on the flesh side depends on your leather and power. Try one sheet first and report what you see. In G-code they engrave at the leather engraving settings; use the SVG output if they need their own power.
 - **Labeled Zones are marked beta.** The layout and output are solid and fully tested, but few sheets have been cut with them on real material so far, so treat the first few as a check rather than a batch you're counting on. Please report anything that looks off.
 - **Labeled Zones cost material, and that's the trade.** Keeping each size in its own tidy block packs less tightly than letting the nester fill every gap — expect to give up roughly 10–15% of a sheet on the sizes you've zoned. It's aimed at tiny pads, where the yield is high and the demand is low anyway; if you're cutting a sheet full of large pads, leave it off. If a size no longer fits once it's been grouped, the app tells you it couldn't fit everything rather than quietly cutting it in loose — **a size is never cut without its labeled group**, since an unmarked pile of small discs is exactly the problem this is meant to solve. Widen the size range, use a bigger piece, or turn zones off for that job.
 - **Labeled Zones are not available in Scrap Mode.** A scrap only takes part of a size's count, so a group would have to be re-sized for every piece. Zones apply when you're cutting a whole batch on one sheet or one traced scrap, which is the case they're built for.
@@ -124,9 +124,9 @@ A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental a
 - **This is a drop-in upgrade** — no migrations, no recalibration. Settings, presets, libraries, and camera calibrations carry over untouched.
 - **(new) Labeled Zones and Export Settings have moved** to the Lesser-used settings section at the bottom of Options > Sizing Rules. Same controls, same saved values; click the header to open it (it opens itself if either is already on).
 - **(new) Your saved Sizing Rules presets still work.** Presets saved before v2.80 read as "locator marks off," and the dropdown still recognises which one you're in.
-- **(new) The tuner reads differently on low notes — on purpose.** If you'd learned to aim a few cents sharp of "stopped" on low notes, stop doing that: the wheel now stops where the pitch actually is. Nothing about your reference pitch or transposition settings changed.
-- **(new) Tone Analyzer users:** captures made before v2.80 carry the slightly less precise pitch reading in their `fundamental_freq`; harmonic levels are identical, so every comparison and descriptor is unaffected.
-- **(new) Mac users:** the window may open a little wider than before so all the tab labels fit. Everything else about the Mac build is unchanged, except that it's been tested now.
+- **(new) Tuner:** low notes now stop where the pitch actually is; if you'd learned to aim a little sharp of "stopped" on low notes, you no longer need to.
+- **(new) Tone Analyzer:** older captures keep their slightly less precise pitch reading; harmonic levels are identical, so comparisons and descriptors are unaffected.
+- **(new) Mac users:** the window may open a little wider so all the tab labels fit.
 - The large-batch optimization prompt in Scrap Mode is gone (v2.75). If you want the leftover space on a scrap used, add small sizes to the list or an `x max` line.
 - **Job History** logs from the moment you installed v2.7 forward; there's no way to reconstruct jobs cut before that. The log lives in `job_history.json` in your config folder alongside your presets.
 - **Mac users on v2.62 or earlier:** v2.63 was the release that made the microphone and camera permission prompts appear for the first time. Click **OK / Allow** when macOS asks. If the Tuner still can't hear anything afterward, your Mac may have cached the old silent denial — clear it with these Terminal commands, then relaunch:
