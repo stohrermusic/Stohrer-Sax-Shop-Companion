@@ -3357,7 +3357,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def on_pad_library_selected(self, event=None):
         lib_name = self.pad_library_var.get()
         preset_list = []
-        if lib_name == "All Libraries":
+        if lib_name == _("All Libraries"):
             for library, presets in sorted(self.pad_presets.items()):
                 for name in sorted(presets.keys()):
                     preset_list.append(f"[{library}] {name}")
@@ -3368,7 +3368,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.pad_preset_menu.set(_("Load Pad Preset"))
 
         # Toggle delete button: "Delete Library" when library is empty
-        if (lib_name != "All Libraries"
+        if (lib_name != _("All Libraries")
                 and lib_name in self.pad_presets
                 and not self.pad_presets[lib_name]):
             self.pad_delete_btn.config(text=_("Delete Library"))
@@ -3379,13 +3379,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.settings["last_pad_library"] = lib_name
 
     def update_pad_library_dropdown(self):
-        lib_names = ["All Libraries"] + sorted(self.pad_presets.keys())
+        lib_names = [_("All Libraries")] + sorted(self.pad_presets.keys())
         self.pad_library_dropdown['values'] = lib_names
         # Default to My Presets if it exists, otherwise All Libraries
         if "My Presets" in lib_names:
             self.pad_library_var.set("My Presets")
         else:
-            self.pad_library_var.set("All Libraries")
+            self.pad_library_var.set(_("All Libraries"))
         self.on_pad_library_selected()
 
     def _get_pad_preset_data(self, raw):
@@ -3396,7 +3396,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def on_save_pad_preset(self):
         active_library = self.pad_library_var.get()
-        if not active_library or active_library == "All Libraries":
+        if not active_library or active_library == _("All Libraries"):
             # No library selected — ask for one or create "My Presets"
             lib_name = simpledialog.askstring(_("Library Name"),
                 _("Enter a library name to save to:"),
@@ -3460,7 +3460,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         preset_name = selected_name
         raw = None
 
-        if lib_name == "All Libraries":
+        if lib_name == _("All Libraries"):
             try:
                 lib_name, preset_name = selected_name.split("] ", 1)
                 lib_name = lib_name[1:]
@@ -3485,7 +3485,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         selected_lib = self.pad_library_var.get()
 
         # Delete empty library
-        if (selected_lib != "All Libraries"
+        if (selected_lib != _("All Libraries")
                 and selected_lib in self.pad_presets
                 and not self.pad_presets[selected_lib]):
             if messagebox.askyesno(_("Delete Library"),
@@ -3503,7 +3503,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showwarning(_("Delete Error"), _("Please load a set to delete."))
             return
 
-        if selected_lib == "All Libraries":
+        if selected_lib == _("All Libraries"):
             try:
                 selected_lib, selected_preset = selected_preset.split("] ", 1)
                 selected_lib = selected_lib[1:]
@@ -4278,6 +4278,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
             try:
                 win.tk.call('::tk::unsupported::MacWindowStyle', 'appearance', win,
                             'darkaqua' if appearance == 'dark' else 'aqua')
+                win.update_idletasks()
             except tk.TclError as e:
                 tour_errors.append(f"appearance {appearance}: {e}")
     apply_appearance(root)

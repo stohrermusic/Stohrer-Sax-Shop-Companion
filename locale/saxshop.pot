@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-10-06 14:38-0400\n"
+"POT-Creation-Date: 2026-10-06 14:54-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -159,6 +159,14 @@ msgstr ""
 
 #: library_features.py:286
 msgid "Enter a name for this set:"
+msgstr ""
+
+#: library_features.py:291 library_features.py:332 library_features.py:366
+#: library_features.py:384 library_features.py:408 library_features.py:419
+#: library_features.py:430 library_features.py:435 main.py:3360 main.py:3371
+#: main.py:3382 main.py:3388 main.py:3399 main.py:3463 main.py:3488
+#: main.py:3506
+msgid "All Libraries"
 msgstr ""
 
 #: library_features.py:292
@@ -1701,17 +1709,17 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:3670 main.py:4395 tooling_tab.py:366 tooling_tab.py:432
+#: main.py:3670 main.py:4396 tooling_tab.py:366 tooling_tab.py:432
 #: ui_dialogs.py:967 ui_dialogs.py:2250
 msgid "Felt"
 msgstr ""
 
-#: main.py:3670 main.py:4395 tooling_tab.py:366 tooling_tab.py:432
+#: main.py:3670 main.py:4396 tooling_tab.py:366 tooling_tab.py:432
 #: ui_dialogs.py:968 ui_dialogs.py:2251
 msgid "Card"
 msgstr ""
 
-#: main.py:3670 main.py:4395 tooling_tab.py:366 tooling_tab.py:432
+#: main.py:3670 main.py:4396 tooling_tab.py:366 tooling_tab.py:432
 #: ui_dialogs.py:965 ui_dialogs.py:2249
 msgid "Leather"
 msgstr ""
@@ -1925,11 +1933,11 @@ msgid ""
 "Expected at: {log_path}"
 msgstr ""
 
-#: main.py:4532
+#: main.py:4533
 msgid "Unexpected Error"
 msgstr ""
 
-#: main.py:4533
+#: main.py:4534
 #, python-brace-format
 msgid ""
 "{exc_type}: {exc_value}\n"

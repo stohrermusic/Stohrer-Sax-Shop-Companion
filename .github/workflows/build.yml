@@ -214,6 +214,11 @@ jobs:
           # so the app forces its windows dark with --appearance dark and
           # tour-done.txt records the measured brightness.
           defaults write -g AppleInterfaceStyle Dark
+          # The session-wide switch, so dialogs follow too (the per-window
+          # Tk switch reaches only windows the tour applies it to). May be
+          # refused on a runner; the forced flag below covers the main window.
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' || echo "osascript dark mode refused"
+          sleep 2
           mkdir -p "$RUNNER_TEMP/tour-dark"
           SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/tour-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour all --shots "$RUNNER_TEMP/tour-dark" --appearance dark &
           for i in $(seq 1 60); do
@@ -222,6 +227,7 @@ jobs:
           done
           pkill -f SaxShopCompanion || true
           defaults delete -g AppleInterfaceStyle || true
+          osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' || true
           cat "$RUNNER_TEMP/tour-dark/tour-done.txt" || echo "dark tour did not finish"
 
       - name: Upload macOS screenshot tours (light + dark)
