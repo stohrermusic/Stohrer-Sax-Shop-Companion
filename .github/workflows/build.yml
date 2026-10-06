@@ -75,6 +75,9 @@ jobs:
     # failing Mac test can't ship an installer (2026-10-06).
     needs: [lint, test]
     strategy:
+      # One platform's build failing must not cancel the others' — the
+      # Mac tours and the Windows installer are evidence we want anyway.
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
