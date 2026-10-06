@@ -19,6 +19,7 @@ from svg_engine import (
     placed_disc_area,
     get_disc_diameter, get_felt_thickness_mm, _wave_value,
     feeds_speeds_label_geometry,
+    locator_mark_geometry, locator_circle_points,
 )
 
 # On macOS, use native system colors for dark/light mode support.
@@ -272,7 +273,15 @@ class OptionsWindow:
 
         self.top = tk.Toplevel(parent)
         self.top.title(_("Sizing Rules"))
-        self.top.geometry("500x750")
+        self._dialog_w, self._dialog_h = 500, 750
+        self.top.geometry(f"{self._dialog_w}x{self._dialog_h}")
+        # Aqua's fonts are wider than Windows'; at 500 px the preset bar's
+        # "Save Preset" was clipped on the Mac tour screenshot (2026-10-06).
+        # Widen to the content once laid out. after_idle can fire before the
+        # window is mapped on macOS and X11 (winfo_width() is still 1 then),
+        # so the fit works from the requested size, and runs again on <Map>.
+        self.top.after_idle(self._fit_dialog_width)
+        self.top.bind("<Map>", lambda e: self._fit_dialog_width(), add="+")
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
@@ -306,7 +315,7 @@ class OptionsWindow:
             adv_btn = tk.Button(bottom_button_frame, text=_("Advanced"), command=self.app.open_resonance_window)
             adv_btn.pack(side="right", padx=5)
             add_tooltip(adv_btn, _("Hidden corner."))
-        revert_btn = tk.Button(bottom_button_frame, text=_("Revert to Defaults"), command=self.revert_to_defaults)
+        revert_btn = tk.Button(bottom_button_frame, text=_("Revert to Program Defaults"), command=self.revert_to_defaults)
         revert_btn.pack(side="right", padx=5)
         add_tooltip(revert_btn,
                     _("Reset every value in this dialog back to the app's "
@@ -370,6 +379,18 @@ class OptionsWindow:
             value=self.settings.get("zone_label_min_size", 7.0))
         self.zone_label_max_var = tk.DoubleVar(
             value=self.settings.get("zone_label_max_size", 12.5))
+
+        # Leather locator marks (lesser-used section)
+        self.locator_enabled_var = tk.BooleanVar(
+            value=self.settings.get("locator_marks_enabled", False))
+        self.locator_min_var = tk.DoubleVar(
+            value=self.settings.get("locator_marks_min_size", 7.0))
+        self.locator_max_var = tk.DoubleVar(
+            value=self.settings.get("locator_marks_max_size", 16.0))
+        self.locator_style_var = tk.StringVar(
+            value=self.settings.get("locator_marks_style", "lines"))
+        self.locator_dashed_var = tk.BooleanVar(
+            value=self.settings.get("locator_marks_dashed", False))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
 
@@ -530,7 +551,7 @@ class OptionsWindow:
         unit_mm.pack(side="left", padx=5)
         add_tooltips(unit_tip, unit_in, unit_cm, unit_mm)
 
-        rules_frame = tk.LabelFrame(main_frame, text=_("Sizing Rules (Advanced)"), bg=DIALOG_BG, padx=5, pady=5)
+        rules_frame = tk.LabelFrame(main_frame, text=_("Sizing Rules"), bg=DIALOG_BG, padx=5, pady=5)
         rules_frame.pack(fill="x", pady=5)
         rules_frame.columnconfigure(1, weight=1)
 
@@ -1057,8 +1078,24 @@ class OptionsWindow:
 
         self._toggle_eng_placement_mode()
 
+        # --- Lesser-used settings (collapsed) ---------------------------
+        # Labeled zones, leather locator marks and export compatibility live
+        # behind one header so the dialog stays about pad geometry. The
+        # section opens itself when anything inside is non-default, so an
+        # active setting is never out of sight.
+        self.lesser_open = False
+        lesser_frame = tk.Frame(main_frame, bg=DIALOG_BG)
+        lesser_frame.pack(fill="x", pady=5)
+        self.lesser_btn = tk.Button(lesser_frame, text="", anchor="w", relief="flat",
+                                    bg=DIALOG_BG, command=self._toggle_lesser_used)
+        self.lesser_btn.pack(fill="x")
+        add_tooltip(self.lesser_btn,
+                    _("Settings most people never touch: labeled zones, leather "
+                      "locator marks and SVG export compatibility."))
+        self.lesser_body = tk.Frame(lesser_frame, bg=DIALOG_BG)
+
         # --- Labeled Zones ---------------------------------------------
-        zone_frame = tk.LabelFrame(main_frame, text=_("Labeled Zones"), bg=DIALOG_BG, padx=5, pady=5)
+        zone_frame = tk.LabelFrame(self.lesser_body, text=_("Labeled Zones"), bg=DIALOG_BG, padx=5, pady=5)
         zone_frame.pack(fill="x", pady=5)
 
         zone_cb = tk.Checkbutton(
@@ -1096,7 +1133,67 @@ class OptionsWindow:
 
         self._toggle_zone_fields()
 
-        export_frame = tk.LabelFrame(main_frame, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
+        locator_frame = tk.LabelFrame(self.lesser_body, text=_("Leather Locator Marks"),
+                                      bg=DIALOG_BG, padx=5, pady=5)
+        locator_frame.pack(fill="x", pady=5)
+        loc_cb = tk.Checkbutton(
+            locator_frame, text=_("Engrave felt locator marks on leather pads"),
+            variable=self.locator_enabled_var, bg=DIALOG_BG,
+            command=self._toggle_locator_fields)
+        loc_cb.pack(anchor='w')
+        add_tooltip(loc_cb,
+                    _("Marks on the leather showing where the felt goes, for "
+                      "centering it on pads that have no center hole. They land "
+                      "on the side facing up on the laser, so cut the leather "
+                      "flesh-side (fuzzy side) up when using them."))
+
+        loc_row = tk.Frame(locator_frame, bg=DIALOG_BG)
+        loc_row.pack(anchor='w', pady=(4, 0))
+        loc_range_label = tk.Label(loc_row, text=_("Applies to pad sizes"), bg=DIALOG_BG)
+        loc_range_label.pack(side="left")
+        self.locator_min_entry = tk.Entry(loc_row, textvariable=self.locator_min_var, width=6)
+        self.locator_min_entry.pack(side="left", padx=4)
+        loc_to_label = tk.Label(loc_row, text=_("to"), bg=DIALOG_BG)
+        loc_to_label.pack(side="left")
+        self.locator_max_entry = tk.Entry(loc_row, textvariable=self.locator_max_var, width=6)
+        self.locator_max_entry.pack(side="left", padx=4)
+        tk.Label(loc_row, text=_("mm"), bg=DIALOG_BG).pack(side="left")
+        add_tooltips(_("Only leather pads in this range get marks. The default "
+                       "covers the sizes that get no center hole under the "
+                       "default sizing rules."),
+                     loc_range_label, self.locator_min_entry, loc_to_label, self.locator_max_entry)
+
+        style_row = tk.Frame(locator_frame, bg=DIALOG_BG)
+        style_row.pack(anchor='w', pady=(4, 0))
+        tk.Label(style_row, text=_("Style:"), bg=DIALOG_BG).pack(side="left")
+        self.locator_style_radios = []
+        for label, value, tip in (
+                (_("Four lines"), "lines",
+                 _("Four lines from near the edge in to where the felt edge "
+                   "should be. Centered when the gaps look equal all round.")),
+                (_("Circle"), "circle",
+                 _("A circle the size of the felt disc.")),
+                (_("Both"), "both",
+                 _("The circle and the four lines together."))):
+            rb = tk.Radiobutton(style_row, text=label, value=value,
+                                variable=self.locator_style_var, bg=DIALOG_BG)
+            rb.pack(side="left", padx=(6, 0))
+            add_tooltip(rb, tip)
+            self.locator_style_radios.append(rb)
+        self.locator_dashed_cb = tk.Checkbutton(style_row, text=_("Dashed"),
+                                                variable=self.locator_dashed_var, bg=DIALOG_BG)
+        self.locator_dashed_cb.pack(side="left", padx=(12, 0))
+        add_tooltip(self.locator_dashed_cb,
+                    _("Draw the marks as short dashes instead of solid lines."))
+
+        tk.Label(locator_frame,
+                 text=_("SVG output gives the marks their own layer (Options > Layer Colors). "
+                        "G-code engraves them at the leather engraving settings, so use "
+                        "SVG if they need their own power."),
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
+                 justify="left", wraplength=420).pack(anchor='w', pady=(3, 0))
+
+        export_frame = tk.LabelFrame(self.lesser_body, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
         compat_cb = tk.Checkbutton(export_frame,
                                    text=_("Enable Inkscape/Compatibility Mode (unitless SVG)"),
@@ -1106,6 +1203,47 @@ class OptionsWindow:
                     _("Write SVGs without explicit unit attributes. Turn on "
                     "if Inkscape (or other software) misinterprets the file "
                     "scale. LightBurn does not need this."))
+
+        self.locator_widgets = [self.locator_min_entry, self.locator_max_entry,
+                                self.locator_dashed_cb] + self.locator_style_radios
+        self._toggle_locator_fields()
+
+        if (self.zone_labels_enabled_var.get() or self.locator_enabled_var.get()
+                or self.compatibility_mode_var.get()):
+            self._toggle_lesser_used()
+        else:
+            self._refresh_lesser_header()
+
+    def _fit_dialog_width(self):
+        """Widen the dialog so the scrollable content's widest row fits."""
+        try:
+            self.top.update_idletasks()
+            need = self.scrollable_frame.winfo_reqwidth() + self.scrollbar.winfo_reqwidth() + 8
+            if need > self._dialog_w:
+                self._dialog_w = int(need)
+                h = self.top.winfo_height()
+                self.top.geometry(f"{self._dialog_w}x{h if h > 1 else self._dialog_h}")
+        except tk.TclError:
+            pass
+
+    def _toggle_lesser_used(self):
+        """Expand or collapse the lesser-used settings section."""
+        self.lesser_open = not self.lesser_open
+        if self.lesser_open:
+            self.lesser_body.pack(fill="x", pady=(2, 0))
+        else:
+            self.lesser_body.pack_forget()
+        self._refresh_lesser_header()
+
+    def _refresh_lesser_header(self):
+        arrow = "\u25bc" if self.lesser_open else "\u25b6"
+        self.lesser_btn.config(text=f"{arrow} " + _("Lesser-used settings"))
+
+    def _toggle_locator_fields(self):
+        """Grey the locator options when the marks are off."""
+        state = "normal" if self.locator_enabled_var.get() else "disabled"
+        for w in self.locator_widgets:
+            w.config(state=state)
 
     def _toggle_zone_fields(self):
         """Grey the zone size range when zones are off."""
@@ -1681,12 +1819,21 @@ class OptionsWindow:
         # Export
         self.settings["compatibility_mode"] = self.compatibility_mode_var.get()
 
+        # Leather locator marks
+        self.settings["locator_marks_enabled"] = self.locator_enabled_var.get()
+        self.settings["locator_marks_min_size"] = self.locator_min_var.get()
+        self.settings["locator_marks_max_size"] = self.locator_max_var.get()
+        self.settings["locator_marks_style"] = self.locator_style_var.get()
+        self.settings["locator_marks_dashed"] = self.locator_dashed_var.get()
+
         self.save_callback()
         self.update_callback()
         self.top.destroy()
 
     def revert_to_defaults(self):
-        if messagebox.askyesno(_("Revert to Defaults"), _("Are you sure you want to revert all settings to their original defaults?")):
+        if messagebox.askyesno(_("Revert to Program Defaults"),
+                               _("Reset every value in this dialog to the program's original defaults? "
+                                 "Your saved presets are not touched.")):
             # Sizing
             self.unit_var.set(DEFAULT_SETTINGS["units"])
             self.felt_offset_var.set(DEFAULT_SETTINGS["felt_offset"])
@@ -1741,6 +1888,14 @@ class OptionsWindow:
             # Export
             self.compatibility_mode_var.set(DEFAULT_SETTINGS.get("compatibility_mode", False))
 
+            # Leather locator marks
+            self.locator_enabled_var.set(DEFAULT_SETTINGS["locator_marks_enabled"])
+            self.locator_min_var.set(DEFAULT_SETTINGS["locator_marks_min_size"])
+            self.locator_max_var.set(DEFAULT_SETTINGS["locator_marks_max_size"])
+            self.locator_style_var.set(DEFAULT_SETTINGS["locator_marks_style"])
+            self.locator_dashed_var.set(DEFAULT_SETTINGS["locator_marks_dashed"])
+            self._toggle_locator_fields()
+
     # ------------------------------------------------------------------
     # Sizing-rules preset support
     # ------------------------------------------------------------------
@@ -1784,6 +1939,12 @@ class OptionsWindow:
             "zone_label_max_size": self.zone_label_max_var.get(),
             # Export
             "compatibility_mode": self.compatibility_mode_var.get(),
+            # Leather locator marks
+            "locator_marks_enabled": self.locator_enabled_var.get(),
+            "locator_marks_min_size": self.locator_min_var.get(),
+            "locator_marks_max_size": self.locator_max_var.get(),
+            "locator_marks_style": self.locator_style_var.get(),
+            "locator_marks_dashed": self.locator_dashed_var.get(),
         }
 
     def _apply_dict_to_form(self, source):
@@ -1848,6 +2009,14 @@ class OptionsWindow:
 
         # Export
         self.compatibility_mode_var.set(source.get("compatibility_mode", d.get("compatibility_mode", False)))
+
+        # Leather locator marks
+        self.locator_enabled_var.set(source.get("locator_marks_enabled", d["locator_marks_enabled"]))
+        self.locator_min_var.set(source.get("locator_marks_min_size", d["locator_marks_min_size"]))
+        self.locator_max_var.set(source.get("locator_marks_max_size", d["locator_marks_max_size"]))
+        self.locator_style_var.set(source.get("locator_marks_style", d["locator_marks_style"]))
+        self.locator_dashed_var.set(source.get("locator_marks_dashed", d["locator_marks_dashed"]))
+        self._toggle_locator_fields()
 
     def _detect_active_preset(self):
         """Find a saved preset whose values match the form's current snapshot.
@@ -2357,6 +2526,7 @@ class PadPreviewWindow(tk.Toplevel):
                 cx - outer_r_px, cy - outer_r_px, cx + outer_r_px, cy + outer_r_px,
                 outline=color, width=2, fill='',
             )
+            self._draw_locator(cx, cy, pad_size, settings, outer_r_px / scale, scale)
             return
 
         # Replicate svg_engine's dart geometry exactly.
@@ -2394,6 +2564,29 @@ class PadPreviewWindow(tk.Toplevel):
         # Use create_line on a closed loop (polygon would auto-fill its
         # interior, smoothing the perceived shape; we want crisp outlines).
         self.canvas.create_line(*coords, fill=color, width=2, smooth=False)
+        self._draw_locator(cx, cy, pad_size, settings, outer_r_mm, scale)
+
+    # --- Leather locator marks (same geometry as both engines) ---
+
+    LOCATOR_COLOR = '#1A9E9E'
+
+    def _draw_locator(self, cx, cy, pad_size, settings, outer_r_mm, scale):
+        loc = locator_mark_geometry(pad_size, outer_r_mm, settings)
+        if loc is None:
+            return
+        for lr in loc["circles"]:
+            if loc["dashed"]:
+                for arc in locator_circle_points(lr, True):
+                    pts = [c for x, y in arc for c in (cx + x * scale, cy + y * scale)]
+                    self.canvas.create_line(*pts, fill=self.LOCATOR_COLOR, width=1, tags=("locator",))
+            else:
+                rp = lr * scale
+                self.canvas.create_oval(cx - rp, cy - rp, cx + rp, cy + rp,
+                                        outline=self.LOCATOR_COLOR, width=1, tags=("locator",))
+        for (x0, y0), (x1, y1) in loc["segments"]:
+            self.canvas.create_line(cx + x0 * scale, cy + y0 * scale,
+                                    cx + x1 * scale, cy + y1 * scale,
+                                    fill=self.LOCATOR_COLOR, width=1, tags=("locator",))
 
     # --- Center hole (info-only; matches should_have_center_hole rules) ---
 
@@ -2574,7 +2767,7 @@ class LayerColorWindow:
         
         self.top = tk.Toplevel(parent)
         self.top.title(_("Layer Color Mapping"))
-        self.top.geometry("450x420")
+        self.top.geometry("450x450")
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
@@ -2592,13 +2785,14 @@ class LayerColorWindow:
         layer_map_keys = [
             'felt_outline', 'felt_center_hole', 'felt_engraving',
             'card_outline', 'card_center_hole', 'card_engraving',
-            'leather_outline', 'leather_center_hole', 'leather_engraving',
+            'leather_outline', 'leather_center_hole', 'leather_engraving', 'leather_locator',
             'exact_size_outline', 'exact_size_center_hole', 'exact_size_engraving'
         ]
         
         op_word = {"outline": "outer cut",
                    "center_hole": "center hole",
-                   "engraving": "engraving"}
+                   "engraving": "engraving",
+                   "locator": "felt locator mark"}
         for i, key in enumerate(layer_map_keys):
             label_text = key.replace('_', ' ').capitalize() + ":"
             row_lbl = tk.Label(main_frame, text=label_text, bg=DIALOG_BG)
@@ -4817,7 +5011,7 @@ class GcodeSettingsWindow:
         # Start with existing settings to preserve materials not shown in this dialog
         new_gcode_settings = dict(self.settings.get("gcode_settings", {}))
 
-        for mat_key, _ in self.active_materials:
+        for mat_key, _label in self.active_materials:
             new_gcode_settings[mat_key] = {}
 
             # Engraving mode
@@ -4851,7 +5045,7 @@ class GcodeSettingsWindow:
             new_gcode_settings[mat_key]["filled_line_spacing"] = round(line_spacing, 3)
 
             # Other operations (hole, cut)
-            for op_key, _ in self.OPERATIONS:
+            for op_key, _label in self.OPERATIONS:
                 try:
                     speed = self.vars[mat_key][op_key]['speed'].get()
                     power = self.vars[mat_key][op_key]['power'].get()
@@ -4913,7 +5107,7 @@ class GcodeSettingsWindow:
         """Reset all values to defaults."""
         default_gcode = DEFAULT_SETTINGS.get("gcode_settings", {})
 
-        for mat_key, _ in self.active_materials:
+        for mat_key, _label in self.active_materials:
             mat_defaults = default_gcode.get(mat_key, {})
 
             # Reset engraving mode
@@ -4936,7 +5130,7 @@ class GcodeSettingsWindow:
             self.vars[mat_key]['fill_density'].set(density_val)
 
             # Reset other operations
-            for op_key, _ in self.OPERATIONS:
+            for op_key, _label in self.OPERATIONS:
                 default_speed = mat_defaults.get(f"{op_key}_speed", 100)
                 default_power = mat_defaults.get(f"{op_key}_power", 10)
                 default_passes = mat_defaults.get(f"{op_key}_passes", 1)
@@ -5216,6 +5410,28 @@ class UserGuideWindow(tk.Toplevel):
         self._h2(_("Layer Colors"))
         self._body(_("Options > Layer Colors maps each operation to a LightBurn color layer "
                     "(numbered 00 through 29). This only affects SVG output for use in LightBurn."))
+        self._blank()
+
+        self._h2(_("Lesser-used settings"))
+        self._body(_("Sizing Rules > Lesser-used settings holds three things most people never touch: Labeled Zones, Leather Locator Marks, and Export Settings. Click the header to open it; it opens itself when any of them is switched on."))
+        self._blank()
+
+        self._h2(_("Labeled Zones"))
+        self._body(_("Cut each pad size in its own bordered block with the size engraved beside it, so small discs can be told apart after they come off the laser. Off by default; set the size range it applies to. Zones use a grid, so they cost some material, and they stand down in Scrap Mode."))
+        self._blank()
+
+        self._h2(_("Leather Locator Marks"))
+        self._body(_("Sizing Rules > Lesser-used settings > Leather Locator Marks engraves guides "
+                    "on leather pads showing where the felt sits — four lines ending at the felt "
+                    "edge, a circle the size of the felt, or both — so a pad with no center hole "
+                    "can be centered by eye before pressing. The marks must be on the side the "
+                    "felt touches, so cut the leather flesh-side (fuzzy side) up when using them. "
+                    "Applies to a pad-size range; off by default."))
+        self._bullet(_("SVG output puts the marks on their own layer (Options > Layer Colors > "
+                      "Leather locator), so you can give them their own power in LightBurn."))
+        self._bullet(_("G-code output engraves them at the leather engraving settings — there is "
+                      "no separate power for them yet. Use the SVG output if the marks need "
+                      "their own power."))
         self._blank()
 
         self._h2(_("Custom Shapes"))

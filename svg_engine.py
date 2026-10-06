@@ -126,6 +126,111 @@ def get_disc_diameter(pad_size, material, settings):
 
     return 0
 
+# --- Leather locator marks -------------------------------------------------
+# Engraved guides on the leather showing where the felt sits, so a pad with
+# no center hole can be centered by eye before pressing. Marks must be on the
+# side the felt touches (flesh side), so the leather is cut flesh-side up.
+LOCATOR_EDGE_MARGIN_MM = 1.0   # lines stop this far inside the cut (or the dart valleys)
+LOCATOR_MIN_LINE_MM = 0.8      # a line shorter than this isn't a guide; drop it
+LOCATOR_DASH_MM = 1.0
+LOCATOR_GAP_MM = 0.6
+LOCATOR_CIRCLE_SEGMENTS = 72
+LOCATOR_STYLES = ("lines", "circle", "both")
+
+
+def locator_marks_apply(pad_size, material, settings):
+    """True when this pad gets locator marks: leather, feature on, size in range."""
+    if material != 'leather' or not settings.get("locator_marks_enabled", False):
+        return False
+    lo = float(settings.get("locator_marks_min_size", 7.0))
+    hi = float(settings.get("locator_marks_max_size", 16.0))
+    return lo <= pad_size <= hi
+
+
+def locator_mark_geometry(pad_size, outer_r, settings):
+    """Locator mark primitives for one leather disc, relative to its center.
+
+    Returns a dict {"felt_r": float, "circles": [radius, ...],
+    "segments": [((x0, y0), (x1, y1)), ...], "dashed": bool} or None when
+    the pad gets no marks. Everything is symmetric about both axes, so the
+    same primitives serve SVG (Y-down) and G-code (Y-up) unchanged — both
+    engines and the pad preview call this, which is what keeps them in
+    agreement.
+
+    The felt footprint on the flat leather is the felt disc itself:
+    felt_r = get_disc_diameter(pad, 'felt') / 2. Lines run from the felt
+    edge outward and stop LOCATOR_EDGE_MARGIN_MM inside the outer cut, or
+    inside the dart valleys on a darted pad, so no mark runs off material.
+    """
+    if not locator_marks_apply(pad_size, 'leather', settings):
+        return None
+    felt_r = get_disc_diameter(pad_size, 'felt', settings) / 2
+    if felt_r <= 0 or felt_r >= outer_r:
+        return None
+
+    # Outer limit: the dart valleys on a darted pad, else the cut.
+    dart_cfg = get_dart_settings_for_size(pad_size, settings)
+    limit_r = outer_r
+    if dart_cfg is not None:
+        sizing = get_sizing_for_size(pad_size, settings)
+        inner_r = felt_r + get_felt_thickness_mm(settings, sizing) + dart_cfg.get("overwrap", 0.5)
+        limit_r = inner_r if inner_r < outer_r else outer_r - 0.2
+    outer_end = limit_r - LOCATOR_EDGE_MARGIN_MM
+
+    style = settings.get("locator_marks_style", "lines")
+    if style not in LOCATOR_STYLES:
+        style = "lines"
+    dashed = bool(settings.get("locator_marks_dashed", False))
+
+    circles, segments = [], []
+    if style in ("circle", "both"):
+        circles.append(felt_r)
+    if style in ("lines", "both") and outer_end - felt_r >= LOCATOR_MIN_LINE_MM:
+        # Dashes are laid from the FELT edge outward, so the inner end — the
+        # one that locates — is always a full dash landing exactly on felt_r.
+        if dashed:
+            spans = []
+            start = felt_r
+            while start < outer_end:
+                end = min(start + LOCATOR_DASH_MM, outer_end)
+                if end - start >= LOCATOR_DASH_MM * 0.4:
+                    spans.append((start, end))
+                start = end + LOCATOR_GAP_MM
+        else:
+            spans = [(felt_r, outer_end)]
+        for ux, uy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            for a, b in spans:
+                segments.append(((ux * a, uy * a), (ux * b, uy * b)))
+
+    if not circles and not segments:
+        return None
+    return {"felt_r": felt_r, "circles": circles, "segments": segments, "dashed": dashed}
+
+
+def locator_circle_points(radius, dashed, segments=LOCATOR_CIRCLE_SEGMENTS):
+    """Polyline(s) for a locator circle, relative to the center.
+
+    Solid: one closed polyline. Dashed: arcs of LOCATOR_DASH_MM separated by
+    LOCATOR_GAP_MM, each sampled along the circle. Shared by G-code and the
+    SVG dashed branch so both draw the same points.
+    """
+    if not dashed:
+        return [[(radius * math.cos(2 * math.pi * i / segments),
+                  radius * math.sin(2 * math.pi * i / segments)) for i in range(segments + 1)]]
+    circ = 2 * math.pi * radius
+    n = max(4, int(circ // (LOCATOR_DASH_MM + LOCATOR_GAP_MM)))
+    pitch = 2 * math.pi / n
+    dash_angle = pitch * LOCATOR_DASH_MM / (LOCATOR_DASH_MM + LOCATOR_GAP_MM)
+    per_dash = max(3, int(math.ceil(segments / n)) + 1)
+    arcs = []
+    for k in range(n):
+        a0 = k * pitch
+        arcs.append([(radius * math.cos(a0 + dash_angle * j / (per_dash - 1)),
+                      radius * math.sin(a0 + dash_angle * j / (per_dash - 1)))
+                     for j in range(per_dash)])
+    return arcs
+
+
 def should_have_center_hole(pad_size, hole_dia, settings):
     sizing = get_sizing_for_size(pad_size, settings)
     min_size = sizing.get("min_hole_size", 16.5)
@@ -1666,6 +1771,13 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
             else:
                 dwg.add(dwg.circle(center=(f"{cx}mm", f"{cy}mm"), r=f"{hole_dia / 2}mm", stroke=layer_colors[f'{material}_center_hole'], fill='none', stroke_width=stroke_w))
 
+        # --- Leather locator marks (own layer) ---
+        if material == 'leather':
+            loc = locator_mark_geometry(pad_size, r, settings)
+            if loc is not None:
+                _render_svg_locator(dwg, cx, cy, loc, layer_colors.get('leather_locator', '#00E0E0'),
+                                    compatibility_mode, stroke_w)
+
         font_size = eng_cfg.get("engraving_font_size", {}).get(material, 2.0)
 
         # --- Determine Engraving Settings (Standard vs Star) ---
@@ -1744,6 +1856,24 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                                  text_anchor="middle",
                                  font_size=f"{font_size}mm",
                                  fill=layer_colors[f'{material}_engraving']))
+
+
+def _render_svg_locator(dwg, cx, cy, loc, color, compatibility_mode, stroke_w):
+    """Draw one disc's locator marks (from locator_mark_geometry) on their own layer."""
+    def _u(v):
+        return v if compatibility_mode else f"{v}mm"
+
+    for radius in loc["circles"]:
+        if loc["dashed"]:
+            for arc in locator_circle_points(radius, True):
+                dwg.add(dwg.polyline(points=[(cx + x, cy + y) for x, y in arc],
+                                     stroke=color, fill='none', stroke_width=stroke_w))
+        else:
+            dwg.add(dwg.circle(center=(_u(cx), _u(cy)), r=_u(radius),
+                               stroke=color, fill='none', stroke_width=stroke_w))
+    for (x0, y0), (x1, y1) in loc["segments"]:
+        dwg.add(dwg.line(start=(_u(cx + x0), _u(cy + y0)), end=(_u(cx + x1), _u(cy + y1)),
+                         stroke=color, stroke_width=stroke_w))
 
 
 def _render_svg_zones(dwg, zones, material, settings, compatibility_mode, stroke_w):
@@ -2144,6 +2274,22 @@ def _min_holder_sheet(num_pieces, outer_d=HOLDER_OUTER_R * 2, spacing=5.0):
     rows = (num_pieces + cols - 1) // cols
     return (cols * outer_d + (cols + 1) * spacing,
             rows * outer_d + (rows + 1) * spacing)
+
+
+def check_holder_sheet(variant, layer_count, sheet_width_mm, sheet_height_mm,
+                       outer_d=HOLDER_OUTER_R * 2, spacing=5.0):
+    """Raise ValueError (the user-facing message) if the holder pieces for
+    this variant don't fit the sheet. The Tooling tab calls this BEFORE the
+    save dialog, so a too-small sheet is reported before the user has
+    picked a filename for a file that will never be written."""
+    num_pieces = len(_holder_pieces_for(variant, layer_count))
+    if _pack_holder_grid(num_pieces, sheet_width_mm, sheet_height_mm, outer_d, spacing) is None:
+        min_w, min_h = _min_holder_sheet(num_pieces, outer_d, spacing)
+        raise ValueError(
+            f"{num_pieces} holder pieces don't fit on a "
+            f"{sheet_width_mm:.0f} × {sheet_height_mm:.0f} mm sheet. "
+            f"Need at least {min_w:.0f} × {min_h:.0f} mm."
+        )
 
 
 def generate_holder_svg(variant, filename, settings, *,

@@ -550,8 +550,10 @@ def calibrate_from_frames(detections, image_size, board=None,
         ref_corners_px, ref_ids = detections[ref_idx]
         src_pts_list.append(
             ref_corners_px.reshape(-1, 2).astype(np.float32))
-        for i in ref_ids:
-            bxy = board_corners_mm[int(i[0]), :2]
+        # OpenCV 4.x returns ids as (N, 1); 5.x returns a flat (N,).
+        # Flatten so both index the board the same way.
+        for cid in np.asarray(ref_ids).reshape(-1):
+            bxy = board_corners_mm[int(cid), :2]
             mxy = _board_corner_to_machine_mm(
                 bxy, card_offset_x_mm, card_offset_y_mm,
                 board_h_mm=board_h_mm,

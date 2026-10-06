@@ -3223,7 +3223,7 @@ class TonerTabMixin:
 
         # Collect unique values for filters
         def _unique(field):
-            return sorted(set(p.get(field, '') for _, _, p in all_presets
+            return sorted(set(p.get(field, '') for _lib, _name, p in all_presets
                               if p.get(field)))
         all_types = _unique('horn_type')
         all_makes = _unique('horn_make')
@@ -3233,7 +3233,7 @@ class TonerTabMixin:
 
         # Mic types from sessions
         all_mic_types = set()
-        for _, _, p in all_presets:
+        for _lib, _name, p in all_presets:
             for s in p.get('sessions', []):
                 mt = s.get('mic_type', '')
                 if mt:

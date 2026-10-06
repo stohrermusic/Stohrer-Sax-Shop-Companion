@@ -7,7 +7,8 @@ Includes a single-stroke digit font for engraving pad sizes.
 
 import math
 
-from svg_engine import _wave_value, feeds_speeds_label_geometry
+from svg_engine import (_wave_value, feeds_speeds_label_geometry,
+                        locator_mark_geometry, locator_circle_points)
 
 # =============================================================================
 # SINGLE-STROKE DIGIT FONT
@@ -954,8 +955,9 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     all_y = []
 
     def _collect_disc_strokes(pad_size, cx, cy, radius):
-        """Collect engraving, hole, and cut strokes for a single disc."""
+        """Collect engraving, locator, hole, and cut strokes for a single disc."""
         disc_eng = []
+        disc_loc = []
         disc_hole = []
         disc_cut = []
 
@@ -1060,6 +1062,18 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
                 hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
                 disc_hole.append(hole_points)
 
+        # Leather locator marks: same primitives as the SVG (they're
+        # symmetric about both axes, so the Y-flip is a no-op). No kerf —
+        # they're engraved, not cut.
+        if material == 'leather':
+            loc = locator_mark_geometry(pad_size, radius, settings)
+            if loc is not None:
+                for lr in loc["circles"]:
+                    for pts in locator_circle_points(lr, loc["dashed"]):
+                        disc_loc.append([(cx + x, cy + y) for x, y in pts])
+                for (x0, y0), (x1, y1) in loc["segments"]:
+                    disc_loc.append([(cx + x0, cy + y0), (cx + x1, cy + y1)])
+
         # Outer cut - circle or star pattern
         if is_dart_pad:
             felt_thick = get_felt_thickness_mm(settings, sizing)
@@ -1091,7 +1105,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             cut_points = linearize_circle(cx, cy, cut_radius, segments=72)
             disc_cut.append(cut_points)
 
-        return disc_eng, disc_hole, disc_cut
+        return disc_eng, disc_loc, disc_hole, disc_cut
 
     # Compute bounds
     for pad_size, cx, cy, radius in placed:
@@ -1113,6 +1127,19 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         'leather': ('C05', 'C03', 'C02'),
     }
     eng_layer, hole_layer, cut_layer = layer_names.get(material, ('C00', 'C01', 'C02'))
+    # Leather locator marks get their own layer comment but run at the
+    # engraving settings — G-code has no separate speed/power for them
+    # (the SVG output does, via its own layer color). Said in the file so a
+    # user reading the G-code knows where the number came from.
+    loc_layer = 'C06'
+
+    def _locator_layer(strokes):
+        if not strokes:
+            return []
+        out = ["; Locator marks: engraving settings (for their own power, use the SVG output)"]
+        out.extend(generate_gcode_layer(strokes, engraving_speed, engraving_power, loc_layer,
+                                        air_assist=air_assist_engraving, passes=engraving_passes))
+        return out
 
     # Zone borders + labels go down first, as one engraving pass, so the
     # sheet is labeled before any part is cut loose. They're not per-disc,
@@ -1146,12 +1173,13 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     if cut_grouping == "pad":
         # Per-pad grouping: engrave + hole + cut for each disc
         for pad_size, cx, cy, radius in placed:
-            disc_eng, disc_hole, disc_cut = _collect_disc_strokes(pad_size, cx, cy, radius)
+            disc_eng, disc_loc, disc_hole, disc_cut = _collect_disc_strokes(pad_size, cx, cy, radius)
 
             if disc_eng:
                 gcode_lines.extend(generate_gcode_layer(disc_eng, engraving_speed, engraving_power, eng_layer,
                                                          overscan_mm=overscan_mm, air_assist=air_assist_engraving,
                                                          passes=engraving_passes))
+            gcode_lines.extend(_locator_layer(disc_loc))
             if disc_hole:
                 gcode_lines.extend(generate_gcode_layer(disc_hole, hole_speed, hole_power, hole_layer,
                                                          air_assist=air_assist_hole, passes=hole_passes))
@@ -1161,12 +1189,14 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     else:
         # Layer grouping (default): all engravings, then all holes, then all cuts
         engraving_strokes = []
+        locator_strokes = []
         hole_strokes = []
         cut_strokes = []
 
         for pad_size, cx, cy, radius in placed:
-            disc_eng, disc_hole, disc_cut = _collect_disc_strokes(pad_size, cx, cy, radius)
+            disc_eng, disc_loc, disc_hole, disc_cut = _collect_disc_strokes(pad_size, cx, cy, radius)
             engraving_strokes.extend(disc_eng)
+            locator_strokes.extend(disc_loc)
             hole_strokes.extend(disc_hole)
             cut_strokes.extend(disc_cut)
 
@@ -1174,6 +1204,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             gcode_lines.extend(generate_gcode_layer(engraving_strokes, engraving_speed, engraving_power, eng_layer,
                                                      overscan_mm=overscan_mm, air_assist=air_assist_engraving,
                                                      passes=engraving_passes))
+        gcode_lines.extend(_locator_layer(locator_strokes))
 
         if hole_strokes:
             gcode_lines.extend(generate_gcode_layer(hole_strokes, hole_speed, hole_power, hole_layer,

@@ -1,6 +1,7 @@
 """Test tuner engine with synthetic audio signals — no microphone needed."""
 import sys
 import math
+import time
 sys.path.insert(0, '.')
 
 import numpy as np
@@ -267,7 +268,6 @@ r1 = engine_acc.analyze_buffer(sharp_audio[:chunk_size])
 phase1 = r1.phase_offsets[9]
 
 # Second analysis (feed more audio)
-import time
 time.sleep(0.02)  # Small delay for dt
 r2 = engine_acc.analyze_buffer(sharp_audio[:chunk_size * 2])
 phase2 = r2.phase_offsets[9]
@@ -360,17 +360,31 @@ print("\n--- Reference Player API ---")
 player = ReferencePlayer()
 test("Player not playing initially", not player.is_playing)
 
-# We can't test actual audio output without speakers, but test the API
-started = player.play(440.0, "pure")
-test("Player.play() returns True", started)
-test("Player is_playing after play()", player.is_playing)
+# Opening an output stream needs an output device. CI runners (and some
+# headless boxes) have none, and play() correctly returns False there —
+# that's the fallback working, not a bug, so skip rather than fail.
+try:
+    import sounddevice as _sd
+    _sd.query_devices(kind='output')
+    _has_output = True
+except Exception as _e:  # noqa: BLE001 — PortAudioError or no sounddevice
+    _has_output = False
+    print(f"  SKIP: no audio output device here ({type(_e).__name__}); "
+          "player start tests skipped")
+if _has_output:
+    started = player.play(440.0, "pure")
+    test("Player.play() returns True", started)
+    test("Player is_playing after play()", player.is_playing)
+else:
+    test("Player.play() returns False with no output device", not player.play(440.0, "pure"))
 
 player.stop()
 test("Player not playing after stop()", not player.is_playing)
 
 # Rich waveform
-started_rich = player.play(440.0, "rich")
-test("Rich waveform starts", started_rich)
+if _has_output:
+    started_rich = player.play(440.0, "rich")
+    test("Rich waveform starts", started_rich)
 player.stop()
 
 # ============================================
@@ -417,6 +431,58 @@ for pc in range(12):
 r_all = engine_all.analyze_buffer(cluster)
 all_active = sum(r_all.active)
 test(f"Chromatic cluster: many wheels active ({all_active}/12)", all_active >= 8)
+
+# ============================================
+# PITCH READING ACCURACY (2026-10-02)
+# ============================================
+# A parabola through three linear magnitudes is the wrong shape for a Hann
+# peak: an exactly-in-tune A2 read 7.8 c flat, so the strobe drifted on a
+# note that was dead on. Peak frequency now comes from the Hann closed form
+# (audio_utils.hann_peak_freq).
+print("\n--- Pitch reading accuracy ---")
+
+
+def make_tone_h2(freq, duration=0.2):
+    """Sine plus a -6 dB 2nd harmonic."""
+    t = np.arange(int(SAMPLE_RATE * duration)) / SAMPLE_RATE
+    s = 0.5 * np.sin(2 * np.pi * freq * t) + 0.25 * np.sin(2 * np.pi * 2 * freq * t)
+    return s.astype(np.float32)
+
+
+OFFSETS = [-20, -10, -5, -2, 0, 2, 5, 10, 20]
+worst, worst_at = 0.0, ""
+for label, f in [("A2", 110.0), ("A3", 220.0), ("A4", 440.0), ("A5", 880.0)]:
+    for off in OFFSETS:
+        r = TunerEngine().analyze_buffer(make_tone_h2(f * 2 ** (off / 1200)))
+        err = abs(r.cents_errors[9] - off)
+        if err > worst:
+            worst, worst_at = err, f"{label} {off:+d} c"
+test(f"A2-A5 at -20..+20 c: cents_errors within 0.15 c (worst {worst:.3f} c, {worst_at})",
+     worst < 0.15)
+
+# The strobe itself: over one 0.1 s frame an in-tune note's wheel and ring
+# must not turn by more than 0.15 c worth of drift.
+worst_deg, worst_at = 0.0, ""
+for label, f, octave in [("A2", 110.0, 2), ("A3", 220.0, 3), ("A4", 440.0, 4), ("A5", 880.0, 5)]:
+    eng = TunerEngine()
+    eng._last_time = time.perf_counter() - 1.0   # dt clamps to 0.1 s
+    r = eng.analyze_buffer(make_tone_h2(f))
+    for what, ph in [("wheel", r.phase_offsets[9]),
+                     ("ring", r.ring_phase_offsets[9][octave - MIN_OCTAVE])]:
+        turn = abs((ph + 180.0) % 360.0 - 180.0)
+        if turn > worst_deg:
+            worst_deg, worst_at = turn, f"{label} {what}"
+limit_deg = 0.15 * eng._drift_rates[9] * 0.1
+test(f"In-tune A2-A5: strobe turns < {limit_deg:.3f} deg per 0.1 s (worst {worst_deg:.4f}, {worst_at})",
+     worst_deg < limit_deg)
+
+# A high note well off pitch peaks outside the 3 bins round the reference
+# bin (B5 26 c flat: peak at bin 90, window 91-93). The estimator climbs to
+# the lobe's top instead of stopping half a bin short.
+f_b5 = 440.0 * 2 ** ((83 - 69) / 12)
+r = TunerEngine().analyze_buffer(make_tone_h2(f_b5 * 2 ** (-26.3 / 1200)))
+test(f"B5 26.3 c flat reads -26.3 c (got {r.cents_errors[11]:+.3f})",
+     abs(r.cents_errors[11] + 26.3) < 0.15)
 
 # ============================================
 # TUNER RESULT STRUCTURE

@@ -48,6 +48,11 @@ def main():
 
     # Load website JSON
     website_path = "C:/code/stohrermusic/static/data/pad_presets.json"
+    if not os.path.isfile(website_path):
+        # The website checkout lives only on Matt's workstation; CI and
+        # clean clones have nothing to compare against.
+        print(f"SKIP: website data not on this machine ({website_path})")
+        sys.exit(0)
     with open(website_path) as f:
         data = json.load(f)
 

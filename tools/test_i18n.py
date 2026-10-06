@@ -86,20 +86,66 @@ def main():
           expected.issubset(LANGUAGE_NAMES.keys()),
           f"have: {set(LANGUAGE_NAMES.keys())}")
 
-    # --- Every shipping .po must have at least some translations ---
-    # Strict full-coverage gate is a separate test that runs at release time
-    # (full_coverage_gate=True). During development we tolerate partial
-    # coverage since translations land incrementally.
-    if os.path.isfile(es_mo):
+    # --- Every shipping catalog is complete: no empty, no fuzzy ---
+    # The workflow in CLAUDE.md translates every new string in the same
+    # commit (extract -> update -> translate -> compile), so a fuzzy or
+    # empty entry in ANY catalog is a slip, not a stage. This used to
+    # check only Spanish; the other three could ship half-done unnoticed.
+    try:
         from babel.messages.pofile import read_po
-        es_po = os.path.join(locale_dir, "es", "LC_MESSAGES", f"{DOMAIN}.po")
-        with open(es_po, "rb") as f:
-            catalog = read_po(f)
-        translated_count = sum(1 for m in catalog if m.string and m.id)
-        total = sum(1 for m in catalog if m.id)
-        check(f"es catalog has translations ({translated_count}/{total})",
-              translated_count > 0,
-              "no translated entries at all")
+    except ImportError:
+        read_po = None
+        check("babel available for catalog checks", False, "pip install babel")
+    if read_po is not None:
+        for lang in sorted(LANGUAGE_NAMES):
+            if lang == "en":
+                continue
+            po = os.path.join(locale_dir, lang, "LC_MESSAGES", f"{DOMAIN}.po")
+            mo = os.path.join(locale_dir, lang, "LC_MESSAGES", f"{DOMAIN}.mo")
+            check(f"{lang}: .po and compiled .mo present",
+                  os.path.isfile(po) and os.path.isfile(mo))
+            if not os.path.isfile(po):
+                continue
+            with open(po, "rb") as f:
+                catalog = read_po(f)
+            ids = [m for m in catalog if m.id]
+            empty = [m.id for m in ids if not m.string]
+            fuzzy = [m.id for m in ids if m.fuzzy]
+            check(f"{lang}: every string translated ({len(ids) - len(empty)}/{len(ids)})",
+                  not empty, f"empty: {[str(e)[:40] for e in empty[:3]]}")
+            check(f"{lang}: no fuzzy entries", not fuzzy,
+                  f"fuzzy: {[str(z)[:40] for z in fuzzy[:3]]}")
+            if os.path.isfile(mo):
+                check(f"{lang}: .mo is not older than .po",
+                      os.path.getmtime(mo) >= os.path.getmtime(po) - 1,
+                      "run tools/compile_translations.py")
+
+    # --- The committed template is current with the source ---
+    # The catalog checks above compare .po against .pot; nothing compared
+    # .pot against the code. A string added without re-running
+    # tools/extract_strings.py shipped untranslated in every language and
+    # no test noticed (the tuner's CPU-mode notice, 2026-10-06). Extract
+    # into a scratch template and require every source msgid to be in the
+    # committed one.
+    if read_po is not None:
+        import subprocess
+        import sys as _sys
+        import tempfile
+        repo = os.path.dirname(locale_dir)
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = os.path.join(tmp, "fresh.pot")
+            r = subprocess.run([_sys.executable, "-m", "babel.messages.frontend", "extract",
+                                "-F", os.path.join(repo, "babel.cfg"), "-o", fresh, "."],
+                               cwd=repo, capture_output=True, text=True)
+            check("extraction into a scratch template runs", r.returncode == 0, r.stderr[-300:])
+            if r.returncode == 0:
+                with open(fresh, "rb") as f:
+                    fresh_ids = {m.id for m in read_po(f) if m.id}
+                with open(pot_path, "rb") as f:
+                    committed_ids = {m.id for m in read_po(f) if m.id}
+                missing = sorted(str(i)[:60] for i in fresh_ids - committed_ids)
+                check(f"committed saxshop.pot has every source string ({len(fresh_ids)})",
+                      not missing, f"not extracted yet: {missing[:4]} — run tools/extract_strings.py")
 
     # --- Summary ---
     print("=" * 60)

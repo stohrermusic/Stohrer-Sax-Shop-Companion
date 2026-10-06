@@ -95,6 +95,20 @@ pub struct Renderer {
     is_srgb: bool,
     width: u32,
     height: u32,
+    /// Largest surface edge the device accepts; configure() panics past it.
+    max_dim: u32,
+    adapter_info: wgpu::AdapterInfo,
+}
+
+/// Clamp a requested surface size to what the device can allocate.
+///
+/// `Limits::downlevel_defaults()` caps textures at 2048 px, and a 1400 px
+/// tuner frame on a 250 % display is 3500 device px — Surface::configure
+/// panics past the limit, and the panic reaches Python as a BaseException.
+/// We now ask for the adapter's real limits (usually 8192+), and clamp as a
+/// last line so an oversize window stretches instead of panicking.
+fn clamp_surface(width: u32, height: u32, max_dim: u32) -> (u32, u32) {
+    (width.max(1).min(max_dim), height.max(1).min(max_dim))
 }
 
 impl Renderer {
@@ -126,15 +140,22 @@ impl Renderer {
         }))
         .ok_or("No suitable GPU adapter found")?;
 
+        let adapter_info = adapter.get_info();
+
         let (device, queue) = pollster::block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("tuner"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                // downlevel_defaults() alone caps textures at 2048 px; take
+                // the adapter's real resolution limits on top of it.
+                required_limits: wgpu::Limits::downlevel_defaults()
+                    .using_resolution(adapter.limits()),
                 ..Default::default()
             },
             None,
         ))?;
+        let max_dim = device.limits().max_texture_dimension_2d.max(1);
+        let (width, height) = clamp_surface(width, height, max_dim);
 
         // Prefer sRGB for correct color handling
         let surface_caps = surface.get_capabilities(&adapter);
@@ -146,12 +167,21 @@ impl Renderer {
             .unwrap_or(surface_caps.formats[0]);
         let is_srgb = format.is_srgb();
 
+        // Fifo blocks render() until the next vsync — ~16 ms on the UI
+        // thread every frame. Mailbox returns at once and shows the latest
+        // frame at vsync, no tearing. Take it where the surface offers it.
+        let present_mode = if surface_caps.present_modes.contains(&wgpu::PresentMode::Mailbox) {
+            wgpu::PresentMode::Mailbox
+        } else {
+            wgpu::PresentMode::Fifo
+        };
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            width: width.max(1),
-            height: height.max(1),
-            present_mode: wgpu::PresentMode::Fifo, // VSync
+            width,
+            height,
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
@@ -290,14 +320,15 @@ impl Renderer {
             stripe_color,
             faceplate_color,
             is_srgb,
-            width: width.max(1),
-            height: height.max(1),
+            width,
+            height,
+            max_dim,
+            adapter_info,
         })
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        let w = width.max(1);
-        let h = height.max(1);
+        let (w, h) = clamp_surface(width, height, self.max_dim);
         if w == self.width && h == self.height {
             return;
         }
@@ -316,6 +347,22 @@ impl Renderer {
                 _pad: [0.0; 2],
             }),
         );
+    }
+
+    /// (name, backend, device_type) of the adapter in use, e.g.
+    /// ("Intel(R) UHD Graphics", "Dx12", "IntegratedGpu"). "Cpu" means a
+    /// software rasterizer (Basic Render Driver, llvmpipe) — no real GPU.
+    pub fn adapter_info(&self) -> (String, String, String) {
+        (
+            self.adapter_info.name.clone(),
+            format!("{:?}", self.adapter_info.backend),
+            format!("{:?}", self.adapter_info.device_type),
+        )
+    }
+
+    /// Present mode in use, e.g. "Mailbox" or "Fifo".
+    pub fn present_mode(&self) -> String {
+        format!("{:?}", self.config.present_mode)
     }
 
     pub fn set_layout(&mut self, positions: Vec<(f32, f32, f32, bool)>) {
