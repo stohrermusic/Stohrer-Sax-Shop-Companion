@@ -307,7 +307,7 @@ class OptionsWindow:
             adv_btn = tk.Button(bottom_button_frame, text=_("Advanced"), command=self.app.open_resonance_window)
             adv_btn.pack(side="right", padx=5)
             add_tooltip(adv_btn, _("Hidden corner."))
-        revert_btn = tk.Button(bottom_button_frame, text=_("Revert to Defaults"), command=self.revert_to_defaults)
+        revert_btn = tk.Button(bottom_button_frame, text=_("Revert to Program Defaults"), command=self.revert_to_defaults)
         revert_btn.pack(side="right", padx=5)
         add_tooltip(revert_btn,
                     _("Reset every value in this dialog back to the app's "
@@ -543,7 +543,7 @@ class OptionsWindow:
         unit_mm.pack(side="left", padx=5)
         add_tooltips(unit_tip, unit_in, unit_cm, unit_mm)
 
-        rules_frame = tk.LabelFrame(main_frame, text=_("Sizing Rules (Advanced)"), bg=DIALOG_BG, padx=5, pady=5)
+        rules_frame = tk.LabelFrame(main_frame, text=_("Sizing Rules"), bg=DIALOG_BG, padx=5, pady=5)
         rules_frame.pack(fill="x", pady=5)
         rules_frame.columnconfigure(1, weight=1)
 
@@ -1811,7 +1811,9 @@ class OptionsWindow:
         self.top.destroy()
 
     def revert_to_defaults(self):
-        if messagebox.askyesno(_("Revert to Defaults"), _("Are you sure you want to revert all settings to their original defaults?")):
+        if messagebox.askyesno(_("Revert to Program Defaults"),
+                               _("Reset every value in this dialog to the program's original defaults? "
+                                 "Your saved presets are not touched.")):
             # Sizing
             self.unit_var.set(DEFAULT_SETTINGS["units"])
             self.felt_offset_var.set(DEFAULT_SETTINGS["felt_offset"])
