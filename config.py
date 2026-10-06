@@ -362,6 +362,9 @@ SIZING_PRESET_KEYS = (
     "zone_labels_enabled", "zone_label_min_size", "zone_label_max_size",
     # Export compatibility (lives in this dialog)
     "compatibility_mode",
+    # Leather locator marks (lives in this dialog)
+    "locator_marks_enabled", "locator_marks_min_size", "locator_marks_max_size",
+    "locator_marks_style", "locator_marks_dashed",
 )
 
 
@@ -587,6 +590,17 @@ DEFAULT_SETTINGS = {
     "zone_label_min_size": 7.0,   # inclusive, pad size in mm
     "zone_label_max_size": 12.5,  # inclusive, pad size in mm
     "zone_gutter_mm": 1.0,        # edge-to-edge gap between discs inside a zone
+    # Locator marks on leather (feature request, 2026-10-06): engraved
+    # guides that show where the felt sits, for centering it on a pad that
+    # has no center hole. They go on the side the felt touches, so the
+    # leather is cut flesh-side up when they're used. Opt-in; the default
+    # range covers the pads that get no hole under the default sizing
+    # (min_hole_size 16.5).
+    "locator_marks_enabled": False,
+    "locator_marks_min_size": 7.0,    # inclusive, pad size in mm
+    "locator_marks_max_size": 16.0,   # inclusive, pad size in mm
+    "locator_marks_style": "lines",   # "lines" | "circle" | "both"
+    "locator_marks_dashed": False,
     # Gap from the outermost disc edge to the engraved border, both sheet
     # types. 1.0 visually crowded the outer discs, which is what prompted
     # the larger value.
@@ -999,6 +1013,7 @@ DEFAULT_SETTINGS = {
         'exact_size_outline': '#D0D000',
         'exact_size_center_hole': '#A0A000',
         'exact_size_engraving': '#BB7784',
+        'leather_locator': '#00E0E0',
         'die_outer_cut': '#FF0000',
         'die_inner_cut': '#0000FF',
         'die_engraving': '#00E000',
