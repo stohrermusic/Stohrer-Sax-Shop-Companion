@@ -5407,6 +5407,14 @@ class UserGuideWindow(tk.Toplevel):
                     "(numbered 00 through 29). This only affects SVG output for use in LightBurn."))
         self._blank()
 
+        self._h2(_("Lesser-used settings"))
+        self._body(_("Sizing Rules > Lesser-used settings holds three things most people never touch: Labeled Zones, Leather Locator Marks, and Export Settings. Click the header to open it; it opens itself when any of them is switched on."))
+        self._blank()
+
+        self._h2(_("Labeled Zones"))
+        self._body(_("Cut each pad size in its own bordered block with the size engraved beside it, so small discs can be told apart after they come off the laser. Off by default; set the size range it applies to. Zones use a grid, so they cost some material, and they stand down in Scrap Mode."))
+        self._blank()
+
         self._h2(_("Leather Locator Marks"))
         self._body(_("Sizing Rules > Lesser-used settings > Leather Locator Marks engraves guides "
                     "on leather pads showing where the felt sits — four lines ending at the felt "

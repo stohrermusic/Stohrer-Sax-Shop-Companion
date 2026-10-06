@@ -120,6 +120,33 @@ def main():
                       os.path.getmtime(mo) >= os.path.getmtime(po) - 1,
                       "run tools/compile_translations.py")
 
+    # --- The committed template is current with the source ---
+    # The catalog checks above compare .po against .pot; nothing compared
+    # .pot against the code. A string added without re-running
+    # tools/extract_strings.py shipped untranslated in every language and
+    # no test noticed (the tuner's CPU-mode notice, 2026-10-06). Extract
+    # into a scratch template and require every source msgid to be in the
+    # committed one.
+    if read_po is not None:
+        import subprocess
+        import sys as _sys
+        import tempfile
+        repo = os.path.dirname(locale_dir)
+        with tempfile.TemporaryDirectory() as tmp:
+            fresh = os.path.join(tmp, "fresh.pot")
+            r = subprocess.run([_sys.executable, "-m", "babel.messages.frontend", "extract",
+                                "-F", os.path.join(repo, "babel.cfg"), "-o", fresh, "."],
+                               cwd=repo, capture_output=True, text=True)
+            check("extraction into a scratch template runs", r.returncode == 0, r.stderr[-300:])
+            if r.returncode == 0:
+                with open(fresh, "rb") as f:
+                    fresh_ids = {m.id for m in read_po(f) if m.id}
+                with open(pot_path, "rb") as f:
+                    committed_ids = {m.id for m in read_po(f) if m.id}
+                missing = sorted(str(i)[:60] for i in fresh_ids - committed_ids)
+                check(f"committed saxshop.pot has every source string ({len(fresh_ids)})",
+                      not missing, f"not extracted yet: {missing[:4]} — run tools/extract_strings.py")
+
     # --- Summary ---
     print("=" * 60)
     passed = sum(results)
