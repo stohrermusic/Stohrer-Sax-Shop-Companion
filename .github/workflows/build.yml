@@ -61,7 +61,11 @@ jobs:
         run: python tools/run_tests.py
       - name: Run test suites (Intel Mac, numpy-less)
         if: matrix.os == 'macos-15-intel'
-        run: python tools/run_tests.py --allow-missing numpy --allow-missing sounddevice
+        # The three excluded suites nest `x max` fills; without numpy the
+        # pure-Python scan took 774 / 293 / 260 s on this runner. They run on
+        # the other three platforms; the pure-Python path still runs here
+        # through the end-to-end suites.
+        run: python tools/run_tests.py --allow-missing numpy --allow-missing sounddevice --skip zone_labels --skip scrap_partial_nest --skip scrap_live_list
       - name: Run test suites (xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a python tools/run_tests.py

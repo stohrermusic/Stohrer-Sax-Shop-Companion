@@ -10,6 +10,8 @@ xvfb); locally it's the "run everything before a release" command.
     python tools/run_tests.py --allow-missing numpy --allow-missing sounddevice
         # a suite that dies on "No module named 'numpy'" counts as skipped, not
         # failed — for the Intel Mac build, which ships without the audio stack
+    python tools/run_tests.py --skip nesting_parity --skip polygon_parity
+        # leave out suites by name (reported as skipped, never silently)
 
 Skips test_descriptor_validity unless its WAV corpus is on this machine.
 """
@@ -36,10 +38,15 @@ def summary_line(output):
 
 def main(argv):
     allow_missing = []
+    skip_names = []
     args = list(argv[1:])
     while "--allow-missing" in args:
         i = args.index("--allow-missing")
         allow_missing.append(args[i + 1])
+        del args[i:i + 2]
+    while "--skip" in args:
+        i = args.index("--skip")
+        skip_names.append(args[i + 1])
         del args[i:i + 2]
     only = [a for a in args if not a.startswith("-")]
     suites = sorted(f for f in os.listdir(TOOLS) if f.startswith("test_") and f.endswith(".py"))
@@ -53,6 +60,10 @@ def main(argv):
         if name == "test_descriptor_validity" and not os.path.isdir(WAV_CORPUS):
             skipped.append(name)
             print(f"skip {name:34s}        WAV corpus not on this machine")
+            continue
+        if any(sk in name for sk in skip_names):
+            skipped.append(name)
+            print(f"skip {name:34s}        excluded by --skip")
             continue
         t0 = time.time()
         try:

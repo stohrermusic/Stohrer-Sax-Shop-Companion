@@ -54,6 +54,11 @@ def main():
     except tk.TclError as e:
         print(f"Skipping: no display available ({e})")
         return 0
+    from toner_engine import AUDIO_AVAILABLE
+    if not AUDIO_AVAILABLE:
+        print("Skipping: audio libraries not installed (numpy/sounddevice) — no toner tab on this build")
+        root.destroy()
+        return 0
 
     print("Toner tab on a synthetic tone")
     print("=" * 60)

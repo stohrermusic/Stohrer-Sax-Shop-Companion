@@ -97,6 +97,13 @@ def main():
     except tk.TclError as e:
         print(f"Skipping: no display available ({e})")
         return 0
+    from tuner_engine import AUDIO_AVAILABLE
+    if not AUDIO_AVAILABLE:
+        # The Intel Mac build ships without numpy/sounddevice; its Tuner tab
+        # is the "not available on this Mac" panel by design.
+        print("Skipping: audio libraries not installed (numpy/sounddevice) — no tuner tab on this build")
+        root.destroy()
+        return 0
 
     print("Tuner tab on a synthetic tone")
     print("=" * 60)
