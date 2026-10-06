@@ -21,6 +21,38 @@ jobs:
       - run: pip install ruff
       - run: ruff check .
 
+  # Every suite in tools/, on all three desktop platforms. Windows and
+  # macOS runners have a display, so the GUI suites (smoke, dialogs,
+  # preview) run for real there — the macOS job is the only place the
+  # IS_MACOS code paths ever execute, since nobody on the project owns a
+  # Mac. Linux runs under xvfb. Full requirements are installed so the
+  # OpenCV and pyserial suites run instead of self-skipping. Public repo:
+  # Actions minutes are free, so this runs on every push.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev libgl1 xvfb
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run test suites
+        if: runner.os != 'Linux'
+        run: python tools/run_tests.py
+      - name: Run test suites (xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python tools/run_tests.py
+
   build:
     strategy:
       matrix:
@@ -87,6 +119,52 @@ jobs:
 
       - name: Build with PyInstaller
         run: python build.py
+
+      # Frozen-build probe: launch what was just built with --selftest,
+      # which constructs the whole app headless and exits 0/1. This is the
+      # only check that runs the shipped bundle rather than the source
+      # tree (missing hidden imports, bad data paths, a module bundled on
+      # the wrong platform). The .exe is a windowed app, so PowerShell
+      # must wait on it explicitly.
+      - name: Frozen-build probe (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\SaxShopCompanion.exe" -ArgumentList "--selftest" -Wait -PassThru
+          Write-Host "selftest exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+
+      - name: Frozen-build probe (macOS)
+        if: runner.os == 'macOS'
+        run: dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --selftest
+
+      - name: Frozen-build probe (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a dist/SaxShopCompanion --selftest
+
+      # Eyes on the Mac: nobody on the project owns one. Launch the built
+      # app for real, screenshot the runner's screen, upload it. Never
+      # fails the build — it's a picture for a human to look at.
+      - name: Screenshot the running app (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          open dist/SaxShopCompanion.app
+          sleep 12
+          screencapture -x "$RUNNER_TEMP/mac-screenshot.png"
+          pkill -f SaxShopCompanion || true
+          ls -la "$RUNNER_TEMP/mac-screenshot.png"
+
+      - name: Upload macOS screenshot
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: mac-screenshot-${{ matrix.asset_name }}
+          path: ${{ runner.temp }}/mac-screenshot.png
+          if-no-files-found: ignore
 
       - name: Verify permission keys and code signature (macOS)
         if: runner.os == 'macOS'

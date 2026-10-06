@@ -4217,6 +4217,53 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
             self.card_paper_dropdown.set("letter (8.5×11 in)")
         self._toggle_card_paper_dropdown()
 
+def _selftest(root):
+    """Frozen-build probe: build the whole app headless and exit 0 or 1.
+
+    `SaxShopCompanion --selftest` constructs every tab and every import in
+    a withdrawn root, checks the tabs exist, and exits without saving
+    anything. CI runs it against the PyInstaller output on each platform —
+    the one check that runs the *shipped* bundle rather than the source
+    tree, so a missing hidden import, a bad data path, or a module that
+    must not be bundled on a platform (the macOS GPU renderer) fails the
+    build instead of a user's first launch. Nothing is shown and no
+    dialog can block: the excepthook is replaced for the run.
+    """
+    import traceback
+
+    def _plain_hook(exc_type, exc_value, exc_tb):
+        traceback.print_exception(exc_type, exc_value, exc_tb)
+        try:
+            root.destroy()
+        except Exception:
+            pass
+        os._exit(1)
+
+    sys.excepthook = _plain_hook
+    root.report_callback_exception = _plain_hook
+    root.withdraw()
+    try:
+        app = PadSVGGeneratorApp(root)
+        app._refresh_machine_ui_state()
+        for attr in ('pad_tab', 'key_tab', 'serial_tab', 'screw_tab', 'tooling_tab_frame'):
+            if getattr(app, attr, None) is None:
+                raise RuntimeError(f"selftest: tab missing: {attr}")
+        root.update_idletasks()
+        root.update()
+        from config import APP_VERSION as _ver
+        print(f"selftest ok: {_ver} on {sys.platform}, "
+              f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}")
+    except BaseException:
+        traceback.print_exc()
+        try:
+            root.destroy()
+        except Exception:
+            pass
+        os._exit(1)
+    root.destroy()
+    os._exit(0)
+
+
 if __name__ == '__main__':
     setup_logging()
 
@@ -4238,6 +4285,9 @@ if __name__ == '__main__':
     sys.excepthook = _handle_exception
 
     root = tk.Tk()
+
+    if '--selftest' in sys.argv[1:]:
+        _selftest(root)
 
     def _handle_tk_exception(exc_type, exc_value, exc_tb):
         """Handle exceptions in tkinter callbacks."""

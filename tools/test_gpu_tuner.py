@@ -29,14 +29,24 @@ def test(name, condition):
 # ============================================================
 print("\n--- tuner_render Module ---")
 
+# The wheel is a build artifact, not a checkout: a fresh clone and the CI
+# test runners don't have it, and macOS must never have it (Tk Aqua's
+# winfo_id() isn't an NSView; wgpu segfaults). Missing is therefore a
+# skip, not a failure — unless SSC_REQUIRE_GPU=1 asks for it (set that on
+# a machine that has built the wheel to make a broken wheel fail loudly).
 try:
     import tuner_render
     _has_gpu = True
     test("tuner_render imports successfully", True)
 except ImportError:
     _has_gpu = False
-    test("tuner_render imports successfully", False)
-    print("  (GPU tests will be skipped)")
+    if sys.platform == "darwin":
+        print("  SKIP: tuner_render absent on macOS — canvas-only by design")
+    elif os.environ.get("SSC_REQUIRE_GPU") == "1":
+        test("tuner_render imports successfully (SSC_REQUIRE_GPU=1)", False)
+    else:
+        print("  SKIP: tuner_render not built here; GPU cases skipped "
+              "(see CLAUDE.md 'GPU Tuner Renderer' to build it)")
 
 if _has_gpu:
     test("TunerRenderer class exists", hasattr(tuner_render, 'TunerRenderer'))

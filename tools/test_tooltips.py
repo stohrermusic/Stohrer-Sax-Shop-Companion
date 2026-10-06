@@ -161,6 +161,60 @@ def main():
         assert tip._tip is None
     check("Destroying parent widget hides tooltip popup", widget_destroy_cleans_up)
 
+    # --- Every input widget in every settings dialog carries a tooltip ---
+    # CLAUDE.md asks for one on each new setting; this makes the convention
+    # a gate. A Tooltip binds <Enter> on its widget, so "has a tooltip" is
+    # "has an <Enter> binding". Measured 2026-10-06: zero missing in all
+    # five dialogs, so any name this prints is a regression.
+    def every_settings_widget_has_a_tooltip():
+        import copy
+        from tkinter import ttk
+        from config import DEFAULT_SETTINGS
+        from ui_dialogs import (OptionsWindow, LayerColorWindow,
+                                GcodeSettingsWindow, KeyLayoutWindow)
+
+        class StubApp:
+            def open_resonance_window(self):
+                pass
+
+        kinds = (tk.Entry, tk.Checkbutton, tk.Radiobutton, tk.Scale, tk.Spinbox, tk.Button,
+                 ttk.Entry, ttk.Checkbutton, ttk.Radiobutton, ttk.Combobox, ttk.Spinbox, ttk.Button)
+
+        def walk(widget, out):
+            for child in widget.winfo_children():
+                if isinstance(child, kinds) and not child.bind("<Enter>"):
+                    try:
+                        label = child.cget("text")
+                    except tk.TclError:
+                        label = ""
+                    out.append(f"{type(child).__name__}({label!r})")
+                walk(child, out)
+
+        s = copy.deepcopy(DEFAULT_SETTINGS)
+        dialogs = {
+            "OptionsWindow": lambda: OptionsWindow(
+                root, StubApp(), s, lambda: None, lambda: None,
+                sizing_presets={}, sizing_presets_save_callback=lambda: None),
+            "LayerColorWindow": lambda: LayerColorWindow(root, s, lambda: None),
+            "KeyLayoutWindow": lambda: KeyLayoutWindow(root, s, lambda: None, lambda: None),
+            "GcodeSettingsWindow": lambda: GcodeSettingsWindow(root, s, lambda _s: None),
+            "GcodeSettingsWindow(tooling)": lambda: GcodeSettingsWindow(
+                root, s, lambda _s: None, materials=[("acrylic", "Acrylic")],
+                show_tooling_engraving=True),
+        }
+        missing = {}
+        for name, make in dialogs.items():
+            w = make()
+            w.top.withdraw()
+            found = []
+            walk(w.top, found)
+            w.top.destroy()
+            if found:
+                missing[name] = found
+        assert not missing, f"widgets without a tooltip: {missing}"
+    check("Every input widget in the settings dialogs has a tooltip",
+          every_settings_widget_has_a_tooltip)
+
     try:
         root.destroy()
     except Exception:
