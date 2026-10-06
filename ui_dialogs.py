@@ -1070,8 +1070,24 @@ class OptionsWindow:
 
         self._toggle_eng_placement_mode()
 
+        # --- Lesser-used settings (collapsed) ---------------------------
+        # Labeled zones, leather locator marks and export compatibility live
+        # behind one header so the dialog stays about pad geometry. The
+        # section opens itself when anything inside is non-default, so an
+        # active setting is never out of sight.
+        self.lesser_open = False
+        lesser_frame = tk.Frame(main_frame, bg=DIALOG_BG)
+        lesser_frame.pack(fill="x", pady=5)
+        self.lesser_btn = tk.Button(lesser_frame, text="", anchor="w", relief="flat",
+                                    bg=DIALOG_BG, command=self._toggle_lesser_used)
+        self.lesser_btn.pack(fill="x")
+        add_tooltip(self.lesser_btn,
+                    _("Settings most people never touch: labeled zones, leather "
+                      "locator marks and SVG export compatibility."))
+        self.lesser_body = tk.Frame(lesser_frame, bg=DIALOG_BG)
+
         # --- Labeled Zones ---------------------------------------------
-        zone_frame = tk.LabelFrame(main_frame, text=_("Labeled Zones"), bg=DIALOG_BG, padx=5, pady=5)
+        zone_frame = tk.LabelFrame(self.lesser_body, text=_("Labeled Zones"), bg=DIALOG_BG, padx=5, pady=5)
         zone_frame.pack(fill="x", pady=5)
 
         zone_cb = tk.Checkbutton(
@@ -1108,33 +1124,6 @@ class OptionsWindow:
                  justify="left").pack(anchor='w', pady=(3, 0))
 
         self._toggle_zone_fields()
-
-        # --- Lesser-used settings (collapsed) ---------------------------
-        # Export compatibility and leather locator marks live behind one
-        # header so the dialog stays about pad geometry. The section opens
-        # itself when anything inside is non-default, so an active setting
-        # is never out of sight.
-        self.lesser_open = False
-        lesser_frame = tk.Frame(main_frame, bg=DIALOG_BG)
-        lesser_frame.pack(fill="x", pady=5)
-        self.lesser_btn = tk.Button(lesser_frame, text="", anchor="w", relief="flat",
-                                    bg=DIALOG_BG, command=self._toggle_lesser_used)
-        self.lesser_btn.pack(fill="x")
-        add_tooltip(self.lesser_btn,
-                    _("Settings most people never touch: SVG export compatibility "
-                      "and leather locator marks."))
-        self.lesser_body = tk.Frame(lesser_frame, bg=DIALOG_BG)
-
-        export_frame = tk.LabelFrame(self.lesser_body, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
-        export_frame.pack(fill="x", pady=5)
-        compat_cb = tk.Checkbutton(export_frame,
-                                   text=_("Enable Inkscape/Compatibility Mode (unitless SVG)"),
-                                   variable=self.compatibility_mode_var, bg=DIALOG_BG)
-        compat_cb.pack(anchor='w')
-        add_tooltip(compat_cb,
-                    _("Write SVGs without explicit unit attributes. Turn on "
-                    "if Inkscape (or other software) misinterprets the file "
-                    "scale. LightBurn does not need this."))
 
         locator_frame = tk.LabelFrame(self.lesser_body, text=_("Leather Locator Marks"),
                                       bg=DIALOG_BG, padx=5, pady=5)
@@ -1196,11 +1185,23 @@ class OptionsWindow:
                  bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
                  justify="left", wraplength=420).pack(anchor='w', pady=(3, 0))
 
+        export_frame = tk.LabelFrame(self.lesser_body, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
+        export_frame.pack(fill="x", pady=5)
+        compat_cb = tk.Checkbutton(export_frame,
+                                   text=_("Enable Inkscape/Compatibility Mode (unitless SVG)"),
+                                   variable=self.compatibility_mode_var, bg=DIALOG_BG)
+        compat_cb.pack(anchor='w')
+        add_tooltip(compat_cb,
+                    _("Write SVGs without explicit unit attributes. Turn on "
+                    "if Inkscape (or other software) misinterprets the file "
+                    "scale. LightBurn does not need this."))
+
         self.locator_widgets = [self.locator_min_entry, self.locator_max_entry,
                                 self.locator_dashed_cb] + self.locator_style_radios
         self._toggle_locator_fields()
 
-        if self.compatibility_mode_var.get() or self.locator_enabled_var.get():
+        if (self.zone_labels_enabled_var.get() or self.locator_enabled_var.get()
+                or self.compatibility_mode_var.get()):
             self._toggle_lesser_used()
         else:
             self._refresh_lesser_header()

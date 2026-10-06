@@ -77,7 +77,7 @@ Tests: `tools/test_job_history.py` (storage round-trip + corruption handling, co
 
 ## Labeled Zones
 
-Options > Sizing Rules > **Labeled Zones**: an opt-in toggle plus an editable pad-size range (default 7.0–12.5mm). Pads in that range are cut in bordered blocks — one block per size, grid-packed, with the size engraved along the block's top edge. Everything outside the range nests normally at full density.
+Options > Sizing Rules > **Lesser-used settings** > **Labeled Zones** (moved into the collapsible 2026-10-06): an opt-in toggle plus an editable pad-size range (default 7.0–12.5mm). Pads in that range are cut in bordered blocks — one block per size, grid-packed, with the size engraved along the block's top edge. Everything outside the range nests normally at full density.
 
 **Why it exists**: small discs are indistinguishable once they're off the laser — a 7.0 and a 7.5 look the same. Their own engraved number doesn't solve it: the font gate (`font_size >= radius * 0.8`) drops the engraving entirely below ~5mm, and above that the number is often unreadable — too small on card/felt, and buried in the darts on leather (every leather pad under `dart_threshold` gets darts). **The label cannot move to the middle of a small leather pad — that's the sealing surface, and those are usually octave pads.** So the label goes on the waste instead of the part, which is the only place it can go.
 

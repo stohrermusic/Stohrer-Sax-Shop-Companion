@@ -16,7 +16,7 @@ Covers:
   - preset schema: keys captured, backfilled for older presets
   - the layer color exists and is a LightBurn color
   - GUI (self-skips without a display): the lesser-used section collapses by
-    default and opens itself when a setting inside is active; the form round-
+    default and opens itself when zones, locator marks or compatibility mode is active; the form round-
     trips the keys; Layer Colors lists the layer; the pad preview draws marks
 """
 import copy
@@ -346,6 +346,11 @@ def test_gui_lesser_used_section_and_form_round_trip():
         w4 = _options(root, base_settings(compatibility_mode=True))
         assert w4.lesser_open, "opens itself when compatibility mode is on"
         w4.top.destroy()
+        w5 = _options(root, base_settings(zone_labels_enabled=True))
+        assert w5.lesser_open, "opens itself when labeled zones are on"
+        assert w5.zone_min_entry.winfo_toplevel() is w5.top, "zone fields live in this dialog"
+        assert str(w5.zone_min_entry.cget("state")) == "normal"
+        w5.top.destroy()
     finally:
         root.destroy()
 
