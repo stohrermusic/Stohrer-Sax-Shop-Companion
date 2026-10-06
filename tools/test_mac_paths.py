@@ -127,8 +127,8 @@ def main():
         # screenshot, 2026-10-06). The content's widest row must fit the canvas.
         opts = ui_dialogs.OptionsWindow(root, app, app.settings, lambda: None, lambda: None,
                                         sizing_presets={}, sizing_presets_save_callback=lambda: None)
-        root.update()                # runs the after_idle fit
-        opts.top.update_idletasks()
+        root.update()                # runs the after_idle fit (and <Map>)
+        opts.top.update()            # lets the new geometry lay out
         need = opts.scrollable_frame.winfo_reqwidth()
         have = opts.canvas.winfo_width()
         opts.top.destroy()

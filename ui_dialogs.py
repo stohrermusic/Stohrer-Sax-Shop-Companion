@@ -273,11 +273,15 @@ class OptionsWindow:
 
         self.top = tk.Toplevel(parent)
         self.top.title(_("Sizing Rules"))
-        self.top.geometry("500x750")
+        self._dialog_w, self._dialog_h = 500, 750
+        self.top.geometry(f"{self._dialog_w}x{self._dialog_h}")
         # Aqua's fonts are wider than Windows'; at 500 px the preset bar's
         # "Save Preset" was clipped on the Mac tour screenshot (2026-10-06).
-        # Widen to the content once it has been laid out.
+        # Widen to the content once laid out. after_idle can fire before the
+        # window is mapped on macOS and X11 (winfo_width() is still 1 then),
+        # so the fit works from the requested size, and runs again on <Map>.
         self.top.after_idle(self._fit_dialog_width)
+        self.top.bind("<Map>", lambda e: self._fit_dialog_width(), add="+")
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
@@ -1215,9 +1219,10 @@ class OptionsWindow:
         try:
             self.top.update_idletasks()
             need = self.scrollable_frame.winfo_reqwidth() + self.scrollbar.winfo_reqwidth() + 8
-            cur = self.top.winfo_width()
-            if cur > 1 and need > cur:
-                self.top.geometry(f"{int(need)}x{self.top.winfo_height()}")
+            if need > self._dialog_w:
+                self._dialog_w = int(need)
+                h = self.top.winfo_height()
+                self.top.geometry(f"{self._dialog_w}x{h if h > 1 else self._dialog_h}")
         except tk.TclError:
             pass
 
