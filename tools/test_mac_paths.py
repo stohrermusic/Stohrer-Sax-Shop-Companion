@@ -95,15 +95,18 @@ def main():
     check("WM_DELETE_WINDOW routes to on_exit",
           lambda: bool(root.protocol("WM_DELETE_WINDOW")))
     if IS_MAC:
-        check("::tk::mac::Quit is registered (Cmd-Q saves settings)",
-              lambda: root.tk.call("info", "commands", "::tk::mac::Quit") == "::tk::mac::Quit")
+        def quit_command_registered():
+            # tk.call can hand back a Tcl object rather than a str; compare text.
+            found = str(root.tk.call("info", "commands", "::tk::mac::Quit"))
+            assert "::tk::mac::Quit" in found, f"info commands returned {found!r}"
+        check("::tk::mac::Quit is registered (Cmd-Q saves settings)", quit_command_registered)
         check("DIALOG_BG is the system window color",
               lambda: ui_dialogs.DIALOG_BG == "systemWindowBackgroundColor")
         check("GPU renderer is never active on darwin",
               lambda: not tuner_tab._HAS_GPU_RENDERER and not app._tuner_use_gpu)
     else:
         check("::tk::mac::Quit is not registered off-Mac",
-              lambda: root.tk.call("info", "commands", "::tk::mac::Quit") == "")
+              lambda: str(root.tk.call("info", "commands", "::tk::mac::Quit")) == "")
         check("cream theme applied to the root window",
               lambda: root.cget("bg").upper() == "#FFFDD0")
 
@@ -118,6 +121,19 @@ def main():
         width = root.winfo_width()
         assert width >= need, f"window {width} px, labels need {need} px"
     check("all seven tab labels fit in the window", tab_labels_fit)
+
+    def sizing_rules_fits_its_content():
+        # Aqua clipped the preset bar at the dialog's fixed 500 px (Mac tour
+        # screenshot, 2026-10-06). The content's widest row must fit the canvas.
+        opts = ui_dialogs.OptionsWindow(root, app, app.settings, lambda: None, lambda: None,
+                                        sizing_presets={}, sizing_presets_save_callback=lambda: None)
+        root.update()                # runs the after_idle fit
+        opts.top.update_idletasks()
+        need = opts.scrollable_frame.winfo_reqwidth()
+        have = opts.canvas.winfo_width()
+        opts.top.destroy()
+        assert have >= need, f"Sizing Rules content needs {need} px, canvas is {have} px"
+    check("Sizing Rules dialog is wide enough for its content", sizing_rules_fits_its_content)
 
     def dialogs_use_platform_colors():
         dialogs = [

@@ -274,6 +274,10 @@ class OptionsWindow:
         self.top = tk.Toplevel(parent)
         self.top.title(_("Sizing Rules"))
         self.top.geometry("500x750")
+        # Aqua's fonts are wider than Windows'; at 500 px the preset bar's
+        # "Save Preset" was clipped on the Mac tour screenshot (2026-10-06).
+        # Widen to the content once it has been laid out.
+        self.top.after_idle(self._fit_dialog_width)
         self.top.configure(bg=DIALOG_BG)
         self.top.transient(parent)
         self.top.grab_set()
@@ -1205,6 +1209,17 @@ class OptionsWindow:
             self._toggle_lesser_used()
         else:
             self._refresh_lesser_header()
+
+    def _fit_dialog_width(self):
+        """Widen the dialog so the scrollable content's widest row fits."""
+        try:
+            self.top.update_idletasks()
+            need = self.scrollable_frame.winfo_reqwidth() + self.scrollbar.winfo_reqwidth() + 8
+            cur = self.top.winfo_width()
+            if cur > 1 and need > cur:
+                self.top.geometry(f"{int(need)}x{self.top.winfo_height()}")
+        except tk.TclError:
+            pass
 
     def _toggle_lesser_used(self):
         """Expand or collapse the lesser-used settings section."""
