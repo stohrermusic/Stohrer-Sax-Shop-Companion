@@ -54,6 +54,10 @@ jobs:
         run: xvfb-run -a python tools/run_tests.py
 
   build:
+    # Nothing is built or attached to a release unless lint and every
+    # test job passed. Costs a few minutes of latency per push; it means a
+    # failing Mac test can't ship an installer (2026-10-06).
+    needs: [lint, test]
     strategy:
       matrix:
         include:
