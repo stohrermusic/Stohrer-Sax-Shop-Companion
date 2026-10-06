@@ -4347,11 +4347,24 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
         app._fit_window_to_tabs()
         app.notebook.select(app.toner_tab_frame)
 
+    def open_tuner_no_mic():
+        # What a user with no (or a denied) microphone sees: the real
+        # engine start, which fails on a runner and draws the audio-error
+        # overlay. On a machine with a mic this is just the live tuner.
+        app.notebook.select(app.tuner_tab_frame)
+
     def open_tuner():
         engine = getattr(app, '_tuner_engine', None)
         if engine is not None:
             engine.synthetic_hz = 440.0
         app.notebook.select(app.tuner_tab_frame)
+        # The tab may already be selected (previous stop), so restart the
+        # engine explicitly to pick up the synthetic source.
+        try:
+            app._tuner_stop()
+            app._tuner_start()
+        except Exception:
+            pass
 
     steps = [
         ("pad-maker", lambda: app.notebook.select(app.pad_tab), None),
@@ -4372,6 +4385,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
         ("serial-lookup", lambda: app.notebook.select(app.serial_tab), None),
         ("screw-specs", lambda: app.notebook.select(app.screw_tab), None),
         ("tooling", lambda: app.notebook.select(app.tooling_tab_frame), None),
+        ("tuner-no-mic", open_tuner_no_mic, None),
         ("tuner", open_tuner, None),
         ("toner", open_toner, None),
     ]
@@ -4410,7 +4424,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
             root.after(150, lambda: run_step(i + 1))
 
         # Audio tabs need a couple of seconds of frames before they look alive.
-        wait = step_ms * (2 if name in ("tuner", "toner") else 1)
+        wait = step_ms * (2 if name in ("tuner-no-mic", "tuner", "toner") else 1)
         root.after(wait, finish)
         try:
             open_fn()

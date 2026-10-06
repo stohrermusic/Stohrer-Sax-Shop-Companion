@@ -7,6 +7,9 @@ xvfb); locally it's the "run everything before a release" command.
 
     python tools/run_tests.py            # all suites
     python tools/run_tests.py zone svg   # only suites whose name contains a word
+    python tools/run_tests.py --allow-missing numpy --allow-missing sounddevice
+        # a suite that dies on "No module named 'numpy'" counts as skipped, not
+        # failed — for the Intel Mac build, which ships without the audio stack
 
 Skips test_descriptor_validity unless its WAV corpus is on this machine.
 """
@@ -32,7 +35,13 @@ def summary_line(output):
 
 
 def main(argv):
-    only = [a for a in argv[1:] if not a.startswith("-")]
+    allow_missing = []
+    args = list(argv[1:])
+    while "--allow-missing" in args:
+        i = args.index("--allow-missing")
+        allow_missing.append(args[i + 1])
+        del args[i:i + 2]
+    only = [a for a in args if not a.startswith("-")]
     suites = sorted(f for f in os.listdir(TOOLS) if f.startswith("test_") and f.endswith(".py"))
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     failed, skipped, ran = [], [], 0
@@ -54,6 +63,11 @@ def main(argv):
         except subprocess.TimeoutExpired as e:
             code, out = 124, f"TIMEOUT after {TIMEOUT_S}s\n" + str(e.stdout or "")
         ran += 1
+        missing = next((m for m in allow_missing if f"No module named '{m}'" in out), None)
+        if code != 0 and missing:
+            skipped.append(name)
+            print(f"skip {name:34s} {time.time() - t0:5.1f}s  needs {missing} (not installed here, by design)", flush=True)
+            continue
         status = "ok  " if code == 0 else "FAIL"
         print(f"{status} {name:34s} {time.time() - t0:5.1f}s  {summary_line(out)[:72]}", flush=True)
         if code != 0:

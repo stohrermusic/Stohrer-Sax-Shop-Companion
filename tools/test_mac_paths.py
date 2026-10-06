@@ -178,7 +178,7 @@ def main():
     root.mainloop()
     expected = ["pad-maker", "sizing-rules-with-preview", "layer-colors", "gcode-settings", "nesting-preview",
                 "polygon-draw", "job-history", "feature-set", "user-guide", "about", "key-heights",
-                "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner", "toner"]
+                "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner", "toner"]
     check(f"tour visited every stop ({len(log)}/{len(expected)})", lambda: log == expected)
     def tour_raised_nothing():
         assert not errors, "\n".join(errors)

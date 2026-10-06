@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -43,12 +43,25 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev libgl1 xvfb
       - name: Install dependencies
+        if: matrix.os != 'macos-15-intel'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+      # The Intel Mac build ships WITHOUT numpy/sounddevice (no audio
+      # features). Test it the way it ships: the audio suites skip, and
+      # everything else — including the pure-Python nesting fallback that
+      # only this build uses — runs for real on x86 macOS Tk.
+      - name: Install dependencies (Intel Mac — the shipped set, no audio stack)
+        if: matrix.os == 'macos-15-intel'
+        run: |
+          python -m pip install --upgrade pip
+          pip install svgwrite pillow babel
       - name: Run test suites
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && matrix.os != 'macos-15-intel'
         run: python tools/run_tests.py
+      - name: Run test suites (Intel Mac, numpy-less)
+        if: matrix.os == 'macos-15-intel'
+        run: python tools/run_tests.py --allow-missing numpy --allow-missing sounddevice
       - name: Run test suites (xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a python tools/run_tests.py
@@ -171,14 +184,29 @@ jobs:
           pkill -f SaxShopCompanion || true
           cat "$RUNNER_TEMP/tour/tour-done.txt" || echo "tour did not finish"
           ls -la "$RUNNER_TEMP/tour"
+          # Same walk in Dark Mode: the system-colour theming has otherwise
+          # only ever been seen in light mode. A fresh process picks up the
+          # global appearance default.
+          defaults write -g AppleInterfaceStyle Dark
+          mkdir -p "$RUNNER_TEMP/tour-dark"
+          SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/tour-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour all --shots "$RUNNER_TEMP/tour-dark" &
+          for i in $(seq 1 60); do
+            [ -f "$RUNNER_TEMP/tour-dark/tour-done.txt" ] && break
+            sleep 3
+          done
+          pkill -f SaxShopCompanion || true
+          defaults delete -g AppleInterfaceStyle || true
+          cat "$RUNNER_TEMP/tour-dark/tour-done.txt" || echo "dark tour did not finish"
 
-      - name: Upload macOS screenshot tour
+      - name: Upload macOS screenshot tours (light + dark)
         if: runner.os == 'macOS'
         continue-on-error: true
         uses: actions/upload-artifact@v6
         with:
           name: mac-tour-${{ matrix.asset_name }}
-          path: ${{ runner.temp }}/tour/
+          path: |
+            ${{ runner.temp }}/tour/
+            ${{ runner.temp }}/tour-dark/
           if-no-files-found: ignore
 
       - name: Verify permission keys and code signature (macOS)
