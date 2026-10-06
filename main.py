@@ -4231,8 +4231,16 @@ def _selftest(root):
     """
     import traceback
 
+    def _say(msg):
+        # os._exit skips Python's buffer flush, so write the verdict straight
+        # to fd 1; a windowed .exe may have no fd 1 at all, hence the guard.
+        try:
+            os.write(1, (msg + "\n").encode("utf-8", "replace"))
+        except OSError:
+            pass
+
     def _plain_hook(exc_type, exc_value, exc_tb):
-        traceback.print_exception(exc_type, exc_value, exc_tb)
+        _say("selftest FAILED:\n" + "".join(traceback.format_exception(exc_type, exc_value, exc_tb)))
         try:
             root.destroy()
         except Exception:
@@ -4251,10 +4259,10 @@ def _selftest(root):
         root.update_idletasks()
         root.update()
         from config import APP_VERSION as _ver
-        print(f"selftest ok: {_ver} on {sys.platform}, "
-              f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}")
+        _say(f"selftest ok: {_ver} on {sys.platform}, "
+             f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}")
     except BaseException:
-        traceback.print_exc()
+        _say("selftest FAILED:\n" + traceback.format_exc())
         try:
             root.destroy()
         except Exception:
