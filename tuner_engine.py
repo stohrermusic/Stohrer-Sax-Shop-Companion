@@ -22,7 +22,7 @@ except (ImportError, OSError):
     np = None
     sd = None
 
-from audio_utils import AudioRingBuffer, hann_peak_freq  # noqa: E402 — shared with toner_engine
+from audio_utils import AudioRingBuffer, hann_peak_freq, synthetic_tone  # noqa: E402 — shared with toner_engine
 
 
 # ============================================
@@ -114,6 +114,13 @@ class TunerEngine:
         self._window = None
         self._last_device = None   # For auto-restart
         self._stale_count = 0      # Consecutive stale reads
+        # Synthetic source: when set (Hz), start() opens no microphone and
+        # analyze() feeds this tone (plus a -6 dB 2nd harmonic) into the
+        # ring buffer itself. Lets the whole tab run on a machine with no
+        # input device — CI runners, the --tour screenshot, the canvas and
+        # GPU tuner gates. Never set in normal use.
+        self.synthetic_hz = None
+        self._synth_pos = 0
         self.last_error = None     # Set when stream restart fails
         # Per-ring smoothed magnitudes — temporal decay like physical disc inertia
         self._smoothed_ring_mags = [[0.0] * NUM_RINGS for _ in range(12)]
@@ -177,6 +184,12 @@ class TunerEngine:
         self._stale_count = 0
         self.last_error = None
 
+        if self.synthetic_hz:
+            self._stream = None
+            self._synth_pos = 0
+            self._running = True
+            return True, None
+
         try:
             self._stream = sd.InputStream(
                 samplerate=SAMPLE_RATE,
@@ -232,6 +245,9 @@ class TunerEngine:
         if not self._running or buf is None:
             return result
 
+        if self.synthetic_hz:
+            self._feed_synthetic()
+
         # Check stream health
         if buf.is_stale():
             self._stale_count += 1
@@ -247,6 +263,13 @@ class TunerEngine:
             return result
 
         return self.analyze_buffer(audio)
+
+    def _feed_synthetic(self):
+        """Write the next chunk of the synthetic tone into the ring buffer,
+        phase-continuous across calls, the way the audio callback would."""
+        n = 1024
+        self._ring_buffer.write(synthetic_tone(self._synth_pos, n, float(self.synthetic_hz), SAMPLE_RATE))
+        self._synth_pos += n
 
     def _restart_stream(self):
         """Restart the audio stream (recover from dead callback)."""

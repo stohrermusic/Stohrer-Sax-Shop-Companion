@@ -203,7 +203,15 @@ def get_config_dir():
     - Windows: %APPDATA%/StohrerSaxShopCompanion/
     - macOS: ~/Library/Application Support/StohrerSaxShopCompanion/
     - Linux: ~/.config/StohrerSaxShopCompanion/ (respects XDG_CONFIG_HOME)
+
+    SAXSHOP_CONFIG_DIR overrides all of the above. It exists for tests and
+    CI: a suite can point the app at a prepared profile (e.g. toner
+    unlocked) without touching the user's real settings. Must be set
+    before config is imported, since the file paths are module constants.
     """
+    override = os.environ.get('SAXSHOP_CONFIG_DIR')
+    if override:
+        return override
     if sys.platform == 'win32':
         base = os.environ.get('APPDATA', os.path.expanduser('~'))
         config_dir = os.path.join(base, APP_NAME)

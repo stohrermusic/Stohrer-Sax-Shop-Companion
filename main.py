@@ -4297,6 +4297,17 @@ if __name__ == '__main__':
     if '--selftest' in sys.argv[1:]:
         _selftest(root)
 
+    # --tour tuner: open on the Tuner tab with a synthetic 440 Hz tone in
+    # place of the microphone, so CI can screenshot the tuner running on a
+    # machine with no audio input (the macOS runners). Visible, normal
+    # mainloop; only the audio source is faked.
+    tour = None
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg.startswith('--tour='):
+            tour = arg.split('=', 1)[1]
+        elif arg == '--tour' and i < len(sys.argv) - 1:
+            tour = sys.argv[i + 1]
+
     def _handle_tk_exception(exc_type, exc_value, exc_tb):
         """Handle exceptions in tkinter callbacks."""
         _handle_exception(exc_type, exc_value, exc_tb)
@@ -4317,4 +4328,26 @@ if __name__ == '__main__':
     # use direct Falcon control.
     if app._machine_enabled():
         root.after(500, app._detect_falcon_async)
+
+    if tour in ('tuner', 'toner'):
+        def _start_tour():
+            try:
+                if tour == 'tuner':
+                    engine = getattr(app, '_tuner_engine', None)
+                    if engine is not None:
+                        engine.synthetic_hz = 440.0
+                    app.notebook.select(app.tuner_tab_frame)
+                else:
+                    # Toner: Bb3 with harmonics. The tab is hidden unless the
+                    # profile has it unlocked (SAXSHOP_CONFIG_DIR lets CI
+                    # supply one); re-adding the frame un-hides it either way.
+                    engine = getattr(app, '_toner_engine', None)
+                    if engine is not None:
+                        engine.synthetic_hz = 233.08
+                    app._toner_mic_checked = True   # no modal mic notice
+                    app.notebook.add(app.toner_tab_frame)
+                    app.notebook.select(app.toner_tab_frame)
+            except Exception as e:
+                logging.getLogger(__name__).warning("tour %s: could not open the tab: %s", tour, e)
+        root.after(1500, _start_tour)
     root.mainloop()

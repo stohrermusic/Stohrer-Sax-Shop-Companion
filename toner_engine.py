@@ -26,7 +26,7 @@ except (ImportError, OSError):
     np = None
     sd = None
 
-from audio_utils import AudioRingBuffer, hann_peak_freq  # noqa: E402 — shared with tuner_engine
+from audio_utils import AudioRingBuffer, hann_peak_freq, synthetic_tone  # noqa: E402 — shared with tuner_engine
 
 
 # ============================================
@@ -254,6 +254,11 @@ class TonerEngine:
         self._running = False
         self._window = None
         self._last_fundamental = 0.0  # For temporal smoothing
+        # Synthetic source (see audio_utils.synthetic_tone): when set (Hz),
+        # start() opens no microphone and analyze() feeds a harmonic-rich
+        # tone into the ring buffer itself. Test/CI hook, never set in use.
+        self.synthetic_hz = None
+        self._synth_pos = 0
         self._harmonic_history = deque(maxlen=DESCRIPTOR_AVG_FRAMES)
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
@@ -312,6 +317,12 @@ class TonerEngine:
         self._stale_count = 0
         self.last_error = None
 
+        if self.synthetic_hz:
+            self._stream = None
+            self._synth_pos = 0
+            self._running = True
+            return True, None
+
         try:
             self._stream = sd.InputStream(
                 samplerate=SAMPLE_RATE,
@@ -338,6 +349,15 @@ class TonerEngine:
                 pass
             self._stream = None
         self._ring_buffer = None
+
+    def _feed_synthetic(self):
+        """Next chunk of the synthetic tone into the ring buffer: fundamental
+        plus six harmonics rolling off 3-4 dB each, like a reed instrument."""
+        n = 1024
+        self._ring_buffer.write(synthetic_tone(
+            self._synth_pos, n, float(self.synthetic_hz), SAMPLE_RATE,
+            harmonics_db=(0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0)))
+        self._synth_pos += n
 
     def start_recording(self):
         """Begin accumulating raw audio for WAV export."""
@@ -386,6 +406,9 @@ class TonerEngine:
         buf = self._ring_buffer
         if not self._running or buf is None:
             return result
+
+        if self.synthetic_hz:
+            self._feed_synthetic()
 
         # Check stream health: if buffer is stale, the callback may have died
         if buf.is_stale():

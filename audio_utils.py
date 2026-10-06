@@ -69,6 +69,24 @@ class AudioRingBuffer:
             self.last_read_count = 0
 
 
+def synthetic_tone(pos, n, freq_hz, sample_rate, harmonics_db=(0.0, -6.0), amplitude=0.3):
+    """n samples of a steady tone, phase-continuous from sample index pos.
+
+    Stands in for a microphone when an engine's `synthetic_hz` is set:
+    `start()` opens no stream and `analyze()` feeds this into the ring
+    buffer itself. That lets the tuner and toner tabs run end to end on a
+    machine with no input device (the CI runners, the --tour screenshots).
+    harmonics_db[0] is the fundamental; each further entry is the level of
+    the next harmonic relative to it.
+    """
+    t = (np.arange(n) + pos) / float(sample_rate)
+    out = np.zeros(n, dtype=np.float64)
+    for k, db in enumerate(harmonics_db, start=1):
+        out += 10.0 ** (db / 20.0) * np.sin(2.0 * np.pi * freq_hz * k * t)
+    peak = np.max(np.abs(out)) or 1.0
+    return (out / peak * amplitude).astype(np.float32)
+
+
 def hann_peak_freq(mags, k, bin_freq):
     """Frequency (Hz) of a Hann-windowed spectral peak at bin k.
 

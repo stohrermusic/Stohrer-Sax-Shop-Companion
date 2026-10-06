@@ -155,15 +155,34 @@ jobs:
           sleep 12
           screencapture -x "$RUNNER_TEMP/mac-screenshot.png"
           pkill -f SaxShopCompanion || true
-          ls -la "$RUNNER_TEMP/mac-screenshot.png"
+          sleep 2
+          # Second launch: the Tuner tab running on a synthetic 440 Hz tone
+          # (the runner has no microphone). Shows the canvas strobe, the
+          # VU readout and the macOS theming of the audio tab.
+          open dist/SaxShopCompanion.app --args --tour tuner
+          sleep 16
+          screencapture -x "$RUNNER_TEMP/mac-tuner.png"
+          pkill -f SaxShopCompanion || true
+          sleep 2
+          # Third launch: the Toner tab on a synthetic Bb3 with harmonics.
+          # The toner is hidden behind the beta terms, so hand the app a
+          # profile with it unlocked via SAXSHOP_CONFIG_DIR; `open` drops
+          # the environment, so run the bundle's executable directly.
+          mkdir -p "$RUNNER_TEMP/toner-profile"
+          echo '{"toner_unlocked": true, "visible_tabs": {"Toner": true}}' > "$RUNNER_TEMP/toner-profile/app_settings.json"
+          SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/toner-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour toner &
+          sleep 16
+          screencapture -x "$RUNNER_TEMP/mac-toner.png"
+          pkill -f SaxShopCompanion || true
+          ls -la "$RUNNER_TEMP"/mac-*.png
 
-      - name: Upload macOS screenshot
+      - name: Upload macOS screenshots
         if: runner.os == 'macOS'
         continue-on-error: true
         uses: actions/upload-artifact@v6
         with:
           name: mac-screenshot-${{ matrix.asset_name }}
-          path: ${{ runner.temp }}/mac-screenshot.png
+          path: ${{ runner.temp }}/mac-*.png
           if-no-files-found: ignore
 
       - name: Verify permission keys and code signature (macOS)
