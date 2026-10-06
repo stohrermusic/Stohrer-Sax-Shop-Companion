@@ -45,7 +45,12 @@ def make_complex_tone(freq, duration=0.2, amplitude=0.5):
 # ============================================
 print("\n--- Prerequisites ---")
 test("numpy available", np is not None)
-test("AUDIO_AVAILABLE flag is True", AUDIO_AVAILABLE)
+try:
+    import sounddevice as _sd_probe  # noqa: F401
+    _sd_present = True
+except Exception:  # noqa: BLE001
+    _sd_present = False
+test("AUDIO_AVAILABLE matches whether sounddevice is installed", AUDIO_AVAILABLE == _sd_present)
 
 # ============================================
 # FREQUENCY TABLE

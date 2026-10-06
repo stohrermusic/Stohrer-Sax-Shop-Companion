@@ -13,14 +13,19 @@ Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 import math
 import time
 
+# numpy and sounddevice are imported separately: the analysis math needs only
+# numpy, and a build with numpy but no sounddevice (the Intel Mac) must keep
+# `np` usable. One combined try used to set np = None whenever sounddevice was
+# missing, which broke every engine test on that build (2026-10-06).
 try:
     import numpy as np
-    import sounddevice as sd
-    AUDIO_AVAILABLE = True
-except (ImportError, OSError):
-    AUDIO_AVAILABLE = False
+except ImportError:
     np = None
+try:
+    import sounddevice as sd
+except (ImportError, OSError):
     sd = None
+AUDIO_AVAILABLE = np is not None and sd is not None
 
 from audio_utils import AudioRingBuffer, hann_peak_freq, synthetic_tone  # noqa: E402 — shared with toner_engine
 
