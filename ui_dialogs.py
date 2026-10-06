@@ -2246,10 +2246,10 @@ class PadPreviewWindow(tk.Toplevel):
         'exact_size': '#444444',
     }
     LABELS = {
-        'leather':    'Leather',
-        'felt':       'Felt',
-        'card':       'Card',
-        'exact_size': 'Exact size',
+        'leather':    _('Leather'),
+        'felt':       _('Felt'),
+        'card':       _('Card'),
+        'exact_size': _('Exact size'),
     }
     MATERIALS = ('leather', 'felt', 'card', 'exact_size')
     POLL_MS = 200

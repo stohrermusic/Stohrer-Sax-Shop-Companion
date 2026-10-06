@@ -206,11 +206,13 @@ jobs:
           cat "$RUNNER_TEMP/tour/tour-done.txt" || echo "tour did not finish"
           ls -la "$RUNNER_TEMP/tour"
           # Same walk in Dark Mode: the system-colour theming has otherwise
-          # only ever been seen in light mode. A fresh process picks up the
-          # global appearance default.
+          # only ever been seen in light mode. `defaults write` alone does not
+          # change the running session (the first dark tour came back light),
+          # so the app forces its windows dark with --appearance dark and
+          # tour-done.txt records the measured brightness.
           defaults write -g AppleInterfaceStyle Dark
           mkdir -p "$RUNNER_TEMP/tour-dark"
-          SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/tour-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour all --shots "$RUNNER_TEMP/tour-dark" &
+          SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/tour-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour all --shots "$RUNNER_TEMP/tour-dark" --appearance dark &
           for i in $(seq 1 60); do
             [ -f "$RUNNER_TEMP/tour-dark/tour-done.txt" ] && break
             sleep 3

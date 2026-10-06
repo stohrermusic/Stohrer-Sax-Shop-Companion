@@ -116,6 +116,20 @@ def main():
     app._toner_stop()
     root.update_idletasks()
     check("stops cleanly", lambda: not app._toner_engine.is_running)
+
+    # No microphone: the error must survive a spectrum rebuild.
+    app._toner_engine.synthetic_hz = None
+    app._toner_engine.start = lambda device=None: (False, "no microphone (test)")
+    app._toner_start()
+    app._toner_build_spectrum_bars()                 # the rebuild that used to wipe it
+    root.update_idletasks()
+
+    def no_mic_error_survives_rebuild():
+        c = app._toner_spectrum_canvas
+        items = c.find_withtag("error")
+        assert items, "audio-error message gone after the spectrum rebuild"
+        assert "no microphone" in c.itemcget(items[0], "text")
+    check("no-mic: 'Audio error' stays on the spectrum canvas after a rebuild", no_mic_error_survives_rebuild)
     root.destroy()
 
     print("=" * 60)

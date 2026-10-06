@@ -857,6 +857,13 @@ class TonerTabMixin:
             font=("Helvetica", 9), anchor="nw")
 
         self._toner_bars_built = True
+        # delete("all") above wiped any error message; put it back (same
+        # mechanism as the tuner — see _tuner_build_wheels_canvas).
+        state = getattr(self, '_toner_error_state', None)
+        if state and state[0] == "audio":
+            self._toner_draw_audio_error()
+        elif state and state[0] == "stream":
+            self._toner_show_stream_error(state[1])
 
     def _toner_db_to_height(self, db_val, max_height, db_range=60.0):
         """Convert a dB value to a bar height, respecting the current scale mode.
@@ -5130,18 +5137,24 @@ class TonerTabMixin:
             device = None  # Linux/PulseAudio: device selection unreliable, use system default
         success, err = self._toner_engine.start(device=device)
         if not success:
-            if hasattr(self, '_toner_spectrum_canvas'):
-                self._toner_spectrum_canvas.create_text(
-                    self._toner_spectrum_canvas.winfo_width() / 2,
-                    self._toner_spectrum_canvas.winfo_height() / 2,
-                    text=_("Audio error: {err}").format(err=err),
-                    fill="#FF4444", font=("Helvetica", 12),
-                    tags="error"
-                )
+            self._toner_error_state = ("audio", err)
+            self._toner_draw_audio_error()
             return
 
+        self._toner_error_state = None
         self._toner_running = True
         self._toner_animate()
+
+    def _toner_draw_audio_error(self):
+        """Draw the 'Audio error' message on the spectrum canvas (tag "error")."""
+        state = getattr(self, '_toner_error_state', None)
+        if not state or not hasattr(self, '_toner_spectrum_canvas'):
+            return
+        c = self._toner_spectrum_canvas
+        c.delete("error")
+        c.create_text(c.winfo_width() / 2, c.winfo_height() / 2,
+                      text=_("Audio error: {err}").format(err=state[1]),
+                      fill="#FF4444", font=("Helvetica", 12), tags="error")
 
     def _toner_stop(self):
         """Stop the toner (audio + animation)."""
@@ -5216,6 +5229,7 @@ class TonerTabMixin:
 
     def _toner_show_stream_error(self, error_msg):
         """Show audio stream error on the spectrum canvas with a retry option."""
+        self._toner_error_state = ("stream", error_msg)
         self._toner_running = False
         if hasattr(self, '_toner_spectrum_canvas'):
             c = self._toner_spectrum_canvas

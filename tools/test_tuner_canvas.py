@@ -110,6 +110,28 @@ def main():
     import tuner_tab
     gpu_available = tuner_tab._HAS_GPU_RENDERER
 
+    # ---- pass 0: no microphone — the error must survive a canvas rebuild ----
+    import tuner_tab as _tt
+    _tt._HAS_GPU_RENDERER = False
+    from main import PadSVGGeneratorApp as _App
+    root.geometry("1000x720+0+0")
+    app0 = _App(root)
+    root.update()
+    app0._tuner_engine.start = lambda device=None: (False, "no microphone (test)")
+    app0.notebook.select(app0.tuner_tab_frame)       # _tuner_start fails -> error text
+    root.after(800, root.quit)
+    root.mainloop()
+    app0._tuner_build_wheels()                       # the rebuild that used to wipe it
+    root.update_idletasks()
+
+    def no_mic_error_survives_rebuild():
+        items = app0._tuner_canvas.find_withtag("error")
+        assert items, "audio-error message gone after the canvas rebuild"
+        assert "no microphone" in app0._tuner_canvas.itemcget(items[0], "text")
+    check("no-mic: 'Audio error' stays on the canvas after a rebuild", no_mic_error_survives_rebuild)
+    root.destroy()
+    root = tk.Tk()
+
     # ---- pass 1: canvas ---------------------------------------------
     app = _drive(root, gpu=False)
     check("tuner is running on the synthetic source (no stream opened)",
