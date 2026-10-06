@@ -797,7 +797,7 @@ class TunerTabMixin:
                 return
             info = self._tuner_gpu_adapter_info()
             if info is not None:
-                logging.getLogger(__name__).info(
+                logging.getLogger(__name__).warning(   # app.log records WARNING and up
                     "Tuner GPU renderer: %s via %s (%s), present mode %s",
                     info[0], info[1], info[2], self._tuner_gpu_present_mode())
                 if info[2] == "Cpu":
