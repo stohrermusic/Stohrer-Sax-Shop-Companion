@@ -28,6 +28,7 @@ init_translation(load_settings().get("language", "en"))
 
 from svg_engine import check_for_oversized_engravings, try_nest_partial, generate_svg_from_placed, nest_with_zones  # noqa: E402
 from gcode_engine import generate_gcode_from_placed  # noqa: E402
+import tkinter.font as tkfont  # noqa: E402
 from ui_dialogs import (  # noqa: E402
     OptionsWindow, LayerColorWindow, KeyLayoutWindow,
     ResonanceWindow, ConfirmationDialog,
@@ -475,6 +476,33 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             help_menu.add_separator()
             help_menu.add_command(label=_("About"), command=self.open_about)
 
+    def _fit_window_to_tabs(self):
+        """Widen the window so every visible tab label fits.
+
+        Aqua's ttk notebook clips tab labels instead of growing the tab
+        row: at the 640 px default, seven tabs read "Pad Mak / Toner
+        (bet" on a Mac (CI screenshot, 2026-10-06). Windows and X11 grow
+        the row, so there this is a no-op in practice. Measures the labels
+        with the notebook's own font rather than trusting a requested
+        width that Aqua may not report.
+        """
+        try:
+            self.root.update_idletasks()
+            style = ttk.Style(self.root)
+            spec = style.lookup('TNotebook.Tab', 'font') or 'TkDefaultFont'
+            font = tkfont.nametofont(spec) if spec in tkfont.names(self.root) else tkfont.Font(self.root, font=spec)
+            visible = [t for t in self.notebook.tabs() if self.notebook.tab(t, 'state') != 'hidden']
+            need = sum(font.measure(self.notebook.tab(t, 'text')) for t in visible)
+            need += TAB_LABEL_PADDING_PX * len(visible) + 40
+            cur_w = self.root.winfo_width()
+            if cur_w <= 1:
+                cur_w = 640
+            if need > cur_w:
+                h = self.root.winfo_height()
+                self.root.geometry(f"{int(need)}x{h if h > 1 else 720}")
+        except tk.TclError:
+            pass
+
     def on_tab_changed(self, event):
         selected = self.notebook.select()
 
@@ -540,6 +568,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+        # After the Feature Set hides have been applied (end of __init__).
+        self.root.after_idle(self._fit_window_to_tabs)
 
         # Build tab → menu mapping (uses widget string IDs)
         self._tab_menus = {
@@ -4217,6 +4247,182 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
             self.card_paper_dropdown.set("letter (8.5×11 in)")
         self._toggle_card_paper_dropdown()
 
+# Per-tab horizontal padding Aqua adds round a notebook label, plus slack.
+TAB_LABEL_PADDING_PX = 30
+
+
+def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
+    """Walk every tab and dialog, optionally screenshotting each.
+
+    This is how the Mac gets looked at: nobody on the project owns one, so
+    the macOS build job runs the frozen .app with `--tour all --shots DIR`
+    and uploads the pictures. With shots_dir=None it is a gate instead:
+    every dialog is constructed and torn down on the live app, on every
+    platform, and `tour_errors` holds anything that raised.
+
+    Each step is (name, open, close). `open` may block in a modal
+    wait_window — Tk keeps firing after() callbacks meanwhile, so the
+    step's finish is scheduled BEFORE open is called, the way the zone
+    preview tests do it. Modal or not, the same code works.
+    """
+    tour_log = []
+    tour_errors = []
+    pre_toplevels = set()
+
+    def new_toplevels():
+        return [w for w in root.winfo_children()
+                if isinstance(w, tk.Toplevel) and w not in pre_toplevels]
+
+    def destroy_new():
+        for w in new_toplevels():
+            try:
+                w.destroy()
+            except tk.TclError:
+                pass
+
+    def shot(name):
+        if not shots_dir:
+            return
+        os.makedirs(shots_dir, exist_ok=True)
+        path = os.path.join(shots_dir, f"{len(tour_log):02d}-{name}.png")
+        try:
+            from PIL import ImageGrab
+            # Crop to the app's own windows (root + any open Toplevel) so the
+            # picture is the app, not a desktop — and so a multi-monitor
+            # machine whose primary screen isn't the one the app opened on
+            # still gets the app. all_screens only matters on Windows.
+            wins = [root] + [w for w in root.winfo_children()
+                             if isinstance(w, tk.Toplevel) and w.winfo_viewable()]
+            x0 = min(w.winfo_rootx() for w in wins) - 12
+            y0 = min(w.winfo_rooty() for w in wins) - 40
+            x1 = max(w.winfo_rootx() + w.winfo_width() for w in wins) + 12
+            y1 = max(w.winfo_rooty() + w.winfo_height() for w in wins) + 12
+            try:
+                img = ImageGrab.grab(bbox=(x0, y0, x1, y1), all_screens=True)
+            except TypeError:
+                img = ImageGrab.grab(bbox=(x0, y0, x1, y1))
+            img.save(path)
+        except Exception as e:  # noqa: BLE001 — fall back to the OS tool
+            if sys.platform == 'darwin':
+                subprocess.run(["screencapture", "-x", path], check=False)
+            else:
+                tour_errors.append(f"{name}: screenshot failed: {e}")
+
+    held = {}
+
+    def open_sizing_rules():
+        opts = OptionsWindow(root, app, app.settings, app.update_ui_from_settings, lambda: None,
+                             sizing_presets=app.sizing_presets, sizing_presets_save_callback=lambda: None)
+        if not opts.lesser_open:
+            opts._toggle_lesser_used()
+        opts.show_preview_var.set(True)
+        opts._toggle_preview_window()
+        for w in opts.top.winfo_children():        # the PadPreviewWindow, if it opened
+            if hasattr(w, 'preview_size_var'):
+                try:
+                    w.preview_size_var.set(10.0)
+                except Exception:
+                    pass
+        held['opts'] = opts
+
+    def close_sizing_rules():
+        o = held.pop('opts', None)
+        if o is not None:
+            o.top.destroy()
+
+    def open_nesting_preview():
+        from svg_engine import nest_pads_with_zones
+        pads = [{'size': 7.0, 'qty': 6}, {'size': 12.5, 'qty': 4}, {'size': 20.0, 'qty': 3}]
+        s = dict(app.settings)
+        s['zone_labels_enabled'] = True
+        placed, zones = nest_pads_with_zones(pads, 'felt', 200.0, 150.0, s)
+        NestingPreviewWindow(root, {'felt': placed}, 200.0, 150.0, zones=zones)
+
+    def open_toner():
+        engine = getattr(app, '_toner_engine', None)
+        if engine is not None:
+            engine.synthetic_hz = 233.08
+        app._toner_mic_checked = True
+        app.notebook.add(app.toner_tab_frame)
+        app._fit_window_to_tabs()
+        app.notebook.select(app.toner_tab_frame)
+
+    def open_tuner():
+        engine = getattr(app, '_tuner_engine', None)
+        if engine is not None:
+            engine.synthetic_hz = 440.0
+        app.notebook.select(app.tuner_tab_frame)
+
+    steps = [
+        ("pad-maker", lambda: app.notebook.select(app.pad_tab), None),
+        ("sizing-rules-with-preview", open_sizing_rules, close_sizing_rules),
+        ("layer-colors", lambda: LayerColorWindow(root, app.settings, lambda: None), destroy_new),
+        ("gcode-settings", lambda: GcodeSettingsWindow(
+            root, app.settings, lambda s: None,
+            materials=[("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))],
+            gcode_presets=app.gcode_presets, gcode_presets_save_callback=lambda: None), destroy_new),
+        ("nesting-preview", open_nesting_preview, destroy_new),
+        ("polygon-draw", lambda: PolygonDrawWindow(root, unit="in", settings=app.settings), destroy_new),
+        ("job-history", lambda: JobHistoryWindow(root, load_job_history(), lambda jobs: None), destroy_new),
+        ("feature-set", app._open_feature_set, destroy_new),
+        ("user-guide", lambda: UserGuideWindow(root, section="pad_generator"), destroy_new),
+        ("about", lambda: AboutDialog(root), destroy_new),
+        ("key-heights", lambda: app.notebook.select(app.key_tab), None),
+        ("key-layout", lambda: KeyLayoutWindow(root, app.settings, lambda: None, lambda: None), destroy_new),
+        ("serial-lookup", lambda: app.notebook.select(app.serial_tab), None),
+        ("screw-specs", lambda: app.notebook.select(app.screw_tab), None),
+        ("tooling", lambda: app.notebook.select(app.tooling_tab_frame), None),
+        ("tuner", open_tuner, None),
+        ("toner", open_toner, None),
+    ]
+
+    def run_step(i):
+        if i >= len(steps):
+            try:
+                app._tuner_stop()
+                app._toner_stop()
+            except Exception:
+                pass
+            if shots_dir:
+                with open(os.path.join(shots_dir, "tour-done.txt"), "w", encoding="utf-8") as f:
+                    f.write("\n".join(tour_log) + "\n")
+                    if tour_errors:
+                        f.write("ERRORS:\n" + "\n".join(tour_errors) + "\n")
+            if on_done is not None:
+                on_done()
+            return
+        name, open_fn, close_fn = steps[i]
+        pre_toplevels.clear()
+        pre_toplevels.update(w for w in root.winfo_children() if isinstance(w, tk.Toplevel))
+
+        def finish():
+            try:
+                root.update_idletasks()
+                shot(name)
+                tour_log.append(name)
+            except Exception as e:  # noqa: BLE001
+                tour_errors.append(f"{name}: {e!r}")
+            try:
+                if close_fn is not None:
+                    close_fn()
+            except Exception as e:  # noqa: BLE001
+                tour_errors.append(f"{name} close: {e!r}")
+            root.after(150, lambda: run_step(i + 1))
+
+        # Audio tabs need a couple of seconds of frames before they look alive.
+        wait = step_ms * (2 if name in ("tuner", "toner") else 1)
+        root.after(wait, finish)
+        try:
+            open_fn()
+        except Exception as e:  # noqa: BLE001
+            tour_errors.append(f"{name} open: {e!r}")
+
+    root.after(200, lambda: run_step(0))
+    run_tour.log = tour_log
+    run_tour.errors = tour_errors
+    return tour_log, tour_errors
+
+
 def _selftest(root):
     """Frozen-build probe: build the whole app headless and exit 0 or 1.
 
@@ -4302,11 +4508,16 @@ if __name__ == '__main__':
     # machine with no audio input (the macOS runners). Visible, normal
     # mainloop; only the audio source is faked.
     tour = None
+    shots_dir = None
     for i, arg in enumerate(sys.argv[1:], 1):
         if arg.startswith('--tour='):
             tour = arg.split('=', 1)[1]
         elif arg == '--tour' and i < len(sys.argv) - 1:
             tour = sys.argv[i + 1]
+        elif arg.startswith('--shots='):
+            shots_dir = arg.split('=', 1)[1]
+        elif arg == '--shots' and i < len(sys.argv) - 1:
+            shots_dir = sys.argv[i + 1]
 
     def _handle_tk_exception(exc_type, exc_value, exc_tb):
         """Handle exceptions in tkinter callbacks."""
@@ -4329,7 +4540,18 @@ if __name__ == '__main__':
     if app._machine_enabled():
         root.after(500, app._detect_falcon_async)
 
-    if tour in ('tuner', 'toner'):
+    if tour == 'all':
+        # Full walk: every tab and dialog, screenshot each when --shots is
+        # given, then exit. See run_tour().
+        root.geometry("+40+60")
+
+        def _tour_finished():
+            try:
+                root.destroy()
+            finally:
+                os._exit(0)
+        run_tour(root, app, shots_dir=shots_dir, on_done=_tour_finished)
+    elif tour in ('tuner', 'toner'):
         def _start_tour():
             try:
                 if tour == 'tuner':
@@ -4346,6 +4568,7 @@ if __name__ == '__main__':
                         engine.synthetic_hz = 233.08
                     app._toner_mic_checked = True   # no modal mic notice
                     app.notebook.add(app.toner_tab_frame)
+                    app._fit_window_to_tabs()
                     app.notebook.select(app.toner_tab_frame)
             except Exception as e:
                 logging.getLogger(__name__).warning("tour %s: could not open the tab: %s", tour, e)

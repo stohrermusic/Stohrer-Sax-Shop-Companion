@@ -147,42 +147,34 @@ jobs:
       # Eyes on the Mac: nobody on the project owns one. Launch the built
       # app for real, screenshot the runner's screen, upload it. Never
       # fails the build — it's a picture for a human to look at.
-      - name: Screenshot the running app (macOS)
+      # Eyes on the Mac: nobody on the project owns one. The built .app
+      # walks every tab and dialog (`--tour all`), screenshots each, and
+      # the pictures are uploaded. The tuner and toner run on synthetic
+      # tones (no microphone here); the toner is hidden behind the beta
+      # terms, so the launch gets a profile with it unlocked via
+      # SAXSHOP_CONFIG_DIR. Never fails the build — it's for a human.
+      - name: Screenshot tour of the running app (macOS)
         if: runner.os == 'macOS'
         continue-on-error: true
         run: |
-          open dist/SaxShopCompanion.app
-          sleep 12
-          screencapture -x "$RUNNER_TEMP/mac-screenshot.png"
+          mkdir -p "$RUNNER_TEMP/tour-profile" "$RUNNER_TEMP/tour"
+          echo '{"toner_unlocked": true, "visible_tabs": {"Toner": true}}' > "$RUNNER_TEMP/tour-profile/app_settings.json"
+          SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/tour-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour all --shots "$RUNNER_TEMP/tour" &
+          for i in $(seq 1 60); do
+            [ -f "$RUNNER_TEMP/tour/tour-done.txt" ] && break
+            sleep 3
+          done
           pkill -f SaxShopCompanion || true
-          sleep 2
-          # Second launch: the Tuner tab running on a synthetic 440 Hz tone
-          # (the runner has no microphone). Shows the canvas strobe, the
-          # VU readout and the macOS theming of the audio tab.
-          open dist/SaxShopCompanion.app --args --tour tuner
-          sleep 16
-          screencapture -x "$RUNNER_TEMP/mac-tuner.png"
-          pkill -f SaxShopCompanion || true
-          sleep 2
-          # Third launch: the Toner tab on a synthetic Bb3 with harmonics.
-          # The toner is hidden behind the beta terms, so hand the app a
-          # profile with it unlocked via SAXSHOP_CONFIG_DIR; `open` drops
-          # the environment, so run the bundle's executable directly.
-          mkdir -p "$RUNNER_TEMP/toner-profile"
-          echo '{"toner_unlocked": true, "visible_tabs": {"Toner": true}}' > "$RUNNER_TEMP/toner-profile/app_settings.json"
-          SAXSHOP_CONFIG_DIR="$RUNNER_TEMP/toner-profile" dist/SaxShopCompanion.app/Contents/MacOS/SaxShopCompanion --tour toner &
-          sleep 16
-          screencapture -x "$RUNNER_TEMP/mac-toner.png"
-          pkill -f SaxShopCompanion || true
-          ls -la "$RUNNER_TEMP"/mac-*.png
+          cat "$RUNNER_TEMP/tour/tour-done.txt" || echo "tour did not finish"
+          ls -la "$RUNNER_TEMP/tour"
 
-      - name: Upload macOS screenshots
+      - name: Upload macOS screenshot tour
         if: runner.os == 'macOS'
         continue-on-error: true
         uses: actions/upload-artifact@v6
         with:
-          name: mac-screenshot-${{ matrix.asset_name }}
-          path: ${{ runner.temp }}/mac-*.png
+          name: mac-tour-${{ matrix.asset_name }}
+          path: ${{ runner.temp }}/tour/
           if-no-files-found: ignore
 
       - name: Verify permission keys and code signature (macOS)

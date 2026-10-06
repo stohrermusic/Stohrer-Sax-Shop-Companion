@@ -4991,7 +4991,7 @@ class GcodeSettingsWindow:
         # Start with existing settings to preserve materials not shown in this dialog
         new_gcode_settings = dict(self.settings.get("gcode_settings", {}))
 
-        for mat_key, _ in self.active_materials:
+        for mat_key, _label in self.active_materials:
             new_gcode_settings[mat_key] = {}
 
             # Engraving mode
@@ -5025,7 +5025,7 @@ class GcodeSettingsWindow:
             new_gcode_settings[mat_key]["filled_line_spacing"] = round(line_spacing, 3)
 
             # Other operations (hole, cut)
-            for op_key, _ in self.OPERATIONS:
+            for op_key, _label in self.OPERATIONS:
                 try:
                     speed = self.vars[mat_key][op_key]['speed'].get()
                     power = self.vars[mat_key][op_key]['power'].get()
@@ -5087,7 +5087,7 @@ class GcodeSettingsWindow:
         """Reset all values to defaults."""
         default_gcode = DEFAULT_SETTINGS.get("gcode_settings", {})
 
-        for mat_key, _ in self.active_materials:
+        for mat_key, _label in self.active_materials:
             mat_defaults = default_gcode.get(mat_key, {})
 
             # Reset engraving mode
@@ -5110,7 +5110,7 @@ class GcodeSettingsWindow:
             self.vars[mat_key]['fill_density'].set(density_val)
 
             # Reset other operations
-            for op_key, _ in self.OPERATIONS:
+            for op_key, _label in self.OPERATIONS:
                 default_speed = mat_defaults.get(f"{op_key}_speed", 100)
                 default_power = mat_defaults.get(f"{op_key}_power", 10)
                 default_passes = mat_defaults.get(f"{op_key}_passes", 1)

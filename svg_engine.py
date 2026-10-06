@@ -2276,6 +2276,22 @@ def _min_holder_sheet(num_pieces, outer_d=HOLDER_OUTER_R * 2, spacing=5.0):
             rows * outer_d + (rows + 1) * spacing)
 
 
+def check_holder_sheet(variant, layer_count, sheet_width_mm, sheet_height_mm,
+                       outer_d=HOLDER_OUTER_R * 2, spacing=5.0):
+    """Raise ValueError (the user-facing message) if the holder pieces for
+    this variant don't fit the sheet. The Tooling tab calls this BEFORE the
+    save dialog, so a too-small sheet is reported before the user has
+    picked a filename for a file that will never be written."""
+    num_pieces = len(_holder_pieces_for(variant, layer_count))
+    if _pack_holder_grid(num_pieces, sheet_width_mm, sheet_height_mm, outer_d, spacing) is None:
+        min_w, min_h = _min_holder_sheet(num_pieces, outer_d, spacing)
+        raise ValueError(
+            f"{num_pieces} holder pieces don't fit on a "
+            f"{sheet_width_mm:.0f} × {sheet_height_mm:.0f} mm sheet. "
+            f"Need at least {min_w:.0f} × {min_h:.0f} mm."
+        )
+
+
 def generate_holder_svg(variant, filename, settings, *,
                         layer_count=6,
                         sheet_width_mm=None, sheet_height_mm=None):

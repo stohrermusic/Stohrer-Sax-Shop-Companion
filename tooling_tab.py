@@ -13,7 +13,7 @@ import webbrowser
 from svg_engine import (
     _nest_discs, try_nest_partial, can_all_pads_fit,
     generate_die_svg, generate_die_svg_from_placed,
-    generate_holder_svg, generate_kerf_test_svg,
+    generate_holder_svg, generate_kerf_test_svg, check_holder_sheet,
     generate_die_organizer_svg,
     _min_feeds_speeds_sheet, _grid_pack_discs,
     build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
@@ -987,7 +987,7 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
 
-            placed, _, _ = _nest_discs(pads, 'die_ring', width_mm, height_mm, settings)
+            placed, _unused_a, _unused_b = _nest_discs(pads, 'die_ring', width_mm, height_mm, settings)
             generate_die_gcode_from_placed(placed, width_mm, height_mm, save_path, settings)
 
             messagebox.showinfo(_("Done"),
@@ -1868,6 +1868,11 @@ class ToolingTabMixin:
             sheet_w, sheet_h = self._get_holder_sheet_mm()
             if sheet_w is None:
                 return
+            try:
+                check_holder_sheet(variant, layer_count, sheet_w, sheet_h)
+            except ValueError as ve:
+                messagebox.showerror(_("Sheet too small"), str(ve))
+                return
 
             save_path = filedialog.asksaveasfilename(
                 title=_("Save Die Holder SVG"),
@@ -1906,6 +1911,11 @@ class ToolingTabMixin:
 
             sheet_w, sheet_h = self._get_holder_sheet_mm()
             if sheet_w is None:
+                return
+            try:
+                check_holder_sheet(variant, layer_count, sheet_w, sheet_h)
+            except ValueError as ve:
+                messagebox.showerror(_("Sheet too small"), str(ve))
                 return
 
             save_path = filedialog.asksaveasfilename(
