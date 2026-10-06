@@ -44,7 +44,8 @@ if _has_gpu:
     # Check the class has the expected methods
     # pyo3 #[new] maps to __init__, other methods keep their names
     methods = ['resize', 'set_layout', 'render',
-               'set_stripe_color', 'set_faceplate_color']
+               'set_stripe_color', 'set_faceplate_color',
+               'adapter_info', 'present_mode']
     for m in methods:
         test(f"TunerRenderer has {m} method",
              hasattr(tuner_render.TunerRenderer, m) or
@@ -453,6 +454,79 @@ try:
 except Exception as e:
     test(f"Tuner engine test ({e})", False)
 
+
+# ============================================================
+# 9. Surface limits, present mode, panic-safe fallback (2026-10-06)
+# ============================================================
+# Found bringing the renderer into a Qt app on a 250 %-scaled laptop:
+# Limits::downlevel_defaults() caps textures at 2048 px, so a 1400 px frame
+# at 250 % (3500 device px) panicked Surface::configure; the panic reached
+# Python as a BaseException that "except Exception" let through; and Fifo
+# blocked render() for a vsync (16.7 ms) on the UI thread every frame.
+print("\n--- Surface limits / present mode / fallback ---")
+import tkinter as tk  # noqa: E402
+
+_root = None
+try:
+    _root = tk.Tk()
+except tk.TclError as e:
+    print(f"  (no display: {e}; skipping GUI cases)")
+
+if _root is not None and _has_gpu:
+    _root.geometry("400x300+0+0")
+    _f = tk.Frame(_root, width=400, height=300)
+    _f.pack(fill="both", expand=True)
+    _root.update_idletasks()
+    _root.update()
+    try:
+        _r = tuner_render.TunerRenderer(_f.winfo_id(), 3500, 1500)
+        test("Surface 3500x1500 (past the 2048 downlevel cap) constructs", True)
+        _info = _r.adapter_info()
+        test(f"adapter_info is 3 strings ({_info[0]}, {_info[1]}, {_info[2]})",
+             len(_info) == 3 and all(isinstance(x, str) for x in _info))
+        _pm = _r.present_mode()
+        test(f"present_mode is Mailbox or Fifo ({_pm})", _pm in ("Mailbox", "Fifo"))
+        _r.resize(400, 300)
+        _r.resize(3500, 1500)
+        _r.resize(400, 300)
+        test("resize past 2048 and back does not raise", True)
+        _r = None
+    except BaseException as e:  # noqa: BLE001 — a wgpu panic is a BaseException
+        test(f"big surface / resize raised {type(e).__name__}: {str(e).splitlines()[-1][:70]}", False)
+    _root.destroy()
+    _root = None
+
+if _root is None:
+    try:
+        _root = tk.Tk()
+    except tk.TclError:
+        _root = None
+if _root is not None:
+    _root.withdraw()
+    from main import PadSVGGeneratorApp  # noqa: E402
+    _a = PadSVGGeneratorApp(_root)
+    if not getattr(_a, '_tuner_use_gpu', False):
+        print("  (app is not in GPU mode here; skipping fallback cases)")
+    else:
+        class _FakePanic(BaseException):
+            """Stands in for pyo3_runtime.PanicException."""
+
+        # A run of render() failures drops the tab to the canvas — but not
+        # a single one, which is just a dropped frame.
+        for _ in range(tuner_tab.GPU_RENDER_FAIL_LIMIT - 1):
+            _a._tuner_gpu_render_failed(_FakePanic("Error in Surface::configure\nInvalid surface"))
+        test(f"{tuner_tab.GPU_RENDER_FAIL_LIMIT - 1} render failures: still GPU", _a._tuner_use_gpu)
+        _a._tuner_gpu_render_failed(_FakePanic("Error in Surface::configure\nInvalid surface"))
+        test(f"{tuner_tab.GPU_RENDER_FAIL_LIMIT} render failures: switched to canvas",
+             not _a._tuner_use_gpu and _a._gpu_renderer is None)
+        test("fallback created and packed a canvas",
+             _a._tuner_canvas is not None and _a._tuner_canvas.winfo_manager() == "pack")
+        test("fallback unpacked the GPU frame", not _a._tuner_gpu_frame.winfo_manager())
+        test("fallback shows the CPU-mode notice", hasattr(_a, '_cpu_mode_lbl'))
+        test("fallback resets the failure counter", _a._tuner_gpu_fail_count == 0)
+        test("render loop would now take the canvas branch",
+             not (_a._tuner_use_gpu and _a._gpu_renderer))
+    _root.destroy()
 
 # ============================================================
 # SUMMARY

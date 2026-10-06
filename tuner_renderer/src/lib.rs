@@ -69,6 +69,18 @@ impl TunerRenderer {
             .map_err(|e| PyRuntimeError::new_err(format!("Render failed: {e}")))
     }
 
+    /// (name, backend, device_type) of the adapter in use. device_type
+    /// "Cpu" means a software rasterizer — the Python side treats that as
+    /// no GPU and falls back to the canvas.
+    fn adapter_info(&self) -> (String, String, String) {
+        self.inner.adapter_info()
+    }
+
+    /// Present mode in use ("Mailbox" or "Fifo").
+    fn present_mode(&self) -> String {
+        self.inner.present_mode()
+    }
+
     /// Set stripe color from hex string (e.g. "#00FF00").
     fn set_stripe_color(&mut self, hex_color: &str) {
         self.inner.set_stripe_color(hex_color);
