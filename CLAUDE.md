@@ -34,7 +34,7 @@ All test suites (59 files): `test_audio_utils`, `test_autofit_shift`, `test_bugf
 
 **SVG↔G-code parity**: `test_engine_parity` pins the contract that the SVG/preview output and the G-code output describe the same physical object (dart wave shape, engraving label placement, engine purity). The two engines render independently and have drifted before — when touching shared geometry (wave math, placement formulas, Y-flip), run this suite and extend it for any new shared shape.
 
-**What CI runs (since 2026-10-06).** Three jobs on every push to `beta` or `main`: `lint` (ruff), `test` (every suite via `run_tests.py` on **Windows, macOS and Linux** — Windows and macOS runners have a display so the GUI suites run for real; Linux runs under `xvfb-run`; full `requirements.txt` is installed so the OpenCV and pyserial suites run instead of self-skipping), and `build`, which `needs: [lint, test]` — nothing is built or attached to a release unless every test job passed (added 2026-10-06 after the first release cut showed the test job ran *beside* the build, not before it). Before this, CI ran no tests at all, and the macOS code paths (`IS_MACOS` theming, `::tk::mac::Quit`, canvas-only tuner, the no-numpy Intel build) had never been executed anywhere — nobody on the project owns a Mac. The macOS test job is the only place they run. The repo is public, so Actions minutes are free; that is why the test job runs on every push rather than only on `main`.
+**What CI runs (since 2026-10-06).** Three jobs on every push to `beta` or `main`: `lint` (ruff), `test` (every suite via `run_tests.py` on **Windows, macOS Apple Silicon, macOS Intel and Linux** — Windows and macOS runners have a display so the GUI suites run for real; Linux runs under `xvfb-run`; full `requirements.txt` is installed so the OpenCV and pyserial suites run instead of self-skipping), and `build`, which `needs: [lint, test]` — nothing is built or attached to a release unless every test job passed (added 2026-10-06 after the first release cut showed the test job ran *beside* the build, not before it). Before this, CI ran no tests at all, and the macOS code paths (`IS_MACOS` theming, `::tk::mac::Quit`, canvas-only tuner, the no-numpy Intel build) had never been executed anywhere — nobody on the project owns a Mac. The macOS test job is the only place they run. The repo is public, so Actions minutes are free; that is why the test job runs on every push rather than only on `main`.
 
 **The Intel Mac is tested as it ships.** The `test` matrix includes `macos-15-intel` with `svgwrite numpy pillow babel` installed — numpy but no sounddevice, exactly the Intel build's dependency set — running `run_tests.py --allow-missing sounddevice`, which counts a suite that dies on one of those imports as skipped (reported, not hidden). Everything else runs for real on x86 macOS Tk. Until 2026-10-06 that build had no numpy, and the first Intel run measured the pure-Python nest at **774 s (`test_zone_labels`), 293 s and 260 s (the two scrap suites)** — the wait an Intel user was living with on a big fill; Matt's answer was to ship numpy in the Intel build ("include numpy for them"), after which `test_zone_labels` took 7.7 s there. The `_HAS_NUMPY` fallback now runs only in the parity suites' reference implementations and in source checkouts without numpy; no shipped build lacks it. The audio-tab suites (`test_tuner_canvas`, `test_toner_live`) self-skip when `AUDIO_AVAILABLE` is False, because that build's tuner and toner are the "not available on this Mac" panels by design.
 
@@ -60,8 +60,8 @@ All test suites (59 files): `test_audio_utils`, `test_autofit_shift`, `test_bugf
 - `test_descriptor_validity` hardcodes a local WAV corpus path (`C:\sax shop companion\recordings`) and only runs on Matt's workstation; `run_tests.py` skips it when the corpus is absent. `test_goodson_import` reads the website checkout at `C:/code/stohrermusic/...` and self-skips elsewhere.
 - `test_tuner_engine`'s reference-player start tests and `test_wav_recording`'s "Music or Documents exists" check self-skip on a machine with no audio output device / a bare home folder (CI runners). `play()` returning False there is the fallback working.
 - **The first CI test run (2026-10-06) caught a shipped bug:** CI installs `opencv-python` 5.0, which returns ChArUco ids as a flat `(N,)` array where 4.x returned `(N, 1)`; `calibrate_from_frames` indexed `i[0]` on a scalar and raised `IndexError`. The Windows installer built that day bundled OpenCV 5, so camera calibration in the shipped build would have crashed at the save step. Fixed by flattening the ids (`np.asarray(ids).reshape(-1)`); `requirements.txt` keeps `>=4.7`. Nobody had run `test_camera_capture` with OpenCV installed before — on the dev machine it had always self-skipped. Its calibration fixture was also degenerate (eight fronto-parallel translations of one card cannot determine a focal length; OpenCV 5 diverged to fx ≈ 9 × 10¹⁷) and is now ten synthetic pinhole views with a known K, which the test requires `calibrate_from_frames` to recover (fx within 2 %, principal point within 3 px; measured 800.2 of 800, rms 0.04 px).
-- `test_smoke_ui` constructs the full `PadSVGGeneratorApp` in a withdrawn Tk root — requires a display, so works on Windows/macOS and GitHub Actions Windows runners. On headless Linux it self-skips with a "no display" message.
-- `test_zone_labels` is headless for everything except its three `preview_*` cases, which build a real `NestingPreviewWindow` and inspect its canvas. Those self-skip without a display; the other 31 always run. Note the window calls `wait_window()` in `__init__`, so the canvas inspection must be scheduled on the parent via `after()` *before* constructing it — see `_probe_preview`.
+- `test_smoke_ui` constructs the full `PadSVGGeneratorApp` in a withdrawn Tk root — requires a display, so works on Windows/macOS and GitHub Actions Windows runners. The Linux CI job runs it under `xvfb-run`; it self-skips with a "no display" message only on a truly headless box.
+- `test_zone_labels` is headless for everything except its three `preview_*` cases, which build a real `NestingPreviewWindow` and inspect its canvas. Those self-skip without a display; the other 44 always run. Note the window calls `wait_window()` in `__init__`, so the canvas inspection must be scheduled on the parent via `after()` *before* constructing it — see `_probe_preview`.
 
 Before committing, run the suites affected by your changes. For releases, run all (minus `test_descriptor_validity` unless the WAV corpus is available). If adding new functionality, write a test script in `tools/` that exercises affected code paths. Test engine/logic functions directly. Print PASS/FAIL per test with a summary.
 
@@ -142,7 +142,7 @@ Options > Sizing Rules > **Lesser-used settings** > **Labeled Zones** (moved int
 
 **Keep test fixtures to real material and real pad sizes.** The two `x max` leftover tests originally filled a 302×158mm scrap with a `4.0mm` pad — a 1.2mm card disc — and placed ~2900 of them, which cost **88s and 71s** and made the suite unusable at ~170s. Matt makes nothing under 7.0mm and works on offcuts never bigger than 14×14in; the fixture is now a 254×162mm offcut filled with `MAX_FILL = 18.0`, and the suite runs in **6.5s**. The old fixture also silently distorted what was being tested: only a sub-millimetre disc fits *above* the groups (they're placed biggest-first from the top and claim the topmost material), so "fills above the groups" was an artifact of the unrealistic size, not a property worth pinning. The real signal is "fills *beside* them" plus a ≥85% comparison against the same fill with zones off.
 
-Tests: `tools/test_zone_labels.py` (46) — opt-in/regression safety (zones off must reproduce the old nester placement-for-placement), range bounds, grid shapes and their fallbacks, containment, group non-overlap and visible separation, groups-and-boundaries-land-on-material, never-cut-unlabeled, the clip helper on concave shapes, SVG↔G-code Y-flip agreement, and three preview-canvas cases that self-skip without a display.
+Tests: `tools/test_zone_labels.py` (47) — opt-in/regression safety (zones off must reproduce the old nester placement-for-placement), range bounds, grid shapes and their fallbacks, containment, group non-overlap and visible separation, groups-and-boundaries-land-on-material, never-cut-unlabeled, the clip helper on concave shapes, SVG↔G-code Y-flip agreement, and three preview-canvas cases that self-skip without a display.
 
 ## Pad Preview Window
 
@@ -257,7 +257,7 @@ CI wraps `dist\SaxShopCompanion.exe` into a versioned `SaxShopCompanion-Windows-
 
 ```bash
 python build.py
-iscc /DAppVersion=2.7 installer.iss     # requires Inno Setup 6
+iscc /DAppVersion=2.80 installer.iss    # requires Inno Setup 6
 ```
 
 **Do not change the `AppId` GUID** in `installer.iss` — Windows uses it to recognize upgrades. Changing it produces a parallel install instead of an in-place upgrade.
@@ -349,9 +349,10 @@ Items new *in that specific release* get a plain `**(new)**` marker prefixed bef
 
 ## CI/CD (GitHub Actions)
 
-The `.github/workflows/build.yml` workflow has two jobs:
+The `.github/workflows/build.yml` workflow has three jobs. `build` has `needs: [lint, test]` and `fail-fast: false`, so nothing is built or attached to a release unless every test job passed, and one platform's build failure does not cancel the others:
 - **`lint`** (ubuntu-latest, ~10s): runs `ruff check .` — fails the workflow on any violation
-- **`build`** (4-platform matrix): Windows Inno Setup installer (the bare PyInstaller .exe is built but not published — only the installer ships), macOS Apple Silicon .app, macOS Intel .app, and Linux binary
+- **`test`** (windows-latest, macos-latest, macos-15-intel, ubuntu-latest): `python tools/run_tests.py` with `requirements.txt` + `requirements-dev.txt`; Linux under `xvfb-run`; the Intel Mac with the shipped dependency set (numpy, no sounddevice) and `--allow-missing sounddevice`
+- **`build`** (4-platform matrix): Windows Inno Setup installer (the bare PyInstaller .exe is built but not published — only the installer ships), macOS Apple Silicon .app, macOS Intel .app, and Linux binary. After PyInstaller each job runs the frozen-build probe (`--selftest` on the built binary); Windows also runs the installer round-trip (silent install → installed copy's selftest → Start Menu shortcut → silent uninstall → `%APPDATA%` preserved) and the German screenshot tour (`win-tour-de`); Windows and Linux run the tuner suites with the freshly built GPU wheel; both Macs run the screenshot tour in light and dark (`mac-tour-*`). Tours never fail the build.
 
 Triggers on push to `main` or `beta`, on release creation, or manually.
 
@@ -372,6 +373,8 @@ The app stores settings and presets in platform-appropriate locations:
 | Windows | `%APPDATA%\StohrerSaxShopCompanion\` |
 | macOS | `~/Library/Application Support/StohrerSaxShopCompanion/` |
 | Linux | `~/.config/StohrerSaxShopCompanion/` (respects `XDG_CONFIG_HOME`) |
+
+**Override for tests and CI**: `SAXSHOP_CONFIG_DIR` replaces the directory above when it is set before `config` is imported. Every GUI suite and the CI tours use it, so nothing they do touches a user's real settings.
 
 **Backward compatibility**: On first run, existing config files in the old location (current working directory) are automatically migrated to the new location.
 
