@@ -18,7 +18,7 @@ from svg_engine import (
     _min_feeds_speeds_sheet, _grid_pack_discs,
     build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
     CRESCENT_CURVE_STANDARD, CRESCENT_MAX_PERCENT, CRESCENT_MAX_TONEHOLE_MM,
-    CRESCENT_MAX_THICKNESS_MM, tonehole_crescent_geometry, tonehole_crescent_outline,
+    CRESCENT_MAX_THICKNESS_MM, CRESCENT_MAX_QTY, tonehole_crescent_geometry, tonehole_crescent_outline,
     generate_tonehole_crescent_svg, generate_tonehole_crescent_stl,
 )
 from gcode_engine import (
@@ -700,15 +700,42 @@ class ToolingTabMixin:
 
         # Preview: shape only (it depends on the percentage and curve, not
         # on the ID), mouthpiece side up, the way it sits in the horn.
-        self.crescent_canvas = tk.Canvas(crescent_frame, width=200, height=200, bg=bg,
+        cr_preview_row = tk.Frame(crescent_frame, bg=bg)
+        cr_preview_row.pack(fill='x', pady=(2, 5))
+        self.crescent_canvas = tk.Canvas(cr_preview_row, width=180, height=180, bg=bg,
                                          highlightthickness=0)
-        self.crescent_canvas.pack(anchor='w', pady=(2, 2))
+        self.crescent_canvas.pack(side='left')
         self.crescent_readout_var = tk.StringVar(value="")
-        tk.Label(crescent_frame, textvariable=self.crescent_readout_var, bg=bg,
-                 fg="#444", font=("Helvetica", 9, "italic"), justify="left"
-                 ).pack(anchor='w', pady=(0, 5))
+        tk.Label(cr_preview_row, textvariable=self.crescent_readout_var, bg=bg,
+                 fg="#444", font=("Helvetica", 9, "italic"), justify="left", wraplength=340
+                 ).pack(side='left', anchor='n', padx=(10, 0), pady=(30, 0))
         for var in (self.crescent_tonehole_var, self.crescent_percent_var):
             var.trace_add("write", lambda *a: self._update_crescent_preview())
+
+        # Several at once: each list entry is a crescent with its own
+        # quantity. With an empty list, Generate makes the one above.
+        cr_list_row = tk.Frame(crescent_frame, bg=bg)
+        cr_list_row.pack(fill='x', pady=(0, 3))
+        tk.Label(cr_list_row, text=_("Quantity:"), bg=bg).pack(side='left')
+        self.crescent_qty_var = tk.StringVar(value=str(tooling.get("crescent_qty", "1")))
+        tk.Entry(cr_list_row, textvariable=self.crescent_qty_var, width=4).pack(side='left', padx=(2, 10))
+        tk.Button(cr_list_row, text=_("Add to list"),
+                  command=self._on_add_crescent).pack(side='left', padx=(0, 5))
+        tk.Button(cr_list_row, text=_("Remove"),
+                  command=self._on_remove_crescent).pack(side='left')
+        self.crescent_listbox = tk.Listbox(crescent_frame, height=4, width=64,
+                                           activestyle='none', exportselection=False)
+        self.crescent_listbox.pack(anchor='w', pady=(0, 2))
+        self.crescent_list_hint_var = tk.StringVar(value="")
+        tk.Label(crescent_frame, textvariable=self.crescent_list_hint_var, bg=bg, fg="gray",
+                 font=("Helvetica", 8), justify="left", wraplength=540).pack(anchor='w', pady=(0, 5))
+        self.crescent_list = []
+        saved_list = tooling.get("crescent_list", [])
+        for raw in saved_list if isinstance(saved_list, list) else []:
+            entry = self._clean_crescent_entry(raw)
+            if entry:
+                self.crescent_list.append(entry)
+        self._refresh_crescent_list()
 
         cr_stl_row = tk.Frame(crescent_frame, bg=bg)
         cr_stl_row.pack(fill='x', pady=(0, 5))
@@ -936,6 +963,8 @@ class ToolingTabMixin:
             tooling["crescent_percent"] = self.crescent_percent_var.get()
             tooling["crescent_curve"] = round(float(self.crescent_curve_var.get()), 1)
             tooling["crescent_thickness"] = self.crescent_thickness_var.get()
+            tooling["crescent_qty"] = self.crescent_qty_var.get()
+            tooling["crescent_list"] = [dict(e) for e in self.crescent_list]
         self.settings["tooling_settings"] = tooling
         # Persist the Feeds & Speeds Tester state too (if the section is built)
         if hasattr(self, 'fs_sweep_vars'):
@@ -2131,6 +2160,61 @@ class ToolingTabMixin:
             + _("Open area left {pct}%, same as a {d} mm round hole").format(
                 pct=f"{geom['open_percent']:g}", d=f"{geom['equivalent_d']:.1f}"))
 
+    def _read_crescent_qty(self):
+        try:
+            qty = int(self.crescent_qty_var.get())
+        except (ValueError, TypeError):
+            qty = 0
+        if not 1 <= qty <= CRESCENT_MAX_QTY:
+            raise ValueError(_("Quantity must be a whole number from 1 to {max}.").format(max=CRESCENT_MAX_QTY))
+        return qty
+
+    @staticmethod
+    def _clean_crescent_entry(raw):
+        """A saved list entry, normalised, or None if it no longer makes a crescent."""
+        try:
+            entry = {'tonehole_d': float(raw['tonehole_d']), 'percent': float(raw['percent']),
+                     'curve': float(raw.get('curve', CRESCENT_CURVE_STANDARD)), 'qty': int(raw.get('qty', 1))}
+            tonehole_crescent_geometry(entry['tonehole_d'], entry['percent'], entry['curve'])
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return None
+        return entry if 1 <= entry['qty'] <= CRESCENT_MAX_QTY else None
+
+    def _on_add_crescent(self):
+        try:
+            d, pct, curve = self._read_crescent_inputs()
+            qty = self._read_crescent_qty()
+        except ValueError as e:
+            messagebox.showerror(_("Invalid Input"), str(e))
+            return
+        self.crescent_list.append({'tonehole_d': d, 'percent': pct, 'curve': curve, 'qty': qty})
+        self._refresh_crescent_list()
+
+    def _on_remove_crescent(self):
+        sel = self.crescent_listbox.curselection()
+        if sel:
+            del self.crescent_list[sel[0]]
+            self._refresh_crescent_list()
+
+    def _refresh_crescent_list(self):
+        """Redraw the list and the line saying what Generate will make."""
+        lb = self.crescent_listbox
+        lb.delete(0, tk.END)
+        for n, e in enumerate(self.crescent_list, 1):
+            g = tonehole_crescent_geometry(e['tonehole_d'], e['percent'], e['curve'])
+            lb.insert(tk.END, _("{n}.  {d} mm, {pct}%, inner edge radius {r} mm, × {qty}").format(
+                n=n, d=f"{e['tonehole_d']:g}", pct=f"{e['percent']:g}",
+                r=f"{g['inner_radius']:.1f}", qty=e['qty']))
+        if not self.crescent_list:
+            hint = _("The list is empty, so Generate makes the crescent above.")
+        else:
+            total = sum(e['qty'] for e in self.crescent_list)
+            hint = ngettext("Generate makes the list: {n} crescent.",
+                            "Generate makes the list: {n} crescents.", total).format(n=total)
+            if len(self.crescent_list) > 1:
+                hint += " " + _("The SVG engraves each one's list number on the scrap beside it.")
+        self.crescent_list_hint_var.set(hint)
+
     def _on_generate_crescent_svg(self):
         self._generate_crescent("svg")
 
@@ -2138,9 +2222,15 @@ class ToolingTabMixin:
         self._generate_crescent("stl")
 
     def _generate_crescent(self, kind):
-        """Save the crescent as an SVG cut path ("svg") or a printable STL ("stl")."""
+        """Save the list (or, with an empty list, the crescent in the fields)
+        as SVG cut paths ("svg") or a printable STL ("stl")."""
         try:
-            d, pct, curve = self._read_crescent_inputs()
+            if self.crescent_list:
+                entries = [dict(e) for e in self.crescent_list]
+            else:
+                d, pct, curve = self._read_crescent_inputs()
+                entries = [{'tonehole_d': d, 'percent': pct, 'curve': curve,
+                            'qty': self._read_crescent_qty()}]
             thickness = None
             if kind == "stl":
                 try:
@@ -2156,20 +2246,24 @@ class ToolingTabMixin:
 
         try:
             ext = "." + kind
+            if len(entries) == 1:
+                initial = f"crescent_{entries[0]['tonehole_d']:g}mm_{entries[0]['percent']:g}pct{ext}"
+            else:
+                initial = f"tonehole_crescents{ext}"
             save_path = filedialog.asksaveasfilename(
                 title=_("Save Tonehole Crescent"),
                 defaultextension=ext,
                 filetypes=[(_("SVG files") if kind == "svg" else _("STL files"), "*" + ext)],
-                initialfile=f"crescent_{d:g}mm_{pct:g}pct{ext}",
+                initialfile=initial,
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             if kind == "svg":
-                generate_tonehole_crescent_svg(d, pct, curve, save_path, self.settings)
+                generate_tonehole_crescent_svg(entries, save_path, self.settings)
             else:
-                generate_tonehole_crescent_stl(d, pct, curve, thickness, save_path)
+                generate_tonehole_crescent_stl(entries, thickness, save_path)
             messagebox.showinfo(_("Done"), _("Saved to: {d}").format(d=save_path))
 
         except Exception as e:

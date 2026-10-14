@@ -13,8 +13,11 @@ extruded STL. These tests pin that they agree:
     SVG-spec arc converter, not the engine's own outline)
   - the STL is watertight, wound outward, and its volume is area x thickness
   - out-of-range input is refused
-  - the Tooling section previews, validates and persists its fields
-    (the UI cases self-skip without a display)
+  - a list of crescents lays out in order without overlaps, numbers each
+    part on the scrap under it when there's more than one entry, and
+    writes one cut path / one STL shell per part
+  - the Tooling section previews, validates and persists its fields and
+    its list (the UI cases self-skip without a display)
 
 Generate SVG / Generate STL through the real buttons are covered by
 test_tooling_e2e.
@@ -37,11 +40,11 @@ init_translation("en")
 
 from config import DEFAULT_SETTINGS  # noqa: E402
 from svg_engine import (  # noqa: E402
-    CRESCENT_CURVE_STANDARD, CRESCENT_FLATTEST, CRESCENT_MAX_PERCENT,
-    CRESCENT_SVG_MARGIN_MM, _circle_overlap_area, crescent_inner_curvature,
-    generate_tonehole_crescent_stl, generate_tonehole_crescent_svg,
-    tonehole_crescent_bounds, tonehole_crescent_geometry, tonehole_crescent_outline,
-    tonehole_crescent_solid, tonehole_crescent_svg_path,
+    CRESCENT_CURVE_STANDARD, CRESCENT_FLATTEST, CRESCENT_GAP_MM, CRESCENT_LABEL_FONT_MM,
+    CRESCENT_MAX_PERCENT, CRESCENT_MAX_QTY, CRESCENT_SVG_MARGIN_MM, _circle_overlap_area,
+    crescent_inner_curvature, generate_tonehole_crescent_stl, generate_tonehole_crescent_svg,
+    layout_tonehole_crescents, tonehole_crescent_bounds, tonehole_crescent_geometry,
+    tonehole_crescent_outline, tonehole_crescent_solid, tonehole_crescent_svg_path,
 )
 
 results = []
@@ -49,6 +52,13 @@ results = []
 DIAMETERS = (8.0, 25.0, 42.5, 60.0)
 PERCENTS = (0.5, 2.0, 5.0, 10.0, 20.0, 35.0, 50.0, 75.0)
 CURVES = (0, 10, 23, 50, 75, 88, 100)
+
+ONE = {'tonehole_d': 42.5, 'percent': 12.0, 'curve': 60, 'qty': 1}
+# The Super tenor case (B and Bb, a spare of one) plus some small flat ones,
+# so rows wrap and sizes mix.
+MIXED = [{'tonehole_d': 41.5, 'percent': 10, 'curve': 75, 'qty': 2},
+         {'tonehole_d': 43.0, 'percent': 12, 'curve': 60, 'qty': 1},
+         {'tonehole_d': 18.0, 'percent': 20, 'curve': 20, 'qty': 3}]
 
 
 def check(name, fn):
@@ -237,7 +247,8 @@ def t_svg_file():
     for compat in (False, True):
         settings = dict(DEFAULT_SETTINGS, compatibility_mode=compat)
         path = os.path.join(out, f"c_{compat}.svg")
-        g = generate_tonehole_crescent_svg(42.5, 12.0, 60, path, settings)
+        parts = generate_tonehole_crescent_svg([ONE], path, settings)
+        g = parts[0]['geom']
         root = ET.parse(path).getroot()
         ns = {"s": "http://www.w3.org/2000/svg"}
         x0, y0, x1, y1 = tonehole_crescent_bounds(g)
@@ -248,6 +259,7 @@ def t_svg_file():
         assert vb[0] == 0 and vb[1] == 0 and abs(vb[2] - float(root.get("width")[:-2])) < 1e-9
         paths = root.findall(".//s:path", ns)
         assert len(paths) == 1 and len(root.findall(".//s:circle", ns)) == 0, "exactly one cut path"
+        assert not root.findall(".//s:text", ns), "a single crescent needs no number"
         assert paths[0].get("stroke") == DEFAULT_SETTINGS["layer_colors"]["die_outer_cut"]
         assert paths[0].get("fill") == "none"
         assert (paths[0].get("stroke-width") == "0.1") == compat
@@ -299,7 +311,8 @@ def t_solid_watertight_and_sized():
 def t_stl_file():
     out = tempfile.mkdtemp(prefix="ssc-crescent-stl-")
     path = os.path.join(out, "c.stl")
-    g = generate_tonehole_crescent_stl(42.5, 12.0, 60, 3.0, path)
+    part = generate_tonehole_crescent_stl([ONE], 3.0, path)[0]
+    g, pcx, pcy = part['geom'], part['cx'], part['cy']
     facets = read_stl(path)
     tris = [f[1:] for f in facets]
     assert _watertight(tris), "STL as written (float32) must still be watertight"
@@ -308,9 +321,10 @@ def t_stl_file():
     zs = [v[2] for t in tris for v in t]
     x0, y0, x1, y1 = tonehole_crescent_bounds(g)
     assert abs(min(zs)) < 1e-6 and abs(max(zs) - 3.0) < 1e-5, "flat on the bed, 3 mm tall"
-    assert abs(max(ys) - g['radius']) < 1e-4, "mouthpiece side is +y"
-    assert abs(min(ys) + g['tip_y']) < 1e-4
-    assert abs(min(xs) - x0) < 0.01 * g['radius'] and abs(max(xs) - x1) < 0.01 * g['radius']
+    assert abs(max(ys) - (g['radius'] - pcy)) < 1e-4, "mouthpiece side is +y"
+    assert abs(min(ys) - (-g['tip_y'] - pcy)) < 1e-4
+    tol = 0.01 * g['radius']
+    assert abs(min(xs) - (x0 + pcx)) < tol and abs(max(xs) - (x1 + pcx)) < tol
     for n, a, b, c in facets:
         ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
         vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
@@ -319,6 +333,100 @@ def t_stl_file():
         assert ln > 0, "degenerate facet"
         assert (n[0] * cx + n[1] * cy + n[2] * cz) / ln > 0.99, "stored normal disagrees with winding"
     assert _volume(tris) > 0
+
+
+# ---------------------------------------------------------------- lists
+
+def _label_box(p):
+    """Generous box round an engraved list number: digits are about
+    0.6 em wide, and the baseline sits about a cap height below the top."""
+    w = 0.6 * CRESCENT_LABEL_FONT_MM * len(str(p['number']))
+    return (p['label_x'] - w / 2, p['label_y'] - CRESCENT_LABEL_FONT_MM, p['label_x'] + w / 2, p['label_y'] + 0.2)
+
+
+def _part_box(p):
+    x0, y0, x1, y1 = tonehole_crescent_bounds(p['geom'])
+    return (x0 + p['cx'], y0 + p['cy'], x1 + p['cx'], y1 + p['cy'])
+
+
+def _overlap(a, b, gap=0.0):
+    return a[0] < b[2] + gap and b[0] < a[2] + gap and a[1] < b[3] + gap and b[1] < a[3] + gap
+
+
+def t_layout():
+    parts, W, H = layout_tonehole_crescents(MIXED)
+    assert len(parts) == sum(e['qty'] for e in MIXED)
+    assert [p['number'] for p in parts] == [1, 1, 2, 3, 3, 3], "list order, copies share their number"
+    m = CRESCENT_SVG_MARGIN_MM
+    boxes = [_part_box(p) for p in parts]
+    labels = [_label_box(p) for p in parts]
+    for i, (b, lab) in enumerate(zip(boxes, labels)):
+        assert b[0] >= m - 1e-9 and b[1] >= m - 1e-9 and b[2] <= W - m + 1e-9 and b[3] <= H - m + 1e-9, i
+        assert lab[0] >= 0 and lab[2] <= W and lab[3] <= H - m + 0.5, f"number {i} off the sheet"
+        assert lab[1] >= b[3] - 1e-9 and abs((lab[0] + lab[2]) / 2 - (b[0] + b[2]) / 2) < 1e-9, \
+            "each number sits centred under its own crescent"
+        for j, other in enumerate(boxes):
+            if j != i:
+                assert not _overlap(b, other, CRESCENT_GAP_MM - 1e-6), f"parts {i} and {j} closer than the gap"
+                assert not _overlap(lab, other), f"number {i} lands on part {j}"
+    for e, want in (([ONE], None), ([dict(ONE, qty=4)], None), (MIXED[:2], 1)):
+        assert layout_tonehole_crescents(e)[0][0]['number'] == want, e
+    # Unnumbered (the STL) packs tighter, never looser.
+    _p, W2, H2 = layout_tonehole_crescents(MIXED, numbered=False)
+    assert W2 <= W + 1e-9 and H2 < H
+
+
+def t_layout_rejects():
+    for bad in ([], [dict(ONE, qty=0)], [dict(ONE, qty=CRESCENT_MAX_QTY + 1)], [dict(ONE, percent=90)]):
+        try:
+            layout_tonehole_crescents(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {bad}")
+
+
+def t_svg_list_file():
+    out = tempfile.mkdtemp(prefix="ssc-crescent-list-")
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    for compat in (False, True):
+        path = os.path.join(out, f"list_{compat}.svg")
+        parts = generate_tonehole_crescent_svg(MIXED, path, dict(DEFAULT_SETTINGS, compatibility_mode=compat))
+        root = ET.parse(path).getroot()
+        paths = root.findall(".//s:path", ns)
+        texts = root.findall(".//s:text", ns)
+        assert len(paths) == len(parts) == 6
+        assert [t.text for t in texts] == [str(p['number']) for p in parts]
+        assert all(t.get("fill") == DEFAULT_SETTINGS["layer_colors"]["die_engraving"] for t in texts)
+        # Each cut path is its part's crescent, in the same place.
+        for el, p in zip(paths, parts):
+            pts = _path_points(el.get("d"))
+            want = p['geom']['radius'] ** 2 * math.pi * (100 - p['geom']['open_percent']) / 100
+            assert abs(polygon_area(pts) / want - 1) < 2e-3
+            assert abs(min(y for _x, y in pts) - (p['cy'] - p['geom']['radius'])) < 1e-3
+
+
+def t_stl_list_file():
+    out = tempfile.mkdtemp(prefix="ssc-crescent-list-stl-")
+    path = os.path.join(out, "list.stl")
+    parts = generate_tonehole_crescent_stl(MIXED, 2.0, path)
+    tris = [f[1:] for f in read_stl(path)]
+    assert _watertight(tris)
+    # One closed shell per part: group triangles by shared vertices.
+    parent = {}
+
+    def find(v):
+        while parent.setdefault(v, v) != v:
+            parent[v] = parent[parent[v]]
+            v = parent[v]
+        return v
+    for a, b, c in tris:
+        ra = find(a)
+        parent[find(b)] = ra
+        parent[find(c)] = ra
+    shells = {find(v) for t in tris for v in t}
+    assert len(shells) == len(parts) == 6, len(shells)
+    want = sum(math.pi * p['geom']['radius'] ** 2 * (100 - p['geom']['open_percent']) / 100 for p in parts) * 2.0
+    assert abs(_volume(tris) / want - 1) < 0.01
 
 
 # ---------------------------------------------------------------- UI
@@ -405,6 +513,54 @@ def ui_checks():
             assert key in DEFAULT_SETTINGS["tooling_settings"], key
     check("UI: crescent fields persist into tooling_settings (and have defaults)", persisted)
 
+    def list_add_remove():
+        app.crescent_list.clear()
+        app._refresh_crescent_list()
+        assert "empty" in app.crescent_list_hint_var.get()
+        for d, p, q in (("41.5", "10", "2"), ("43", "12", "1")):
+            app.crescent_tonehole_var.set(d)
+            app.crescent_percent_var.set(p)
+            app.crescent_qty_var.set(q)
+            find_button(app._tooling_sections["tonehole_crescent"], "Add to list").invoke()
+        assert [(e['tonehole_d'], e['percent'], e['qty']) for e in app.crescent_list] == [(41.5, 10, 2), (43, 12, 1)]
+        assert app.crescent_listbox.size() == 2
+        assert app.crescent_listbox.get(0).startswith("1.  41.5 mm, 10%"), app.crescent_listbox.get(0)
+        hint = app.crescent_list_hint_var.get()
+        assert "3 crescents" in hint and "number" in hint, hint
+        app.crescent_listbox.selection_set(0)
+        find_button(app._tooling_sections["tonehole_crescent"], "Remove").invoke()
+        assert [e['tonehole_d'] for e in app.crescent_list] == [43]
+        hint = app.crescent_list_hint_var.get()
+        assert "1 crescent." in hint and "number" not in hint, "one entry: no numbers engraved"
+        app._update_tooling_settings()
+        assert app.settings["tooling_settings"]["crescent_list"] == [dict(app.crescent_list[0])]
+    check("UI: Add to list / Remove, the list line and the hint follow", list_add_remove)
+
+    def list_add_refuses_bad_qty():
+        boxes = []
+        orig = tooling_tab.messagebox.showerror
+        tooling_tab.messagebox.showerror = lambda title, msg, **k: boxes.append(msg)
+        try:
+            before = len(app.crescent_list)
+            for q in ("0", "2.5", "x", str(CRESCENT_MAX_QTY + 1)):
+                app.crescent_qty_var.set(q)
+                app._on_add_crescent()
+            assert len(app.crescent_list) == before and len(boxes) == 4, boxes
+        finally:
+            tooling_tab.messagebox.showerror = orig
+            app.crescent_qty_var.set("1")
+    import tooling_tab
+    check("UI: Add to list refuses a bad quantity with a message", list_add_refuses_bad_qty)
+
+    def saved_list_is_cleaned():
+        clean = tooling_tab.ToolingTabMixin._clean_crescent_entry
+        assert clean({'tonehole_d': "41.5", 'percent': 10, 'curve': 75, 'qty': "2"}) == \
+            {'tonehole_d': 41.5, 'percent': 10.0, 'curve': 75.0, 'qty': 2}
+        for junk in ({}, {'tonehole_d': 40}, {'tonehole_d': 40, 'percent': 90}, {'tonehole_d': -1, 'percent': 10},
+                     {'tonehole_d': 40, 'percent': 10, 'qty': 0}, "40,10", None, 7):
+            assert clean(junk) is None, junk
+    check("UI: a hand-edited or stale saved list loads only valid entries", saved_list_is_cleaned)
+
     try:
         root.destroy()
     except tk.TclError:
@@ -426,6 +582,10 @@ def main():
     check("SVG file: one cut path, sized to the crescent, both output modes", t_svg_file)
     check("STL solid: watertight, wound outward, volume = area x thickness", t_solid_watertight_and_sized)
     check("STL file: binary, float32-watertight, flat on the bed, normals agree", t_stl_file)
+    check("list layout: in order, gapped, on the sheet, numbers under their own part", t_layout)
+    check("list layout refuses empty lists, bad quantities, bad crescents", t_layout_rejects)
+    check("list SVG: a cut path per part, numbers on the engrave layer", t_svg_list_file)
+    check("list STL: one watertight shell per part, total volume right", t_stl_list_file)
     ui_checks()
     print("=" * 60)
     print(f"{sum(results)}/{len(results)} passed")

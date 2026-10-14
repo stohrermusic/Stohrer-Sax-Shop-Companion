@@ -2531,6 +2531,10 @@ CRESCENT_MAX_TONEHOLE_MM = 200.0
 CRESCENT_MAX_THICKNESS_MM = 50.0
 CRESCENT_SVG_MARGIN_MM = 2.0
 CRESCENT_ARC_SEGMENTS = 128      # per arc, for the preview outline and the STL
+CRESCENT_MAX_QTY = 50            # per list entry
+CRESCENT_GAP_MM = 3.0            # between parts in a file with more than one
+CRESCENT_LABEL_FONT_MM = 3.0     # list number engraved under each part
+CRESCENT_LABEL_GAP_MM = 1.0      # part to top of its number
 
 
 def _circle_overlap_area(r1, r2, d):
@@ -2662,24 +2666,85 @@ def tonehole_crescent_svg_path(geom, cx, cy):
             f"A {Rc:.8f},{Rc:.8f} 0 {large_inner} 0 {lx:.8f},{ty:.8f} Z")
 
 
-def generate_tonehole_crescent_svg(tonehole_d_mm, percent, curve, filename, settings):
-    """Write the crescent as a single cut path, sized to the crescent plus a
-    small margin. No kerf compensation — the material is the user's choice.
-    Returns the geometry dict."""
-    geom = tonehole_crescent_geometry(tonehole_d_mm, percent, curve)
-    min_x, min_y, max_x, max_y = tonehole_crescent_bounds(geom)
-    m = CRESCENT_SVG_MARGIN_MM
-    width_mm = round(max_x - min_x + 2 * m, 3)
-    height_mm = round(max_y - min_y + 2 * m, 3)
+def layout_tonehole_crescents(entries, numbered=None):
+    """Place every part for a list of crescents, in list order.
+
+    entries: [{'tonehole_d', 'percent', 'curve', 'qty'}, ...]; each entry
+    becomes qty identical parts. numbered: leave room under each part for
+    its 1-based entry number. Defaults to on with more than one entry: a
+    B and a Bb crescent a couple of mm apart look alike once cut, and the
+    number can't go on the part (it's a few mm wide), so it goes on the
+    scrap beside it. Copies of one crescent need no telling apart.
+
+    Shelf-packs the parts' bounding boxes into rows about as wide as the
+    layout ends up tall. Returns (parts, width_mm, height_mm); each part is
+    {'geom', 'cx', 'cy', 'number', 'label_x', 'label_y'} with (cx, cy) the
+    tonehole centre on the sheet (mm, y down, margin included) and the
+    label fields None when unnumbered.
+    """
+    if not entries:
+        raise ValueError("no crescents to lay out")
+    if numbered is None:
+        numbered = len(entries) > 1
+    strip = CRESCENT_LABEL_GAP_MM + CRESCENT_LABEL_FONT_MM if numbered else 0.0
+    cells = []
+    for n, e in enumerate(entries, 1):
+        qty = int(e.get('qty', 1))
+        if not 1 <= qty <= CRESCENT_MAX_QTY:
+            raise ValueError(f"quantity must be 1 to {CRESCENT_MAX_QTY}")
+        g = tonehole_crescent_geometry(e['tonehole_d'], e['percent'],
+                                       e.get('curve', CRESCENT_CURVE_STANDARD))
+        x0, y0, x1, y1 = tonehole_crescent_bounds(g)
+        cells += [(g, n, x0, y0, x1 - x0, y1 - y0)] * qty
+
+    gap, m = CRESCENT_GAP_MM, CRESCENT_SVG_MARGIN_MM
+    area = sum((w + gap) * (h + strip + gap) for _g, _n, _x0, _y0, w, h in cells)
+    row_limit = max(max(c[4] for c in cells), math.sqrt(area))
+    parts = []
+    x = y = row_h = width = 0.0
+    for g, n, x0, y0, w, h in cells:
+        if x > 0 and x + w > row_limit + 1e-9:
+            y += row_h + gap
+            x = row_h = 0.0
+        part = {'geom': g, 'cx': m + x - x0, 'cy': m + y - y0,
+                'number': None, 'label_x': None, 'label_y': None}
+        if numbered:
+            # Baseline about a cap height below the top of the label strip.
+            part.update(number=n, label_x=m + x + w / 2,
+                        label_y=m + y + h + CRESCENT_LABEL_GAP_MM + 0.75 * CRESCENT_LABEL_FONT_MM)
+        parts.append(part)
+        width = max(width, x + w)
+        row_h = max(row_h, h + strip)
+        x += w + gap
+    # Rounded up, not to nearest: a size rounded down trims the margin.
+    return parts, math.ceil((width + 2 * m) * 1000) / 1000, math.ceil((y + row_h + 2 * m) * 1000) / 1000
+
+
+def generate_tonehole_crescent_svg(entries, filename, settings):
+    """Write a list of crescents (see layout_tonehole_crescents) as cut
+    paths, numbered on the scrap when there's more than one entry. No kerf
+    compensation — the material is the user's choice. Returns the parts."""
+    parts, width_mm, height_mm = layout_tonehole_crescents(entries)
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
     cut_color = layer_colors.get('die_outer_cut', '#FF0000')
-    dwg, _compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
-    # Path data is unitless in both output modes; it inherits the viewBox's
-    # 1 unit = 1 mm.
-    dwg.add(dwg.path(d=tonehole_crescent_svg_path(geom, m - min_x, m - min_y),
-                     stroke=cut_color, fill='none', stroke_width=stroke_w))
+    eng_color = layer_colors.get('die_engraving', '#00E000')
+    dwg, compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+    for p in parts:
+        if p['number'] is None:
+            continue
+        if compat:
+            dwg.add(dwg.text(str(p['number']), insert=(p['label_x'], p['label_y']),
+                             text_anchor="middle", font_size=CRESCENT_LABEL_FONT_MM, fill=eng_color))
+        else:
+            dwg.add(dwg.text(str(p['number']), insert=(f"{p['label_x']}mm", f"{p['label_y']}mm"),
+                             text_anchor="middle", font_size=f"{CRESCENT_LABEL_FONT_MM}mm", fill=eng_color))
+    for p in parts:
+        # Path data is unitless in both output modes; it inherits the
+        # viewBox's 1 unit = 1 mm.
+        dwg.add(dwg.path(d=tonehole_crescent_svg_path(p['geom'], p['cx'], p['cy']),
+                         stroke=cut_color, fill='none', stroke_width=stroke_w))
     dwg.save()
-    return geom
+    return parts
 
 
 def tonehole_crescent_solid(geom, thickness_mm, segments=CRESCENT_ARC_SEGMENTS):
@@ -2744,12 +2809,20 @@ def _write_binary_stl(filename, triangles):
                                 *a, *b, *c, 0))
 
 
-def generate_tonehole_crescent_stl(tonehole_d_mm, percent, curve, thickness_mm, filename):
-    """Write the crescent as a printable solid thickness_mm tall. Returns the
-    geometry dict."""
-    geom = tonehole_crescent_geometry(tonehole_d_mm, percent, curve)
-    _write_binary_stl(filename, tonehole_crescent_solid(geom, thickness_mm))
-    return geom
+def generate_tonehole_crescent_stl(entries, thickness_mm, filename):
+    """Write a list of crescents as printable solids thickness_mm tall, one
+    STL, laid out like the SVG (unnumbered: a print has no engrave layer).
+    Returns the parts."""
+    parts, _w, _h = layout_tonehole_crescents(entries, numbered=False)
+    tris = []
+    for p in parts:
+        cx, cy = p['cx'], p['cy']
+        # The solid is built mirrored (+y = mouthpiece side), so the sheet's
+        # y-down offset goes in negated.
+        for tri in tonehole_crescent_solid(p['geom'], thickness_mm):
+            tris.append(tuple((x + cx, y - cy, z) for x, y, z in tri))
+    _write_binary_stl(filename, tris)
+    return parts
 
 
 # ==========================================

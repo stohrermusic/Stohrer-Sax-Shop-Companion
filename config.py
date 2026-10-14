@@ -810,6 +810,8 @@ DEFAULT_SETTINGS = {
         "crescent_percent": "10",
         "crescent_curve": 75.0,
         "crescent_thickness": "2.0",
+        "crescent_qty": "1",
+        "crescent_list": [],     # [{"tonehole_d", "percent", "curve", "qty"}, ...]
         # Feeds & Speeds Tester
         "feeds_speeds_tester": {
             "material": "Felt",

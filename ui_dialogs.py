@@ -5702,6 +5702,10 @@ class UserGuideWindow(tk.Toplevel):
                       "rounder makes it longer and thinner. The area covered stays the same."))
         self._bullet(_("The preview shows it mouthpiece side up, with its widest point and the "
                       "round hole that would leave the same open area."))
+        self._bullet(_("To make several at once, set each one up, give it a quantity and click Add to "
+                      "list. Generate then puts the whole list in one file, in order. With more than "
+                      "one entry the SVG engraves each crescent's list number on the scrap beside it, "
+                      "since crescents a little different in size look alike once cut."))
         self._bullet(_("Generate SVG to laser-cut it (no kerf compensation \u2014 set that in your "
                       "laser software), or Generate STL to 3D print it at the thickness you enter."))
         self._blank()

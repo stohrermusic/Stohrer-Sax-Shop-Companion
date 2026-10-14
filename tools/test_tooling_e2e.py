@@ -198,6 +198,26 @@ def main():
         app.crescent_thickness_var.set("2.5")
     check("tonehole crescent: zero print thickness is refused before saving", crescent_refuses_bad_thickness)
 
+    def crescent_list_svg():
+        app.crescent_list.clear()
+        for d, p, q in (("41.5", "10", "2"), ("43", "12", "1")):
+            app.crescent_tonehole_var.set(d)
+            app.crescent_percent_var.set(p)
+            app.crescent_qty_var.set(q)
+            app._on_add_crescent()
+        # The fields now hold something else; Generate must make the list.
+        app.crescent_tonehole_var.set("20")
+        path = run("crescent list svg", app._on_generate_crescent_svg, ".svg")
+        svg_ok(path)
+        assert os.path.basename(path) == "tonehole_crescents.svg", path
+        ns = {"s": "http://www.w3.org/2000/svg"}
+        root_el = ET.parse(path).getroot()
+        assert len(root_el.findall(".//s:path", ns)) == 3, "2 + 1 crescents from the list"
+        assert [t.text for t in root_el.findall(".//s:text", ns)] == ["1", "1", "2"]
+        app.crescent_list.clear()
+        app._refresh_crescent_list()
+    check("tonehole crescent: Generate SVG makes the whole list, numbered", crescent_list_svg)
+
     try:
         root.destroy()
     except tk.TclError:
