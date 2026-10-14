@@ -17,6 +17,9 @@ from svg_engine import (
     generate_die_organizer_svg,
     _min_feeds_speeds_sheet, _grid_pack_discs,
     build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
+    CRESCENT_CURVE_STANDARD, CRESCENT_MAX_PERCENT, CRESCENT_MAX_TONEHOLE_MM,
+    CRESCENT_MAX_THICKNESS_MM, tonehole_crescent_geometry, tonehole_crescent_outline,
+    generate_tonehole_crescent_svg, generate_tonehole_crescent_stl,
 )
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode,
@@ -78,8 +81,8 @@ class ToolingTabMixin:
         tooling = self.settings.get("tooling_settings", {})
         bg = self.root.cget('bg') if IS_MACOS else self.default_bg
 
-        # Tool selector buttons at top, laid out in two rows so longer
-        # labels like "Feeds & Speeds Tester" stay readable.
+        # Tool selector buttons at top, three to a row so longer labels
+        # like "Speed & Power Test" stay readable in the 640 px window.
         selector_frame = tk.Frame(parent, bg=bg)
         selector_frame.pack(fill='x', padx=10, pady=(10, 5))
 
@@ -93,6 +96,7 @@ class ToolingTabMixin:
             ("kerf_test", _("Kerf Test")),
             ("feeds_speeds_tester", _("Speed & Power Test")),
             ("pad_press_spacers", _("Pad Press Spacers")),
+            ("tonehole_crescent", _("Tonehole Crescent")),
         ]
         # Calibration Card was deliberately removed from this list —
         # it's a workflow step in Pad Maker > Options > Machine >
@@ -100,12 +104,13 @@ class ToolingTabMixin:
         # frames in one wizard), not a standalone tool. The engine
         # entry point `generate_calibration_card_gcode` lives on in
         # gcode_engine.py and is invoked by the calibration dialog.
-        row_frames = [tk.Frame(selector_frame, bg=bg), tk.Frame(selector_frame, bg=bg)]
-        row_frames[0].pack(fill='x')
-        row_frames[1].pack(fill='x', pady=(4, 0))
-        per_row = (len(tool_names) + 1) // 2  # split evenly, first row gets extras
+        per_row = 3  # four 22-character buttons overflow the default window
+        row_frames = []
+        for r in range((len(tool_names) + per_row - 1) // per_row):
+            row_frames.append(tk.Frame(selector_frame, bg=bg))
+            row_frames[-1].pack(fill='x', pady=(4 if r else 0, 0))
         for idx, (key, label) in enumerate(tool_names):
-            row = row_frames[0 if idx < per_row else 1]
+            row = row_frames[idx // per_row]
             btn = tk.Button(row, text=label, width=22,
                             command=lambda k=key: self._show_tooling_section(k))
             btn.pack(side='left', padx=(0, 5))
@@ -654,6 +659,74 @@ class ToolingTabMixin:
 
         self._tooling_sections['pad_press_spacers'] = spacers_frame
 
+        # ========================================
+        # TONEHOLE CRESCENT SECTION
+        # ========================================
+        crescent_frame = tk.Frame(self._tooling_content, bg=bg)
+
+        tk.Label(crescent_frame, bg=bg, font=("Helvetica", 9), fg="gray",
+                 text=_("A crescent set into the mouthpiece side of a tonehole covers part "
+                        "of it and flattens that note. The outer edge is the tonehole ID "
+                        "exactly; allow for kerf or print tolerance."),
+                 justify="left", wraplength=540).pack(anchor='w', pady=(0, 8))
+
+        cr_size_row = tk.Frame(crescent_frame, bg=bg)
+        cr_size_row.pack(fill='x', pady=(0, 5))
+        tk.Label(cr_size_row, text=_("Tonehole ID:"), bg=bg).pack(side='left')
+        self.crescent_tonehole_var = tk.StringVar(value=str(tooling.get("crescent_tonehole_d", "40")))
+        tk.Entry(cr_size_row, textvariable=self.crescent_tonehole_var, width=8).pack(side='left', padx=(2, 2))
+        tk.Label(cr_size_row, text=_("mm"), bg=bg).pack(side='left', padx=(0, 15))
+        tk.Label(cr_size_row, text=_("Reduce open area by:"), bg=bg).pack(side='left')
+        self.crescent_percent_var = tk.StringVar(value=str(tooling.get("crescent_percent", "10")))
+        tk.Entry(cr_size_row, textvariable=self.crescent_percent_var, width=6).pack(side='left', padx=(2, 2))
+        tk.Label(cr_size_row, text="%", bg=bg).pack(side='left')
+
+        cr_curve_row = tk.Frame(crescent_frame, bg=bg)
+        cr_curve_row.pack(fill='x', pady=(0, 5))
+        tk.Label(cr_curve_row, text=_("Inner edge:"), bg=bg).pack(side='left')
+        tk.Label(cr_curve_row, text=_("Flatter"), bg=bg, font=("Helvetica", 8)).pack(side='left', padx=(6, 0))
+        try:
+            curve_initial = float(tooling.get("crescent_curve", CRESCENT_CURVE_STANDARD))
+        except (ValueError, TypeError):
+            curve_initial = CRESCENT_CURVE_STANDARD
+        self.crescent_curve_var = tk.DoubleVar(value=curve_initial)
+        tk.Scale(cr_curve_row, from_=0, to=100, orient='horizontal', variable=self.crescent_curve_var,
+                 showvalue=False, length=200, bg=bg, highlightthickness=0,
+                 command=lambda v: self._update_crescent_preview()).pack(side='left', padx=4)
+        tk.Label(cr_curve_row, text=_("Rounder"), bg=bg, font=("Helvetica", 8)).pack(side='left', padx=(0, 10))
+        tk.Button(cr_curve_row, text=_("Match tonehole curve"),
+                  command=lambda: (self.crescent_curve_var.set(CRESCENT_CURVE_STANDARD),
+                                   self._update_crescent_preview())).pack(side='left')
+
+        # Preview: shape only (it depends on the percentage and curve, not
+        # on the ID), mouthpiece side up, the way it sits in the horn.
+        self.crescent_canvas = tk.Canvas(crescent_frame, width=200, height=200, bg=bg,
+                                         highlightthickness=0)
+        self.crescent_canvas.pack(anchor='w', pady=(2, 2))
+        self.crescent_readout_var = tk.StringVar(value="")
+        tk.Label(crescent_frame, textvariable=self.crescent_readout_var, bg=bg,
+                 fg="#444", font=("Helvetica", 9, "italic"), justify="left"
+                 ).pack(anchor='w', pady=(0, 5))
+        for var in (self.crescent_tonehole_var, self.crescent_percent_var):
+            var.trace_add("write", lambda *a: self._update_crescent_preview())
+
+        cr_stl_row = tk.Frame(crescent_frame, bg=bg)
+        cr_stl_row.pack(fill='x', pady=(0, 5))
+        tk.Label(cr_stl_row, text=_("Print thickness:"), bg=bg).pack(side='left')
+        self.crescent_thickness_var = tk.StringVar(value=str(tooling.get("crescent_thickness", "2.0")))
+        tk.Entry(cr_stl_row, textvariable=self.crescent_thickness_var, width=6).pack(side='left', padx=(2, 2))
+        tk.Label(cr_stl_row, text=_("mm  (STL only)"), bg=bg).pack(side='left')
+
+        cr_gen_frame = tk.Frame(crescent_frame, bg=bg)
+        cr_gen_frame.pack(fill='x', pady=(5, 0))
+        tk.Button(cr_gen_frame, text=_("Generate SVG"), width=15,
+                  command=self._on_generate_crescent_svg).pack(side='left', padx=(0, 10))
+        tk.Button(cr_gen_frame, text=_("Generate STL"), width=15,
+                  command=self._on_generate_crescent_stl).pack(side='left')
+
+        self._tooling_sections['tonehole_crescent'] = crescent_frame
+        self._update_crescent_preview()
+
         # Calibration Card UI was removed from the Tooling tab —
         # see the comment on the tool_names list. The integrated
         # Camera Calibration wizard (Pad Maker > Options > Machine)
@@ -858,6 +931,11 @@ class ToolingTabMixin:
             tooling["holder_layer_count"] = int(self.holder_layer_count_var.get())
             tooling["holder_sheet_width"] = self.holder_width_var.get()
             tooling["holder_sheet_height"] = self.holder_height_var.get()
+        if hasattr(self, 'crescent_curve_var'):
+            tooling["crescent_tonehole_d"] = self.crescent_tonehole_var.get()
+            tooling["crescent_percent"] = self.crescent_percent_var.get()
+            tooling["crescent_curve"] = round(float(self.crescent_curve_var.get()), 1)
+            tooling["crescent_thickness"] = self.crescent_thickness_var.get()
         self.settings["tooling_settings"] = tooling
         # Persist the Feeds & Speeds Tester state too (if the section is built)
         if hasattr(self, 'fs_sweep_vars'):
@@ -2001,6 +2079,98 @@ class ToolingTabMixin:
 
             messagebox.showinfo(_("Done"),
                 _("Saved {filename} to:\n\n{path}").format(filename=stl_filename, path=save_path))
+
+        except Exception as e:
+            messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    # ========================================
+    # TONEHOLE CRESCENT
+    # ========================================
+
+    def _read_crescent_inputs(self):
+        """Parse the crescent fields into (tonehole_d, percent, curve).
+
+        Raises ValueError carrying a message ready to show the user.
+        """
+        try:
+            d = float(self.crescent_tonehole_var.get())
+            pct = float(self.crescent_percent_var.get())
+        except (ValueError, TypeError):
+            raise ValueError(_("Enter the tonehole ID and the percentage as numbers.")) from None
+        if not 0 < d <= CRESCENT_MAX_TONEHOLE_MM:
+            raise ValueError(_("Tonehole ID must be more than 0 and at most {max} mm.").format(
+                max=f"{CRESCENT_MAX_TONEHOLE_MM:g}"))
+        if not 0 < pct <= CRESCENT_MAX_PERCENT:
+            raise ValueError(_("The percentage must be more than 0 and at most {max}.").format(
+                max=f"{CRESCENT_MAX_PERCENT:g}"))
+        return d, pct, float(self.crescent_curve_var.get())
+
+    def _update_crescent_preview(self):
+        """Redraw the crescent preview and the measurements under it."""
+        cv = self.crescent_canvas
+        cv.delete("all")
+        r_px = 70
+        cx, cy = int(cv.cget('width')) / 2, int(cv.cget('height')) / 2 + 8
+        cv.create_text(cx, 12, text=_("Mouthpiece side"), fill="#777777", font=("Helvetica", 8))
+        cv.create_oval(cx - r_px, cy - r_px, cx + r_px, cy + r_px, outline="#888888", dash=(3, 3))
+        try:
+            geom = tonehole_crescent_geometry(*self._read_crescent_inputs())
+        except ValueError as e:
+            self.crescent_readout_var.set(str(e))
+            return
+        scale = r_px / geom['radius']
+        outer, inner = tonehole_crescent_outline(geom, 64)
+        pts = []
+        for x, y in outer + inner[-2:0:-1]:
+            pts += [cx + x * scale, cy + y * scale]
+        cv.create_polygon(pts, fill="#E8A080", outline="#993C1D")
+        self.crescent_readout_var.set(
+            _("Widest point {w} mm, inner edge radius {r} mm").format(
+                w=f"{geom['width']:.2f}", r=f"{geom['inner_radius']:.1f}")
+            + "\n"
+            + _("Open area left {pct}%, same as a {d} mm round hole").format(
+                pct=f"{geom['open_percent']:g}", d=f"{geom['equivalent_d']:.1f}"))
+
+    def _on_generate_crescent_svg(self):
+        self._generate_crescent("svg")
+
+    def _on_generate_crescent_stl(self):
+        self._generate_crescent("stl")
+
+    def _generate_crescent(self, kind):
+        """Save the crescent as an SVG cut path ("svg") or a printable STL ("stl")."""
+        try:
+            d, pct, curve = self._read_crescent_inputs()
+            thickness = None
+            if kind == "stl":
+                try:
+                    thickness = float(self.crescent_thickness_var.get())
+                except (ValueError, TypeError):
+                    thickness = 0.0
+                if not 0 < thickness <= CRESCENT_MAX_THICKNESS_MM:
+                    raise ValueError(_("Print thickness must be more than 0 and at most {max} mm.").format(
+                        max=f"{CRESCENT_MAX_THICKNESS_MM:g}"))
+        except ValueError as e:
+            messagebox.showerror(_("Invalid Input"), str(e))
+            return
+
+        try:
+            ext = "." + kind
+            save_path = filedialog.asksaveasfilename(
+                title=_("Save Tonehole Crescent"),
+                defaultextension=ext,
+                filetypes=[(_("SVG files") if kind == "svg" else _("STL files"), "*" + ext)],
+                initialfile=f"crescent_{d:g}mm_{pct:g}pct{ext}",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+            if kind == "svg":
+                generate_tonehole_crescent_svg(d, pct, curve, save_path, self.settings)
+            else:
+                generate_tonehole_crescent_stl(d, pct, curve, thickness, save_path)
+            messagebox.showinfo(_("Done"), _("Saved to: {d}").format(d=save_path))
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))

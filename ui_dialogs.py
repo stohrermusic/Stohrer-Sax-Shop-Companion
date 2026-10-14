@@ -5693,6 +5693,19 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("Save the .stl files to disk and slice them in your 3D printer software."))
         self._blank()
 
+        self._h2(_("Tooling \u2014 Tonehole Crescent"))
+        self._body(_("A crescent set into the mouthpiece side of a tonehole covers part of it and "
+                    "flattens that note. Enter the tonehole ID and how much of its open area to "
+                    "cover; the outer edge is the tonehole ID exactly."))
+        self._bullet(_("The Inner edge slider sets how curved the inner edge is. \"Match tonehole "
+                      "curve\" gives the classic crescent; flatter makes it shorter and wider, "
+                      "rounder makes it longer and thinner. The area covered stays the same."))
+        self._bullet(_("The preview shows it mouthpiece side up, with its widest point and the "
+                      "round hole that would leave the same open area."))
+        self._bullet(_("Generate SVG to laser-cut it (no kerf compensation \u2014 set that in your "
+                      "laser software), or Generate STL to 3D print it at the thickness you enter."))
+        self._blank()
+
         self._h2(_("Tooling \u2014 Settings"))
         self._body(_("Options > Tooling Settings: per-material G-code (acrylic, basswood) "
                     "and die-engraving options."))

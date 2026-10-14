@@ -804,6 +804,12 @@ DEFAULT_SETTINGS = {
         "holder_layer_count": 6,                  # 5 (2x pin) or 6 (3x pin)
         "holder_sheet_width": "12",
         "holder_sheet_height": "12",
+        # Tonehole Crescent (curve is the 0-100 slider; 75 = inner edge
+        # matches the tonehole's curve, see svg_engine.CRESCENT_CURVE_STANDARD)
+        "crescent_tonehole_d": "40",
+        "crescent_percent": "10",
+        "crescent_curve": 75.0,
+        "crescent_thickness": "2.0",
         # Feeds & Speeds Tester
         "feeds_speeds_tester": {
             "material": "Felt",
