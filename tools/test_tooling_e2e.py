@@ -2,7 +2,8 @@
 
 Die inserts (SVG and G-code), die holder (SVG and G-code, both variants),
 die organizer (both halves), kerf test (SVG and G-code), the speed & power
-test sheet, and a pad-press spacer STL — each driven through its handler
+test sheet, a pad-press spacer STL, and the tonehole crescent (SVG and
+STL) — each driven through its handler
 on the live tab with only the save dialog and message boxes stubbed, then
 the written file checked: SVGs parse as XML, G-code switches the laser off,
 the organizer and STL copies are byte-identical to the bundled assets.
@@ -171,6 +172,51 @@ def main():
         assert not [b for b in boxes if b[0] == "showerror"], boxes
         assert filecmp.cmp(saved[-1], os.path.join(assets, stl), shallow=False), "STL copy differs"
     check("pad-press spacer STL: byte-identical copy of the asset", spacer_copy)
+
+    # Tonehole crescent: SVG cut path and a printable binary STL
+    app.crescent_tonehole_var.set("41.5")
+    app.crescent_percent_var.set("12")
+    app.crescent_curve_var.set(60)
+    app.crescent_thickness_var.set("2.5")
+    check("tonehole crescent: Generate SVG", lambda: svg_ok(run("crescent svg", app._on_generate_crescent_svg, ".svg")))
+
+    def crescent_stl():
+        path = run("crescent stl", app._on_generate_crescent_stl, ".stl")
+        data = open(path, "rb").read()
+        n = int.from_bytes(data[80:84], "little")
+        assert n > 0 and len(data) == 84 + 50 * n, "not a binary STL"
+    check("tonehole crescent: Generate STL", crescent_stl)
+
+    def crescent_refuses_bad_thickness():
+        app.crescent_thickness_var.set("0")
+        boxes.clear()
+        before = len(saved)
+        app._on_generate_crescent_stl()
+        root.update()
+        assert len(saved) == before, "a zero thickness must not open the save dialog"
+        assert any(b[0] == "showerror" for b in boxes), boxes
+        app.crescent_thickness_var.set("2.5")
+    check("tonehole crescent: zero print thickness is refused before saving", crescent_refuses_bad_thickness)
+
+    def crescent_list_svg():
+        app.crescent_list.clear()
+        for d, p, q in (("41.5", "10", "2"), ("43", "12", "1")):
+            app.crescent_tonehole_var.set(d)
+            app.crescent_percent_var.set(p)
+            app.crescent_qty_var.set(q)
+            app._on_add_crescent()
+        # The fields now hold something else; Generate must make the list.
+        app.crescent_tonehole_var.set("20")
+        path = run("crescent list svg", app._on_generate_crescent_svg, ".svg")
+        svg_ok(path)
+        assert os.path.basename(path) == "tonehole_crescents.svg", path
+        ns = {"s": "http://www.w3.org/2000/svg"}
+        root_el = ET.parse(path).getroot()
+        assert len(root_el.findall(".//s:path", ns)) == 3, "2 + 1 crescents from the list"
+        assert [t.text for t in root_el.findall(".//s:text", ns)] == ["1", "1", "2"]
+        app.crescent_list.clear()
+        app._refresh_crescent_list()
+    check("tonehole crescent: Generate SVG makes the whole list, numbered", crescent_list_svg)
 
     try:
         root.destroy()

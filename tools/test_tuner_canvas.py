@@ -97,11 +97,40 @@ def main():
     except tk.TclError as e:
         print(f"Skipping: no display available ({e})")
         return 0
+    from tuner_engine import AUDIO_AVAILABLE
+    if not AUDIO_AVAILABLE:
+        # The Intel Mac build ships without numpy/sounddevice; its Tuner tab
+        # is the "not available on this Mac" panel by design.
+        print("Skipping: audio libraries not installed (numpy/sounddevice) — no tuner tab on this build")
+        root.destroy()
+        return 0
 
     print("Tuner tab on a synthetic tone")
     print("=" * 60)
     import tuner_tab
     gpu_available = tuner_tab._HAS_GPU_RENDERER
+
+    # ---- pass 0: no microphone — the error must survive a canvas rebuild ----
+    import tuner_tab as _tt
+    _tt._HAS_GPU_RENDERER = False
+    from main import PadSVGGeneratorApp as _App
+    root.geometry("1000x720+0+0")
+    app0 = _App(root)
+    root.update()
+    app0._tuner_engine.start = lambda device=None: (False, "no microphone (test)")
+    app0.notebook.select(app0.tuner_tab_frame)       # _tuner_start fails -> error text
+    root.after(800, root.quit)
+    root.mainloop()
+    app0._tuner_build_wheels()                       # the rebuild that used to wipe it
+    root.update_idletasks()
+
+    def no_mic_error_survives_rebuild():
+        items = app0._tuner_canvas.find_withtag("error")
+        assert items, "audio-error message gone after the canvas rebuild"
+        assert "no microphone" in app0._tuner_canvas.itemcget(items[0], "text")
+    check("no-mic: 'Audio error' stays on the canvas after a rebuild", no_mic_error_survives_rebuild)
+    root.destroy()
+    root = tk.Tk()
 
     # ---- pass 1: canvas ---------------------------------------------
     app = _drive(root, gpu=False)
@@ -146,16 +175,23 @@ def main():
     if gpu_available:
         root = tk.Tk()
         app2 = _drive(root, gpu=True)
-        check("GPU mode: renderer alive after the frames",
-              lambda: app2._tuner_use_gpu and app2._gpu_renderer is not None)
-        check("GPU mode: zero render failures",
-              lambda: app2._tuner_gpu_fail_count == 0)
+        if app2._tuner_use_gpu:
+            check("GPU mode: renderer alive after the frames",
+                  lambda: app2._tuner_use_gpu and app2._gpu_renderer is not None)
+            check("GPU mode: zero render failures",
+                  lambda: app2._tuner_gpu_fail_count == 0)
+        else:
+            # CI runners have a software adapter (or no Vulkan): the tab
+            # must have dropped to the canvas on purpose and said so.
+            check("software adapter / no GPU: fell back to the canvas as designed",
+                  lambda: app2._tuner_canvas is not None and len(app2._tuner_wheels) == 12
+                  and app2._gpu_renderer is None and hasattr(app2, '_cpu_mode_lbl'))
 
         def gpu_readout():
             note, cents, raw = _readout(app2)
             assert note.rstrip("0123456789") == "A", (note, raw)
             assert "IN TUNE" in raw or (cents is not None and abs(cents) < 1.0), (note, raw)
-        check("GPU mode: VU readout says A, in tune", gpu_readout)
+        check("GPU build: VU readout says A, in tune", gpu_readout)
         app2._tuner_stop()
         root.update_idletasks()
         root.destroy()

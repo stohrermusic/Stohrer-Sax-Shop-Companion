@@ -178,15 +178,20 @@ def main():
     root.mainloop()
     expected = ["pad-maker", "sizing-rules-with-preview", "layer-colors", "gcode-settings", "nesting-preview",
                 "polygon-draw", "job-history", "feature-set", "user-guide", "about", "key-heights",
-                "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner", "toner"]
+                "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner", "toner"]
     check(f"tour visited every stop ({len(log)}/{len(expected)})", lambda: log == expected)
     def tour_raised_nothing():
         assert not errors, "\n".join(errors)
     check("tour raised nothing", tour_raised_nothing)
     check("no stray Toplevel left open after the tour",
           lambda: not [w for w in root.winfo_children() if isinstance(w, tk.Toplevel) and w.winfo_exists()])
-    check("tuner and toner stopped after the tour",
-          lambda: not app._tuner_running and not app._toner_engine.is_running)
+    def audio_tabs_stopped():
+        # On a build without the audio stack (Intel Mac) there is no engine
+        # and nothing to stop; the fallback panels are the designed state.
+        assert not getattr(app, "_tuner_running", False)
+        toner = getattr(app, "_toner_engine", None)
+        assert toner is None or not toner.is_running
+    check("tuner and toner stopped after the tour", audio_tabs_stopped)
 
     try:
         root.destroy()

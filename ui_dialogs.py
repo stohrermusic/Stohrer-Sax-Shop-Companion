@@ -2246,10 +2246,10 @@ class PadPreviewWindow(tk.Toplevel):
         'exact_size': '#444444',
     }
     LABELS = {
-        'leather':    'Leather',
-        'felt':       'Felt',
-        'card':       'Card',
-        'exact_size': 'Exact size',
+        'leather':    _('Leather'),
+        'felt':       _('Felt'),
+        'card':       _('Card'),
+        'exact_size': _('Exact size'),
     }
     MATERIALS = ('leather', 'felt', 'card', 'exact_size')
     POLL_MS = 200
@@ -5691,6 +5691,23 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Quarter-step set: 3.25 / 3.75 / 4.25 mm (4 of each, 12 total)."))
         self._bullet(_("Organizer rack: 7 compartments to hold the whole spacer set."))
         self._body(_("Save the .stl files to disk and slice them in your 3D printer software."))
+        self._blank()
+
+        self._h2(_("Tooling \u2014 Tonehole Crescent"))
+        self._body(_("A crescent set into the mouthpiece side of a tonehole covers part of it and "
+                    "flattens that note. Enter the tonehole ID and how much of its open area to "
+                    "cover; the outer edge is the tonehole ID exactly."))
+        self._bullet(_("The Inner edge slider sets how curved the inner edge is. \"Match tonehole "
+                      "curve\" gives the classic crescent; flatter makes it shorter and wider, "
+                      "rounder makes it longer and thinner. The area covered stays the same."))
+        self._bullet(_("The preview shows it mouthpiece side up, with its widest point and the "
+                      "round hole that would leave the same open area."))
+        self._bullet(_("To make several at once, set each one up, give it a quantity and click Add to "
+                      "list. Generate then puts the whole list in one file, in order. With more than "
+                      "one entry the SVG engraves each crescent's list number on the scrap beside it, "
+                      "since crescents a little different in size look alike once cut."))
+        self._bullet(_("Generate SVG to laser-cut it (no kerf compensation \u2014 set that in your "
+                      "laser software), or Generate STL to 3D print it at the thickness you enter."))
         self._blank()
 
         self._h2(_("Tooling \u2014 Settings"))

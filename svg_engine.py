@@ -1,5 +1,6 @@
 import math
 import os
+import struct
 import sys
 import svgwrite
 from config import (DEFAULT_SETTINGS, get_dart_settings_for_size, get_sizing_for_size,
@@ -2503,6 +2504,325 @@ def generate_kerf_test_svg(material_name, filename, settings):
                                stroke=cut_color, fill='none', stroke_width=stroke_w))
 
     dwg.save()
+
+
+# ==========================================
+# TONEHOLE CRESCENT
+# ==========================================
+#
+# A crescent set into the mouthpiece side of a tonehole covers part of its
+# open area, which flattens that note. The outer edge is the tonehole wall;
+# the inner edge is an arc of a second circle (the "inner circle") slid in
+# from the far side until the uncovered lens between the two circles is the
+# open area the user wants left. Coordinates are mm with the tonehole centre
+# at the origin and y DOWN (SVG convention), crescent on the -y side — the
+# top of the drawing is the mouthpiece side.
+#
+# The user sets two things: how much open area to cover, and how curved the
+# inner edge is. Curvature is expressed relative to the tonehole's own
+# (1.0 = the inner edge has the tonehole's radius, the classic crescent).
+
+CRESCENT_CURVE_STANDARD = 75     # slider position (0-100) where the inner edge matches the tonehole's curve
+CRESCENT_FLATTEST = 0.2          # inner-edge curvature at slider 0 (radius 5x the tonehole's): nearly a flat D
+CRESCENT_ROUNDEST = 0.5          # slider 100: this fraction of the way (in curvature) from the standard
+                                 # crescent toward a round opening, which is where the horns would close
+CRESCENT_MAX_PERCENT = 75.0
+CRESCENT_MAX_TONEHOLE_MM = 200.0
+CRESCENT_MAX_THICKNESS_MM = 50.0
+CRESCENT_SVG_MARGIN_MM = 2.0
+CRESCENT_ARC_SEGMENTS = 128      # per arc, for the preview outline and the STL
+CRESCENT_MAX_QTY = 50            # per list entry
+CRESCENT_GAP_MM = 3.0            # between parts in a file with more than one
+CRESCENT_LABEL_FONT_MM = 3.0     # list number engraved under each part
+CRESCENT_LABEL_GAP_MM = 1.0      # part to top of its number
+
+
+def _circle_overlap_area(r1, r2, d):
+    """Area of the lens where two circles (radii r1, r2, centres d apart) overlap."""
+    if d >= r1 + r2:
+        return 0.0
+    if d <= abs(r1 - r2):
+        return math.pi * min(r1, r2) ** 2
+    c1 = max(-1.0, min(1.0, (d * d + r1 * r1 - r2 * r2) / (2 * d * r1)))
+    c2 = max(-1.0, min(1.0, (d * d + r2 * r2 - r1 * r1) / (2 * d * r2)))
+    k = (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2)
+    return r1 * r1 * math.acos(c1) + r2 * r2 * math.acos(c2) - 0.5 * math.sqrt(max(0.0, k))
+
+
+def crescent_inner_curvature(curve, fraction):
+    """Inner-edge curvature relative to the tonehole's, for a slider position.
+
+    0..CRESCENT_CURVE_STANDARD runs linearly from CRESCENT_FLATTEST to 1.0.
+    Rounder than standard, the inner circle gets smaller than the tonehole,
+    and it can't get smaller than the opening it leaves: at curvature
+    1/sqrt(1 - fraction) the opening is a round hole touching the far wall
+    and the horns meet. That limit depends on how much area is covered, so
+    the rounder half of the slider is measured as a fraction of the way
+    there rather than as a fixed curvature — a fixed range would be
+    impossible at small percentages, which are the common ones.
+    """
+    c = max(0.0, min(100.0, float(curve)))
+    if c <= CRESCENT_CURVE_STANDARD:
+        return CRESCENT_FLATTEST + (1.0 - CRESCENT_FLATTEST) * c / CRESCENT_CURVE_STANDARD
+    k_round = 1.0 / math.sqrt(1.0 - fraction)
+    t = (c - CRESCENT_CURVE_STANDARD) / (100.0 - CRESCENT_CURVE_STANDARD)
+    return 1.0 + t * CRESCENT_ROUNDEST * (k_round - 1.0)
+
+
+def tonehole_crescent_geometry(tonehole_d_mm, percent, curve=CRESCENT_CURVE_STANDARD):
+    """Solve the crescent for a tonehole ID, % of open area to cover, and curve.
+
+    Returns a dict (mm, tonehole-centred, y down):
+      radius        tonehole radius (the outer edge)
+      inner_radius  radius of the inner edge's arc
+      offset        inner circle's centre, this far +y of the tonehole centre
+      tip_x, tip_y  the horns are at (+/-tip_x, tip_y)
+      width         widest point of the crescent, on the centreline
+      open_percent  open area left, % of the tonehole's
+      equivalent_d  diameter of a round hole with the same open area
+    Raises ValueError for out-of-range input.
+    """
+    tonehole_d_mm = float(tonehole_d_mm)
+    percent = float(percent)
+    if not (0.0 < tonehole_d_mm <= CRESCENT_MAX_TONEHOLE_MM):
+        raise ValueError(f"tonehole diameter must be above 0 and at most {CRESCENT_MAX_TONEHOLE_MM:g} mm")
+    if not (0.0 < percent <= CRESCENT_MAX_PERCENT):
+        raise ValueError(f"percentage must be above 0 and at most {CRESCENT_MAX_PERCENT:g}")
+    R = tonehole_d_mm / 2.0
+    fraction = percent / 100.0
+    Rc = R / crescent_inner_curvature(curve, fraction)
+    target = (1.0 - fraction) * math.pi * R * R
+    # The overlap shrinks monotonically as the inner circle slides away.
+    lo, hi = abs(R - Rc), R + Rc
+    for _i in range(100):
+        mid = (lo + hi) / 2.0
+        if _circle_overlap_area(R, Rc, mid) > target:
+            lo = mid
+        else:
+            hi = mid
+    offset = (lo + hi) / 2.0
+    tip_y = (offset * offset + R * R - Rc * Rc) / (2.0 * offset)
+    tip_x = math.sqrt(max(0.0, R * R - tip_y * tip_y))
+    return {
+        'radius': R,
+        'inner_radius': Rc,
+        'offset': offset,
+        'tip_x': tip_x,
+        'tip_y': tip_y,
+        'width': offset - Rc + R,
+        'open_percent': 100.0 - percent,
+        'equivalent_d': tonehole_d_mm * math.sqrt(1.0 - fraction),
+    }
+
+
+def tonehole_crescent_bounds(geom):
+    """(min_x, min_y, max_x, max_y) of the crescent itself.
+
+    Everything lies on the mouthpiece side of the horns' chord (the two
+    circles' radical axis), so the horns are the lowest points; the outer
+    arc reaches the full tonehole width only once it wraps past halfway.
+    """
+    R = geom['radius']
+    half_w = R if geom['tip_y'] > 0 else geom['tip_x']
+    return (-half_w, -R, half_w, geom['tip_y'])
+
+
+def tonehole_crescent_outline(geom, segments=CRESCENT_ARC_SEGMENTS):
+    """The crescent's two edges as point lists, each from the left horn to
+    the right horn over the mouthpiece side: (outer, inner). They share
+    their end points exactly. outer + reversed(inner)[1:-1] is the closed
+    outline."""
+    R, Rc, off = geom['radius'], geom['inner_radius'], geom['offset']
+    tx, ty = geom['tip_x'], geom['tip_y']
+    a_r = math.atan2(ty, tx)                  # right horn, seen from the tonehole centre
+    b_r = math.atan2(ty - off, tx)            # right horn, seen from the inner circle's centre
+    outer, inner = [], []
+    for i in range(segments + 1):
+        f = i / segments
+        a = (math.pi - a_r) + (math.pi + 2 * a_r) * f
+        b = (math.pi - b_r) + (math.pi + 2 * b_r) * f
+        outer.append((R * math.cos(a), R * math.sin(a)))
+        inner.append((Rc * math.cos(b), off + Rc * math.sin(b)))
+    for pts in (outer, inner):
+        pts[0] = (-tx, ty)
+        pts[-1] = (tx, ty)
+    return outer, inner
+
+
+def tonehole_crescent_svg_path(geom, cx, cy):
+    """SVG path data for the crescent with the tonehole centre at (cx, cy):
+    two true arcs, so laser software gets a smooth curve, not a polyline."""
+    R, Rc = geom['radius'], geom['inner_radius']
+    lx, rx, ty = cx - geom['tip_x'], cx + geom['tip_x'], cy + geom['tip_y']
+    large_outer = 1 if geom['tip_y'] > 0 else 0                 # wraps past halfway round the tonehole
+    large_inner = 1 if geom['tip_y'] > geom['offset'] else 0    # ... or round the inner circle
+    # Eight decimals, not the usual four: on a small tonehole at a low
+    # percentage the horns sit within 1e-4 mm of a diameter apart, where
+    # the arc centre a reader rebuilds from the endpoints moves ~250x as
+    # far as they do. At four decimals both arcs collapse into the same
+    # semicircle; at six the area is still off by a few tenths of a percent.
+    return (f"M {lx:.8f},{ty:.8f} "
+            f"A {R:.8f},{R:.8f} 0 {large_outer} 1 {rx:.8f},{ty:.8f} "
+            f"A {Rc:.8f},{Rc:.8f} 0 {large_inner} 0 {lx:.8f},{ty:.8f} Z")
+
+
+def layout_tonehole_crescents(entries, numbered=None):
+    """Place every part for a list of crescents, in list order.
+
+    entries: [{'tonehole_d', 'percent', 'curve', 'qty'}, ...]; each entry
+    becomes qty identical parts. numbered: leave room under each part for
+    its 1-based entry number. Defaults to on with more than one entry: a
+    B and a Bb crescent a couple of mm apart look alike once cut, and the
+    number can't go on the part (it's a few mm wide), so it goes on the
+    scrap beside it. Copies of one crescent need no telling apart.
+
+    Shelf-packs the parts' bounding boxes into rows about as wide as the
+    layout ends up tall. Returns (parts, width_mm, height_mm); each part is
+    {'geom', 'cx', 'cy', 'number', 'label_x', 'label_y'} with (cx, cy) the
+    tonehole centre on the sheet (mm, y down, margin included) and the
+    label fields None when unnumbered.
+    """
+    if not entries:
+        raise ValueError("no crescents to lay out")
+    if numbered is None:
+        numbered = len(entries) > 1
+    strip = CRESCENT_LABEL_GAP_MM + CRESCENT_LABEL_FONT_MM if numbered else 0.0
+    cells = []
+    for n, e in enumerate(entries, 1):
+        qty = int(e.get('qty', 1))
+        if not 1 <= qty <= CRESCENT_MAX_QTY:
+            raise ValueError(f"quantity must be 1 to {CRESCENT_MAX_QTY}")
+        g = tonehole_crescent_geometry(e['tonehole_d'], e['percent'],
+                                       e.get('curve', CRESCENT_CURVE_STANDARD))
+        x0, y0, x1, y1 = tonehole_crescent_bounds(g)
+        cells += [(g, n, x0, y0, x1 - x0, y1 - y0)] * qty
+
+    gap, m = CRESCENT_GAP_MM, CRESCENT_SVG_MARGIN_MM
+    area = sum((w + gap) * (h + strip + gap) for _g, _n, _x0, _y0, w, h in cells)
+    row_limit = max(max(c[4] for c in cells), math.sqrt(area))
+    parts = []
+    x = y = row_h = width = 0.0
+    for g, n, x0, y0, w, h in cells:
+        if x > 0 and x + w > row_limit + 1e-9:
+            y += row_h + gap
+            x = row_h = 0.0
+        part = {'geom': g, 'cx': m + x - x0, 'cy': m + y - y0,
+                'number': None, 'label_x': None, 'label_y': None}
+        if numbered:
+            # Baseline about a cap height below the top of the label strip.
+            part.update(number=n, label_x=m + x + w / 2,
+                        label_y=m + y + h + CRESCENT_LABEL_GAP_MM + 0.75 * CRESCENT_LABEL_FONT_MM)
+        parts.append(part)
+        width = max(width, x + w)
+        row_h = max(row_h, h + strip)
+        x += w + gap
+    # Rounded up, not to nearest: a size rounded down trims the margin.
+    return parts, math.ceil((width + 2 * m) * 1000) / 1000, math.ceil((y + row_h + 2 * m) * 1000) / 1000
+
+
+def generate_tonehole_crescent_svg(entries, filename, settings):
+    """Write a list of crescents (see layout_tonehole_crescents) as cut
+    paths, numbered on the scrap when there's more than one entry. No kerf
+    compensation — the material is the user's choice. Returns the parts."""
+    parts, width_mm, height_mm = layout_tonehole_crescents(entries)
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    cut_color = layer_colors.get('die_outer_cut', '#FF0000')
+    eng_color = layer_colors.get('die_engraving', '#00E000')
+    dwg, compat, stroke_w = _create_svg_drawing(filename, width_mm, height_mm, settings)
+    for p in parts:
+        if p['number'] is None:
+            continue
+        if compat:
+            dwg.add(dwg.text(str(p['number']), insert=(p['label_x'], p['label_y']),
+                             text_anchor="middle", font_size=CRESCENT_LABEL_FONT_MM, fill=eng_color))
+        else:
+            dwg.add(dwg.text(str(p['number']), insert=(f"{p['label_x']}mm", f"{p['label_y']}mm"),
+                             text_anchor="middle", font_size=f"{CRESCENT_LABEL_FONT_MM}mm", fill=eng_color))
+    for p in parts:
+        # Path data is unitless in both output modes; it inherits the
+        # viewBox's 1 unit = 1 mm.
+        dwg.add(dwg.path(d=tonehole_crescent_svg_path(p['geom'], p['cx'], p['cy']),
+                         stroke=cut_color, fill='none', stroke_width=stroke_w))
+    dwg.save()
+    return parts
+
+
+def tonehole_crescent_solid(geom, thickness_mm, segments=CRESCENT_ARC_SEGMENTS):
+    """Triangles of the crescent extruded to thickness_mm, lying flat on z=0.
+
+    Mouthpiece side is +y (the outline is mirrored out of SVG's y-down).
+    The faces are a strip between the two edges — matched point for point,
+    with the degenerate triangle at each horn dropped — plus a wall quad
+    per outline segment. Closed and consistently wound outward, so a slicer
+    reads it as one watertight part. Returns [((x,y,z), (x,y,z), (x,y,z)), ...].
+    """
+    thickness_mm = float(thickness_mm)
+    if not (0.0 < thickness_mm <= CRESCENT_MAX_THICKNESS_MM):
+        raise ValueError(f"thickness must be above 0 and at most {CRESCENT_MAX_THICKNESS_MM:g} mm")
+    outer, inner = tonehole_crescent_outline(geom, segments)
+    outer = [(x, -y) for x, y in outer]
+    inner = [(x, -y) for x, y in inner]
+    n = len(outer) - 1
+    faces = []
+    for i in range(n):
+        if i < n - 1:
+            faces.append((outer[i], outer[i + 1], inner[i + 1]))
+        if i > 0:
+            faces.append((outer[i], inner[i + 1], inner[i]))
+
+    def signed_area(a, b, c):
+        return ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2.0
+
+    # Wind the cap counter-clockwise seen from above (normal +z). Every strip
+    # triangle has the same winding, so one test decides for all of them.
+    if signed_area(*faces[0]) < 0:
+        faces = [(a, c, b) for a, b, c in faces]
+    loop = outer + inner[-2:0:-1]
+    if sum(signed_area((0.0, 0.0), p, q) for p, q in zip(loop, loop[1:] + loop[:1])) < 0:
+        loop.reverse()
+
+    t = thickness_mm
+    tris = []
+    for a, b, c in faces:
+        tris.append(((a[0], a[1], t), (b[0], b[1], t), (c[0], c[1], t)))
+        tris.append(((a[0], a[1], 0.0), (c[0], c[1], 0.0), (b[0], b[1], 0.0)))
+    for p, q in zip(loop, loop[1:] + loop[:1]):
+        p0, q0 = (p[0], p[1], 0.0), (q[0], q[1], 0.0)
+        p1, q1 = (p[0], p[1], t), (q[0], q[1], t)
+        tris.append((p0, q0, q1))
+        tris.append((p0, q1, p1))
+    return tris
+
+
+def _write_binary_stl(filename, triangles):
+    """Binary STL, mm. The header must not begin with "solid" — some
+    readers take that to mean ASCII STL."""
+    with open(filename, 'wb') as f:
+        f.write(b"Stohrer Sax Shop Companion".ljust(80, b" "))
+        f.write(struct.pack('<I', len(triangles)))
+        for a, b, c in triangles:
+            ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+            vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+            nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+            length = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+            f.write(struct.pack('<12fH', nx / length, ny / length, nz / length,
+                                *a, *b, *c, 0))
+
+
+def generate_tonehole_crescent_stl(entries, thickness_mm, filename):
+    """Write a list of crescents as printable solids thickness_mm tall, one
+    STL, laid out like the SVG (unnumbered: a print has no engrave layer).
+    Returns the parts."""
+    parts, _w, _h = layout_tonehole_crescents(entries, numbered=False)
+    tris = []
+    for p in parts:
+        cx, cy = p['cx'], p['cy']
+        # The solid is built mirrored (+y = mouthpiece side), so the sheet's
+        # y-down offset goes in negated.
+        for tri in tonehole_crescent_solid(p['geom'], thickness_mm):
+            tris.append(tuple((x + cx, y - cy, z) for x, y, z in tri))
+    _write_binary_stl(filename, tris)
+    return parts
 
 
 # ==========================================

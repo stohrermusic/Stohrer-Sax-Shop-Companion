@@ -288,7 +288,7 @@ class LibraryFeaturesMixin:
             return
             
         active_library = self.key_library_var.get()
-        if not active_library or active_library == "All Libraries":
+        if not active_library or active_library == _("All Libraries"):
             messagebox.showwarning(_("Save Error"), _("Please select a specific library to save to."))
             return
 
@@ -329,7 +329,7 @@ class LibraryFeaturesMixin:
         lib_name = self.key_library_var.get()
         data = None
         
-        if lib_name == "All Libraries":
+        if lib_name == _("All Libraries"):
             try:
                 lib_name, preset_name = selected_name.split("] ", 1)
                 lib_name = lib_name[1:]
@@ -363,7 +363,7 @@ class LibraryFeaturesMixin:
         selected_lib = self.key_library_var.get()
 
         # Delete empty library
-        if (selected_lib != "All Libraries"
+        if (selected_lib != _("All Libraries")
                 and selected_lib in self.key_presets
                 and not self.key_presets[selected_lib]):
             if messagebox.askyesno(_("Delete Library"),
@@ -381,7 +381,7 @@ class LibraryFeaturesMixin:
             messagebox.showwarning(_("Delete Error"), _("Please load a set to delete."))
             return
 
-        if selected_lib == "All Libraries":
+        if selected_lib == _("All Libraries"):
             try:
                 selected_lib, selected_preset = selected_preset.split("] ", 1)
                 selected_lib = selected_lib[1:]
@@ -405,7 +405,7 @@ class LibraryFeaturesMixin:
     def on_key_library_selected(self, event=None):
         lib_name = self.key_library_var.get()
         preset_list = []
-        if lib_name == "All Libraries":
+        if lib_name == _("All Libraries"):
             for library, presets in sorted(self.key_presets.items()):
                 for name in sorted(presets.keys()):
                     preset_list.append(f"[{library}] {name}")
@@ -416,7 +416,7 @@ class LibraryFeaturesMixin:
         self.key_preset_menu.set("Load Key Set")
 
         # Toggle delete button: "Delete Library" when library is empty
-        if (lib_name != "All Libraries"
+        if (lib_name != _("All Libraries")
                 and lib_name in self.key_presets
                 and not self.key_presets[lib_name]):
             self.key_delete_btn.config(text=_("Delete Library"))
@@ -427,12 +427,12 @@ class LibraryFeaturesMixin:
         self.settings["last_key_library"] = lib_name
 
     def update_key_library_dropdown(self):
-        lib_names = ["All Libraries"] + sorted(self.key_presets.keys())
+        lib_names = [_("All Libraries")] + sorted(self.key_presets.keys())
         self.key_library_dropdown['values'] = lib_names
         if "My Presets" in lib_names:
             self.key_library_var.set("My Presets")
         else:
-            self.key_library_var.set("All Libraries")
+            self.key_library_var.set(_("All Libraries"))
         self.on_key_library_selected()
     
     def on_import_key_sets(self):

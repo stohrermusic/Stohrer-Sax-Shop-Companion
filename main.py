@@ -3357,7 +3357,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def on_pad_library_selected(self, event=None):
         lib_name = self.pad_library_var.get()
         preset_list = []
-        if lib_name == "All Libraries":
+        if lib_name == _("All Libraries"):
             for library, presets in sorted(self.pad_presets.items()):
                 for name in sorted(presets.keys()):
                     preset_list.append(f"[{library}] {name}")
@@ -3368,7 +3368,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.pad_preset_menu.set(_("Load Pad Preset"))
 
         # Toggle delete button: "Delete Library" when library is empty
-        if (lib_name != "All Libraries"
+        if (lib_name != _("All Libraries")
                 and lib_name in self.pad_presets
                 and not self.pad_presets[lib_name]):
             self.pad_delete_btn.config(text=_("Delete Library"))
@@ -3379,13 +3379,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.settings["last_pad_library"] = lib_name
 
     def update_pad_library_dropdown(self):
-        lib_names = ["All Libraries"] + sorted(self.pad_presets.keys())
+        lib_names = [_("All Libraries")] + sorted(self.pad_presets.keys())
         self.pad_library_dropdown['values'] = lib_names
         # Default to My Presets if it exists, otherwise All Libraries
         if "My Presets" in lib_names:
             self.pad_library_var.set("My Presets")
         else:
-            self.pad_library_var.set("All Libraries")
+            self.pad_library_var.set(_("All Libraries"))
         self.on_pad_library_selected()
 
     def _get_pad_preset_data(self, raw):
@@ -3396,7 +3396,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def on_save_pad_preset(self):
         active_library = self.pad_library_var.get()
-        if not active_library or active_library == "All Libraries":
+        if not active_library or active_library == _("All Libraries"):
             # No library selected — ask for one or create "My Presets"
             lib_name = simpledialog.askstring(_("Library Name"),
                 _("Enter a library name to save to:"),
@@ -3460,7 +3460,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         preset_name = selected_name
         raw = None
 
-        if lib_name == "All Libraries":
+        if lib_name == _("All Libraries"):
             try:
                 lib_name, preset_name = selected_name.split("] ", 1)
                 lib_name = lib_name[1:]
@@ -3485,7 +3485,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         selected_lib = self.pad_library_var.get()
 
         # Delete empty library
-        if (selected_lib != "All Libraries"
+        if (selected_lib != _("All Libraries")
                 and selected_lib in self.pad_presets
                 and not self.pad_presets[selected_lib]):
             if messagebox.askyesno(_("Delete Library"),
@@ -3503,7 +3503,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showwarning(_("Delete Error"), _("Please load a set to delete."))
             return
 
-        if selected_lib == "All Libraries":
+        if selected_lib == _("All Libraries"):
             try:
                 selected_lib, selected_preset = selected_preset.split("] ", 1)
                 selected_lib = selected_lib[1:]
@@ -4251,7 +4251,7 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
 TAB_LABEL_PADDING_PX = 30
 
 
-def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
+def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=None):
     """Walk every tab and dialog, optionally screenshotting each.
 
     This is how the Mac gets looked at: nobody on the project owns one, so
@@ -4268,6 +4268,20 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
     tour_log = []
     tour_errors = []
     pre_toplevels = set()
+    brightness = []
+
+    def apply_appearance(win):
+        # macOS only. `defaults write -g AppleInterfaceStyle Dark` does not
+        # change a running login session, so the CI "dark" tour came back
+        # light (2026-10-06). Tk can force a window's appearance directly.
+        if appearance and sys.platform == 'darwin':
+            try:
+                win.tk.call('::tk::unsupported::MacWindowStyle', 'appearance', win,
+                            'darkaqua' if appearance == 'dark' else 'aqua')
+                win.update_idletasks()
+            except tk.TclError as e:
+                tour_errors.append(f"appearance {appearance}: {e}")
+    apply_appearance(root)
 
     def new_toplevels():
         return [w for w in root.winfo_children()
@@ -4302,6 +4316,13 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
             except TypeError:
                 img = ImageGrab.grab(bbox=(x0, y0, x1, y1))
             img.save(path)
+            # Mean brightness of the picture: says which appearance was
+            # really captured, so the artifact can't quietly be the wrong one.
+            try:
+                g = img.convert("L")
+                brightness.append(sum(g.getdata()) / (g.width * g.height))
+            except Exception:
+                pass
         except Exception as e:  # noqa: BLE001 — fall back to the OS tool
             if sys.platform == 'darwin':
                 subprocess.run(["screencapture", "-x", path], check=False)
@@ -4347,11 +4368,24 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
         app._fit_window_to_tabs()
         app.notebook.select(app.toner_tab_frame)
 
+    def open_tuner_no_mic():
+        # What a user with no (or a denied) microphone sees: the real
+        # engine start, which fails on a runner and draws the audio-error
+        # overlay. On a machine with a mic this is just the live tuner.
+        app.notebook.select(app.tuner_tab_frame)
+
     def open_tuner():
         engine = getattr(app, '_tuner_engine', None)
         if engine is not None:
             engine.synthetic_hz = 440.0
         app.notebook.select(app.tuner_tab_frame)
+        # The tab may already be selected (previous stop), so restart the
+        # engine explicitly to pick up the synthetic source.
+        try:
+            app._tuner_stop()
+            app._tuner_start()
+        except Exception:
+            pass
 
     steps = [
         ("pad-maker", lambda: app.notebook.select(app.pad_tab), None),
@@ -4372,6 +4406,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
         ("serial-lookup", lambda: app.notebook.select(app.serial_tab), None),
         ("screw-specs", lambda: app.notebook.select(app.screw_tab), None),
         ("tooling", lambda: app.notebook.select(app.tooling_tab_frame), None),
+        ("tuner-no-mic", open_tuner_no_mic, None),
         ("tuner", open_tuner, None),
         ("toner", open_toner, None),
     ]
@@ -4386,6 +4421,10 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
             if shots_dir:
                 with open(os.path.join(shots_dir, "tour-done.txt"), "w", encoding="utf-8") as f:
                     f.write("\n".join(tour_log) + "\n")
+                    if brightness:
+                        mean = sum(brightness) / len(brightness)
+                        f.write(f"appearance requested: {appearance or 'system'}; measured: "
+                                f"{'dark' if mean < 110 else 'light'} (mean {mean:.0f}/255)\n")
                     if tour_errors:
                         f.write("ERRORS:\n" + "\n".join(tour_errors) + "\n")
             if on_done is not None:
@@ -4397,6 +4436,8 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
 
         def finish():
             try:
+                for w in new_toplevels():
+                    apply_appearance(w)
                 root.update_idletasks()
                 shot(name)
                 tour_log.append(name)
@@ -4410,7 +4451,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None):
             root.after(150, lambda: run_step(i + 1))
 
         # Audio tabs need a couple of seconds of frames before they look alive.
-        wait = step_ms * (2 if name in ("tuner", "toner") else 1)
+        wait = step_ms * (2 if name in ("tuner-no-mic", "tuner", "toner") else 1)
         root.after(wait, finish)
         try:
             open_fn()
@@ -4509,6 +4550,7 @@ if __name__ == '__main__':
     # mainloop; only the audio source is faked.
     tour = None
     shots_dir = None
+    appearance = None
     for i, arg in enumerate(sys.argv[1:], 1):
         if arg.startswith('--tour='):
             tour = arg.split('=', 1)[1]
@@ -4518,6 +4560,10 @@ if __name__ == '__main__':
             shots_dir = arg.split('=', 1)[1]
         elif arg == '--shots' and i < len(sys.argv) - 1:
             shots_dir = sys.argv[i + 1]
+        elif arg.startswith('--appearance='):
+            appearance = arg.split('=', 1)[1]
+        elif arg == '--appearance' and i < len(sys.argv) - 1:
+            appearance = sys.argv[i + 1]
 
     def _handle_tk_exception(exc_type, exc_value, exc_tb):
         """Handle exceptions in tkinter callbacks."""
@@ -4550,7 +4596,7 @@ if __name__ == '__main__':
                 root.destroy()
             finally:
                 os._exit(0)
-        run_tour(root, app, shots_dir=shots_dir, on_done=_tour_finished)
+        run_tour(root, app, shots_dir=shots_dir, on_done=_tour_finished, appearance=appearance)
     elif tour in ('tuner', 'toner'):
         def _start_tour():
             try:

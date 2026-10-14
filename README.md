@@ -80,6 +80,7 @@ Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W t
 - **Die Organizer** — SVG templates for a stackable die organizer (230 × 330 mm). Cut three Uppers and one Lower, align the four 1/8″ corner holes, glue the stack together.
 - **Pad Press Spacers** — bundled 3D-printable STL files for setting pad press depth. Half-step set (3.0 / 3.5 / 4.0 / 4.5 mm), quarter-step set (3.25 / 3.75 / 4.25 mm), and an organizer rack.
 - **Kerf Test** — quick three-circle pattern for measuring kerf on any material.
+- **Tonehole Crescent** — crescents that cover part of a tonehole's open area to flatten that note. Set the tonehole ID, the percentage to cover, and the inner edge's curve; laser-cut as SVG or 3D print as STL, one or a whole list at a time.
 - **Speed & Power Test (beta)** — generate a sheet of small test discs at different speed / power / passes combinations to dial in laser settings on a new material. Each disc engraved with a 2-digit ID; a `legend.txt` saved alongside the G-code maps each ID to its parameters. Sweep 0–3 variables; "Also test with air off" doubles the matrix for side-by-side air-quality comparison.
 - **G-code presets** — Options > Settings on the Tooling tab exposes per-material G-code for Acrylic and Basswood. Acrylic for die holders and inserts, basswood preset feeds the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
 

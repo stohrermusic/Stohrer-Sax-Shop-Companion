@@ -179,13 +179,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.80"
+APP_VERSION = "2.85"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-09-22"
+    manual = "2026-10-14"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -804,6 +804,14 @@ DEFAULT_SETTINGS = {
         "holder_layer_count": 6,                  # 5 (2x pin) or 6 (3x pin)
         "holder_sheet_width": "12",
         "holder_sheet_height": "12",
+        # Tonehole Crescent (curve is the 0-100 slider; 75 = inner edge
+        # matches the tonehole's curve, see svg_engine.CRESCENT_CURVE_STANDARD)
+        "crescent_tonehole_d": "40",
+        "crescent_percent": "10",
+        "crescent_curve": 75.0,
+        "crescent_thickness": "2.0",
+        "crescent_qty": "1",
+        "crescent_list": [],     # [{"tonehole_d", "percent", "curve", "qty"}, ...]
         # Feeds & Speeds Tester
         "feeds_speeds_tester": {
             "material": "Felt",
