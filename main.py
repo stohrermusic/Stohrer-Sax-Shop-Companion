@@ -48,6 +48,52 @@ from toner_tab import TonerTabMixin  # noqa: E402
 
 IS_MACOS = sys.platform == 'darwin'
 
+
+def audio_supported(platform=None, audio_available=None):
+    """Whether this build can run the Tuner and Toner at all.
+
+    False only on a Mac without the audio stack -- the Intel build, which
+    ships without sounddevice by design. There the tabs used to sit in the
+    notebook saying "not available on this Mac"; since 2026-10-15 they
+    are hidden and left out of Feature Set instead (Matt: "let's just not
+    support the features on an intel mac that it cannot use. they are
+    getting rare"). Windows and Linux keep their panel, because there a
+    missing audio library is something the user can install."""
+    platform = platform or sys.platform
+    if audio_available is None:
+        import tuner_tab
+        audio_available = tuner_tab.AUDIO_AVAILABLE
+    return not (platform == 'darwin' and not audio_available)
+
+
+def machine_supported():
+    """Whether this build can talk to a laser at all (pyserial bundled).
+    False on the Intel Mac build, which has neither pyserial nor OpenCV:
+    the Machine menu toggle isn't offered there, and an old setting that
+    turned it on is ignored (same decision as audio_supported)."""
+    try:
+        import falcon_sender
+        return bool(falcon_sender.HAS_PYSERIAL)
+    except Exception:
+        return False
+
+
+def reveal_in_file_manager_command(path, platform=None):
+    """The command that opens the system file manager with ``path``
+    selected (Explorer, Finder), or its folder where selecting isn't
+    available (Linux has no common 'select' flag across file managers).
+
+    Windows gets a string, not a list: explorer wants ``/select,"<path>"``
+    as one argument with the quotes inside it, which list-to-command-line
+    quoting can't produce for a path with spaces in it."""
+    platform = platform or sys.platform
+    if platform == 'win32':
+        return f'explorer /select,"{os.path.normpath(path)}"'
+    if platform == 'darwin':
+        return ['open', '-R', path]
+    return ['xdg-open', os.path.dirname(path) or '.']
+
+
 class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, TonerTabMixin):
     def __init__(self, root):
         self.root = root
@@ -589,8 +635,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.serial_tab: visible.get("Serial Lookup", True),
             self.screw_tab: visible.get("Screw Specs", True),
             self.tooling_tab_frame: visible.get("Tooling", True),
-            self.tuner_tab_frame: visible.get("Tuner", True),
-            self.toner_tab_frame: visible.get("Toner", True),
+            self.tuner_tab_frame: visible.get("Tuner", True) and audio_supported(),
+            self.toner_tab_frame: visible.get("Toner", True) and audio_supported(),
         }
         for tab_frame, is_visible in tab_visibility.items():
             if not is_visible:
@@ -1043,6 +1089,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         return camera_capture.load_calibration(
             camera_capture.default_calibration_path()) is not None
 
+    def _frame_cut_anchor(self):
+        """The G92 X/Y for Frame & Cut: the outline's anchor vertex
+        (svg_engine.polygon_anchor_vertex) in framing's Y-up frame,
+        relative to the outline's bounding box. (0, 0) without a
+        polygon. Try Auto Locate drives the head to the same vertex."""
+        from svg_engine import polygon_anchor_vertex
+        offset_source = (self.custom_polygon_outline
+                         or self.custom_polygon)
+        if not offset_source:
+            return 0.0, 0.0
+        y_max_storage = max(p[1] for p in offset_source)
+        flipped = [(x, y_max_storage - y) for (x, y) in offset_source]
+        x, y = polygon_anchor_vertex(flipped)
+        return float(x), float(y)
+
     def _adopt_camera_polygon(self, machine_polygon):
         """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
         pixel→machine homography) as the active scrap shape.
@@ -1075,8 +1136,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Capture the LB-vertex BEFORE inset shrinks the polygon — the
         # user is going to jog to the visible bottom-left corner of
         # their material, not the inset corner.
-        self._custom_polygon_lb_machine = min(
-            machine_polygon, key=lambda p: (p[0], p[1]))
+        from svg_engine import polygon_anchor_vertex
+        self._custom_polygon_lb_machine = tuple(
+            polygon_anchor_vertex(machine_polygon))
         outline = list(machine_polygon)
         inset_polygon = outline
         try:
@@ -2185,7 +2247,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         Single source of truth used by every gating site. Tested on
         Windows; the macOS/Linux paths are best-effort and the user
         is opting in via the experimental toggle."""
-        return bool(self.settings.get("experimental_machine_menu", False))
+        return (machine_supported()
+                and bool(self.settings.get("experimental_machine_menu", False)))
 
     def _camera_calibration_present(self):
         """True iff a usable (non-legacy) camera calibration is on disk."""
@@ -2463,6 +2526,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             sender.disconnect()
         except Exception:
             pass
+        logging.getLogger("ssc.machine").info(
+            "Machine > Test Connection on %s: %s", self.falcon_port,
+            status.get('raw') if status else "no status reply")
         if not status:
             messagebox.showwarning(
                 _("Connected, no response"),
@@ -2538,6 +2604,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showerror(_("Missing Dependency"),
                                   _("Reset needs pyserial: {e}").format(e=e))
             return
+        logging.getLogger("ssc.machine").info(
+            "Machine > Reset Falcon: soft-reset on %s", self.falcon_port)
         sender = falcon_sender.FalconSender(port=self.falcon_port)
         try:
             sender.connect()
@@ -3039,17 +3107,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # (see _set_custom_polygon_from_y_up), so cut placements
             # remain correctly anchored even though the G92 offset
             # comes from the outline.
-            g92_x, g92_y = 0.0, 0.0
-            offset_source = (self.custom_polygon_outline
-                              or self.custom_polygon)
-            if offset_source:
-                _y_max_storage = max(p[1] for p in offset_source)
-                _flipped = [(x, _y_max_storage - y)
-                             for (x, y) in offset_source]
-                _lb_idx = min(
-                    range(len(_flipped)),
-                    key=lambda i: _flipped[i][0] ** 2 + _flipped[i][1] ** 2)
-                g92_x, g92_y = _flipped[_lb_idx]
+            g92_x, g92_y = self._frame_cut_anchor()
 
             # Both modes share the same framing-loop recipe:
             # G92 X{lb_x} Y{lb_y} sets work coords such that the
@@ -3923,6 +3981,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         experimental_tabs = [
             ("Toner", _("Toner")),
         ]
+        if not audio_supported():
+            # A build that can't run them doesn't offer them (Intel Mac).
+            main_tabs = [t for t in main_tabs if t[0] != "Tuner"]
+            experimental_tabs = []
 
         check_vars = {}
         for key, display in main_tabs:
@@ -3948,11 +4010,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # platform; the macOS/Linux paths are best-effort.
         machine_menu_var = tk.BooleanVar(
             value=self.settings.get("experimental_machine_menu", False))
-        tk.Checkbutton(
-            frame,
-            text=_("Machine menu (direct Falcon serial control)"),
-            variable=machine_menu_var, bg=bg,
-            font=("Helvetica", 10)).pack(anchor="w")
+        if machine_supported():  # not offered on a build without pyserial
+            tk.Checkbutton(
+                frame,
+                text=_("Machine menu (direct Falcon serial control)"),
+                variable=machine_menu_var, bg=bg,
+                font=("Helvetica", 10)).pack(anchor="w")
 
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
@@ -4088,7 +4151,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return result["accepted"]
 
         def apply():
-            new_visible = {name: var.get() for name, var in check_vars.items()}
+            # Merge, don't replace: tabs this build doesn't offer (Tuner and
+            # Toner on the Intel Mac) keep whatever was saved for them.
+            new_visible = dict(self.settings.get("visible_tabs", {}))
+            new_visible.update({name: var.get() for name, var in check_vars.items()})
 
             # Toner requires terms acceptance if not previously unlocked
             if new_visible.get("Toner") and not self.settings.get("toner_unlocked"):
@@ -4157,15 +4223,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         AboutDialog(self.root)
 
     def _open_log_file(self):
-        """Open the log file in the system's default text editor."""
+        """Show the log file selected in the system file manager.
+
+        Opening it in a text editor (before v2.86) showed the contents but
+        left the user with no idea where the file was, and what we need
+        from a user is the file itself, attached to an email, often with
+        last_calibration_frame.png and last_frame_cut.gcode beside it."""
         log_path = get_log_file()
         if log_path and os.path.exists(log_path):
-            if sys.platform == 'win32':
-                os.startfile(log_path)
-            elif sys.platform == 'darwin':
-                subprocess.Popen(['open', log_path])
-            else:
-                subprocess.Popen(['xdg-open', log_path])
+            try:
+                subprocess.Popen(reveal_in_file_manager_command(log_path))
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "could not show the log file in the file manager")
+                if sys.platform == 'win32':
+                    os.startfile(log_path)
         else:
             messagebox.showinfo(_("Log File"), _("No log file found.\nExpected at: {log_path}").format(log_path=log_path))
 
@@ -4410,6 +4482,9 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("tuner", open_tuner, None),
         ("toner", open_toner, None),
     ]
+    if not audio_supported():
+        # Hidden on this build; selecting a hidden ttk tab would show it.
+        steps = [s for s in steps if s[0] not in ("tuner-no-mic", "tuner", "toner")]
 
     def run_step(i):
         if i >= len(steps):
@@ -4540,6 +4615,11 @@ if __name__ == '__main__':
     sys.excepthook = _handle_exception
 
     root = tk.Tk()
+    try:
+        from config import log_runtime_versions
+        log_runtime_versions(root)
+    except Exception:
+        logging.getLogger(__name__).exception("could not log runtime versions")
 
     if '--selftest' in sys.argv[1:]:
         _selftest(root)

@@ -1888,6 +1888,12 @@ def generate_calibration_card_gcode(filename, cols=8, rows=6,
         ])
     lines.extend(generate_gcode_header(
         bounds_min_x, bounds_min_y, bounds_max_x, bounds_max_y))
+    # The card's coordinates are MACHINE coordinates (offset from the
+    # head's MPos), but G-code moves in work coordinates. Clear any G92
+    # offset first: Frame & Cut leaves one set, and in the same power-on
+    # it would shift the whole card -- and every capture calibrated
+    # against it -- by that offset.
+    lines.append('G92.1')
     lines.extend(generate_gcode_layer(
         strokes_machine, engrave_speed, engrave_power, 'CAL',
         overscan_mm=overscan_mm, air_assist=air_assist,

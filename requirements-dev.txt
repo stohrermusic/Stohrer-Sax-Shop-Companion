@@ -4,6 +4,10 @@
 # Lint
 ruff>=0.6
 
+# Builds the optional GPU tuner renderer (tuner_renderer/, Windows/Linux;
+# needs a Rust toolchain). CI's build job uses it.
+maturin>=1.5
+
 # i18n workflow (extract / merge / compile translation catalogs).
 # Run via:  python tools/extract_strings.py / update_translations.py / compile_translations.py
 babel>=2.16

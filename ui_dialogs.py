@@ -2,9 +2,12 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, simpledialog
 import copy
 import datetime
+import functools
 import math
 import random
 import json
+import logging
+import os
 import sys
 import time
 
@@ -20,12 +23,35 @@ from svg_engine import (
     get_disc_diameter, get_felt_thickness_mm, _wave_value,
     feeds_speeds_label_geometry,
     locator_mark_geometry, locator_circle_points,
+    polygon_anchor_vertex,
 )
 
 # On macOS, use native system colors for dark/light mode support.
 # On Windows/Linux, use our custom cream color for dialogs.
 IS_MACOS = sys.platform == 'darwin'
 DIALOG_BG = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+
+# Help > About links here; GitHub sends it to the newest release's page.
+LATEST_RELEASE_URL = (
+    "https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases/latest")
+
+# Camera calibration and laser-control diagnostics. config.setup_logging
+# lets this logger write INFO to app.log (the rest of the app logs WARNING
+# and up), so what happened on a user's machine can be read afterwards.
+mlog = logging.getLogger("ssc.machine")
+
+
+def _holds_port(method):
+    """CameraCalibrationDialog: run ``method`` holding the dialog's serial
+    port lock. The head-position poll reads the laser from a worker thread
+    and skips a tick whenever the lock is taken, so a button that opens
+    the port never collides with a poll (Windows serial ports are
+    exclusive), and the poll never blocks the Tk thread."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._port_lock:
+            return method(self, *args, **kwargs)
+    return wrapper
 
 # ==========================================
 # CROSS-PLATFORM SCROLL HELPER
@@ -3778,8 +3804,11 @@ class PolygonDrawWindow(tk.Toplevel):
                           daemon=True).start()
 
     def _camera_overlay_ready(self, cap):
-        # User may have toggled off / cancelled in the meantime.
-        if not self._show_camera_var or not self._show_camera_var.get():
+        # User may have toggled off / cancelled / closed in the meantime.
+        # (Cancel and Submit don't clear the toggle, so a closed window
+        # has to be checked separately or the handle is never released.)
+        if (not self.winfo_exists() or not self._show_camera_var
+                or not self._show_camera_var.get()):
             try:
                 cap.release()
             except Exception:
@@ -3819,6 +3848,20 @@ class PolygonDrawWindow(tk.Toplevel):
         the grid + polygon items via tag_lower."""
         import cv2
         import numpy as np
+        mismatch = self._cam_mod.calibration_size_mismatch(
+            self._calibration, frame)
+        if mismatch:
+            cw, ch, fw, fh = mismatch
+            if not getattr(self, '_size_mismatch_logged', False):
+                self._size_mismatch_logged = True
+                mlog.warning("camera overlay: camera sends %dx%d, "
+                             "calibrated at %dx%d", fw, fh, cw, ch)
+            self.status_var.set(_(
+                "This camera is sending {fw}×{fh} images, but the "
+                "calibration was made at {cw}×{ch}. Recalibrate the "
+                "camera (Options > Machine > Camera Calibration).").format(
+                    fw=fw, fh=fh, cw=cw, ch=ch))
+            return
         undist = self._cam_mod.undistort_frame(frame, self._calibration)
         h, w = undist.shape[:2]
         # Map four image corners through pixels_to_mm (which handles
@@ -4099,7 +4142,7 @@ class PolygonDrawWindow(tk.Toplevel):
         ax, ay = self._camera_anchor_mm or (0.0, 0.0)
         machine = [(gx * mm_per_unit + ax, gy * mm_per_unit + ay)
                     for (gx, gy) in self.points]
-        return min(machine, key=lambda p: (p[0], p[1]))
+        return tuple(polygon_anchor_vertex(machine))
 
     def on_submit(self):
         """Submit the polygon."""
@@ -6308,7 +6351,6 @@ class AboutDialog(tk.Toplevel):
         import webbrowser
         super().__init__(parent)
         self.title(_("About"))
-        self.geometry("440x520")
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.grab_set()
@@ -6322,6 +6364,12 @@ class AboutDialog(tk.Toplevel):
                  font=("Helvetica", 9, "italic")).pack()
         tk.Label(self, text=_("Version {version}  •  Built {build}").format(version=APP_VERSION, build=APP_BUILD_DATE),
                  bg=DIALOG_BG, font=("Helvetica", 9)).pack(pady=(2, 0))
+        # GitHub redirects /releases/latest to the newest release's page.
+        latest = tk.Label(self, text=_("Check for a newer version"),
+                          bg=DIALOG_BG, fg="#0066CC",
+                          font=("Helvetica", 9, "underline"), cursor="hand2")
+        latest.pack()
+        latest.bind("<Button-1>", lambda e: webbrowser.open(LATEST_RELEASE_URL))
 
         # Feature summary
         features = _(
@@ -6382,6 +6430,11 @@ class AboutDialog(tk.Toplevel):
                  justify="center").pack(pady=(4, 0))
 
         tk.Button(self, text=_("OK"), command=self.destroy, width=10).pack(pady=(12, 15))
+        # Height from the content, not a fixed number: the window doesn't
+        # resize, so every added line (like the newer-version link) or a
+        # longer translation would otherwise push OK off the bottom.
+        self.update_idletasks()
+        self.geometry(f"440x{max(520, self.winfo_reqheight())}")
 
 
 class PadNotesWindow(tk.Toplevel):
@@ -7230,6 +7283,23 @@ class CameraCalibrationDialog(tk.Toplevel):
     TARGET_FRAMES = 12      # frames to collect for a robust calibration
     PREVIEW_W = 640
     PREVIEW_H = 480
+    # Diagnostics (see _note_frame): one detection summary per window
+    # instead of a line per frame, and the raw frame saved to the config
+    # folder -- a few seconds after the camera goes live, then again
+    # whenever the board hasn't been found for a while.
+    SUMMARY_INTERVAL_S = 5.0
+    SNAPSHOT_FIRST_S = 3.0
+    SNAPSHOT_NO_DETECT_S = 10.0
+    SNAPSHOT_MIN_GAP_S = 60.0
+    SNAPSHOT_NAME = "last_calibration_frame.png"
+    # The preview rewrites its progress line ~10x a second; any other
+    # message gets this long on screen first (see _may_write_progress).
+    STATUS_HOLD_S = 6.0
+    # Calibrate needs this many captures with the card MOVED, after the
+    # references. Fewer leaves lens distortion unconstrained: in a
+    # simulated Falcon camera, 12 untouched captures mapped the bed edge
+    # 21 mm wrong while reporting a 0.28 px RMS.
+    MIN_MOVED_CAPTURES = 5
 
     def __init__(self, parent, camera_index, calibration_path,
                   falcon_port=None, settings=None):
@@ -7256,6 +7326,22 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._image_size = (640, 480)
         self._latest_photo = None  # keep a reference so PIL doesn't GC it
         self._refresh_after_id = None
+        self._cam_opening = False
+        self._cam_open_reason = "open"
+        # Live-preview diagnostics: see _note_frame / _maybe_snapshot.
+        self._live_stats = None
+        self._live_since = None
+        self._last_good_t = None
+        self._last_snapshot_t = None
+        self._snapshot_this_open = False
+        self._loop_errors = 0
+        self._failed_reads = 0
+        self._last_progress_status = None
+        self._foreign_status = None
+        self._foreign_status_t = 0.0
+        import threading
+        self._port_lock = threading.RLock()
+        self._win_size = (self.PREVIEW_W + 380, max(self.PREVIEW_H, 600))
         # Phase state: 'engrave' or 'capture'. Decided after the
         # persisted-offset check below — if SSC saved an offset from
         # a previous (possibly 2-hour) engrave, default to capture
@@ -7277,11 +7363,11 @@ class CameraCalibrationDialog(tk.Toplevel):
         # _framing_done → enables Engrave; Engrave → engrave offset
         # set → enables Next; Next → capture phase.
         self._framing_done = False
-        # Center of the last framing pass, captured by the framing
-        # provider on each iteration. Engrave uses THIS (not current
-        # MPos) so Stopping mid-trace doesn't move the engrave's
-        # center to wherever the head happened to be when Stop hit.
-        self._framing_center = None
+        # Engrave centres the card on the head's MPos when it's clicked.
+        # A framing pass ended with Done finishes its loop and parks the
+        # head back at the framed centre; one ended with the window's X
+        # soft-resets mid-trace, which loses position, so
+        # _on_frame_clicked then clears _engrave_homed and _framing_done.
 
         # Where the card was engraved on the bed, in machine-mm.
         # Either captured this session (set by _on_engrave_clicked
@@ -7311,6 +7397,10 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._phase = 'capture'
         else:
             self._phase = 'engrave'
+        mlog.info("calibration dialog opened: phase=%s, saved engrave "
+                  "offset=%s, camera #%s, laser port=%s, calibration "
+                  "file=%s", self._phase, self._captured_engrave_offset,
+                  camera_index, falcon_port, calibration_path)
 
         # Block system/display sleep for the lifetime of the dialog —
         # the engrave can run 45-60 minutes and Windows would
@@ -7361,20 +7451,24 @@ class CameraCalibrationDialog(tk.Toplevel):
         body.pack(side='top', fill='both', expand=True,
                    padx=10, pady=(0, 8))
 
+        # RIGHT: control panel (instructions on top, jog/buttons
+        # below), fixed width. Packed BEFORE the preview: the packer
+        # serves widgets in packing order, so the panel always gets its
+        # 340 px and the preview takes what's left. In the old order a
+        # preview label showing no image (camera failed, or "Camera
+        # opening...") asked for its 640x480 size in TEXT CHARACTERS,
+        # about 4500x7200 px, and squeezed the panel to 1 px: no
+        # Cancel, Switch camera or Reconnect when they were needed most.
+        right_panel = tk.Frame(body, bg=DIALOG_BG, width=340)
+        right_panel.pack(side='right', fill='y')
+        right_panel.pack_propagate(False)  # honor the width=340
+
         # LEFT: camera preview, expands to fill available space.
         preview_frame = tk.Frame(body, bg='black')
         preview_frame.pack(side='left', fill='both', expand=True,
                             padx=(0, 8))
-        self._preview_label = tk.Label(
-            preview_frame, bg="#000000",
-            width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label = tk.Label(preview_frame, bg="#000000")
         self._preview_label.pack(fill='both', expand=True)
-
-        # RIGHT: control panel (instructions on top, jog/buttons
-        # below). Fixed width so the preview gets the rest.
-        right_panel = tk.Frame(body, bg=DIALOG_BG, width=340)
-        right_panel.pack(side='left', fill='y')
-        right_panel.pack_propagate(False)  # honor the width=340
 
         # Instructions live in the right panel, narrower wraplength.
         self._instructions_var = tk.StringVar(value="")
@@ -7482,7 +7576,7 @@ class CameraCalibrationDialog(tk.Toplevel):
 
         # Wide default: preview width + right panel + padding.
         # Tall enough for the right panel's stacked controls.
-        self.geometry(f"{self.PREVIEW_W + 380}x{max(self.PREVIEW_H, 600)}")
+        self.geometry("{}x{}".format(*self._win_size))
         self.minsize(900, 600)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -7549,6 +7643,10 @@ class CameraCalibrationDialog(tk.Toplevel):
         # Reset to disabled, then enable based on current flow flags.
         # Without the reset, going from capture phase BACK to engrave
         # phase via Engrave-new-card would leave stale enabled state.
+        # Frame is disabled after a completed engrave; coming back here
+        # via "Engrave new card" must turn it on again or the new card
+        # can never be framed (and so never engraved).
+        self._frame_btn.config(state="normal")
         self._engrave_btn.config(state="disabled")
         self._next_btn.config(state="disabled")
         if self._captured_engrave_offset is not None:
@@ -7557,9 +7655,11 @@ class CameraCalibrationDialog(tk.Toplevel):
         elif getattr(self, '_framing_done', False):
             self._engrave_btn.config(state="normal")
         # Open the camera early so the user can see the head as they jog.
+        mlog.info("calibration: engrave phase")
         if self._cap is None and self._detector_imports_ok:
-            self.after(50, self._open_camera_and_start)
+            self.after(50, self._open_camera_and_start, "engrave phase")
         self._start_mpos_polling()
+        self._fit_height()
 
     def _build_engrave_controls(self):
         """Build the home/jog/MPos cluster used during engrave-phase
@@ -7611,26 +7711,52 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._mpos_after_id = self.after(300, self._poll_mpos)
 
     def _poll_mpos(self):
+        """Read the head position for the MPos label, on a worker thread.
+
+        Quick connect/disconnect per read: a persistent sender would tie
+        up the port that Home, Jog, Frame and Engrave each open. The read
+        used to run on the Tk thread, and FalconSender.connect() alone
+        sleeps 0.3 s, so the preview and the jog buttons froze for about
+        a third of every second while positioning the head. The worker
+        skips its read whenever a button holds the port (_holds_port)."""
         if self._phase != 'engrave' or not self._falcon_port:
             return
-        # Quick connect/disconnect to read status — the persistent
-        # sender pattern would tie up the port and conflict with the
-        # engrave/jog actions which also need to connect.
-        try:
-            import falcon_sender
-            s = falcon_sender.FalconSender(port=self._falcon_port)
-            s.connect()
-            st = s.get_status(timeout=0.2)
-            s.disconnect()
-            if st and st.get('mpos'):
-                self._mpos_var.set(
-                    _("MPos: X={x:7.2f}  Y={y:7.2f}").format(
-                        x=st['mpos'][0], y=st['mpos'][1]))
-        except Exception:
-            pass
+        import threading
+
+        def _worker():
+            st = None
+            if self._port_lock.acquire(blocking=False):
+                try:
+                    import falcon_sender
+                    s = falcon_sender.FalconSender(port=self._falcon_port)
+                    try:
+                        s.connect()
+                        st = s.get_status(timeout=0.2)
+                    finally:
+                        s.disconnect()
+                except Exception:
+                    st = None
+                finally:
+                    self._port_lock.release()
+            try:
+                self.after(0, self._mpos_polled, st)
+            except (RuntimeError, tk.TclError):
+                pass  # app shutting down
+
+        threading.Thread(target=_worker, name='camcal-mpos',
+                         daemon=True).start()
+
+    def _mpos_polled(self, st):
+        if not self.winfo_exists():
+            return
+        if st and st.get('mpos'):
+            self._mpos_var.set(
+                _("MPos: X={x:7.2f}  Y={y:7.2f}").format(
+                    x=st['mpos'][0], y=st['mpos'][1]))
         if self._phase == 'engrave':
             self._mpos_after_id = self.after(800, self._poll_mpos)
 
+    @_holds_port
     def _on_engrave_home(self):
         """Send $H standalone, with a small "Homing..." indicator."""
         if not self._falcon_port:
@@ -7696,6 +7822,7 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._status_var.set(
                 _("Home failed: {m}").format(m=result.get('msg', '?')))
 
+    @_holds_port
     def _engrave_jog(self, dx_sign, dy_sign):
         """Send a relative jog via Grbl $J=."""
         if not self._falcon_port:
@@ -7754,8 +7881,46 @@ class CameraCalibrationDialog(tk.Toplevel):
         # engrave or at dialog-transition. Without an explicit reopen
         # path the user has to cancel and lose any in-memory captures.
         # Kick off camera open + live refresh (may already be open
-        # from engrave phase — _open_camera_and_start handles that).
-        self.after(50, self._open_camera_and_start)
+        # from engrave phase — _open_camera_and_start handles that: it does nothing when the camera is already open).
+        mlog.info("calibration: capture phase (%d captures so far)",
+                  len(self._captures))
+        self.after(50, self._open_camera_and_start, "capture phase")
+        self._fit_height()
+
+    def _fit_height(self):
+        """Grow the window (never shrink it) until the right panel's
+        controls fit. Engrave phase stacks the instructions, the jog
+        cluster and six buttons; at the fixed 600 px the jog cluster got
+        1 px and Cancel fell off the bottom, and display scaling above
+        100 % makes everything taller still. Capped at the screen."""
+        try:
+            self.update_idletasks()
+            panel = self._btn_frame.master
+            need = sum(w.winfo_reqheight() for w in panel.pack_slaves())
+            need += 12 * len(panel.pack_slaves())  # pack padding
+            need += sum(w.winfo_reqheight() for w in self.pack_slaves()
+                        if w is not panel.master)  # title + status
+            need += 40
+            screen = self.winfo_screenheight() - 80  # taskbar, title bar
+            target = min(need, screen)
+            w, h = self._win_size
+            if target > h:
+                self._win_size = (w, target)
+                self.geometry(f"{w}x{target}")
+            self.minsize(900, min(max(600, target), screen))
+        except tk.TclError:
+            pass
+
+    def _regrab(self):
+        """FalconRunDialog takes the input grab while it runs, and Tk
+        doesn't hand it back when that window closes: after Frame or
+        Engrave this dialog stopped being modal and the main window
+        took clicks in the middle of a calibration."""
+        try:
+            if self.winfo_exists():
+                self.grab_set()
+        except tk.TclError:
+            pass
 
     def _engrave_geometry(self):
         """Return (cols, rows, sq, board_w, board_h, border, label_h)
@@ -7766,6 +7931,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         sq = _cam.CHARUCO_SQUARE_MM
         return (cols, rows, sq, cols * sq, rows * sq, 10.0, 8.0)
 
+    @_holds_port
     def _engrave_check_position_safe(self):
         """Read current MPos and verify the engrave area would fit on
         the bed. Returns True if safe, else False (with an error
@@ -7804,6 +7970,9 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._settings.get("laser_bed_y_max", 415.0))
         if (ox < 0 or oy < 0
                 or fx > bed_x_max + 1.0 or fy > bed_y_max + 1.0):
+            mlog.warning("card would run off the bed: head (%.1f, %.1f), "
+                         "card (%.0f, %.0f) to (%.0f, %.0f), bed %.0fx%.0f",
+                         hx, hy, ox, oy, fx, fy, bed_x_max, bed_y_max)
             messagebox.showerror(
                 _("Card Would Run Off Bed"),
                 _("With head at machine (X={x:.1f}, Y={y:.1f}), the "
@@ -7855,6 +8024,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 self._engrave_homed = True
         return True
 
+    @_holds_port
     def _on_frame_clicked(self):
         """Run a continuous framing loop that re-reads MPos each
         iteration — the trace FOLLOWS the head as the user jogs
@@ -7900,7 +8070,11 @@ class CameraCalibrationDialog(tk.Toplevel):
             fx = ox + board_w + 2 * border
             fy = oy + board_h + 2 * border + label_h
             from config import get_framing_power_s
-            return generate_framing_gcode(
+            # G92.1 first: the outline is computed from MPos (machine
+            # coordinates) but G-code moves in work coordinates, and a
+            # G92 left by an earlier Frame & Cut in the same power-on
+            # would shift the frame by that offset.
+            return ['G92.1'] + generate_framing_gcode(
                 ox, oy, fx, fy,
                 # The calibration card is engraved on basswood, so frame
                 # at basswood's power rather than the global fallback.
@@ -7924,8 +8098,12 @@ class CameraCalibrationDialog(tk.Toplevel):
             self.after_cancel(self._mpos_after_id)
             self._mpos_after_id = None
 
+        mlog.info("calibration: framing the card outline (power S%s)",
+                  self._settings.get("laser_framing_power_by_material", {})
+                  .get("basswood"))
+        fdlg = None
         try:
-            FalconRunDialog(
+            fdlg = FalconRunDialog(
                 self, sender, _framing_provider(),
                 title=_("Framing — jog to position, click Done when "
                          "alignment looks right"),
@@ -7937,6 +8115,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 sender.disconnect()
             except Exception:
                 pass
+            self._regrab()
             self._start_mpos_polling()
             # Recycle the camera handle. Empirically the cv2.VideoCapture
             # frame stream stalls (frozen preview) when a long-lived
@@ -7944,9 +8123,28 @@ class CameraCalibrationDialog(tk.Toplevel):
             # DirectShow / USB-focus quirk we can't suppress at the
             # cv2 layer. Cheaper to just reopen than diagnose.
             self._auto_recycle_camera()
-        # Framing window closed (Stop or X). Treat as "user is done
-        # positioning" — enable the Engrave button. User may run
-        # Frame again to re-verify or jog more; that's fine.
+        # Done ends the loop gracefully ("complete") with the head parked
+        # back at the framed centre. The window's X soft-resets the laser
+        # mid-trace instead, and a reset during motion loses the machine
+        # position: until v2.86 that still counted as framed, and Engrave
+        # then centred the card wherever the head had stopped, using a
+        # position Grbl no longer knew.
+        if fdlg is None or fdlg._final_reason != "complete":
+            mlog.warning("calibration framing ended without finishing "
+                         "(%s); laser position is no longer trusted",
+                         None if fdlg is None else fdlg._final_reason)
+            self._framing_done = False
+            self._engrave_homed = False
+            try:
+                self._engrave_btn.config(state="disabled")
+                self._status_var.set(_(
+                    "Framing was stopped mid-trace, so the laser lost its "
+                    "position. Home the laser, then Frame again."))
+            except tk.TclError:
+                pass
+            return
+        # Framing finished: the user is done positioning. They may still
+        # Frame again or jog more; Engrave uses the head's position then.
         self._framing_done = True
         if self._phase == 'engrave':
             try:
@@ -7968,6 +8166,7 @@ class CameraCalibrationDialog(tk.Toplevel):
             return
         self._enter_capture_phase()
 
+    @_holds_port
     def _on_engrave_clicked(self):
         """Commit to the engrave at the head's current position.
         Confirmation popup ("are you sure?"). If yes, ~45-60 minute
@@ -8071,10 +8270,22 @@ class CameraCalibrationDialog(tk.Toplevel):
             self.after_cancel(self._mpos_after_id)
             self._mpos_after_id = None
 
+        bw = (self._settings.get("gcode_settings") or {}).get("basswood") or {}
+        mlog.info("engraving the calibration card: head (%.2f, %.2f), card "
+                  "(%.2f, %.2f) to (%.2f, %.2f), %d G-code lines, basswood "
+                  "speed=%s power=%s passes=%s spacing=%s", head_x, head_y,
+                  offset_x, offset_y, card_far_x, card_far_y,
+                  len(gcode_lines), bw.get("filled_engraving_speed"),
+                  bw.get("filled_engraving_power"),
+                  bw.get("filled_engraving_passes"),
+                  bw.get("filled_line_spacing"))
         try:
             run_dlg = FalconRunDialog(
                 self, sender, gcode_lines,
                 title=_("Engraving Calibration Card"))
+            mlog.info("calibration card engrave ended: %s",
+                      run_dlg._final_reason)
+            self._regrab()
             # Run dialog closed (regardless of success/stop/error).
             # Recycle the camera before the next phase needs it — see
             # _auto_recycle_camera for the rationale.
@@ -8107,6 +8318,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         # (the engrave is the most expensive step; losing the offset
         # to a UI hiccup wastes ~2 hours of basswood).
         self._captured_engrave_offset = (offset_x, offset_y)
+        mlog.info("engrave offset saved: (%.3f, %.3f)", offset_x, offset_y)
         try:
             self._settings['camera_calibration_engrave_offset_mm'] = [
                 offset_x, offset_y]
@@ -8158,9 +8370,16 @@ class CameraCalibrationDialog(tk.Toplevel):
                   ).format(n=len(self._captures)),
                 parent=self):
             return
+        mlog.info("Engrave new card: discarding %d captures and the saved "
+                  "engrave offset %s", len(self._captures),
+                  self._captured_engrave_offset)
         self._captures = []
         self._reference_count = 0
         self._capture_substate = 'reference'
+        self._capture_btn.config(text=_("Capture reference"))
+        for b in (self._done_refs_btn, self._retake_ref_btn,
+                  self._reset_btn, self._calibrate_btn):
+            b.config(state="disabled")
         self._captured_engrave_offset = None
         # Force fresh framing for the new card — new wood / new
         # position warrants re-positioning, so disable Engrave until
@@ -8178,10 +8397,24 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._enter_engrave_phase()
 
     # ------------------------------------------------------------------
-    def _open_camera_and_start(self):
+    def _open_camera_and_start(self, reason="open"):
         """Open the camera on a background thread so the dialog stays
-        responsive during the 1-3 second cv2.VideoCapture warm-up."""
+        responsive during the 1-3 second cv2.VideoCapture warm-up.
+
+        Does nothing while a camera is already open or opening. Engrave
+        phase opens it so the user can watch the head, and until v2.86
+        capture phase opened it a second time on top: two handles on one
+        DirectShow device and two refresh loops, only one of which
+        _stop_refresh could cancel. Paths that want a fresh handle
+        (reconnect, switch, recycle) release ``self._cap`` first."""
         import threading
+        if self._cap is not None or self._cam_opening:
+            mlog.info("camera #%s: %s -- already %s, not reopening",
+                      self._camera_index, reason,
+                      "open" if self._cap is not None else "opening")
+            return
+        self._cam_opening = True
+        self._cam_open_reason = reason
         self._status_var.set(
             _("Opening camera..."))
 
@@ -8200,15 +8433,46 @@ class CameraCalibrationDialog(tk.Toplevel):
                           daemon=True).start()
 
     def _camera_ready(self, cap, first_frame):
+        self._cam_opening = False
+        if not self.winfo_exists():
+            # Closed while the camera was opening. after() callbacks
+            # still run on a destroyed widget, and nothing else would
+            # ever release this handle.
+            try:
+                cap.release()
+            except Exception:
+                pass
+            mlog.info("camera #%s opened after the dialog closed; released",
+                      self._camera_index)
+            return
+        if self._cap is not None and self._cap is not cap:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
         self._cap = cap
         h, w = first_frame.shape[:2]
         self._image_size = (w, h)
         self._last_frame_shape = (h, w)
-        self._status_var.set(
-            _("Camera live. Captured 0 / {n} good frames.").format(n=self.TARGET_FRAMES))
+        self._live_since = time.monotonic()
+        self._live_stats = None
+        self._snapshot_this_open = False
+        mlog.info("camera #%s live (%s): first frame %s",
+                  self._camera_index, self._cam_open_reason,
+                  self._cam_mod.describe_frame(first_frame))
+        if self._phase == 'capture':
+            msg = _("Camera live. Captured 0 / {n} good frames.").format(
+                n=self.TARGET_FRAMES)
+            self._last_progress_status = msg  # ours: no hold needed
+            self._status_var.set(msg)
+        # One refresh chain only: cancel any pending tick before starting.
+        self._stop_refresh()
         self._refresh_loop()
 
     def _camera_failed(self, err):
+        self._cam_opening = False
+        mlog.warning("camera #%s failed to open (%s): %s",
+                     self._camera_index, self._cam_open_reason, err)
         self._status_var.set(
             _("Could not open camera index {i}: {e}").format(
                 i=self._camera_index, e=err))
@@ -8221,18 +8485,33 @@ class CameraCalibrationDialog(tk.Toplevel):
         except Exception:
             ok, frame = False, None
         if ok and frame is not None:
+            if self._failed_reads >= 30:
+                mlog.info("camera #%s: reads recovered after %d failures",
+                          self._camera_index, self._failed_reads)
             self._failed_reads = 0
             self._latest_frame = frame
             try:
                 self._render_frame_with_overlay(frame)
             except Exception:
-                pass  # don't kill the loop on a bad frame
+                # Never kill the loop on a bad frame, and never hide it:
+                # v2.80 swallowed an IndexError here on every frame the
+                # board was found in (OpenCV 5 corner shape), so the
+                # preview froze on the last frame it WASN'T found in and
+                # nothing reached the log. The first failure logs its
+                # traceback; the rest are counted in the 5 s summary.
+                self._loop_errors += 1
+                if self._loop_errors == 1:
+                    mlog.exception(
+                        "calibration preview: processing a frame failed "
+                        "(further failures are counted in the summary)")
         else:
             # Camera disconnect / USB hung. Surface it after a few
             # consecutive failures so the user knows to click
             # Reconnect rather than staring at a frozen preview.
             self._failed_reads = getattr(self, '_failed_reads', 0) + 1
             if self._failed_reads == 30:  # ~3s at 10fps
+                mlog.warning("camera #%s: 30 consecutive failed reads",
+                             self._camera_index)
                 try:
                     self._status_var.set(_(
                         "Camera lost — click Reconnect Camera to recover."))
@@ -8241,12 +8520,22 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
                                               self._refresh_loop)
 
-    def _on_manual_offset_clicked(self):
-        """Engrave-phase escape hatch. If the user knows the machine-mm
-        coords where their engraved card sits (e.g. recovered from a
-        backup, or printed at engrave time), they can punch in the
-        offset and skip straight to capture phase. Avoids losing 2
-        hours of basswood to a state-persistence hiccup."""
+    def _store_engrave_offset(self, ox, oy, how):
+        """Remember where the card was engraved, and persist it so a
+        closed dialog or a restarted app resumes at the capture step."""
+        mlog.info("engrave offset %s: (%.3f, %.3f)", how, ox, oy)
+        self._captured_engrave_offset = (ox, oy)
+        try:
+            self._settings['camera_calibration_engrave_offset_mm'] = [ox, oy]
+            from config import save_settings
+            save_settings(self._settings)
+        except Exception:
+            mlog.exception("could not save the engrave offset")
+
+    def _ask_manual_offset(self):
+        """Prompt for the engraved card's bottom-left machine X,Y.
+        Returns (x, y) or None if cancelled or unreadable (after saying
+        so)."""
         from tkinter import simpledialog
         prompt = _(
             "Enter the engraved card's bottom-left machine-mm coords.\n\n"
@@ -8257,26 +8546,30 @@ class CameraCalibrationDialog(tk.Toplevel):
         val = simpledialog.askstring(
             _("Manual Engrave Offset"), prompt, parent=self)
         if not val:
-            return
+            return None
         try:
             parts = val.replace(';', ',').split(',')
             if len(parts) != 2:
                 raise ValueError("need two numbers separated by a comma")
-            ox = float(parts[0].strip())
-            oy = float(parts[1].strip())
+            return float(parts[0].strip()), float(parts[1].strip())
         except (ValueError, TypeError) as e:
             messagebox.showerror(
                 _("Bad Offset"),
                 _("Couldn't parse '{v}' as X,Y mm:\n{e}").format(v=val, e=e),
                 parent=self)
+            return None
+
+    def _on_manual_offset_clicked(self):
+        """Engrave-phase escape hatch. If the user knows the machine-mm
+        coords where their engraved card sits (e.g. recovered from a
+        backup, or printed at engrave time), they can punch in the
+        offset and skip straight to capture phase. Avoids losing 2
+        hours of basswood to a state-persistence hiccup."""
+        offset = self._ask_manual_offset()
+        if offset is None:
             return
-        self._captured_engrave_offset = (ox, oy)
-        try:
-            self._settings['camera_calibration_engrave_offset_mm'] = [ox, oy]
-            from config import save_settings
-            save_settings(self._settings)
-        except Exception:
-            pass
+        self._store_engrave_offset(*offset, how="entered by hand")
+        ox, oy = offset
         # Re-enter engrave phase so Next becomes enabled (the offset
         # check happens at phase-enter time), then user can click Next
         # to advance to capture.
@@ -8286,6 +8579,10 @@ class CameraCalibrationDialog(tk.Toplevel):
                 x=ox, y=oy))
 
     def _on_reconnect_camera_clicked(self):
+        mlog.info("camera #%s: Reconnect clicked", self._camera_index)
+        self._reconnect_camera()
+
+    def _reconnect_camera(self):
         """Release the (likely-dead) cv2.VideoCapture handle and open
         a fresh one. Used when the USB camera died mid-session and the
         existing handle is stale. Doesn't touch captures already taken
@@ -8299,10 +8596,14 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._cap = None
         self._failed_reads = 0
         self._status_var.set(_("Reopening camera..."))
-        self.after(50, self._open_camera_and_start)
+        self.after(50, self._open_camera_and_start, "Reconnect clicked")
 
     def _on_switch_camera_clicked(self):
-        """Cycle to the next enumerated camera; persist the choice."""
+        """Cycle to the next enumerated camera; persist the choice.
+
+        Captures from two cameras can't go into one calibration (and the
+        image size is per camera), so switching with captures taken
+        discards them, after asking."""
         try:
             cams = self._cam_mod.enumerate_cameras()
         except Exception:
@@ -8312,6 +8613,22 @@ class CameraCalibrationDialog(tk.Toplevel):
                 _("Only One Camera"),
                 _("Only one camera is detected."), parent=self)
             return
+        if self._captures:
+            if not messagebox.askyesno(
+                    _("Switch Camera?"),
+                    _("Switching cameras discards the {n} captures taken "
+                      "so far. Continue?").format(n=len(self._captures)),
+                    parent=self):
+                return
+            mlog.info("switch camera: discarding %d captures",
+                      len(self._captures))
+            self._captures = []
+            self._reference_count = 0
+            self._capture_substate = 'reference'
+            self._capture_btn.config(text=_("Capture reference"))
+            for b in (self._done_refs_btn, self._retake_ref_btn,
+                      self._reset_btn, self._calibrate_btn):
+                b.config(state="disabled")
         indices = [c['index'] for c in cams]
         try:
             pos = indices.index(self._camera_index)
@@ -8335,7 +8652,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 pass
             self._cap = None
         self._failed_reads = 0
-        self.after(50, self._open_camera_and_start)
+        self.after(50, self._open_camera_and_start, "Switch camera clicked")
 
     def _auto_recycle_camera(self):
         """Called after every FalconRunDialog close. The cv2 frame
@@ -8352,20 +8669,28 @@ class CameraCalibrationDialog(tk.Toplevel):
             pass
         self._cap = None
         self._failed_reads = 0
-        self.after(50, self._open_camera_and_start)
+        self.after(50, self._open_camera_and_start,
+                   "recycle after laser dialog")
 
     def _render_frame_with_overlay(self, frame):
         import cv2
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids = self._cam_mod.detect_charuco(gray, self._board)
+        det = {}
+        t0 = time.perf_counter()  # monotonic() ticks every ~15 ms on Windows
+        corners, ids = self._cam_mod.detect_charuco(
+            gray, self._board, stats=det)
+        self._note_frame(frame, gray, det,
+                         (time.perf_counter() - t0) * 1000.0,
+                         corners is not None)
 
         annotated = frame.copy()
         detected_count = 0 if corners is None else len(corners)
         if corners is not None and ids is not None and len(corners) >= 4:
-            # Draw green dots at detected ChArUco corners
-            for pt in corners:
-                x, y = int(pt[0][0]), int(pt[0][1])
-                cv2.circle(annotated, (x, y), 4, (0, 255, 0), -1)
+            # Green dots at the detected ChArUco corners. corner_points
+            # takes OpenCV 4's (N, 1, 2) and OpenCV 5's (N, 2) alike;
+            # indexing pt[0][0] here is what broke v2.80 under OpenCV 5.
+            for x, y in self._cam_mod.corner_points(corners):
+                cv2.circle(annotated, (int(x), int(y)), 4, (0, 255, 0), -1)
             self._capture_btn.config(state="normal")
         else:
             self._capture_btn.config(state="disabled")
@@ -8380,14 +8705,121 @@ class CameraCalibrationDialog(tk.Toplevel):
                                     width=img.width, height=img.height)
 
         n_caps = len(self._captures)
+        if not self._may_write_progress():
+            return
         if corners is not None:
-            self._status_var.set(
-                _("Detected {d} corners — captured {n} / {target} good frames.").format(
-                    d=detected_count, n=n_caps, target=self.TARGET_FRAMES))
+            msg = _("Detected {d} corners — captured {n} / {target} good frames.").format(
+                d=detected_count, n=n_caps, target=self.TARGET_FRAMES)
         else:
-            self._status_var.set(
-                _("Move the card into view — captured {n} / {target} good frames.").format(
-                    n=n_caps, target=self.TARGET_FRAMES))
+            msg = _("Move the card into view — captured {n} / {target} good frames.").format(
+                n=n_caps, target=self.TARGET_FRAMES)
+        self._last_progress_status = msg
+        self._status_var.set(msg)
+
+    def _may_write_progress(self):
+        """Whether the preview may write its progress line now.
+
+        It runs ~10x a second, so before v2.86 every other message
+        ("Homed", "Framing done", "Engrave complete", the capture hints)
+        was overwritten before anyone could read it. Now it writes only
+        in capture phase, and only once anything else it finds in the
+        status line has been there STATUS_HOLD_S seconds."""
+        if self._phase != 'capture':
+            return False
+        cur = self._status_var.get()
+        if cur == self._last_progress_status:
+            return True
+        now = time.monotonic()
+        if cur != self._foreign_status:
+            self._foreign_status = cur
+            self._foreign_status_t = now
+        return now - self._foreign_status_t >= self.STATUS_HOLD_S
+
+    def _note_frame(self, frame, gray, det, detect_ms, good):
+        """Accumulate one preview frame into the detection summary and
+        write the summary to the log once per SUMMARY_INTERVAL_S.
+
+        The summary is what answers "why are there no green corners on
+        this user's machine": no markers at all (focus, exposure, wrong
+        camera) reads differently from markers without corners (board
+        mismatch), slow detection, or frames that error out."""
+        now = time.monotonic()
+        st = self._live_stats
+        if st is None:
+            st = self._live_stats = {
+                't0': now, 'frames': 0, 'with_markers': 0, 'good': 0,
+                'max_markers': 0, 'max_corners': 0,
+                'ms_min': None, 'ms_max': 0.0,
+                'g_min': 255, 'g_max': 0, 'g_mean_sum': 0.0,
+                'errors0': self._loop_errors,
+            }
+        markers = det.get('markers', 0)
+        st['frames'] += 1
+        st['with_markers'] += 1 if markers else 0
+        st['max_markers'] = max(st['max_markers'], markers)
+        st['max_corners'] = max(st['max_corners'], det.get('corners', 0))
+        if good:
+            st['good'] += 1
+            self._last_good_t = now
+        st['ms_min'] = (detect_ms if st['ms_min'] is None
+                        else min(st['ms_min'], detect_ms))
+        st['ms_max'] = max(st['ms_max'], detect_ms)
+        st['g_min'] = min(st['g_min'], int(gray.min()))
+        st['g_max'] = max(st['g_max'], int(gray.max()))
+        st['g_mean_sum'] += float(gray.mean())
+        if now - st['t0'] >= self.SUMMARY_INTERVAL_S:
+            h, w = frame.shape[:2]
+            mlog.info(
+                "calibration preview, last %.1fs: %d frames %dx%d; markers "
+                "in %d (max %d); board found in %d (max %d corners); gray "
+                "min/mean/max %d/%.0f/%d; detect %.0f-%.0f ms; frame errors "
+                "%d; captures %d (%d references)",
+                now - st['t0'], st['frames'], w, h, st['with_markers'],
+                st['max_markers'], st['good'], st['max_corners'],
+                st['g_min'], st['g_mean_sum'] / st['frames'], st['g_max'],
+                st['ms_min'], st['ms_max'],
+                self._loop_errors - st['errors0'],
+                len(self._captures), self._reference_count)
+            self._live_stats = None
+        self._maybe_snapshot(frame, now)
+
+    def _maybe_snapshot(self, frame, now):
+        """Save the raw frame a few seconds after the camera goes live,
+        and again (at most once a minute) while the board hasn't been
+        found for SNAPSHOT_NO_DETECT_S. Overwrites one file, like
+        last_frame_cut.gcode: it is the exact image the detector saw."""
+        if self._live_since is None:
+            return
+        if not self._snapshot_this_open:
+            due = now - self._live_since >= self.SNAPSHOT_FIRST_S
+        else:
+            since_good = now - max(self._live_since,
+                                   self._last_good_t or self._live_since)
+            due = (since_good >= self.SNAPSHOT_NO_DETECT_S
+                   and now - (self._last_snapshot_t or 0.0)
+                   >= self.SNAPSHOT_MIN_GAP_S)
+        if due:
+            self._save_snapshot(frame, now)
+
+    def _save_snapshot(self, frame, now):
+        self._snapshot_this_open = True
+        self._last_snapshot_t = now
+        try:
+            import cv2
+            from config import ensure_config_dir
+            path = os.path.join(ensure_config_dir(), self.SNAPSHOT_NAME)
+            # imencode + Python file write, not cv2.imwrite: imwrite can't
+            # open a non-ASCII path on Windows (a user name with an accent
+            # is enough) and only says so by returning False.
+            ok, buf = cv2.imencode(".png", frame)
+            if not ok:
+                raise RuntimeError("PNG encoding failed")
+            with open(path, "wb") as f:
+                f.write(buf.tobytes())
+            mlog.info("saved the raw camera frame to %s (%s)", path,
+                      self._cam_mod.describe_frame(frame))
+        except Exception:
+            mlog.exception("could not save the raw camera frame")
 
     def _on_capture_clicked(self):
         if not hasattr(self, '_latest_frame'):
@@ -8401,6 +8833,8 @@ class CameraCalibrationDialog(tk.Toplevel):
         is_ref = (self._capture_substate == 'reference')
         if is_ref:
             self._reference_count += 1
+        mlog.info("capture %d (%s): %d corners", len(self._captures),
+                  "reference" if is_ref else "card moved", len(corners))
         n = len(self._captures)
         target = self.TARGET_FRAMES
         if n >= self._cam_mod.CALIB_MIN_FRAMES:
@@ -8431,6 +8865,8 @@ class CameraCalibrationDialog(tk.Toplevel):
         if self._reference_count < 1:
             return
         self._capture_substate = 'intrinsics'
+        mlog.info("done with references: %d reference captures",
+                  self._reference_count)
         self._capture_btn.config(text=_("Capture (card moved)"))
         self._done_refs_btn.config(state="disabled")
         self._status_var.set(
@@ -8441,19 +8877,31 @@ class CameraCalibrationDialog(tk.Toplevel):
                 m=max(0, self.TARGET_FRAMES - len(self._captures))))
 
     def _on_retake_last_clicked(self):
-        """Drop the most recent capture so the user can redo it."""
+        """Drop the most recent capture so the user can redo it.
+
+        References are always the first ``_reference_count`` captures, so
+        the dropped one was a reference exactly when its index is below
+        that count. If that leaves no reference, go back to taking
+        references: v2.80 stayed in "card moved" mode with zero
+        references, the next moved capture became capture 0, and
+        Calibrate used it as the reference -- a calibration tens of mm
+        off that still reported a fine RMS."""
         if not self._captures:
             return
-        # Decrement reference count if the removed capture was a reference
-        if (self._capture_substate == 'reference'
-                and self._reference_count > 0):
-            self._reference_count -= 1
-        elif (self._capture_substate == 'intrinsics'
-              and len(self._captures) - 1 < self._reference_count):
-            # Defensive: shouldn't happen, but if it did, fix the count
-            self._reference_count = len(self._captures) - 1
+        dropped = len(self._captures) - 1
         self._captures.pop()
+        if dropped < self._reference_count:
+            self._reference_count -= 1
+        if self._reference_count == 0 and self._capture_substate != 'reference':
+            self._capture_substate = 'reference'
+            self._capture_btn.config(text=_("Capture reference"))
         n = len(self._captures)
+        self._done_refs_btn.config(
+            state="normal" if (self._capture_substate == 'reference'
+                               and self._reference_count >= 1)
+            else "disabled")
+        mlog.info("retake: dropped the last capture; %d left "
+                  "(%d references)", n, self._reference_count)
         self._calibrate_btn.config(
             state="normal" if n >= self._cam_mod.CALIB_MIN_FRAMES
             else "disabled")
@@ -8476,6 +8924,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                   "Continue?").format(n=len(self._captures)),
                 parent=self):
             return
+        mlog.info("reset: discarded %d captures", len(self._captures))
         self._captures = []
         self._reference_count = 0
         self._capture_substate = 'reference'
@@ -8488,8 +8937,62 @@ class CameraCalibrationDialog(tk.Toplevel):
             _("Captures cleared. Place the card in its engraved "
               "position and click Capture reference."))
 
+    def _calibration_inputs_ok(self):
+        """Refuse a capture set that would save a wrong calibration.
+
+        Each of these used to calibrate and save anyway, and the RMS the
+        dialog reports doesn't show it (measured on a simulated Falcon
+        camera, bed error over the whole bed):
+          - no reference capture left: a moved frame became the
+            reference, ~50 mm off;
+          - Done with references never clicked: every capture counted as
+            a reference, 21-43 mm off;
+          - no engrave position on file (the dialog opened in capture
+            phase without one): the (50, 50) default was used silently.
+        """
+        refs = self._reference_count
+        moved = len(self._captures) - refs
+        if refs < 1:
+            messagebox.showwarning(
+                _("No Reference Capture"),
+                _("Calibration needs at least one reference capture: the "
+                  "card exactly where it was engraved, taken before "
+                  "clicking 'Done with references'.\n\n"
+                  "Click Reset all, put the card back where it was "
+                  "engraved if you moved it, and start with Capture "
+                  "reference."), parent=self)
+            return False
+        if (self._capture_substate != 'intrinsics'
+                or moved < self.MIN_MOVED_CAPTURES):
+            messagebox.showwarning(
+                _("Move the Card"),
+                _("Calibration needs at least {m} captures with the card "
+                  "moved to different spots on the bed (you have {n}).\n\n"
+                  "Click 'Done with references' if you haven't yet, then "
+                  "move the card between captures.").format(
+                    m=self.MIN_MOVED_CAPTURES, n=max(0, moved)
+                    if self._capture_substate == 'intrinsics' else 0),
+                parent=self)
+            return False
+        if self._captured_engrave_offset is None:
+            if not messagebox.askyesno(
+                    _("No Engrave Position"),
+                    _("The app doesn't know where on the bed this card was "
+                      "engraved, so it can't tie the camera to machine "
+                      "coordinates.\n\n"
+                      "Enter the card's bottom-left machine position now?"),
+                    parent=self):
+                return False
+            offset = self._ask_manual_offset()
+            if offset is None:
+                return False
+            self._store_engrave_offset(*offset, how="entered by hand")
+        return True
+
     def _on_calibrate_clicked(self):
         if len(self._captures) < self._cam_mod.CALIB_MIN_FRAMES:
+            return
+        if not self._calibration_inputs_ok():
             return
         self._stop_refresh()
         self._status_var.set(_("Computing calibration ..."))
@@ -8505,9 +9008,19 @@ class CameraCalibrationDialog(tk.Toplevel):
             # taken with the card untouched at its engraved position.
             ref_count = max(1, getattr(self, '_reference_count', 1))
             kwargs['reference_indices'] = tuple(range(ref_count))
+            mlog.info("calibrating: %d captures (%d references), image "
+                      "%s, engrave offset %s", len(self._captures),
+                      ref_count, self._image_size, eng_off)
             calib = self._cam_mod.calibrate_from_frames(
                 self._captures, self._image_size, self._board, **kwargs)
             self._cam_mod.save_calibration(calib, self._calibration_path)
+            cm = calib.get('camera_matrix') or [[0] * 3] * 3
+            mlog.info("calibration saved to %s: rms %.3f px, fx %.1f fy "
+                      "%.1f cx %.1f cy %.1f, dist %s",
+                      self._calibration_path,
+                      calib.get('rms_reprojection_error_px', -1),
+                      cm[0][0], cm[1][1], cm[0][2], cm[1][2],
+                      calib.get('dist_coeffs'))
             # Calibration committed. Clear the in-progress recovery
             # hint (engrave offset in settings) — it was useful for
             # restoring state during the capture phase, but now the
@@ -8540,6 +9053,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 parent=self)
             self._on_close()
         except Exception as e:
+            mlog.exception("calibration failed")
             messagebox.showerror(_("Calibration Failed"),
                                   _("Calibration did not converge:\n\n{e}\n\n"
                                     "Try capturing more frames at different "
@@ -8557,6 +9071,9 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._refresh_after_id = None
 
     def _on_close(self):
+        mlog.info("calibration dialog closed: result=%s, %d captures "
+                  "(%d references)", self.result, len(self._captures),
+                  self._reference_count)
         self._stop_refresh()
         if self._cap is not None:
             try:
@@ -8649,13 +9166,16 @@ class CameraCaptureDialog(tk.Toplevel):
             bg=DIALOG_BG, wraplength=620, justify="left",
             font=("Helvetica", 9)).pack(padx=15, pady=(0, 6))
 
-        # Preview label shows a prominent "loading" message until the
-        # first camera frame arrives, then displays live frames.
-        self._preview_label = tk.Label(
-            self, bg="#222222", fg="#cccccc",
-            text=_("Waking camera..."),
-            font=("Helvetica", 14),
+        # Preview: a blank image the size of the preview until the first
+        # frame arrives (the status line below says the camera is
+        # opening). A label holding TEXT reads width/height in
+        # characters: the old 640x480 "Waking camera..." label asked for
+        # ~4500x7200 px and, if the camera never opened, pushed the
+        # status line and the Use/Cancel buttons off the window.
+        self._preview_blank = tk.PhotoImage(
             width=self.PREVIEW_W, height=self.PREVIEW_H)
+        self._preview_label = tk.Label(
+            self, bg="#222222", image=self._preview_blank)
         self._preview_label.pack(padx=15, pady=(0, 8))
 
         self._status_var = tk.StringVar(value=_("Opening camera ..."))
@@ -8798,6 +9318,14 @@ class CameraCaptureDialog(tk.Toplevel):
                           daemon=True).start()
 
     def _camera_ready(self, cap):
+        if not self.winfo_exists():
+            # Closed while the camera was opening; release it here or
+            # nothing will.
+            try:
+                cap.release()
+            except Exception:
+                pass
+            return
         self._cap = cap
         self._refresh_loop()
 
@@ -8839,6 +9367,29 @@ class CameraCaptureDialog(tk.Toplevel):
 
     def _render_frame_with_overlay(self, frame):
         import cv2
+        mismatch = self._cam_mod.calibration_size_mismatch(
+            self._calibration, frame)
+        if mismatch:
+            cw, ch, fw, fh = mismatch
+            if not getattr(self, '_size_mismatch_logged', False):
+                self._size_mismatch_logged = True
+                mlog.warning("scrap capture: camera #%s sends %dx%d, "
+                             "calibrated at %dx%d", self._camera_index,
+                             fw, fh, cw, ch)
+            self._latest_polygon_mm = None
+            self._use_btn.config(state="disabled")
+            self._status_var.set(_(
+                "This camera is sending {fw}×{fh} images, but the "
+                "calibration was made at {cw}×{ch}. Recalibrate, or use "
+                "Switch camera if this is the wrong one.").format(
+                    fw=fw, fh=fh, cw=cw, ch=ch))
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = self._PIL_Image.fromarray(rgb)
+            img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
+            self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
+            self._preview_label.config(image=self._latest_photo,
+                                        width=img.width, height=img.height)
+            return
         # Undistort + detect contour
         undistorted = self._cam_mod.undistort_frame(frame, self._calibration)
         try:
@@ -9640,7 +10191,7 @@ class FalconRunDialog(tk.Toplevel):
         # cancellable + tracked separately from stream lines.
         try:
             self._sender.jog(x=target_x, y=target_y,
-                              feed=3000, relative=False)
+                              feed=3000, relative=False, machine=True)
         except Exception as e:
             self._state_var.set(_("Auto-locate failed: {e}").format(e=e))
             return

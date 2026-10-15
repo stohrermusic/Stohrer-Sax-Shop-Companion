@@ -80,7 +80,9 @@ All JSON saves route through `_write_json_atomic()` in config.py — write to a 
 
 ## Error Logging
 
-`setup_logging()` in config.py creates a rotating log file (`app.log`) in the config directory. `main.py` hooks both `sys.excepthook` and tkinter's `report_callback_exception` so any unhandled exception gets a full traceback written to the log and a dialog shown to the user pointing them to Help > Open Log File. The log rotates at 500KB with 1 backup.
+`setup_logging()` in config.py creates a rotating log file (`app.log`) in the config directory. `main.py` hooks both `sys.excepthook` and tkinter's `report_callback_exception` so any unhandled exception gets a full traceback written to the log and a dialog shown to the user pointing them to Help > Open Log File. The log rotates at 2 MB (`LOG_MAX_BYTES`) with 1 backup.
+
+The root level is WARNING, but the loggers in `config.INFO_LOGGERS` (`falcon_sender`, `camera_capture`, `ssc.machine`, `ssc.startup`) write INFO: until v2.86 every INFO line `falcon_sender` had (stream start/end, wake-up, `$X`, the M-code trace) was silently dropped because only the root level was set. Things that repeat on a timer must not log per tick: the calibration preview logs a 5 s summary, and `falcon_sender._log_throttled` holds a repeating connect message to one line per 30 s (the calibration MPos poll connects every 0.8 s). At startup `config.log_runtime_versions` writes one line with Python, OS, Tk and library versions (already-imported modules report their own `__version__`; others come from metadata without importing them), and `camera_capture` logs the OpenCV it loads. Help > Open Log File shows the file *selected* in Explorer/Finder (`reveal_in_file_manager_command`) so it can be attached to an email next to `last_calibration_frame.png` and `last_frame_cut.gcode`.
 
 ## macOS Build
 
@@ -92,7 +94,7 @@ Packaging must preserve symlinks too: CI zips the `.app` with `ditto -c -k --kee
 
 ## Feature Set
 
-File > Feature Set lets users show/hide tabs. As of v2.0 the Tuner is default-on (no longer marked experimental); only the Toner remains hidden by default. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, three ways to use it, and setup steps: input device, recording folder, preset fields, required preset fields). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
+File > Feature Set lets users show/hide tabs. It only lists what the build can run: no Tuner/Toner on a Mac without the audio stack (`main.audio_supported`), no Machine menu toggle without pyserial (`main.machine_supported`) — i.e. the Intel Mac build. Saving merges into `visible_tabs` rather than replacing it, so a tab the build doesn't offer keeps its saved value. As of v2.0 the Tuner is default-on (no longer marked experimental); only the Toner remains hidden by default. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, three ways to use it, and setup steps: input device, recording folder, preset fields, required preset fields). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
 
 **Machine Integration (v2.5+, experimental, opt-in)** — File > Feature Set also exposes an `experimental_machine_menu` toggle (default False). When on, the Pad Maker tab gains an Options > Machine submenu, a Frame & Cut button, and the polygon-draw dialog grows its "Get from camera" + live overlay UI. When off, none of that surfaces — the app behaves like pre-v2.5. Helper `_machine_enabled()` in main.py is the single source of truth and is called by `_refresh_machine_ui_state()` whenever the toggle changes or the calibration file appears/disappears.
 
@@ -124,7 +126,7 @@ main._machine_enabled() + _refresh_machine_ui_state()
       ├─ jog-to-position dialog (FalconRunDialog jog-only mode)
       │   ├─ Home Laser button
       │   ├─ Jog cluster
-      │   ├─ Try Auto Locate (drives head to polygon LB-vertex)
+      │   ├─ Try Auto Locate (drives head to polygon anchor vertex, G53)
       │   └─ Start Frame →
       ├─ Framing loop dialog (FalconRunDialog loop=True)
       │   └─ generate_polygon_framing_gcode (outline, BL-first rotation, G92 with LB offset)
@@ -134,7 +136,7 @@ main._machine_enabled() + _refresh_machine_ui_state()
 Key invariants the subsystem keeps:
 - `custom_polygon` (inset, normalized to outline's origin) drives nesting placements.
 - `custom_polygon_outline` (un-inset, normalized to outline's origin) drives framing trace.
-- `_custom_polygon_lb_machine` (absolute machine coords of original polygon's LB-vertex) drives Try Auto Locate.
+- `_custom_polygon_lb_machine` (absolute machine coords of the outline's anchor vertex, `svg_engine.polygon_anchor_vertex` — the same vertex the G92 uses) drives Try Auto Locate.
 - `_falcon_homed_this_session` (True after $H or after Machine > Reset Falcon) gates Try Auto Locate enabled state.
 - Frame G-code emits `G92 X{lb_x} Y{lb_y}` (LB-vertex in Y-flipped frame) so jogging to the visible scrap corner bridges to the polygon's bbox origin.
 - `falcon_sender._stream_loop` starts every stream with two safety lines BEFORE the caller's G-code: (1) `G4 P0.01` wake-up dwell to prevent Grbl parser dormancy from eating the first command, and (2) `$X` unlock so a sticky Alarm from the previous stream (e.g. soft-limit triggered by a jog-shifted cut bbox in Frame & Cut) doesn't force a Falcon power cycle. `$X` is a no-op when Grbl is already Idle.

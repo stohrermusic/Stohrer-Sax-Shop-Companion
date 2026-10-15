@@ -115,12 +115,15 @@ def main():
         spec = style.lookup("TNotebook.Tab", "font") or "TkDefaultFont"
         font = tkfont.nametofont(spec) if spec in tkfont.names(root) else tkfont.Font(root, font=spec)
         visible = [t for t in app.notebook.tabs() if app.notebook.tab(t, "state") != "hidden"]
-        assert len(visible) == 7, f"{len(visible)} visible tabs"
+        # Seven tabs, or five on a build without the audio stack (Intel Mac:
+        # Tuner and Toner hidden, main.audio_supported).
+        want = 7 if main_mod.audio_supported() else 5
+        assert len(visible) == want, f"{len(visible)} visible tabs, expected {want}"
         need = sum(font.measure(app.notebook.tab(t, "text")) for t in visible)
         need += main_mod.TAB_LABEL_PADDING_PX * len(visible) + 40
         width = root.winfo_width()
         assert width >= need, f"window {width} px, labels need {need} px"
-    check("all seven tab labels fit in the window", tab_labels_fit)
+    check("every visible tab label fits in the window", tab_labels_fit)
 
     def sizing_rules_fits_its_content():
         # Aqua clipped the preset bar at the dialog's fixed 500 px (Mac tour
@@ -179,6 +182,9 @@ def main():
     expected = ["pad-maker", "sizing-rules-with-preview", "layer-colors", "gcode-settings", "nesting-preview",
                 "polygon-draw", "job-history", "feature-set", "user-guide", "about", "key-heights",
                 "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner", "toner"]
+    if not main_mod.audio_supported():
+        # Intel Mac: the Tuner and Toner tabs are hidden, so the tour skips them.
+        expected = [s for s in expected if s not in ("tuner-no-mic", "tuner", "toner")]
     check(f"tour visited every stop ({len(log)}/{len(expected)})", lambda: log == expected)
     def tour_raised_nothing():
         assert not errors, "\n".join(errors)

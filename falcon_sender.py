@@ -44,6 +44,27 @@ from collections import deque
 
 log = logging.getLogger(__name__)
 
+# Some callers poll: the calibration dialog's MPos readout connects, reads
+# status and disconnects every ~300 ms. A message that can fire on every
+# poll (port won't open, Grbl silent) goes through _log_throttled so a
+# stuck port writes one line per LOG_REPEAT_S, not twelve thousand an hour.
+LOG_REPEAT_S = 30.0
+_log_last = {}  # key -> [monotonic time of last write, repeats suppressed]
+
+
+def _log_throttled(level, key, msg, *args):
+    now = time.monotonic()
+    entry = _log_last.get(key)
+    if entry is not None and now - entry[0] < LOG_REPEAT_S:
+        entry[1] += 1
+        return
+    suppressed = entry[1] if entry is not None else 0
+    _log_last[key] = [now, 0]
+    if suppressed:
+        msg += " (%d repeats in the last %.0fs not logged)"
+        args = args + (suppressed, LOG_REPEAT_S)
+    log.log(level, msg, *args)
+
 try:
     import serial
     import serial.tools.list_ports
@@ -340,7 +361,14 @@ class FalconSender:
         with self._lock:
             if self._serial is not None and self._serial.is_open:
                 return
-            self._serial = serial.Serial(self.port, self.baud, timeout=0.05)
+            try:
+                self._serial = serial.Serial(self.port, self.baud,
+                                             timeout=0.05)
+            except Exception as e:
+                _log_throttled(logging.WARNING, ('open', self.port, str(e)),
+                               "connect %s: could not open the port: %s",
+                               self.port, e)
+                raise
             time.sleep(0.1)  # let port settle
 
             # Probe with ? — non-destructive
@@ -378,6 +406,16 @@ class FalconSender:
                 self._serial.write(RT_SOFT_RESET)
                 time.sleep(CONNECT_WAKEUP_DELAY_S)
                 buf += self._serial.read(self._serial.in_waiting or 256)
+                _log_throttled(
+                    logging.WARNING, ('reset', self.port),
+                    "connect %s: no reply to '?' or a boot banner; sent a "
+                    "soft-reset (Grbl may now be in Alarm); reply: %r",
+                    self.port, buf[-160:])
+            else:
+                _log_throttled(
+                    logging.INFO, ('banner', self.port),
+                    "connect %s: no reply to '?'; woke after waiting for "
+                    "the boot banner: %r", self.port, buf[-160:])
             self._serial.reset_input_buffer()
             self.status = {'state': 'Idle',
                             'raw': buf.decode('ascii', 'replace')}
@@ -436,6 +474,9 @@ class FalconSender:
         self._stop_flag.set()
         self._pause_flag.clear()
         if self._worker is not None and self._worker.is_alive():
+            log.info("stop: soft-reset sent to end stream #%d at line %d/%d",
+                     self._stream_session, self._sent_lines,
+                     self._total_lines)
             self.send_realtime(RT_SOFT_RESET)
             self._worker.join(timeout=2.0)
         self._worker = None
@@ -447,8 +488,10 @@ class FalconSender:
                 return
             try:
                 self._serial.write(b'$X\n')
-            except (serial.SerialException, OSError):
-                pass
+                log.info("unlock ($X) sent on %s", self.port)
+            except (serial.SerialException, OSError) as e:
+                log.warning("unlock ($X) on %s: write failed: %s",
+                            self.port, e)
 
     def home(self, timeout_s=60.0):
         """Send ``$H`` and block until Grbl returns ``ok`` (homing done)
@@ -463,6 +506,14 @@ class FalconSender:
         40W with $130=400/$131=415, homing typically completes in 15-25
         seconds; 60s is comfortable headroom.
         """
+        t0 = time.monotonic()
+        ok, msg = self._home(timeout_s)
+        log.log(logging.INFO if ok else logging.WARNING,
+                "home ($H) on %s: %s after %.1fs", self.port, msg,
+                time.monotonic() - t0)
+        return ok, msg
+
+    def _home(self, timeout_s):
         with self._lock:
             if self._serial is None or not self._serial.is_open:
                 return (False, "not connected")
@@ -537,7 +588,8 @@ class FalconSender:
     # Jog
     # ------------------------------------------------------------------
 
-    def jog(self, x=None, y=None, z=None, feed=2000, relative=False):
+    def jog(self, x=None, y=None, z=None, feed=2000, relative=False,
+            machine=False):
         """Send a jog command. Uses Grbl 1.1 `$J=` syntax (cancellable).
 
         Safe to call during streaming: the write is serialized with
@@ -552,6 +604,11 @@ class FalconSender:
             parts.append('G91')
         else:
             parts.append('G90')
+            if machine:
+                # Absolute MACHINE coordinates, whatever G92/G54 offset
+                # is in force (Try Auto Locate targets an MPos; a G92
+                # left by the previous Frame & Cut would shift it).
+                parts.append('G53')
         if x is not None:
             parts.append(f'X{x}')
         if y is not None:
@@ -566,8 +623,12 @@ class FalconSender:
             try:
                 self._serial.write(cmd.encode('ascii'))
                 self._jogs_in_flight += 1
-            except (serial.SerialException, OSError):
-                pass  # do NOT count an unack-able jog
+                log.info("jog on %s: %s (state=%s, mpos=%s)", self.port,
+                         cmd.strip(), (self.status or {}).get('state'),
+                         (self.status or {}).get('mpos'))
+            except (serial.SerialException, OSError) as e:
+                # do NOT count an unack-able jog
+                log.warning("jog on %s: write failed: %s", self.port, e)
 
     # ------------------------------------------------------------------
     # Streaming

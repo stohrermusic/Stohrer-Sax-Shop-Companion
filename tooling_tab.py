@@ -665,9 +665,8 @@ class ToolingTabMixin:
         crescent_frame = tk.Frame(self._tooling_content, bg=bg)
 
         tk.Label(crescent_frame, bg=bg, font=("Helvetica", 9), fg="gray",
-                 text=_("A crescent set into the mouthpiece side of a tonehole covers part "
-                        "of it and flattens that note. The outer edge is the tonehole ID "
-                        "exactly; allow for kerf or print tolerance."),
+                 text=_("The outer edge is the tonehole ID exactly; allow for kerf or "
+                        "print tolerance."),
                  justify="left", wraplength=540).pack(anchor='w', pady=(0, 8))
 
         cr_size_row = tk.Frame(crescent_frame, bg=bg)
@@ -2139,8 +2138,7 @@ class ToolingTabMixin:
         cv = self.crescent_canvas
         cv.delete("all")
         r_px = 70
-        cx, cy = int(cv.cget('width')) / 2, int(cv.cget('height')) / 2 + 8
-        cv.create_text(cx, 12, text=_("Mouthpiece side"), fill="#777777", font=("Helvetica", 8))
+        cx, cy = int(cv.cget('width')) / 2, int(cv.cget('height')) / 2
         cv.create_oval(cx - r_px, cy - r_px, cx + r_px, cy + r_px, outline="#888888", dash=(3, 3))
         try:
             geom = tonehole_crescent_geometry(*self._read_crescent_inputs())
