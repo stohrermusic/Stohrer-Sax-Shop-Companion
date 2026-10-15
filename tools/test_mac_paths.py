@@ -179,6 +179,9 @@ def main():
     expected = ["pad-maker", "sizing-rules-with-preview", "layer-colors", "gcode-settings", "nesting-preview",
                 "polygon-draw", "job-history", "feature-set", "user-guide", "about", "key-heights",
                 "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner", "toner"]
+    if not main_mod.audio_supported():
+        # Intel Mac: the Tuner and Toner tabs are hidden, so the tour skips them.
+        expected = [s for s in expected if s not in ("tuner-no-mic", "tuner", "toner")]
     check(f"tour visited every stop ({len(log)}/{len(expected)})", lambda: log == expected)
     def tour_raised_nothing():
         assert not errors, "\n".join(errors)

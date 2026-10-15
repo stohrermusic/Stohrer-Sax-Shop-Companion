@@ -49,6 +49,35 @@ from toner_tab import TonerTabMixin  # noqa: E402
 IS_MACOS = sys.platform == 'darwin'
 
 
+def audio_supported(platform=None, audio_available=None):
+    """Whether this build can run the Tuner and Toner at all.
+
+    False only on a Mac without the audio stack -- the Intel build, which
+    ships without sounddevice by design. There the tabs used to sit in the
+    notebook saying "not available on this Mac"; since 2026-10-15 they
+    are hidden and left out of Feature Set instead (Matt: "let's just not
+    support the features on an intel mac that it cannot use. they are
+    getting rare"). Windows and Linux keep their panel, because there a
+    missing audio library is something the user can install."""
+    platform = platform or sys.platform
+    if audio_available is None:
+        import tuner_tab
+        audio_available = tuner_tab.AUDIO_AVAILABLE
+    return not (platform == 'darwin' and not audio_available)
+
+
+def machine_supported():
+    """Whether this build can talk to a laser at all (pyserial bundled).
+    False on the Intel Mac build, which has neither pyserial nor OpenCV:
+    the Machine menu toggle isn't offered there, and an old setting that
+    turned it on is ignored (same decision as audio_supported)."""
+    try:
+        import falcon_sender
+        return bool(falcon_sender.HAS_PYSERIAL)
+    except Exception:
+        return False
+
+
 def reveal_in_file_manager_command(path, platform=None):
     """The command that opens the system file manager with ``path``
     selected (Explorer, Finder), or its folder where selecting isn't
@@ -606,8 +635,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.serial_tab: visible.get("Serial Lookup", True),
             self.screw_tab: visible.get("Screw Specs", True),
             self.tooling_tab_frame: visible.get("Tooling", True),
-            self.tuner_tab_frame: visible.get("Tuner", True),
-            self.toner_tab_frame: visible.get("Toner", True),
+            self.tuner_tab_frame: visible.get("Tuner", True) and audio_supported(),
+            self.toner_tab_frame: visible.get("Toner", True) and audio_supported(),
         }
         for tab_frame, is_visible in tab_visibility.items():
             if not is_visible:
@@ -2218,7 +2247,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         Single source of truth used by every gating site. Tested on
         Windows; the macOS/Linux paths are best-effort and the user
         is opting in via the experimental toggle."""
-        return bool(self.settings.get("experimental_machine_menu", False))
+        return (machine_supported()
+                and bool(self.settings.get("experimental_machine_menu", False)))
 
     def _camera_calibration_present(self):
         """True iff a usable (non-legacy) camera calibration is on disk."""
@@ -3951,6 +3981,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         experimental_tabs = [
             ("Toner", _("Toner")),
         ]
+        if not audio_supported():
+            # A build that can't run them doesn't offer them (Intel Mac).
+            main_tabs = [t for t in main_tabs if t[0] != "Tuner"]
+            experimental_tabs = []
 
         check_vars = {}
         for key, display in main_tabs:
@@ -3976,11 +4010,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # platform; the macOS/Linux paths are best-effort.
         machine_menu_var = tk.BooleanVar(
             value=self.settings.get("experimental_machine_menu", False))
-        tk.Checkbutton(
-            frame,
-            text=_("Machine menu (direct Falcon serial control)"),
-            variable=machine_menu_var, bg=bg,
-            font=("Helvetica", 10)).pack(anchor="w")
+        if machine_supported():  # not offered on a build without pyserial
+            tk.Checkbutton(
+                frame,
+                text=_("Machine menu (direct Falcon serial control)"),
+                variable=machine_menu_var, bg=bg,
+                font=("Helvetica", 10)).pack(anchor="w")
 
         def _show_toner_terms(parent_dlg):
             """Show toner beta terms acceptance dialog. Returns True if accepted."""
@@ -4116,7 +4151,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return result["accepted"]
 
         def apply():
-            new_visible = {name: var.get() for name, var in check_vars.items()}
+            # Merge, don't replace: tabs this build doesn't offer (Tuner and
+            # Toner on the Intel Mac) keep whatever was saved for them.
+            new_visible = dict(self.settings.get("visible_tabs", {}))
+            new_visible.update({name: var.get() for name, var in check_vars.items()})
 
             # Toner requires terms acceptance if not previously unlocked
             if new_visible.get("Toner") and not self.settings.get("toner_unlocked"):
@@ -4444,6 +4482,9 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("tuner", open_tuner, None),
         ("toner", open_toner, None),
     ]
+    if not audio_supported():
+        # Hidden on this build; selecting a hidden ttk tab would show it.
+        steps = [s for s in steps if s[0] not in ("tuner-no-mic", "tuner", "toner")]
 
     def run_step(i):
         if i >= len(steps):

@@ -92,6 +92,12 @@ def main():
           polygon_dialog_anchor)
 
     def card_clears_g92():
+        import camera_capture
+        if not camera_capture.HAS_OPENCV:
+            # The card is rendered with OpenCV; the Intel Mac build has none
+            # (and so no camera features at all).
+            print("    (OpenCV missing; skipped)")
+            return
         import gcode_engine
         p = os.path.join(_PROFILE, "card.gcode")
         gcode_engine.generate_calibration_card_gcode(
@@ -213,6 +219,73 @@ def main():
         check("Tonehole Crescent: no 'Mouthpiece side' caption; description "
               "is the kerf sentence", crescent)
     finally:
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
+
+    # ---- a build that can't run audio or talk to a laser (Intel Mac) -----
+    def support_rules():
+        assert main_mod.audio_supported("darwin", False) is False
+        assert main_mod.audio_supported("darwin", True) is True
+        # Linux/Windows keep the "install PortAudio / reinstall" panel.
+        assert main_mod.audio_supported("linux", False) is True
+        assert main_mod.audio_supported("win32", False) is True
+    check("audio hidden only on a Mac without the audio stack", support_rules)
+
+    real_audio, real_machine = main_mod.audio_supported, main_mod.machine_supported
+    main_mod.audio_supported = lambda *a, **k: False
+    main_mod.machine_supported = lambda: False
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        app = main_mod.PadSVGGeneratorApp(root)
+        app.settings["experimental_machine_menu"] = True  # from an older config
+        app.settings.setdefault("visible_tabs", {})["Tuner"] = True
+        root.update()
+
+        def hidden(frame):
+            return app.notebook.tab(frame, "state") == "hidden"
+
+        def tabs_hidden():
+            assert hidden(app.tuner_tab_frame), "Tuner tab shown"
+            assert hidden(app.toner_tab_frame), "Toner tab shown"
+            assert app._machine_enabled() is False, "Machine menu enabled"
+        check("unsupported build: Tuner/Toner hidden, Machine menu off "
+              "even if a saved setting turns it on", tabs_hidden)
+
+        def feature_set_omits():
+            before = set(root.winfo_children())
+            app._open_feature_set()
+            dlg = next(w for w in root.winfo_children() if w not in before)
+            texts = []
+
+            def walk(w):
+                for c in w.winfo_children():
+                    if isinstance(c, tk.Checkbutton):
+                        texts.append(c.cget("text"))
+                    walk(c)
+            walk(dlg)
+            dlg.destroy()
+            assert "Key Height Library" in texts, texts  # the dialog was found
+            for gone in ("Tuner", "Toner", "Machine menu (direct Falcon serial control)"):
+                assert gone not in texts, f"{gone!r} still offered: {texts}"
+        check("Feature Set doesn't offer what the build can't run", feature_set_omits)
+
+        app._toner_mic_checked = True
+        log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=150,
+                                        on_done=root.quit)
+        root.after(60000, root.quit)
+        root.mainloop()
+
+        def tour_skips():
+            assert not errors, errors
+            assert not {"tuner", "tuner-no-mic", "toner"} & set(log), log
+            assert hidden(app.tuner_tab_frame) and hidden(app.toner_tab_frame), \
+                "the tour un-hid an audio tab"
+        check("tour skips the hidden tabs and leaves them hidden", tour_skips)
+    finally:
+        main_mod.audio_supported, main_mod.machine_supported = real_audio, real_machine
         try:
             root.destroy()
         except tk.TclError:
