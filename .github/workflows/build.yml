@@ -18,8 +18,20 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - run: pip install ruff
+      # Every install in this workflow comes from a lock in locks/ with a
+      # hash per file (tools/update_locks.py). Until v2.86 each build took
+      # whatever was newest on PyPI that day: OpenCV 5.0 arrived that way
+      # on 2026-07-02 and broke camera calibration in every release from
+      # v2.7 to v2.85 without a single commit saying so.
+      - run: pip install --require-hashes -r locks/lint.txt
       - run: ruff check .
+      # The locks must match requirements*.txt / locks/*.in: re-resolving
+      # keeps every pinned version, so any diff means someone changed the
+      # inputs without regenerating (python tools/update_locks.py).
+      - name: Locks in sync with requirements
+        run: |
+          python tools/update_locks.py
+          git diff --exit-code locks/
 
   # Every suite in tools/, on all three desktop platforms. Windows and
   # macOS runners have a display, so the GUI suites (smoke, dialogs,
@@ -46,7 +58,7 @@ jobs:
         if: matrix.os != 'macos-15-intel'
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install --require-hashes -r locks/full.txt
       # The Intel Mac build ships with numpy but WITHOUT sounddevice (no audio
       # features). Test it the way it ships: the audio suites skip, and
       # everything else runs for real on x86 macOS Tk.
@@ -54,7 +66,7 @@ jobs:
         if: matrix.os == 'macos-15-intel'
         run: |
           python -m pip install --upgrade pip
-          pip install svgwrite numpy pillow babel
+          pip install --require-hashes -r locks/intel-mac-test.txt
       - name: Run test suites
         if: runner.os != 'Linux' && matrix.os != 'macos-15-intel'
         run: python tools/run_tests.py
@@ -117,13 +129,13 @@ jobs:
         if: matrix.full_build
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --require-hashes -r locks/full.txt
 
       - name: Install dependencies (Intel Mac — numpy but no audio stack)
         if: "!matrix.full_build"
         run: |
           python -m pip install --upgrade pip
-          pip install svgwrite numpy pyinstaller
+          pip install --require-hashes -r locks/intel-mac-build.txt
 
       # GPU strobe tuner renderer (Rust/wgpu) — only for full builds, and
       # never on macOS: Tk Aqua's winfo_id() is not an NSView, so wgpu
@@ -136,7 +148,6 @@ jobs:
       - name: Build GPU tuner renderer
         if: matrix.full_build && !startsWith(matrix.os, 'macos')
         run: |
-          pip install maturin
           python -m maturin build --release --manifest-path tuner_renderer/Cargo.toml
           pip install --find-links tuner_renderer/target/wheels tuner_render
 
@@ -148,7 +159,6 @@ jobs:
         if: matrix.full_build && !startsWith(matrix.os, 'macos')
         shell: bash
         run: |
-          pip install -r requirements.txt
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get install -y xvfb
             xvfb-run -a python tools/test_gpu_tuner.py

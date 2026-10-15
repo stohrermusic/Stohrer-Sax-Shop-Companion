@@ -1,0 +1,66 @@
+name: Refresh dependency locks
+
+# Once a month, move every package in locks/ to its newest allowed version
+# on a branch, run the full Build Releases workflow (lint, every test suite
+# on all four platforms, every build) on that branch, and open a pull
+# request into beta listing what changed. Nothing reaches beta, or a
+# release, until a person merges it -- an upgrade is a decision, not
+# something a build picks up because it happened to be newest that day.
+#
+# Opening the pull request needs Settings > Actions > General > "Allow
+# GitHub Actions to create and approve pull requests". Without it the job
+# still pushes the branch and starts the build, and its summary links to
+# the page that opens the pull request in one click.
+
+on:
+  schedule:
+    - cron: '0 9 1 * *'   # 09:00 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  contents: write        # push the refresh branch
+  pull-requests: write   # open the pull request
+  actions: write         # start Build Releases on the branch
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: beta
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install --require-hashes -r locks/lint.txt   # pinned uv
+      - run: python tools/update_locks.py --upgrade
+      - name: Branch, build and pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet locks/; then
+            echo "Every lock is already current." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch="deps/lock-refresh-$(date -u +%Y-%m)"
+          changes=$(git diff -U0 locks/full.txt locks/intel-mac-*.txt locks/lint.txt \
+                    | grep -E '^[-+][A-Za-z0-9_.-]+==' | sed 's/ \\$//' | sort -u)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "deps: lock refresh $(date -u +%Y-%m)"
+          git push --force origin "$branch"
+          gh workflow run build.yml --ref "$branch"
+          body=$(printf '%s\n\n```diff\n%s\n```\n\n%s\n' \
+            "Monthly dependency refresh (python tools/update_locks.py --upgrade)." \
+            "$changes" \
+            "Build Releases is running on this branch: check every test and build job is green before merging. A major version (OpenCV, numpy, Pillow, PyInstaller) deserves a manual look at whatever it touches.")
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            gh pr edit "$branch" --body "$body"
+          elif ! gh pr create --base beta --head "$branch" \
+                 --title "Dependency lock refresh $(date -u +%Y-%m)" --body "$body"; then
+            url="https://github.com/${GITHUB_REPOSITORY}/compare/beta...${branch}?expand=1"
+            echo "::notice::Could not open the pull request (see the note at the top of lock-refresh.yml). Open it here: $url"
+            echo "Open the pull request: $url" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf '### Changes\n```diff\n%s\n```\n' "$changes" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,6 @@
+# Intel Mac test job: the shipped set (numpy, no audio or camera stack)
+# plus Pillow and Babel for the test suites. Compiled by tools/update_locks.py.
+svgwrite>=1.4
+numpy>=1.26
+Pillow>=10.0
+babel>=2.16

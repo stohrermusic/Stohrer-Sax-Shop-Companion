@@ -1,0 +1,5 @@
+# Intel Mac build job: exactly what that build bundles (numpy, no audio
+# or camera stack) plus PyInstaller. Compiled by tools/update_locks.py.
+svgwrite>=1.4
+numpy>=1.26
+pyinstaller>=6.0
