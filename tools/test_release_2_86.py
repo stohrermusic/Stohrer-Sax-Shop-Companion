@@ -47,6 +47,11 @@ def check(name, fn):
         results.append(False)
 
 
+def step(what):
+    """Progress line, flushed, so a CI timeout shows where it stopped."""
+    print(f"  .. {what}", flush=True)
+
+
 def rotated_rect(w, h, deg, cx=200.0, cy=150.0):
     """A w x h rectangle turned `deg` counter-clockwise about (cx, cy),
     machine Y-up, corners in order BL, BR, TR, TL before rotation."""
@@ -143,19 +148,39 @@ def main():
     check("calibration file follows SAXSHOP_CONFIG_DIR", calibration_path_isolated)
 
     print()
-    print("App")
+    print("App (built as a build that can't run audio or talk to a laser, "
+          "i.e. the Intel Mac)")
     print("=" * 60)
     import tkinter as tk
+    import main as main_mod
+
+    def support_rules():
+        assert main_mod.audio_supported("darwin", False) is False
+        assert main_mod.audio_supported("darwin", True) is True
+        # Linux/Windows keep the "install PortAudio / reinstall" panel.
+        assert main_mod.audio_supported("linux", False) is True
+        assert main_mod.audio_supported("win32", False) is True
+    check("audio hidden only on a Mac without the audio stack", support_rules)
+
     try:
         root = tk.Tk()
     except tk.TclError as e:
         print(f"Skipping the app cases: no display available ({e})")
         return 0 if all(results) else 1
     root.withdraw()
+    # ONE root and one app for every case below. A second tk.Tk() after
+    # destroying the first hangs Tk on macOS (both Mac CI jobs timed out at
+    # 900 s on the first version of this suite); none of these checks needs
+    # a normally-configured app, so the app is built as the Intel Mac build.
+    real_audio, real_machine = main_mod.audio_supported, main_mod.machine_supported
+    main_mod.audio_supported = lambda *a, **k: False
+    main_mod.machine_supported = lambda: False
     try:
-        import main as main_mod
         import ui_dialogs as ui
+        step("building the app")
         app = main_mod.PadSVGGeneratorApp(root)
+        app.settings["experimental_machine_menu"] = True  # from an older config
+        app.settings.setdefault("visible_tabs", {})["Tuner"] = True
         root.update()
 
         def auto_locate_matches_g92():
@@ -168,6 +193,7 @@ def main():
             # is at (gx, gy) relative to the outline's bbox. Same point:
             assert abs((target[0] - xmin) - gx) < 1e-6 and \
                 abs((target[1] - ymin) - gy) < 1e-6, (target, (gx, gy), (xmin, ymin))
+        step("auto locate")
         check("Frame & Cut: Auto Locate target is the vertex the G92 assumes",
               auto_locate_matches_g92)
 
@@ -197,6 +223,7 @@ def main():
                 assert h >= dlg.winfo_reqheight(), (set_sizes, dlg.winfo_reqheight())
             finally:
                 dlg.destroy()
+        step("about")
         check("About links to the latest release and fits its content", about)
 
         def crescent():
@@ -216,33 +243,9 @@ def main():
                            for t in all_text), "old first sentence still shown"
             assert any(t.startswith("The outer edge is the tonehole ID exactly")
                        for t in all_text), "kerf sentence missing"
+        step("crescent")
         check("Tonehole Crescent: no 'Mouthpiece side' caption; description "
               "is the kerf sentence", crescent)
-    finally:
-        try:
-            root.destroy()
-        except tk.TclError:
-            pass
-
-    # ---- a build that can't run audio or talk to a laser (Intel Mac) -----
-    def support_rules():
-        assert main_mod.audio_supported("darwin", False) is False
-        assert main_mod.audio_supported("darwin", True) is True
-        # Linux/Windows keep the "install PortAudio / reinstall" panel.
-        assert main_mod.audio_supported("linux", False) is True
-        assert main_mod.audio_supported("win32", False) is True
-    check("audio hidden only on a Mac without the audio stack", support_rules)
-
-    real_audio, real_machine = main_mod.audio_supported, main_mod.machine_supported
-    main_mod.audio_supported = lambda *a, **k: False
-    main_mod.machine_supported = lambda: False
-    root = tk.Tk()
-    root.withdraw()
-    try:
-        app = main_mod.PadSVGGeneratorApp(root)
-        app.settings["experimental_machine_menu"] = True  # from an older config
-        app.settings.setdefault("visible_tabs", {})["Tuner"] = True
-        root.update()
 
         def hidden(frame):
             return app.notebook.tab(frame, "state") == "hidden"
@@ -251,6 +254,7 @@ def main():
             assert hidden(app.tuner_tab_frame), "Tuner tab shown"
             assert hidden(app.toner_tab_frame), "Toner tab shown"
             assert app._machine_enabled() is False, "Machine menu enabled"
+        step("hidden tabs")
         check("unsupported build: Tuner/Toner hidden, Machine menu off "
               "even if a saved setting turns it on", tabs_hidden)
 
@@ -270,16 +274,19 @@ def main():
             assert "Key Height Library" in texts, texts  # the dialog was found
             for gone in ("Tuner", "Toner", "Machine menu (direct Falcon serial control)"):
                 assert gone not in texts, f"{gone!r} still offered: {texts}"
+        step("feature set")
         check("Feature Set doesn't offer what the build can't run", feature_set_omits)
 
+        step("tour")
         app._toner_mic_checked = True
-        log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=150,
+        log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=350,
                                         on_done=root.quit)
-        root.after(60000, root.quit)
+        root.after(120000, root.quit)   # safety net
         root.mainloop()
 
         def tour_skips():
             assert not errors, errors
+            assert log and log[0] == "pad-maker", log
             assert not {"tuner", "tuner-no-mic", "toner"} & set(log), log
             assert hidden(app.tuner_tab_frame) and hidden(app.toner_tab_frame), \
                 "the tour un-hid an audio tab"
