@@ -3007,3 +3007,19 @@ def build_feeds_speeds_matrix(speed_cfg, power_cfg, passes_cfg):
     return triples, len(speeds), len(powers), len(passes_list)
 
 
+
+
+def polygon_anchor_vertex(points):
+    """The vertex Frame & Cut treats as the material's bottom-left corner:
+    the one nearest the bounding box's bottom-left, with Y up.
+
+    The cut's G92 offset, "Try Auto Locate" and the polygon dialog's
+    machine anchor must all name the same corner, so they all call this.
+    Until v2.86 Auto Locate took the LEFTMOST vertex instead, which on a
+    tilted scrap is often the top-left one: a 250 x 150 mm scrap turned
+    2 degrees counter-clockwise sent the head 150 mm from where the frame
+    and the cut assumed it was. Ties keep the first vertex in order."""
+    xmin = min(p[0] for p in points)
+    ymin = min(p[1] for p in points)
+    return min(points,
+               key=lambda p: (p[0] - xmin) ** 2 + (p[1] - ymin) ** 2)

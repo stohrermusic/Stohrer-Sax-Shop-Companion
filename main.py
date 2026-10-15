@@ -48,6 +48,23 @@ from toner_tab import TonerTabMixin  # noqa: E402
 
 IS_MACOS = sys.platform == 'darwin'
 
+
+def reveal_in_file_manager_command(path, platform=None):
+    """The command that opens the system file manager with ``path``
+    selected (Explorer, Finder), or its folder where selecting isn't
+    available (Linux has no common 'select' flag across file managers).
+
+    Windows gets a string, not a list: explorer wants ``/select,"<path>"``
+    as one argument with the quotes inside it, which list-to-command-line
+    quoting can't produce for a path with spaces in it."""
+    platform = platform or sys.platform
+    if platform == 'win32':
+        return f'explorer /select,"{os.path.normpath(path)}"'
+    if platform == 'darwin':
+        return ['open', '-R', path]
+    return ['xdg-open', os.path.dirname(path) or '.']
+
+
 class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, TonerTabMixin):
     def __init__(self, root):
         self.root = root
@@ -1043,6 +1060,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         return camera_capture.load_calibration(
             camera_capture.default_calibration_path()) is not None
 
+    def _frame_cut_anchor(self):
+        """The G92 X/Y for Frame & Cut: the outline's anchor vertex
+        (svg_engine.polygon_anchor_vertex) in framing's Y-up frame,
+        relative to the outline's bounding box. (0, 0) without a
+        polygon. Try Auto Locate drives the head to the same vertex."""
+        from svg_engine import polygon_anchor_vertex
+        offset_source = (self.custom_polygon_outline
+                         or self.custom_polygon)
+        if not offset_source:
+            return 0.0, 0.0
+        y_max_storage = max(p[1] for p in offset_source)
+        flipped = [(x, y_max_storage - y) for (x, y) in offset_source]
+        x, y = polygon_anchor_vertex(flipped)
+        return float(x), float(y)
+
     def _adopt_camera_polygon(self, machine_polygon):
         """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
         pixel→machine homography) as the active scrap shape.
@@ -1075,8 +1107,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # Capture the LB-vertex BEFORE inset shrinks the polygon — the
         # user is going to jog to the visible bottom-left corner of
         # their material, not the inset corner.
-        self._custom_polygon_lb_machine = min(
-            machine_polygon, key=lambda p: (p[0], p[1]))
+        from svg_engine import polygon_anchor_vertex
+        self._custom_polygon_lb_machine = tuple(
+            polygon_anchor_vertex(machine_polygon))
         outline = list(machine_polygon)
         inset_polygon = outline
         try:
@@ -2463,6 +2496,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             sender.disconnect()
         except Exception:
             pass
+        logging.getLogger("ssc.machine").info(
+            "Machine > Test Connection on %s: %s", self.falcon_port,
+            status.get('raw') if status else "no status reply")
         if not status:
             messagebox.showwarning(
                 _("Connected, no response"),
@@ -2538,6 +2574,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showerror(_("Missing Dependency"),
                                   _("Reset needs pyserial: {e}").format(e=e))
             return
+        logging.getLogger("ssc.machine").info(
+            "Machine > Reset Falcon: soft-reset on %s", self.falcon_port)
         sender = falcon_sender.FalconSender(port=self.falcon_port)
         try:
             sender.connect()
@@ -3039,17 +3077,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # (see _set_custom_polygon_from_y_up), so cut placements
             # remain correctly anchored even though the G92 offset
             # comes from the outline.
-            g92_x, g92_y = 0.0, 0.0
-            offset_source = (self.custom_polygon_outline
-                              or self.custom_polygon)
-            if offset_source:
-                _y_max_storage = max(p[1] for p in offset_source)
-                _flipped = [(x, _y_max_storage - y)
-                             for (x, y) in offset_source]
-                _lb_idx = min(
-                    range(len(_flipped)),
-                    key=lambda i: _flipped[i][0] ** 2 + _flipped[i][1] ** 2)
-                g92_x, g92_y = _flipped[_lb_idx]
+            g92_x, g92_y = self._frame_cut_anchor()
 
             # Both modes share the same framing-loop recipe:
             # G92 X{lb_x} Y{lb_y} sets work coords such that the
@@ -4157,15 +4185,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         AboutDialog(self.root)
 
     def _open_log_file(self):
-        """Open the log file in the system's default text editor."""
+        """Show the log file selected in the system file manager.
+
+        Opening it in a text editor (before v2.86) showed the contents but
+        left the user with no idea where the file was, and what we need
+        from a user is the file itself, attached to an email, often with
+        last_calibration_frame.png and last_frame_cut.gcode beside it."""
         log_path = get_log_file()
         if log_path and os.path.exists(log_path):
-            if sys.platform == 'win32':
-                os.startfile(log_path)
-            elif sys.platform == 'darwin':
-                subprocess.Popen(['open', log_path])
-            else:
-                subprocess.Popen(['xdg-open', log_path])
+            try:
+                subprocess.Popen(reveal_in_file_manager_command(log_path))
+            except Exception:
+                logging.getLogger(__name__).exception(
+                    "could not show the log file in the file manager")
+                if sys.platform == 'win32':
+                    os.startfile(log_path)
         else:
             messagebox.showinfo(_("Log File"), _("No log file found.\nExpected at: {log_path}").format(log_path=log_path))
 
@@ -4540,6 +4574,11 @@ if __name__ == '__main__':
     sys.excepthook = _handle_exception
 
     root = tk.Tk()
+    try:
+        from config import log_runtime_versions
+        log_runtime_versions(root)
+    except Exception:
+        logging.getLogger(__name__).exception("could not log runtime versions")
 
     if '--selftest' in sys.argv[1:]:
         _selftest(root)

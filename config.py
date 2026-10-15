@@ -234,11 +234,24 @@ def ensure_config_dir():
 
 LOG_FILE = None  # Set by setup_logging()
 
+# The app logs WARNING and up, except these loggers, which log INFO: the
+# laser streamer, the camera module, the machine/calibration UI and the
+# startup line naming every library version. Their INFO lines are the
+# diagnostics for "the laser / camera did something odd on a machine we
+# can't see" -- and until 2026-10-15 every one of them was silently
+# dropped, because only the root level was set (a logger with no level of
+# its own inherits WARNING). A child logger's own level is what filters
+# it; the root handler then writes whatever reaches it.
+INFO_LOGGERS = ("falcon_sender", "camera_capture", "ssc.machine",
+                "ssc.startup")
+LOG_MAX_BYTES = 2_000_000
+
+
 def setup_logging():
     """Set up file logging for error diagnostics.
 
-    Log file goes in the config directory. Rotates at 500KB, keeps 1 backup.
-    Returns the log file path.
+    Log file goes in the config directory. Rotates at LOG_MAX_BYTES, keeps
+    1 backup. Returns the log file path.
     """
     global LOG_FILE
     config_dir = ensure_config_dir()
@@ -246,10 +259,13 @@ def setup_logging():
 
     logger = logging.getLogger()
     logger.setLevel(logging.WARNING)
+    for name in INFO_LOGGERS:
+        logging.getLogger(name).setLevel(logging.INFO)
 
-    # Rotating file handler: 500KB max, 1 backup
+    # Rotating file handler, 1 backup. 2 MB holds a whole camera
+    # calibration session plus a few dozen laser jobs.
     handler = logging.handlers.RotatingFileHandler(
-        LOG_FILE, maxBytes=500_000, backupCount=1, encoding='utf-8')
+        LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=1, encoding='utf-8')
     handler.setFormatter(logging.Formatter(
         '%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
     logger.addHandler(handler)
@@ -257,6 +273,66 @@ def setup_logging():
     # Log app startup at WARNING level so it always appears
     logging.warning("App starting — version %s", APP_VERSION)
     return LOG_FILE
+
+
+# (label, import name, distribution name) for log_runtime_versions.
+_VERSIONED_LIBS = (
+    ("numpy", "numpy", "numpy"),
+    ("Pillow", "PIL", "Pillow"),
+    ("OpenCV", "cv2", "opencv-python"),
+    ("sounddevice", "sounddevice", "sounddevice"),
+    ("pyserial", "serial", "pyserial"),
+    ("svgwrite", "svgwrite", "svgwrite"),
+    ("tuner_render", "tuner_render", "tuner_render"),
+)
+
+
+def runtime_versions():
+    """Python, OS and library versions this copy of the app is running.
+
+    A library already imported reports its own ``__version__`` (in a
+    frozen build that is the bundled copy, which is the point); one not
+    imported yet is read from its installed metadata WITHOUT importing it,
+    so startup doesn't pay for OpenCV. PyInstaller doesn't always bundle
+    that metadata, so a library the app hasn't loaded can show "not
+    loaded" in a frozen build -- camera_capture logs OpenCV's version
+    itself when it imports it."""
+    import platform
+    out = {
+        "python": platform.python_version(),
+        "os": platform.platform(),
+        "frozen": bool(getattr(sys, "frozen", False)),
+    }
+    try:
+        import tkinter
+        out["Tk"] = str(tkinter.TkVersion)
+    except Exception:
+        out["Tk"] = "unavailable"
+    for label, module, dist in _VERSIONED_LIBS:
+        mod = sys.modules.get(module)
+        ver = getattr(mod, "__version__", None) if mod is not None else None
+        if ver is None:
+            try:
+                from importlib.metadata import version
+                ver = version(dist)
+            except Exception:
+                ver = "not loaded" if mod is None else "unknown version"
+        out[label] = str(ver)
+    return out
+
+
+def log_runtime_versions(root=None):
+    """One INFO line in app.log naming every version (see runtime_versions).
+    Before v2.86 the only way to learn which OpenCV a release bundled was
+    its CI build log -- and those expire."""
+    v = runtime_versions()
+    if root is not None:
+        try:
+            v["Tk"] = str(root.tk.call("info", "patchlevel"))
+        except Exception:
+            pass
+    logging.getLogger("ssc.startup").info(
+        "runtime: %s", ", ".join(f"{k} {val}" for k, val in v.items()))
 
 
 def get_log_file():

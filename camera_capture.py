@@ -27,14 +27,22 @@ Camera notes (validated on Creality Falcon2 Pro 40W):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import platform
 import sys
+import time
+
+log = logging.getLogger(__name__)
 
 try:
     import cv2
     import numpy as np
     HAS_OPENCV = True
+    # The OpenCV actually running (in a frozen build, the bundled one).
+    # v2.80 shipped 5.0 where the code assumed 4.x array shapes, and
+    # finding that out took the CI logs.
+    log.info("OpenCV %s loaded", cv2.__version__)
     # Silence OpenCV's DSHOW probe warnings ("backend is generally
     # available but can't be used to capture by index N"). They fire
     # for every empty camera slot we probe in enumerate_cameras and
@@ -146,6 +154,9 @@ def enumerate_cameras(max_index=12):
         cap.release()
         if ok:
             cams.append({'index': i, 'width': w, 'height': h})
+    log.info("cameras found: %s",
+             ", ".join(f"#{c['index']} {c['width']}x{c['height']}"
+                       for c in cams) or "none")
     return cams
 
 
@@ -222,6 +233,7 @@ def find_falcon_camera_index():
     if not HAS_OPENCV:
         return None
     names = _list_camera_names()
+    log.info("camera names reported by the system: %s", names or "none")
     if not any('falcon' in n.lower() for n in names):
         return None
     cams = enumerate_cameras()
@@ -239,17 +251,63 @@ def open_camera(index, request_width=None, request_height=None):
     in well under a second. Other platforms get the default backend.
     """
     _require_opencv()
+    t0 = time.monotonic()
     if platform.system() == "Windows":
         cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
     else:
         cap = cv2.VideoCapture(index)
     if not cap.isOpened():
+        log.warning("camera #%s: could not open (%.0f ms)", index,
+                    (time.monotonic() - t0) * 1000)
         raise RuntimeError(f"Could not open camera index {index}")
     if request_width:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, request_width)
     if request_height:
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, request_height)
+    log.info("camera #%s opened in %.0f ms: %s", index,
+             (time.monotonic() - t0) * 1000, describe_capture(cap))
     return cap
+
+
+def describe_capture(cap):
+    """One-line summary of what the driver says it is delivering, for the
+    log. Every property read is best-effort: a backend that doesn't
+    implement one reports 0 or raises, and neither may stop a camera."""
+    parts = []
+    try:
+        parts.append(f"backend={cap.getBackendName()}")
+    except Exception:
+        pass
+    try:
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        parts.append(f"reported={w}x{h}")
+    except Exception:
+        pass
+    try:
+        code = int(cap.get(cv2.CAP_PROP_FOURCC))
+        fourcc = "".join(chr((code >> (8 * i)) & 0xFF) for i in range(4))
+        parts.append(f"fourcc={fourcc.strip() or code!r}")
+    except Exception:
+        pass
+    try:
+        parts.append(f"fps={cap.get(cv2.CAP_PROP_FPS):.1f}")
+    except Exception:
+        pass
+    return ", ".join(parts)
+
+
+def describe_frame(frame):
+    """Shape, type and brightness of one frame, for the log. A frame that
+    is all black (mean near 0) or blown out (near 255) is the usual first
+    clue when a camera "works" but nothing can be detected."""
+    if frame is None:
+        return "no frame"
+    h, w = frame.shape[:2]
+    ch = 1 if frame.ndim == 2 else frame.shape[2]
+    gray = frame if ch == 1 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    return (f"{w}x{h}x{ch} {frame.dtype}, gray min/mean/max "
+            f"{int(gray.min())}/{gray.mean():.0f}/{int(gray.max())}")
 
 
 def capture_frame(cap, warmup_frames=5):
@@ -408,22 +466,60 @@ def render_charuco_card_png(filename, cols=CHARUCO_COLS, rows=CHARUCO_ROWS,
 # ChArUco detection & calibration
 # =============================================================================
 
-def detect_charuco(frame, board=None):
+def detect_charuco(frame, board=None, stats=None):
     """Detect ChArUco corners/IDs in a frame.
 
     Returns ``(charuco_corners, charuco_ids)`` arrays or ``(None, None)``
     if detection failed.
+
+    The arrays' shapes depend on the OpenCV version: 4.x returns corners
+    as ``(N, 1, 2)`` and ids as ``(N, 1)``, 5.x returns ``(N, 2)`` and
+    ``(N,)``. Callers that index individual points must go through
+    ``corner_points`` (and ``np.asarray(ids).reshape(-1)`` for ids).
+
+    If ``stats`` is a dict it receives ``markers`` (ArUco markers found,
+    before corner interpolation) and ``corners`` (ChArUco corners found,
+    including a count under 4 that is reported as a failure) -- the
+    difference between "sees nothing" and "sees markers but can't place
+    the board" is the first question when detection fails on a user's
+    machine.
     """
     _require_opencv()
     if board is None:
         board = make_charuco_board()
     detector = cv2.aruco.CharucoDetector(board)
-    charuco_corners, charuco_ids, _marker_corners, _marker_ids = (
+    charuco_corners, charuco_ids, _marker_corners, marker_ids = (
         detector.detectBoard(frame)
     )
+    if stats is not None:
+        stats['markers'] = 0 if marker_ids is None else len(marker_ids)
+        stats['corners'] = (0 if charuco_corners is None
+                            else len(charuco_corners))
     if charuco_corners is None or len(charuco_corners) < 4:
         return None, None
     return charuco_corners, charuco_ids
+
+
+def calibration_size_mismatch(calibration, frame):
+    """``(calibrated_w, calibrated_h, frame_w, frame_h)`` when ``frame``
+    is not the size the calibration was made at, else None.
+
+    The camera matrix and the pixel-to-machine homography only hold at
+    the calibrated resolution. A different camera, or the same one
+    negotiating another size, would map every pixel to the wrong place
+    on the bed with nothing to say so."""
+    try:
+        cw, ch = (int(v) for v in calibration.get('image_size'))
+    except Exception:
+        return None
+    h, w = frame.shape[:2]
+    return None if (w, h) == (cw, ch) else (cw, ch, w, h)
+
+
+def corner_points(charuco_corners):
+    """ChArUco corners as a plain ``(N, 2)`` float array, whichever
+    OpenCV version produced them (see ``detect_charuco``)."""
+    return np.asarray(charuco_corners, dtype=np.float32).reshape(-1, 2)
 
 
 def _board_corner_to_machine_mm(board_xy, offset_x, offset_y,
@@ -873,8 +969,18 @@ def capture_scrap_polygon(cap, calibration, min_area_frac=SCRAP_MIN_AREA_FRAC,
 # =============================================================================
 
 def default_calibration_path():
-    """Return platform-appropriate path for the calibration file."""
-    # Mirror config.py's locations to avoid pulling that module here.
+    """Return platform-appropriate path for the calibration file.
+
+    Same folder as every other settings file, from config.get_config_dir,
+    so SAXSHOP_CONFIG_DIR redirects it too: before v2.86 tests and the
+    screenshot tours read (and could overwrite) the user's real
+    calibration. The copy of the per-platform rules below is only the
+    fallback for an environment where config can't be imported."""
+    try:
+        from config import get_config_dir
+        return os.path.join(get_config_dir(), 'camera_calibration.json')
+    except Exception:
+        pass
     if sys.platform == 'win32':
         base = os.path.join(os.environ.get('APPDATA', '.'),
                              'StohrerSaxShopCompanion')
