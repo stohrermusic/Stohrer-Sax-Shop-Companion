@@ -147,7 +147,7 @@ Descriptors are still being calibrated as we gather more data from different hor
 ### From Release (Recommended)
 Download the latest release for your platform from the [Releases](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases) page.
 
-**macOS users**: Two builds are available — **Apple Silicon** (M1/M2/M3/M4) with full features, and **Intel** with all features except the Tuner and Tone Analyzer (which require audio libraries not available on Intel Macs).
+**macOS users**: Two builds are available — **Apple Silicon** (M1/M2/M3/M4) with full features, and **Intel** with all features except the Tuner, Tone Analyzer and machine integration (the Intel build doesn't include the audio, camera and laser-control libraries, so those features don't appear there).
 
 The app is not signed with an Apple Developer certificate (they charge $100 a year for that), so macOS will block it on first launch with either an "unidentified developer" warning or a "damaged and can't be opened" error. To unblock it:
 
