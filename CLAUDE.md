@@ -348,9 +348,9 @@ the start of each session, but it only *reports* — reconciling is still a deli
 
 ## Release Notes Style
 
-Every GitHub release uses the same body template: a short single-paragraph lead describing the app, then the **full feature overview** organized tab-by-tab (Pad Maker, Tooling, Chromatic Strobe Tuner, Harmonic Tone Analyzer, Cross-platform & General), followed by **Known limitations** and **Upgrading from v1.x**. Every release is the complete picture of the app, so a user landing on any release page cold gets the full story — no "What's new since" sections or fix logs.
+**Concise, user-facing, nothing else (Matt, 2026-10-26).** A release note tells someone who uses the program what changed for them in this release: a one-line title (`# vX.YZ — what it's about`), then a handful of bullets, grouped by tab only when more than one tab is involved. Each bullet says what is new or different and, where it matters, where to find it or how to use it. No background, no history, no explanation of how it works or why the old behaviour was wrong, no engineering detail: that belongs in the commit messages and CLAUDE-engines.md. `release_notes_vX.YZ.md` in the repo root is the GitHub release body as published; v2.87 is the first in this form.
 
-Items new *in that specific release* get a plain `**(new)**` marker prefixed before the relevant bullet (or interpolated into a longer bullet that has both old and new content). Items from prior releases carry no marker. v2.1 is the canonical example — see [the v2.1 release page](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases/tag/v2.1) for the exact format. Don't mix in `(new in v2.X.Y)` cross-version tags or "Fixes & polish" sections — both got tried and rejected.
+This replaces the full-feature-overview template used from v2.1 to v2.86 (a paragraph describing the app, then every feature of every tab with `**(new)**` markers). Those notes grew with every release and spent most of their length explaining things to people who already use the program. Don't bring back the overview, the `(new in v2.X.Y)` tags, or "Fixes & polish" sections.
 
 ## CI/CD (GitHub Actions)
 
