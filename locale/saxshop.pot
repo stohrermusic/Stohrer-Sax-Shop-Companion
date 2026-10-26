@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-10-26 16:58-0400\n"
+"POT-Creation-Date: 2026-10-26 16:59-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -972,13 +972,13 @@ msgstr ""
 #: toner_tab.py:2792 tooling_tab.py:1053 tooling_tab.py:1099
 #: tooling_tab.py:1370 tooling_tab.py:2005 tooling_tab.py:2049
 #: tooling_tab.py:2074 tooling_tab.py:2108 tooling_tab.py:2265
-#: ui_dialogs.py:9688
+#: ui_dialogs.py:9740
 msgid "Done"
 msgstr ""
 
 #: main.py:1676 toner_tab.py:1645 toner_tab.py:4804 toner_tab.py:5112
 #: tooling_tab.py:1379 tuner_tab.py:1366 ui_dialogs.py:5267 ui_dialogs.py:6558
-#: ui_dialogs.py:7431 ui_dialogs.py:9154 ui_dialogs.py:9584 ui_dialogs.py:9792
+#: ui_dialogs.py:7431 ui_dialogs.py:9154 ui_dialogs.py:9636 ui_dialogs.py:9844
 msgid "Close"
 msgstr ""
 
@@ -1235,7 +1235,7 @@ msgstr ""
 msgid "Home needs pyserial: {e}"
 msgstr ""
 
-#: main.py:2556 ui_dialogs.py:7769 ui_dialogs.py:10134
+#: main.py:2556 ui_dialogs.py:7769 ui_dialogs.py:10192
 msgid "Home Laser?"
 msgstr ""
 
@@ -1430,7 +1430,7 @@ msgstr ""
 #: toner_tab.py:5386 toner_tab.py:5516 toner_tab.py:5677 ui_dialogs.py:321
 #: ui_dialogs.py:2731 ui_dialogs.py:2848 ui_dialogs.py:2880 ui_dialogs.py:3435
 #: ui_dialogs.py:3637 ui_dialogs.py:4368 ui_dialogs.py:6463 ui_dialogs.py:7574
-#: ui_dialogs.py:9246 ui_dialogs.py:9708
+#: ui_dialogs.py:9246 ui_dialogs.py:9760
 msgid "Cancel"
 msgstr ""
 
@@ -1461,7 +1461,7 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: main.py:2914 ui_dialogs.py:9811
+#: main.py:2914 ui_dialogs.py:9863
 msgid "Homing"
 msgstr ""
 
@@ -1967,7 +1967,7 @@ msgstr ""
 msgid "IN TUNE"
 msgstr ""
 
-#: toner_tab.py:365 toner_tab.py:2502 toner_tab.py:2806 ui_dialogs.py:9674
+#: toner_tab.py:365 toner_tab.py:2502 toner_tab.py:2806 ui_dialogs.py:9726
 msgid "Pause"
 msgstr ""
 
@@ -2320,7 +2320,7 @@ msgid ""
 "Calibration will cover {total} notes."
 msgstr ""
 
-#: toner_tab.py:2151 ui_dialogs.py:9689
+#: toner_tab.py:2151 ui_dialogs.py:9741
 msgid "Stop"
 msgstr ""
 
@@ -2470,7 +2470,7 @@ msgstr ""
 msgid "Resumed..."
 msgstr ""
 
-#: toner_tab.py:2813 ui_dialogs.py:9677
+#: toner_tab.py:2813 ui_dialogs.py:9729
 msgid "Resume"
 msgstr ""
 
@@ -4070,7 +4070,7 @@ msgstr ""
 msgid "Yes, Proceed"
 msgstr ""
 
-#: ui_dialogs.py:271
+#: ui_dialogs.py:271 ui_dialogs.py:10136
 msgid "No, Cancel"
 msgstr ""
 
@@ -8067,7 +8067,7 @@ msgstr ""
 msgid "Reconnect camera"
 msgstr ""
 
-#: ui_dialogs.py:7558 ui_dialogs.py:9243 ui_dialogs.py:10400
+#: ui_dialogs.py:7558 ui_dialogs.py:9243 ui_dialogs.py:10460
 msgid "Switch camera"
 msgstr ""
 
@@ -8109,7 +8109,7 @@ msgstr ""
 msgid "Position the head"
 msgstr ""
 
-#: ui_dialogs.py:7674 ui_dialogs.py:9765 ui_dialogs.py:10168
+#: ui_dialogs.py:7674 ui_dialogs.py:9817 ui_dialogs.py:10226
 msgid "Home Laser ($H)"
 msgstr ""
 
@@ -8117,7 +8117,7 @@ msgstr ""
 msgid "MPos: --"
 msgstr ""
 
-#: ui_dialogs.py:7682 ui_dialogs.py:9737
+#: ui_dialogs.py:7682 ui_dialogs.py:9789
 msgid "Step (mm):"
 msgstr ""
 
@@ -8132,7 +8132,7 @@ msgid ""
 "speed."
 msgstr ""
 
-#: ui_dialogs.py:7785 ui_dialogs.py:10141 ui_dialogs.py:10144
+#: ui_dialogs.py:7785 ui_dialogs.py:10199 ui_dialogs.py:10202
 msgid "Homing..."
 msgstr ""
 
@@ -8364,11 +8364,11 @@ msgstr ""
 msgid "Reopening camera..."
 msgstr ""
 
-#: ui_dialogs.py:8613 ui_dialogs.py:9265 ui_dialogs.py:10426
+#: ui_dialogs.py:8613 ui_dialogs.py:9265 ui_dialogs.py:10486
 msgid "Only One Camera"
 msgstr ""
 
-#: ui_dialogs.py:8614 ui_dialogs.py:9266 ui_dialogs.py:10427
+#: ui_dialogs.py:8614 ui_dialogs.py:9266 ui_dialogs.py:10487
 msgid "Only one camera is detected."
 msgstr ""
 
@@ -8576,227 +8576,231 @@ msgstr ""
 msgid "No scrap detected — place a piece on the bed."
 msgstr ""
 
-#: ui_dialogs.py:9530 ui_dialogs.py:9626
+#: ui_dialogs.py:9582 ui_dialogs.py:9678
 msgid "Sending to Falcon"
 msgstr ""
 
-#: ui_dialogs.py:9636
+#: ui_dialogs.py:9688
 #, python-brace-format
 msgid "Position the head, then click {label}."
 msgstr ""
 
-#: ui_dialogs.py:9639
+#: ui_dialogs.py:9691
 msgid "Connecting ..."
 msgstr ""
 
-#: ui_dialogs.py:9658
+#: ui_dialogs.py:9710
 #, python-brace-format
 msgid "Line 0 / {n}"
 msgstr ""
 
-#: ui_dialogs.py:9662
+#: ui_dialogs.py:9714
 msgid "Elapsed 0:00"
 msgstr ""
 
-#: ui_dialogs.py:9717
+#: ui_dialogs.py:9769
 msgid "Looks Good — Cut!"
 msgstr ""
 
-#: ui_dialogs.py:9728
+#: ui_dialogs.py:9780
 msgid "Nudge head"
 msgstr ""
 
-#: ui_dialogs.py:9775
+#: ui_dialogs.py:9827
 msgid "Try Auto Locate"
 msgstr ""
 
-#: ui_dialogs.py:9789
+#: ui_dialogs.py:9841
 msgid "Running ..."
 msgstr ""
 
-#: ui_dialogs.py:9791
+#: ui_dialogs.py:9843
 #, python-brace-format
 msgid "Failed to start: {e}"
 msgstr ""
 
-#: ui_dialogs.py:9805
+#: ui_dialogs.py:9857
 msgid "Idle"
 msgstr ""
 
-#: ui_dialogs.py:9806
+#: ui_dialogs.py:9858
 msgid "Running"
 msgstr ""
 
-#: ui_dialogs.py:9807
+#: ui_dialogs.py:9859
 msgid "Paused (feed hold)"
 msgstr ""
 
-#: ui_dialogs.py:9808
+#: ui_dialogs.py:9860
 msgid "ALARM"
 msgstr ""
 
-#: ui_dialogs.py:9809
+#: ui_dialogs.py:9861
 msgid "Safety door open"
 msgstr ""
 
-#: ui_dialogs.py:9810
+#: ui_dialogs.py:9862
 msgid "Jogging"
 msgstr ""
 
-#: ui_dialogs.py:9812
+#: ui_dialogs.py:9864
 msgid "Sleeping"
 msgstr ""
 
-#: ui_dialogs.py:9831
+#: ui_dialogs.py:9883
 #, python-brace-format
 msgid "Line {s} / {t}  ({pct:.0f}%)"
 msgstr ""
 
-#: ui_dialogs.py:9835
+#: ui_dialogs.py:9887
 #, python-brace-format
 msgid "Error: {m}"
 msgstr ""
 
-#: ui_dialogs.py:9839
+#: ui_dialogs.py:9891
 #, python-brace-format
 msgid "ALARM: {m}"
 msgstr ""
 
-#: ui_dialogs.py:9853
+#: ui_dialogs.py:9905
 #, python-brace-format
 msgid "Pass {n} complete — waiting for Idle..."
 msgstr ""
 
-#: ui_dialogs.py:9876
+#: ui_dialogs.py:9928
 msgid "Complete ✓"
 msgstr ""
 
-#: ui_dialogs.py:9878
+#: ui_dialogs.py:9930
 msgid "Stopped"
 msgstr ""
 
-#: ui_dialogs.py:9883
+#: ui_dialogs.py:9935
 msgid "unknown error"
 msgstr ""
 
-#: ui_dialogs.py:9888
+#: ui_dialogs.py:9940
 #, python-brace-format
 msgid "Stopped on error: {e}"
 msgstr ""
 
-#: ui_dialogs.py:9890
+#: ui_dialogs.py:9942
 #, python-brace-format
 msgid "  — {d}"
 msgstr ""
 
-#: ui_dialogs.py:9892
+#: ui_dialogs.py:9944
 #, python-brace-format
 msgid ""
 "\n"
 "Failing line {n}: {l}"
 msgstr ""
 
-#: ui_dialogs.py:9924
+#: ui_dialogs.py:9976
 #, python-brace-format
 msgid "Jog the head to your material's bottom-left corner, then click {label}."
 msgstr ""
 
-#: ui_dialogs.py:10000
+#: ui_dialogs.py:10052
 #, python-brace-format
 msgid "Timed out waiting for Idle (state={s})"
 msgstr ""
 
-#: ui_dialogs.py:10029
+#: ui_dialogs.py:10081
 #, python-brace-format
 msgid "Regenerate failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:10036
+#: ui_dialogs.py:10088
 #, python-brace-format
 msgid "Restart failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:10077
+#: ui_dialogs.py:10135
 msgid "Lid Closed?"
 msgstr ""
 
-#: ui_dialogs.py:10078
+#: ui_dialogs.py:10135
 msgid "Is the lid closed?"
 msgstr ""
 
-#: ui_dialogs.py:10092 ui_dialogs.py:10265
+#: ui_dialogs.py:10136
+msgid "Yes, Start Frame"
+msgstr ""
+
+#: ui_dialogs.py:10150 ui_dialogs.py:10325
 msgid "Finishing pass..."
 msgstr ""
 
-#: ui_dialogs.py:10096
+#: ui_dialogs.py:10154
 msgid "Cut requested — finishing current framing pass..."
 msgstr ""
 
-#: ui_dialogs.py:10121
+#: ui_dialogs.py:10179
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr ""
 
-#: ui_dialogs.py:10135
+#: ui_dialogs.py:10193
 msgid "Homing will abort the run in progress. Continue?"
 msgstr ""
 
-#: ui_dialogs.py:10178
+#: ui_dialogs.py:10236
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr ""
 
-#: ui_dialogs.py:10180
+#: ui_dialogs.py:10238
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr ""
 
-#: ui_dialogs.py:10207
+#: ui_dialogs.py:10265
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr ""
 
-#: ui_dialogs.py:10209
+#: ui_dialogs.py:10267
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr ""
 
-#: ui_dialogs.py:10269
+#: ui_dialogs.py:10329
 msgid "Finishing current pass + centering head..."
 msgstr ""
 
-#: ui_dialogs.py:10274
+#: ui_dialogs.py:10334
 msgid "Stop?"
 msgstr ""
 
-#: ui_dialogs.py:10275
+#: ui_dialogs.py:10335
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
 msgstr ""
 
-#: ui_dialogs.py:10301
+#: ui_dialogs.py:10361
 msgid "Stop and close?"
 msgstr ""
 
-#: ui_dialogs.py:10302
+#: ui_dialogs.py:10362
 msgid "A job is still running. Stop it and close the window?"
 msgstr ""
 
-#: ui_dialogs.py:10332 ui_dialogs.py:10342
+#: ui_dialogs.py:10392 ui_dialogs.py:10402
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr ""
 
-#: ui_dialogs.py:10339
+#: ui_dialogs.py:10399
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr ""
 
-#: ui_dialogs.py:10365
+#: ui_dialogs.py:10425
 msgid "Live camera"
 msgstr ""
 
-#: ui_dialogs.py:10385
+#: ui_dialogs.py:10445
 msgid "Camera preview unavailable"
 msgstr ""
 

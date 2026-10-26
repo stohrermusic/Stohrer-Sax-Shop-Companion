@@ -9510,6 +9510,58 @@ def _decode_grbl_error(msg):
     return None
 
 
+class LidClosedDialog(tk.Toplevel):
+    """The one question asked before the laser comes on: is the lid closed?
+
+    Two buttons with real labels, "Yes, Start Frame" and "No, Cancel",
+    because tk's askyesno can only say Yes / No and Matt wanted the
+    buttons to say what they do (2026-10-26). `result` is True only for
+    the Yes button; No, the close box and Escape all answer False.
+    """
+
+    def __init__(self, parent, title, message, yes_label, no_label):
+        super().__init__(parent)
+        self.title(title)
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.resizable(False, False)
+        self.result = False
+
+        tk.Label(self, text=message, wraplength=380, bg=DIALOG_BG,
+                 justify="left", font=("Helvetica", 11)).pack(padx=24, pady=(18, 10))
+        buttons = tk.Frame(self, bg=DIALOG_BG)
+        buttons.pack(pady=(4, 16))
+        yes_btn = tk.Button(buttons, text=yes_label, width=16, command=self._on_yes)
+        yes_btn.pack(side="left", padx=8)
+        tk.Button(buttons, text=no_label, width=16, command=self._on_no).pack(side="left", padx=8)
+
+        self.bind("<Return>", lambda e: self._on_yes())
+        self.bind("<Escape>", lambda e: self._on_no())
+        self.protocol("WM_DELETE_WINDOW", self._on_no)
+
+        # Size to content and centre over the parent dialog.
+        self.update_idletasks()
+        self.geometry("")
+        try:
+            w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+            x = parent.winfo_rootx() + (parent.winfo_width() - w) // 2
+            y = parent.winfo_rooty() + (parent.winfo_height() - h) // 2
+            self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        except tk.TclError:
+            pass
+        yes_btn.focus_set()
+        self.grab_set()
+        self.wait_window(self)
+
+    def _on_yes(self):
+        self.result = True
+        self.destroy()
+
+    def _on_no(self):
+        self.result = False
+        self.destroy()
+
+
 class FalconRunDialog(tk.Toplevel):
     """Live-progress dialog while G-code streams to the Falcon.
 
@@ -10038,13 +10090,20 @@ class FalconRunDialog(tk.Toplevel):
             self._final_reason = "error"
 
     def _remind_lid_closed(self):
-        """Plain OK-only popup shown once, before the cut.
+        """Ask "Is the lid closed?" once, before the laser comes on, and
+        return True to proceed or False to stay put.
 
-        Not a yes/no gate; there's nothing to decline, clicking the
-        (only) button is what lets the caller proceed. An open lid
-        wedges the stream because Grbl blocks motion in Door state (no
-        error returned, just an unresponsive controller), which costs a
-        laser power cycle AND an app restart to recover.
+        Two buttons, "Yes, Start Frame" and "No, Cancel" (Matt,
+        2026-10-26). From 2026-08-05 to 2026-10-26 this was a single-OK
+        reminder with nothing to decline, on the reasoning that a yes/no
+        gate just gets clicked through; in the shop the single button
+        turned out to read as "the app thinks the lid is closed" rather
+        than a question, so the answer now has two real options. No
+        keeps the jog dialog open: close the lid, click Start Frame
+        again, nothing has been consumed. An open lid wedges the stream
+        because Grbl blocks motion in Door state (no error returned,
+        just an unresponsive controller), which costs a laser power
+        cycle AND an app restart to recover.
 
         It fires once per Frame & Cut run, on **Start Frame** — the
         boundary where the laser first comes on. Framing runs at low
@@ -10073,10 +10132,9 @@ class FalconRunDialog(tk.Toplevel):
         reminder every time is simpler and honest about what the app
         knows.
         """
-        messagebox.showinfo(
-            _("Lid Closed?"),
-            _("Is the lid closed?"),
-            parent=self)
+        dlg = LidClosedDialog(self, _("Lid Closed?"), _("Is the lid closed?"),
+                              _("Yes, Start Frame"), _("No, Cancel"))
+        return bool(dlg.result)
 
     def _on_cut_clicked(self):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
@@ -10235,9 +10293,11 @@ class FalconRunDialog(tk.Toplevel):
         Callers that advance straight into a laser-firing pass set
         remind_lid_on_advance, which puts the lid reminder here — the
         framing pass energises the laser, and an open lid at that
-        moment costs a power cycle plus an app restart."""
-        if self._remind_lid_on_advance:
-            self._remind_lid_closed()
+        moment costs a power cycle plus an app restart. "No, Cancel"
+        returns without closing: the jog dialog stays up, the user shuts
+        the lid and clicks Start Frame again."""
+        if self._remind_lid_on_advance and not self._remind_lid_closed():
+            return
         self.destroy()
 
     def _on_stop_clicked(self):
