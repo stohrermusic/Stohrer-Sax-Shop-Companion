@@ -401,6 +401,8 @@ class OptionsWindow:
         # Labeled zones
         self.zone_labels_enabled_var = tk.BooleanVar(
             value=self.settings.get("zone_labels_enabled", False))
+        self.darted_out_from_valley_var = tk.BooleanVar(
+            value=self.settings.get("darted_out_from_valley", False))
         self.zone_label_min_var = tk.DoubleVar(
             value=self.settings.get("zone_label_min_size", 7.0))
         self.zone_label_max_var = tk.DoubleVar(
@@ -966,6 +968,19 @@ class OptionsWindow:
         engraving_loc_frame = tk.LabelFrame(main_frame, text=_("Engraving Placement"), bg=DIALOG_BG, padx=5, pady=5)
         engraving_loc_frame.pack(fill="x", pady=5)
 
+        # Darted leather: "out" from the dart valley rather than the cut edge.
+        valley_cb = tk.Checkbutton(
+            engraving_loc_frame,
+            text=_("Darted leather: measure \"out\" from the dart valley"),
+            variable=self.darted_out_from_valley_var, bg=DIALOG_BG)
+        valley_cb.pack(anchor="w", pady=(0, 4))
+        add_tooltip(valley_cb, _(
+            "On darted leather pads the dart valley sits inside the cut edge, "
+            "and deeper on bigger pads. With this on, the darted leather \"out\" "
+            "distance is measured inward from the valley, so one value keeps "
+            "the label just inside the darts at every size. Off: measured from "
+            "the cut edge, as before."))
+
         ep_mode_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         ep_mode_frame.pack(fill="x", pady=2)
         ep_mode_tip = (
@@ -1003,7 +1018,8 @@ class OptionsWindow:
         }
         mode_help = (
             "out = distance measured inward from the outer edge "
-            "(for darted leather: inward from the dart valley).\n"
+            "(for darted leather: from the dart valley instead, when that "
+            "box is ticked).\n"
             "int = distance measured outward from the center hole "
             "(from the center, if the pad has no hole).\n"
             "mid = halfway between the center hole (or the center, if "
@@ -1838,6 +1854,7 @@ class OptionsWindow:
             self.settings["engraving_location"][material]['value'] = vars['value'].get()
         self.settings["engraving_placement_range_mode"] = self.eng_placement_range_mode_var.get()
         self.settings["engraving_placement_ranges"] = self.eng_placement_ranges
+        self.settings["darted_out_from_valley"] = self.darted_out_from_valley_var.get()
 
         # STAR ENGRAVING SAVE
         self.settings["dart_engraving_on"] = self.dart_engraving_on_var.get()
@@ -1909,6 +1926,7 @@ class OptionsWindow:
                  
             # Revert Star Engraving
             self.dart_engraving_on_var.set(True)
+            self.darted_out_from_valley_var.set(DEFAULT_SETTINGS["darted_out_from_valley"])
 
             # Labeled zones
             self.zone_labels_enabled_var.set(DEFAULT_SETTINGS["zone_labels_enabled"])
@@ -1964,6 +1982,7 @@ class OptionsWindow:
             },
             "engraving_placement_range_mode": self.eng_placement_range_mode_var.get(),
             "engraving_placement_ranges": copy.deepcopy(self.eng_placement_ranges),
+            "darted_out_from_valley": self.darted_out_from_valley_var.get(),
             # Labeled zones
             "zone_labels_enabled": self.zone_labels_enabled_var.get(),
             "zone_label_min_size": self.zone_label_min_var.get(),
@@ -2031,6 +2050,8 @@ class OptionsWindow:
         self.eng_placement_ranges = copy.deepcopy(list(source.get("engraving_placement_ranges", [])))
         self._refresh_eng_placement_range_combo()
         self._toggle_eng_placement_mode()
+        self.darted_out_from_valley_var.set(
+            source.get("darted_out_from_valley", d["darted_out_from_valley"]))
 
         # Labeled zones
         self.zone_labels_enabled_var.set(source.get("zone_labels_enabled", d["zone_labels_enabled"]))

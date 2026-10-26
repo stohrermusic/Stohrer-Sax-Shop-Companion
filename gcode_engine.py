@@ -976,10 +976,13 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
         dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
         is_dart_pad = dart_cfg is not None
-        # The edge the "out" placement measures from: the dart valley on a
-        # darted disc, the cut edge otherwise. Mirrors svg_engine.
+        # The edge the "out" placement measures from: the cut edge, or the
+        # dart valley on a darted disc when darted_out_from_valley is on.
+        # Mirrors svg_engine.
         dart_valley_r = dart_valley_radius(pad_size, radius, sizing, dart_cfg, settings) if is_dart_pad else None
-        label_edge_r = dart_valley_r if is_dart_pad else radius
+        label_edge_r = radius
+        if is_dart_pad and settings.get("darted_out_from_valley", False):
+            label_edge_r = dart_valley_r
 
         # Engraving
         should_engrave = False

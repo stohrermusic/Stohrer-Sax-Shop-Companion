@@ -174,11 +174,12 @@ def gcode_label_center_y_h(gcode_text, hole_dia):
 # SVG label must land value mm inside the valley exactly.
 from svg_engine import dart_valley_radius, get_disc_diameter  # noqa: E402
 from config import get_sizing_for_size, get_dart_settings_for_size  # noqa: E402
-for pad in (12.0, 30.0):
+for pad, from_valley in ((12.0, True), (30.0, True), (30.0, False)):
     settings = copy.deepcopy(DEFAULT_SETTINGS)
     settings["engraving_on"] = True
     settings["dart_engraving_on"] = True
     settings["dart_threshold"] = 100.0            # every pad darted
+    settings["darted_out_from_valley"] = from_valley
     settings["engraving_location"]["darted_leather"] = {"mode": "from_outside", "value": 1.75}
     r = get_disc_diameter(pad, "leather", settings) / 2
     sizing = get_sizing_for_size(pad, settings)
@@ -201,10 +202,12 @@ for pad in (12.0, 30.0):
           if math.hypot(float(m.group(1)) - DISC_CX, float(m.group(2)) - gc_cy) < valley - 0.6
           and abs(math.hypot(float(m.group(1)) - DISC_CX, float(m.group(2)) - gc_cy) - 1.5) > 0.6]
     gc_off = (min(ys) + max(ys)) / 2 - gc_cy
-    check(f"darted {pad} mm: svg label {svg_off:.3f} from center == valley {valley:.3f} - 1.75",
-          abs(svg_off - (valley - 1.75)) < 0.05)
-    check(f"darted {pad} mm: gcode label agrees with svg (err {abs(gc_off - svg_off):.3f} mm)",
-          abs(gc_off - svg_off) < 0.3)
+    ref = valley if from_valley else r
+    check(f"darted {pad} mm, from_valley={from_valley}: svg label {svg_off:.3f} from center == "
+          f"{'valley' if from_valley else 'cut edge'} {ref:.3f} - 1.75",
+          abs(svg_off - (ref - 1.75)) < 0.05)
+    check(f"darted {pad} mm, from_valley={from_valley}: gcode label agrees with svg "
+          f"(err {abs(gc_off - svg_off):.3f} mm)", abs(gc_off - svg_off) < 0.3)
 
 HOLE_SCENARIOS = (
     # label, hole option (mm), min_hole_size, hole radius the label should use

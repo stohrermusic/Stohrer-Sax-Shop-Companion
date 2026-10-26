@@ -1746,14 +1746,15 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
         plc_cfg = get_engraving_placement_for_size(pad_size, settings)
         dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
         is_dart_pad = dart_cfg is not None
-        # The edge the "out" placement measures from: the dart valley on a
-        # darted disc, the cut edge otherwise.
+        # The edge the "out" placement measures from: the cut edge, or the
+        # dart valley on a darted disc when darted_out_from_valley is on.
         label_edge_r = r
 
         if is_dart_pad:
             # --- STAR LOGIC ---
             inner_r = dart_valley_radius(pad_size, r, sizing, dart_cfg, settings)
-            label_edge_r = inner_r
+            if settings.get("darted_out_from_valley", False):
+                label_edge_r = inner_r
             outer_r = r
 
             circumference = 2 * math.pi * inner_r

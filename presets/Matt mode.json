@@ -267,6 +267,7 @@
     "locator_marks_min_size": 7.0,
     "locator_marks_max_size": 16.0,
     "locator_marks_style": "lines",
-    "locator_marks_dashed": false
+    "locator_marks_dashed": false,
+    "darted_out_from_valley": true
   }
 }
