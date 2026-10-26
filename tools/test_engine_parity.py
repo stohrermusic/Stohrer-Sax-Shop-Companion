@@ -180,7 +180,7 @@ for pad, from_valley in ((12.0, True), (30.0, True), (30.0, False)):
     settings["dart_engraving_on"] = True
     settings["dart_threshold"] = 100.0            # every pad darted
     settings["darted_out_from_valley"] = from_valley
-    settings["engraving_location"]["darted_leather"] = {"mode": "from_outside", "value": 1.75}
+    settings["engraving_location"]["darted_leather"] = {"mode": "from_outside", "value": 3.0}
     r = get_disc_diameter(pad, "leather", settings) / 2
     sizing = get_sizing_for_size(pad, settings)
     valley = dart_valley_radius(pad, r, sizing, get_dart_settings_for_size(pad, settings), settings)
@@ -198,14 +198,16 @@ for pad, from_valley in ((12.0, True), (30.0, True), (30.0, False)):
     svg_center = float(re.search(r'<text[^>]*\sy="([0-9.]+)mm"', svg_text).group(1)) - 0.35 * font
     svg_off = DISC_CY - svg_center
     gc_cy = SHEET_H - DISC_CY
-    ys = [float(m.group(2)) for m in re.finditer(r'^G1 X([0-9.-]+)Y([0-9.-]+)', gc_text.split("\n; return to origin")[0], re.M)
-          if math.hypot(float(m.group(1)) - DISC_CX, float(m.group(2)) - gc_cy) < valley - 0.6
-          and abs(math.hypot(float(m.group(1)) - DISC_CX, float(m.group(2)) - gc_cy) - 1.5) > 0.6]
+    # The engraving block is everything between the first and second
+    # '; Cut @' lines (hole and outline cuts follow), so no geometric
+    # filtering is needed to tell label strokes from dart strokes.
+    engraving_block = gc_text.split('; Cut @')[1]
+    ys = [float(mm.group(2)) for mm in re.finditer(r'^G1 X([0-9.-]+)Y([0-9.-]+)', engraving_block, re.M)]
     gc_off = (min(ys) + max(ys)) / 2 - gc_cy
     ref = valley if from_valley else r
     check(f"darted {pad} mm, from_valley={from_valley}: svg label {svg_off:.3f} from center == "
-          f"{'valley' if from_valley else 'cut edge'} {ref:.3f} - 1.75",
-          abs(svg_off - (ref - 1.75)) < 0.05)
+          f"{'valley' if from_valley else 'cut edge'} {ref:.3f} - 3.0",
+          abs(svg_off - (ref - 3.0)) < 0.05)
     check(f"darted {pad} mm, from_valley={from_valley}: gcode label agrees with svg "
           f"(err {abs(gc_off - svg_off):.3f} mm)", abs(gc_off - svg_off) < 0.3)
 
