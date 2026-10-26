@@ -9956,8 +9956,15 @@ class FalconRunDialog(tk.Toplevel):
         """Poll Grbl's state until it's Idle (any pending jog has
         finished), then restart the stream. Sending the next iter's
         M3 while Grbl is still in JOG state would trigger error:9
-        (G-code locked out during alarm or jog)."""
-        if self._finished or self._cut_requested:
+        (G-code locked out during alarm or jog).
+
+        If Cut (or Done) was clicked during this between-pass wait,
+        the last pass already finished cleanly: still wait for Idle,
+        then end the loop instead of starting another pass. This used
+        to bail out on _cut_requested and leave nothing to end the
+        loop, so the dialog sat on "finishing current framing pass"
+        forever with the head stopped (Matt, 2026-10-26)."""
+        if self._finished:
             return
         # Guard against the dialog being destroyed while a deferred
         # call is in flight — accessing tk widgets after destroy
@@ -9973,6 +9980,9 @@ class FalconRunDialog(tk.Toplevel):
             st = None
         state = (st or {}).get('state')
         if state in ('Idle', None):
+            if self._cut_requested:
+                self._on_done("complete")
+                return
             # Settle delay before restart: gives any in-flight jog its
             # ok-byte time to land in the OS serial buffer so
             # start_stream's reset_input_buffer can flush it (without
@@ -10003,8 +10013,12 @@ class FalconRunDialog(tk.Toplevel):
         ``gcode_provider`` callback is set, calls it to get fresh
         gcode (used by the calibration dialog so the framing trace
         follows the head as the user jogs between passes). Bails
-        silently if the user has since stopped."""
-        if self._finished or self._cut_requested:
+        silently if the user has since stopped, and ends the loop if
+        Cut was clicked during the settle delay."""
+        if self._finished:
+            return
+        if self._cut_requested:
+            self._on_done("complete")
             return
         if self._gcode_provider is not None:
             try:
@@ -10121,10 +10135,7 @@ class FalconRunDialog(tk.Toplevel):
                     _("Homing will abort the run in progress. Continue?"),
                     parent=self):
                 return
-            try:
-                self._sender.stop()
-            except Exception:
-                pass
+            self._stop_stream()
         import threading
         try:
             self._home_btn.config(state="disabled", text=_("Homing..."))
@@ -10266,11 +10277,23 @@ class FalconRunDialog(tk.Toplevel):
                       "Material in progress may be ruined."),
                     parent=self):
                 return
+        self._stop_stream()
+
+    def _stop_stream(self):
+        """Stop the run. With a pass streaming, the soft-reset ends it and
+        the sender's on_done finishes the dialog. Between framing passes
+        nothing is streaming, so no on_done will ever come — finish here,
+        or Stop (and Home) do nothing at all."""
+        try:
+            streaming = self._sender.is_streaming()
+        except Exception:
+            streaming = True
         try:
             self._sender.stop()
         except Exception:
             pass
-        # Sender's on_done will set self._finished and update buttons.
+        if not streaming and not self._finished:
+            self._on_done("stopped")
 
     def _on_close_window(self):
         if not self._finished:
