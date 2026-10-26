@@ -243,6 +243,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'material': None,          # Single material locked for session
             'save_dir': '',            # Output directory
             'hole_dia': 0,             # Locked hole diameter
+            'pending': {},             # {size: qty} nested on the current scrap, not cut yet
         }
         self.scrap_remaining_window = None  # Popup showing progress
 
@@ -1354,6 +1355,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             'save_dir': '',
             'hole_dia': 0,
             'done': {},
+            'pending': {},
         }
         self._unlock_material_selection()
         self._close_remaining_pads_window()
@@ -1374,7 +1376,13 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.scrap_status_label.config(fg="green")
                 else:
                     count = self.scrap_session['scrap_count']
-                    self.scrap_status_var.set(_("{remaining} left ({count} scraps)").format(remaining=remaining, count=count))
+                    pending = self._count_pending_pads()
+                    if pending:
+                        self.scrap_status_var.set(
+                            _("{remaining} left, {pending} on this scrap ({count} scraps)").format(
+                                remaining=remaining - pending, pending=pending, count=count))
+                    else:
+                        self.scrap_status_var.set(_("{remaining} left ({count} scraps)").format(remaining=remaining, count=count))
                     self.scrap_status_label.config(fg="blue")
                 self.scrap_status_label.pack(side='left', padx=(8, 0))
             else:
@@ -1419,6 +1427,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # live (re-read every Generate); this is the only thing the
             # session has to remember about it.
             'done': {},
+            'pending': {},
         }
         self._lock_material_selection(material)
         self._open_remaining_pads_window()
@@ -1470,6 +1479,42 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if cut > 0:
                 done[p['size']] = done.get(p['size'], 0) + cut
         session['remaining_pads'] = remaining
+        session['pending'] = {}
+
+    @staticmethod
+    def _count_by_size(placed):
+        """{pad_size: count} for a list of placed (pad_size, cx, cy, r)."""
+        counts = {}
+        for pad_size, _cx, _cy, _r in placed:
+            counts[pad_size] = counts.get(pad_size, 0) + 1
+        return counts
+
+    def _count_pending_pads(self):
+        """Pads nested on the current scrap and not yet cut."""
+        return sum((self.scrap_session.get('pending') or {}).values())
+
+    def _scrap_set_pending(self, placed):
+        """Record what the current scrap's nest placed, before anything is
+        cut or written. The progress window shows it in its "On this scrap"
+        column and takes it off Remaining from this moment, so the preview
+        and the running cut no longer read as "0 done, everything remaining"
+        -- which looked exactly like pads being dropped (Matt, 2026-10-26).
+        Cleared by _scrap_record_result (commit) or _scrap_abandon_pending.
+        """
+        self.scrap_session['pending'] = self._count_by_size(placed)
+        self._update_scrap_status_display()
+        self._update_remaining_pads_window()
+
+    def _scrap_abandon_pending(self):
+        """The nested scrap never became a cut: preview backed out, jog or
+        framing dialog cancelled, cut stopped or errored, file not written.
+        Put the pads back in Remaining. No-op when nothing is pending, so
+        the file-export and Frame & Cut paths call it from a finally.
+        """
+        if self.scrap_session.get('pending'):
+            self.scrap_session['pending'] = {}
+            self._update_scrap_status_display()
+            self._update_remaining_pads_window()
 
     def _scrap_begin_partial(self, pads, hole_dia, material, mat_w, mat_h,
                              mat_polygon, ask_save_dir):
@@ -1538,6 +1583,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "Try a larger scrap piece.").format(min_pad_size=min_pad_size))
             return None
 
+        self._scrap_set_pending(placed)
         return placed, remaining
 
     def _frame_cut_scrap_advance(self, placed_count, remaining):
@@ -1574,7 +1620,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         self.scrap_remaining_window = tk.Toplevel(self.root)
         self.scrap_remaining_window.title(_("Scrap Mode Progress"))
-        self.scrap_remaining_window.geometry("320x300")
+        self.scrap_remaining_window.geometry("480x300")
         theme_bg = self._get_theme_color()
         self.scrap_remaining_window.configure(bg=theme_bg)
         self.scrap_remaining_window.resizable(True, True)
@@ -1592,7 +1638,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                                             font=("Helvetica", 10, "bold"))
         self.scrap_window_header.pack(anchor="w")
 
-        # Two-column layout for Remaining and Done
+        # Three columns: Remaining (not yet placed), On this scrap (nested,
+        # waiting for the cut), Done (cut).
         columns_frame = tk.Frame(self.scrap_remaining_window, bg=theme_bg)
         columns_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -1603,6 +1650,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                  font=("Helvetica", 9, "bold"), fg="blue").pack(anchor="w")
         self.scrap_remaining_listbox = tk.Listbox(remaining_frame, font=("Courier", 10), height=10, width=12)
         self.scrap_remaining_listbox.pack(fill="both", expand=True)
+
+        # On-this-scrap column
+        pending_frame = tk.Frame(columns_frame, bg=theme_bg)
+        pending_frame.pack(side="left", fill="both", expand=True, padx=5)
+        tk.Label(pending_frame, text=_("On this scrap"), bg=theme_bg,
+                 font=("Helvetica", 9, "bold"), fg="#B35900").pack(anchor="w")
+        self.scrap_pending_listbox = tk.Listbox(pending_frame, font=("Courier", 10), height=10, width=12)
+        self.scrap_pending_listbox.pack(fill="both", expand=True)
 
         # Done column
         done_frame = tk.Frame(columns_frame, bg=theme_bg)
@@ -1645,13 +1700,30 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             done_pads = [{'size': s, 'qty': q}
                          for s, q in self.scrap_session.get('done', {}).items() if q > 0]
 
+            # Pads nested on the current scrap but not cut yet sit in the
+            # middle column and come off Remaining; a backed-out preview
+            # or a stopped cut puts them straight back (see
+            # _scrap_set_pending / _scrap_abandon_pending).
+            pending = self.scrap_session.get('pending') or {}
+            pending_pads = [{'size': s, 'qty': q} for s, q in pending.items() if q > 0]
+            if pending:
+                remaining_pads = [{'size': p['size'], 'qty': p['qty'] - pending.get(p['size'], 0)}
+                                  for p in remaining_pads]
+                remaining_pads = [p for p in remaining_pads if p['qty'] > 0]
+
             total_remaining = sum(p['qty'] for p in remaining_pads)
+            total_pending = sum(p['qty'] for p in pending_pads)
             total_done = sum(p['qty'] for p in done_pads)
             total_original = sum(p['qty'] for p in original_pads)
 
             # Update header
-            if total_remaining == 0:
+            if total_remaining == 0 and total_pending == 0:
                 self.scrap_window_header.config(text=_("All done!"), fg="green")
+            elif total_pending:
+                self.scrap_window_header.config(
+                    text=_("{placed} on scrap #{num}, {done} / {total} cut").format(
+                        placed=total_pending, num=scraps + 1, done=total_done, total=total_original),
+                    fg="#B35900")
             else:
                 self.scrap_window_header.config(
                     text=_("{done} / {total} pads complete").format(done=total_done, total=total_original), fg="blue")
@@ -1665,6 +1737,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     self.scrap_remaining_listbox.insert(tk.END, f" {pad['qty']} x {size_str}")
             else:
                 self.scrap_remaining_listbox.insert(tk.END, _(" (none)"))
+
+            # Update On-this-scrap listbox
+            self.scrap_pending_listbox.delete(0, tk.END)
+            if pending_pads:
+                for pad in sorted(pending_pads, key=lambda p: -p['size']):
+                    size_str = f"{pad['size']:.1f}".rstrip('0').rstrip('.')
+                    self.scrap_pending_listbox.insert(tk.END, f" {pad['qty']} x {size_str}")
+            else:
+                self.scrap_pending_listbox.insert(tk.END, _(" (none)"))
 
             # Update Done listbox
             self.scrap_done_listbox.delete(0, tk.END)
@@ -2186,6 +2267,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except Exception as e:
             print(f"An error occurred during scrap mode SVG generation: {e}")
             messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
+        finally:
+            # A nest that never became a file is not "on this scrap".
+            self._scrap_abandon_pending()
 
     def _detect_falcon_async(self):
         """Probe USB serial ports for a Grbl controller; show the button if found.
@@ -3187,6 +3271,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 sleep_lock.allow_sleep()
             except Exception:
                 pass
+            # Every early return above (preview Adjust, jog or framing
+            # cancelled, stopped or errored cut, exception) lands here
+            # with the scrap still pending; a completed cut has already
+            # committed it, so this is a no-op then.
+            self._scrap_abandon_pending()
 
     def on_generate_gcode(self):
         """Generate G-code files."""
@@ -3372,6 +3461,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except Exception as e:
             print(f"An error occurred during scrap mode G-code generation: {e}")
             messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
+        finally:
+            # A nest that never became a file is not "on this scrap".
+            self._scrap_abandon_pending()
 
     def parse_pad_list(self, pad_input, rejected=None):
         """
