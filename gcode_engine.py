@@ -883,7 +883,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             Borders and labels are engraved (never cut), so the sheet stays
             in one piece and no part can drop out early.
     """
-    from svg_engine import get_felt_thickness_mm
+    from svg_engine import dart_valley_radius
     from config import (get_dart_settings_for_size, get_sizing_for_size,
                         get_engraving_settings_for_size, get_engraving_placement_for_size)
 
@@ -976,6 +976,10 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
         dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
         is_dart_pad = dart_cfg is not None
+        # The edge the "out" placement measures from: the dart valley on a
+        # darted disc, the cut edge otherwise. Mirrors svg_engine.
+        dart_valley_r = dart_valley_radius(pad_size, radius, sizing, dart_cfg, settings) if is_dart_pad else None
+        label_edge_r = dart_valley_r if is_dart_pad else radius
 
         # Engraving
         should_engrave = False
@@ -1004,7 +1008,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             # baseline, but get_text_strokes()/get_filled_text_strokes() are
             # already center-anchored.
             if mode == 'from_outside':
-                engraving_y = cy + (radius - value)
+                engraving_y = cy + (label_edge_r - value)
             elif mode == 'from_inside':
                 hole_r = disc_hole_dia / 2 if disc_hole_dia > 0 else 0
                 engraving_y = cy + (hole_r + value)
@@ -1084,15 +1088,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
         # Outer cut - circle or star pattern
         if is_dart_pad:
-            felt_thick = get_felt_thickness_mm(settings, sizing)
-            overwrap = dart_cfg.get("overwrap", 0.5)
-
-            felt_r = (pad_size - sizing.get("felt_offset", 0.75)) / 2
-            inner_r = felt_r + felt_thick + overwrap
+            inner_r = dart_valley_r
             outer_r = radius
-
-            if inner_r >= outer_r:
-                inner_r = outer_r - 0.2
 
             outer_r += kerf_offset
             inner_r += kerf_offset

@@ -1002,7 +1002,8 @@ class OptionsWindow:
             'exact_size': "Where the size label sits on exact-size discs.",
         }
         mode_help = (
-            "out = distance measured inward from the outer edge.\n"
+            "out = distance measured inward from the outer edge "
+            "(for darted leather: inward from the dart valley).\n"
             "int = distance measured outward from the center hole "
             "(from the center, if the pad has no hole).\n"
             "mid = halfway between the center hole (or the center, if "

@@ -1,0 +1,272 @@
+{
+  "Matt mode": {
+    "units": "in",
+    "felt_offset": 0.75,
+    "card_to_felt_offset": 0.75,
+    "leather_wrap_multiplier": 1.0,
+    "min_hole_size": 16.5,
+    "felt_thickness": 3.175,
+    "felt_thickness_unit": "mm",
+    "sizing_range_mode": "range",
+    "sizing_ranges": [
+      {
+        "min_size": 0.0,
+        "max_size": 11.0,
+        "felt_offset": 0.75,
+        "card_to_felt_offset": 0.0,
+        "leather_wrap_multiplier": 0.9,
+        "min_hole_size": 16.5,
+        "felt_thickness": 2.1,
+        "felt_thickness_unit": "mm"
+      },
+      {
+        "min_size": 11.1,
+        "max_size": 70.0,
+        "felt_offset": 0.75,
+        "card_to_felt_offset": 0.5,
+        "leather_wrap_multiplier": 1.0,
+        "min_hole_size": 17.0,
+        "felt_thickness": 3.175,
+        "felt_thickness_unit": "mm"
+      }
+    ],
+    "darts_enabled": true,
+    "dart_range_mode": "universal",
+    "dart_threshold": 40.0,
+    "dart_overwrap": 0.75,
+    "dart_wrap_bonus": 0.6,
+    "dart_frequency_multiplier": 1.0,
+    "dart_shape_factor": 0.5,
+    "dart_ranges": [],
+    "dart_engraving_on": true,
+    "engraving_on": true,
+    "engraving_font_size": {
+      "felt": 3.5,
+      "card": 3.5,
+      "leather": 3.0,
+      "exact_size": 3.5
+    },
+    "engraving_settings_range_mode": "range",
+    "engraving_settings_ranges": [
+      {
+        "min_size": 0.0,
+        "max_size": 12.0,
+        "engraving_on": true,
+        "engraving_font_size": {
+          "felt": 3.0,
+          "card": 2.5,
+          "leather": 2.0,
+          "exact_size": 2.5
+        }
+      },
+      {
+        "min_size": 12.1,
+        "max_size": 14.9,
+        "engraving_on": true,
+        "engraving_font_size": {
+          "felt": 3.0,
+          "card": 3.5,
+          "leather": 2.0,
+          "exact_size": 3.5
+        }
+      },
+      {
+        "min_size": 15.0,
+        "max_size": 16.9,
+        "engraving_on": true,
+        "engraving_font_size": {
+          "felt": 3.0,
+          "card": 3.5,
+          "leather": 2.5,
+          "exact_size": 3.5
+        }
+      },
+      {
+        "min_size": 17.0,
+        "max_size": 39.9,
+        "engraving_on": true,
+        "engraving_font_size": {
+          "felt": 3.5,
+          "card": 3.5,
+          "leather": 2.5,
+          "exact_size": 3.5
+        }
+      },
+      {
+        "min_size": 40.0,
+        "max_size": 80.0,
+        "engraving_on": true,
+        "engraving_font_size": {
+          "felt": 3.5,
+          "card": 3.5,
+          "leather": 3.0,
+          "exact_size": 3.5
+        }
+      }
+    ],
+    "engraving_location": {
+      "leather": {
+        "mode": "from_outside",
+        "value": 2.5
+      },
+      "darted_leather": {
+        "mode": "from_outside",
+        "value": 1.75
+      },
+      "felt": {
+        "mode": "from_inside",
+        "value": 2.75
+      },
+      "card": {
+        "mode": "centered",
+        "value": 0.0
+      },
+      "exact_size": {
+        "mode": "centered",
+        "value": 0.0
+      }
+    },
+    "engraving_placement_range_mode": "range",
+    "engraving_placement_ranges": [
+      {
+        "min_size": 0.0,
+        "max_size": 12.0,
+        "engraving_location": {
+          "leather": {
+            "mode": "from_outside",
+            "value": 2.25
+          },
+          "darted_leather": {
+            "mode": "from_outside",
+            "value": 1.5
+          },
+          "felt": {
+            "mode": "from_inside",
+            "value": 0.0
+          },
+          "card": {
+            "mode": "centered",
+            "value": 0.0
+          },
+          "exact_size": {
+            "mode": "centered",
+            "value": 0.0
+          }
+        }
+      },
+      {
+        "min_size": 12.1,
+        "max_size": 14.9,
+        "engraving_location": {
+          "leather": {
+            "mode": "from_outside",
+            "value": 2.25
+          },
+          "darted_leather": {
+            "mode": "from_outside",
+            "value": 1.5
+          },
+          "felt": {
+            "mode": "from_inside",
+            "value": 0.0
+          },
+          "card": {
+            "mode": "centered",
+            "value": 0.0
+          },
+          "exact_size": {
+            "mode": "centered",
+            "value": 0.0
+          }
+        }
+      },
+      {
+        "min_size": 15.0,
+        "max_size": 16.9,
+        "engraving_location": {
+          "leather": {
+            "mode": "from_outside",
+            "value": 2.5
+          },
+          "darted_leather": {
+            "mode": "from_outside",
+            "value": 1.75
+          },
+          "felt": {
+            "mode": "from_inside",
+            "value": 0.0
+          },
+          "card": {
+            "mode": "centered",
+            "value": 0.0
+          },
+          "exact_size": {
+            "mode": "centered",
+            "value": 0.0
+          }
+        }
+      },
+      {
+        "min_size": 17.0,
+        "max_size": 39.9,
+        "engraving_location": {
+          "leather": {
+            "mode": "from_outside",
+            "value": 2.5
+          },
+          "darted_leather": {
+            "mode": "from_outside",
+            "value": 1.75
+          },
+          "felt": {
+            "mode": "from_inside",
+            "value": 2.75
+          },
+          "card": {
+            "mode": "centered",
+            "value": 0.0
+          },
+          "exact_size": {
+            "mode": "centered",
+            "value": 0.0
+          }
+        }
+      },
+      {
+        "min_size": 40.0,
+        "max_size": 80.0,
+        "engraving_location": {
+          "leather": {
+            "mode": "from_outside",
+            "value": 2.5
+          },
+          "darted_leather": {
+            "mode": "from_outside",
+            "value": 2.0
+          },
+          "felt": {
+            "mode": "from_inside",
+            "value": 2.75
+          },
+          "card": {
+            "mode": "centered",
+            "value": 0.0
+          },
+          "exact_size": {
+            "mode": "centered",
+            "value": 0.0
+          }
+        }
+      }
+    ],
+    "zone_labels_enabled": false,
+    "zone_label_min_size": 7.0,
+    "zone_label_max_size": 12.5,
+    "compatibility_mode": false,
+    "locator_marks_enabled": false,
+    "locator_marks_min_size": 7.0,
+    "locator_marks_max_size": 16.0,
+    "locator_marks_style": "lines",
+    "locator_marks_dashed": false
+  }
+}

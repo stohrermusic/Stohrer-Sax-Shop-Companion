@@ -232,6 +232,22 @@ def locator_circle_points(radius, dashed, segments=LOCATOR_CIRCLE_SEGMENTS):
     return arcs
 
 
+def dart_valley_radius(pad_size, r, sizing, dart_cfg, settings):
+    """Radius of a darted leather disc's dart valleys: the star's inner
+    radius, before kerf. The felt disc plus the felt thickness plus the
+    overwrap, never reaching the cut edge. Both engines cut the star from
+    this, and for a darted disc the "out" label placement measures from
+    it (Matt, 2026-10-26: the label has to sit just inside the valley,
+    and the valley's depth grows with pad size, so measuring from the
+    cut edge needed a different value for every size band)."""
+    felt_thick = get_felt_thickness_mm(settings, sizing)
+    felt_r = (pad_size - sizing.get("felt_offset", 0.75)) / 2
+    inner_r = felt_r + felt_thick + dart_cfg.get("overwrap", 0.5)
+    if inner_r >= r:
+        inner_r = r - 0.2
+    return inner_r
+
+
 def should_have_center_hole(pad_size, hole_dia, settings):
     sizing = get_sizing_for_size(pad_size, settings)
     min_size = sizing.get("min_hole_size", 16.5)
@@ -1730,18 +1746,15 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
         plc_cfg = get_engraving_placement_for_size(pad_size, settings)
         dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
         is_dart_pad = dart_cfg is not None
+        # The edge the "out" placement measures from: the dart valley on a
+        # darted disc, the cut edge otherwise.
+        label_edge_r = r
 
         if is_dart_pad:
             # --- STAR LOGIC ---
-            felt_thick = get_felt_thickness_mm(settings, sizing)
-            overwrap = dart_cfg.get("overwrap", 0.5)
-
-            felt_r = (pad_size - sizing["felt_offset"]) / 2
-            inner_r = felt_r + felt_thick + overwrap
+            inner_r = dart_valley_radius(pad_size, r, sizing, dart_cfg, settings)
+            label_edge_r = inner_r
             outer_r = r
-
-            if inner_r >= outer_r:
-                inner_r = outer_r - 0.2
 
             circumference = 2 * math.pi * inner_r
             freq_mult = dart_cfg.get("frequency_multiplier", 1.0)
@@ -1802,7 +1815,7 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
 
             engraving_y = 0
             if mode == 'from_outside':
-                engraving_y = cy - (r - value)
+                engraving_y = cy - (label_edge_r - value)
             elif mode == 'from_inside':
                 hole_r = hole_dia / 2 if hole_dia > 0 else 0
                 engraving_y = cy - (hole_r + value)

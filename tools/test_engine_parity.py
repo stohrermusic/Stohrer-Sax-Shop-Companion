@@ -168,6 +168,44 @@ def gcode_label_center_y_h(gcode_text, hole_dia):
     return (min(ys) + max(ys)) / 2
 
 
+# Darted leather: "out" measures from the dart valley (the star's inner
+# radius), not the cut edge, so one value sits the label just inside the
+# valley at every size (Matt, 2026-10-26). Both engines must agree, and the
+# SVG label must land value mm inside the valley exactly.
+from svg_engine import dart_valley_radius, get_disc_diameter  # noqa: E402
+from config import get_sizing_for_size, get_dart_settings_for_size  # noqa: E402
+for pad in (12.0, 30.0):
+    settings = copy.deepcopy(DEFAULT_SETTINGS)
+    settings["engraving_on"] = True
+    settings["dart_engraving_on"] = True
+    settings["dart_threshold"] = 100.0            # every pad darted
+    settings["engraving_location"]["darted_leather"] = {"mode": "from_outside", "value": 1.75}
+    r = get_disc_diameter(pad, "leather", settings) / 2
+    sizing = get_sizing_for_size(pad, settings)
+    valley = dart_valley_radius(pad, r, sizing, get_dart_settings_for_size(pad, settings), settings)
+    placed = [(pad, DISC_CX, DISC_CY, r)]
+    with tempfile.TemporaryDirectory() as td:
+        svg_path = os.path.join(td, "dart.svg")
+        gc_path = os.path.join(td, "dart.gcode")
+        generate_svg_from_placed(placed, "leather", SHEET_W, SHEET_H, svg_path, 3.0, settings)
+        generate_gcode_from_placed(placed, "leather", SHEET_W, SHEET_H, gc_path, 3.0, settings)
+        with open(svg_path) as f:
+            svg_text = f.read()
+        with open(gc_path) as f:
+            gc_text = f.read()
+    font = float(re.search(r'font-size="([0-9.]+)mm"', svg_text).group(1))
+    svg_center = float(re.search(r'<text[^>]*\sy="([0-9.]+)mm"', svg_text).group(1)) - 0.35 * font
+    svg_off = DISC_CY - svg_center
+    gc_cy = SHEET_H - DISC_CY
+    ys = [float(m.group(2)) for m in re.finditer(r'^G1 X([0-9.-]+)Y([0-9.-]+)', gc_text.split("\n; return to origin")[0], re.M)
+          if math.hypot(float(m.group(1)) - DISC_CX, float(m.group(2)) - gc_cy) < valley - 0.6
+          and abs(math.hypot(float(m.group(1)) - DISC_CX, float(m.group(2)) - gc_cy) - 1.5) > 0.6]
+    gc_off = (min(ys) + max(ys)) / 2 - gc_cy
+    check(f"darted {pad} mm: svg label {svg_off:.3f} from center == valley {valley:.3f} - 1.75",
+          abs(svg_off - (valley - 1.75)) < 0.05)
+    check(f"darted {pad} mm: gcode label agrees with svg (err {abs(gc_off - svg_off):.3f} mm)",
+          abs(gc_off - svg_off) < 0.3)
+
 HOLE_SCENARIOS = (
     # label, hole option (mm), min_hole_size, hole radius the label should use
     ("hole 6.0, pad 40 gets it", 6.0, 16.5, 3.0),

@@ -32,7 +32,7 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Pad size labels on each disc, with per-material font size and position
 - Line mode (single-stroke) or filled mode (scan-line raster fill with overscan)
 - Auto-fit — shifts text toward center on small pads, scales only as last resort
-- **Sizing Rules Presets** — save the entire Sizing Rules dialog as a named preset, load presets from a dropdown, import/export to share with other techs
+- **Sizing Rules Presets** — save the entire Sizing Rules dialog as a named preset, load presets from a dropdown, import/export to share with other techs. Matt's own rules are in [`presets/Matt mode.json`](presets/Matt%20mode.json): Options > Sizing Rules > Import
 
 #### G-code Options
 - Air assist toggles (M8/M9) per layer
