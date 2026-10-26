@@ -1003,8 +1003,11 @@ class OptionsWindow:
         }
         mode_help = (
             "out = distance measured inward from the outer edge.\n"
-            "in = distance measured outward from the center hole.\n"
-            "ctr = centered between the two."
+            "int = distance measured outward from the center hole "
+            "(from the center, if the pad has no hole).\n"
+            "mid = halfway between the center hole (or the center, if "
+            "the pad has no hole) and the outer edge. The mm value is "
+            "not used."
         )
         self.eng_placement_universal_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         for mat in placement_materials:
@@ -1023,7 +1026,7 @@ class OptionsWindow:
             # inches unit "in" used in tooling/felt-thickness pickers.
             rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
-            rb_ctr = tk.Radiobutton(frame, text=_("ctr"), variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
             rb_ctr.pack(side="left")
             val_ent = tk.Entry(frame, textvariable=val_var, width=5)
             val_ent.pack(side="left", padx=5)
@@ -1033,7 +1036,7 @@ class OptionsWindow:
             add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
             add_tooltips(
                 _("Distance in millimeters from the chosen reference "
-                "(outside, inside, or centered)."),
+                "(out or int; mid does not use it)."),
                 val_ent, mm_lbl,
             )
 
@@ -1077,7 +1080,7 @@ class OptionsWindow:
             rb_out.pack(side="left")
             rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
-            rb_ctr = tk.Radiobutton(frame, text=_("ctr"), variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
             rb_ctr.pack(side="left")
             val_ent = tk.Entry(frame, textvariable=val_var, width=5)
             val_ent.pack(side="left", padx=5)
@@ -1086,7 +1089,8 @@ class OptionsWindow:
             add_tooltip(row_lbl, placement_help[mat] + " (this size range)")
             add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
             add_tooltips(
-                _("Distance from the chosen reference, in millimeters."),
+                _("Distance from the chosen reference, in millimeters "
+                "(out or int; mid does not use it)."),
                 val_ent, mm_lbl,
             )
 

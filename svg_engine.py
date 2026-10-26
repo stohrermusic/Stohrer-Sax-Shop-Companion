@@ -1806,8 +1806,11 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
             elif mode == 'from_inside':
                 hole_r = hole_dia / 2 if hole_dia > 0 else 0
                 engraving_y = cy - (hole_r + value)
-            else:  # centered
-                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+            else:  # centered ("mid"): halfway between the hole edge and the cut edge
+                # hole_dia is this disc's hole (0 when the pad gets none),
+                # so a no-hole pad measures from its centre. Until
+                # 2026-10-26 it measured from a phantom 1.75 mm hole radius.
+                hole_r = hole_dia / 2 if hole_dia > 0 else 0
                 offset_from_center = (r + hole_r) / 2
                 engraving_y = cy - offset_from_center
 

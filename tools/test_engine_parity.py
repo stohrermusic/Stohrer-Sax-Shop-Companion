@@ -142,6 +142,67 @@ for mode, value in (("from_outside", 2.5), ("from_inside", 4.0), ("centered", 0)
     gc_side = gc_center - (SHEET_H - DISC_CY)  # positive = above center (Y-up)
     check(f"{mode}: label on same physical side of disc center",
           (svg_side < 0) == (gc_side > 0))
+# ============================================================
+print("\n=== 'mid' / 'int' placement with and without a hole (both engines) ===")
+# ============================================================
+# Matt (2026-10-26): "mid" (settings mode "centered") puts the label halfway
+# between the center hole's edge and the cut edge, or halfway between the
+# CENTER and the cut edge when the pad gets no hole. Until then a no-hole
+# pad used a phantom 1.75 mm hole radius, and the G-code engine placed
+# "int"/"mid" labels from the PRESET hole size even on pads too small for
+# a hole, so the two outputs disagreed there. Both engines now resolve the
+# disc's hole the same way: preset size only when pad >= min_hole_size.
+
+
+def gcode_label_center_y_h(gcode_text, hole_dia):
+    """gcode_label_center_y for a given hole size (0 = no hole circle)."""
+    gc_cy = SHEET_H - DISC_CY
+    body = gcode_text.split("\n; return to origin")[0]
+    ys = []
+    for m in re.finditer(r'^G1 X([0-9.-]+)Y([0-9.-]+)', body, re.M):
+        x, y = float(m.group(1)), float(m.group(2))
+        dist = math.hypot(x - DISC_CX, y - gc_cy)
+        if abs(dist - DISC_R) > 0.6 and (hole_dia <= 0 or abs(dist - hole_dia / 2) > 0.6):
+            ys.append(y)
+    assert ys, "no engraving stroke points found in gcode"
+    return (min(ys) + max(ys)) / 2
+
+
+HOLE_SCENARIOS = (
+    # label, hole option (mm), min_hole_size, hole radius the label should use
+    ("hole 6.0, pad 40 gets it", 6.0, 16.5, 3.0),
+    ("hole option None", 0.0, 16.5, 0.0),
+    ("hole 6.0 but pad below min_hole_size", 6.0, 50.0, 0.0),
+)
+for label, hole_dia, min_hole, exp_hole_r in HOLE_SCENARIOS:
+    for mode, value, expected_offset in (
+            ("centered", 0, (DISC_R + exp_hole_r) / 2),
+            ("from_inside", 4.0, exp_hole_r + 4.0)):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings["engraving_on"] = True
+        settings["min_hole_size"] = min_hole
+        settings["engraving_location"]["felt"] = {"mode": mode, "value": value}
+        placed = [(PAD_SIZE, DISC_CX, DISC_CY, DISC_R)]
+        with tempfile.TemporaryDirectory() as td:
+            svg_path = os.path.join(td, "mid.svg")
+            gc_path = os.path.join(td, "mid.gcode")
+            generate_svg_from_placed(placed, "felt", SHEET_W, SHEET_H,
+                                     svg_path, hole_dia, settings)
+            generate_gcode_from_placed(placed, "felt", SHEET_W, SHEET_H,
+                                       gc_path, hole_dia, settings)
+            with open(svg_path) as f:
+                svg_center = svg_label_center_y(f.read())
+            with open(gc_path) as f:
+                # Only a hole that is actually cut leaves a circle to filter out.
+                cut_hole = hole_dia if PAD_SIZE >= min_hole else 0
+                gc_center = gcode_label_center_y_h(f.read(), cut_hole)
+        svg_off = DISC_CY - svg_center             # above center, Y-down
+        gc_off = gc_center - (SHEET_H - DISC_CY)   # above center, Y-up
+        check(f"{mode}, {label}: svg label {svg_off:.3f} mm from center, "
+              f"expected {expected_offset:.3f}", abs(svg_off - expected_offset) < 0.05)
+        check(f"{mode}, {label}: gcode label agrees with svg "
+              f"(err {abs(gc_off - svg_off):.3f} mm)", abs(gc_off - svg_off) < 0.3)
+
 
 
 # ============================================================

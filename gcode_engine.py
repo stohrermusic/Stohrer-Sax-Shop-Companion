@@ -966,6 +966,14 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         plc_cfg = get_engraving_placement_for_size(pad_size, settings)
         font_size = eng_cfg.get("engraving_font_size", {}).get(material, 2.0)  # 2.0 matches svg_engine fallback
 
+        # This disc's hole: the preset size when the pad is large enough
+        # for one, else none. The SVG engine resolves it the same way
+        # (should_have_center_hole) before placing the label; until
+        # 2026-10-26 the label placement here used the preset size even
+        # for pads that get no hole, so "int" and "mid" labels on small
+        # pads sat in different places in the two outputs.
+        disc_hole_dia = hole_dia if (hole_dia > 0 and pad_size >= sizing.get("min_hole_size", 16.5)) else 0
+
         dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
         is_dart_pad = dart_cfg is not None
 
@@ -998,10 +1006,10 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             if mode == 'from_outside':
                 engraving_y = cy + (radius - value)
             elif mode == 'from_inside':
-                hole_r = hole_dia / 2 if hole_dia > 0 else 0
+                hole_r = disc_hole_dia / 2 if disc_hole_dia > 0 else 0
                 engraving_y = cy + (hole_r + value)
-            else:  # centered
-                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+            else:  # centered ("mid"): halfway between the hole edge and the cut edge
+                hole_r = disc_hole_dia / 2 if disc_hole_dia > 0 else 0
                 offset_from_center = (radius + hole_r) / 2
                 engraving_y = cy + offset_from_center
 
@@ -1056,8 +1064,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             disc_eng.extend(text_strokes)
 
         # Center hole
-        if hole_dia > 0 and pad_size >= sizing.get("min_hole_size", 16.5):
-            hole_radius = (hole_dia / 2) - kerf_offset
+        if disc_hole_dia > 0:
+            hole_radius = (disc_hole_dia / 2) - kerf_offset
             if hole_radius > 0:
                 hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
                 disc_hole.append(hole_points)
