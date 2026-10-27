@@ -50,10 +50,26 @@ def _wave_value(raw_cos, shape_factor):
     return (1.0 - t) * sine + t * square
 
 
-def calculate_star_path(cx, cy, outer_r, inner_r, num_points=12, shape_factor=0.5):
+# Darted pads are cut with a dart tip at 12 o'clock, over the size label,
+# so the label always has a tip's room above it rather than a notch (Matt,
+# 2026-10-26; before this, whether a tip or a notch sat there depended on
+# the pad size). The angle is in Y-down coordinates (SVG, the preview
+# canvas); the G-code engine works Y-up and uses its negation.
+DART_TIP_ANGLE = -math.pi / 2
+
+
+def dart_wave_raw(num_points, theta, tip_angle=0.0):
+    """Raw cosine of the dart wave at angle theta, peaking (a dart tip) at
+    tip_angle. The SVG path, the G-code cut and the pad preview all walk
+    the outline with this, so they turn the darts the same way."""
+    return math.cos(num_points * (theta - tip_angle))
+
+
+def calculate_star_path(cx, cy, outer_r, inner_r, num_points=12, shape_factor=0.5, tip_angle=0.0):
     """
     Generates an SVG path string for a darted (geared) leather pad shape.
     shape_factor spans 0.0 (Triangle) → 0.5 (Sine) → 1.0 (Square).
+    A dart tip points at tip_angle (DART_TIP_ANGLE puts it over the label).
     """
     path_data = []
 
@@ -68,7 +84,7 @@ def calculate_star_path(cx, cy, outer_r, inner_r, num_points=12, shape_factor=0.
 
     for i in range(steps + 1):
         theta = i * angle_step
-        raw_wave = math.cos(num_points * theta)
+        raw_wave = dart_wave_raw(num_points, theta, tip_angle)
         shaped_wave = _wave_value(raw_wave, shape_factor)
         r = avg_r + amplitude * shaped_wave
 
@@ -236,10 +252,11 @@ def dart_valley_radius(pad_size, r, sizing, dart_cfg, settings):
     """Radius of a darted leather disc's dart valleys: the star's inner
     radius, before kerf. The felt disc plus the felt thickness plus the
     overwrap, never reaching the cut edge. Both engines cut the star from
-    this, and for a darted disc the "out" label placement measures from
-    it (Matt, 2026-10-26: the label has to sit just inside the valley,
-    and the valley's depth grows with pad size, so measuring from the
-    cut edge needed a different value for every size band)."""
+    this, and with darted_out_from_valley on the "out" label placement
+    measures from it to the top of the number (Matt, 2026-10-26: the
+    label has to sit just inside the valley, and the valley's depth grows
+    with pad size, so measuring from the cut edge needed a different
+    value for every size band)."""
     felt_thick = get_felt_thickness_mm(settings, sizing)
     felt_r = (pad_size - sizing.get("felt_offset", 0.75)) / 2
     inner_r = felt_r + felt_thick + dart_cfg.get("overwrap", 0.5)
@@ -1749,12 +1766,14 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
         # The edge the "out" placement measures from: the cut edge, or the
         # dart valley on a darted disc when darted_out_from_valley is on.
         label_edge_r = r
+        from_valley = False
 
         if is_dart_pad:
             # --- STAR LOGIC ---
             inner_r = dart_valley_radius(pad_size, r, sizing, dart_cfg, settings)
             if settings.get("darted_out_from_valley", False):
                 label_edge_r = inner_r
+                from_valley = True
             outer_r = r
 
             circumference = 2 * math.pi * inner_r
@@ -1766,7 +1785,8 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                 num_points += 1
 
             shape_factor = dart_cfg.get("shape_factor", 0.5)
-            path_d = calculate_star_path(cx, cy, outer_r, inner_r, num_points=num_points, shape_factor=shape_factor)
+            path_d = calculate_star_path(cx, cy, outer_r, inner_r, num_points=num_points,
+                                         shape_factor=shape_factor, tip_angle=DART_TIP_ANGLE)
 
             dwg.add(dwg.path(d=path_d, stroke=layer_colors[f'{material}_outline'], fill='none', stroke_width=stroke_w))
         else:
@@ -1816,7 +1836,14 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
 
             engraving_y = 0
             if mode == 'from_outside':
-                engraving_y = cy - (label_edge_r - value)
+                # From the dart valley the value is the gap between the
+                # valley and the near (top) edge of the number, so 0 means
+                # touching the valley rather than half into the darts
+                # (Matt, 2026-10-26). From the cut edge it stays the
+                # distance to the middle of the number, as saved presets
+                # expect.
+                to_near_edge = font_size / 2 if from_valley else 0
+                engraving_y = cy - (label_edge_r - value - to_near_edge)
             elif mode == 'from_inside':
                 hole_r = hole_dia / 2 if hole_dia > 0 else 0
                 engraving_y = cy - (hole_r + value)

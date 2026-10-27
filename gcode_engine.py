@@ -7,7 +7,7 @@ Includes a single-stroke digit font for engraving pad sizes.
 
 import math
 
-from svg_engine import (_wave_value, feeds_speeds_label_geometry,
+from svg_engine import (_wave_value, dart_wave_raw, DART_TIP_ANGLE, feeds_speeds_label_geometry,
                         locator_mark_geometry, locator_circle_points)
 
 # =============================================================================
@@ -659,7 +659,7 @@ def linearize_circle(cx, cy, radius, segments=72):
 # G-CODE GENERATION
 # =============================================================================
 
-def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5):
+def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5, tip_angle=0.0):
     """
     Generate star/dart pattern points for G-code.
 
@@ -673,6 +673,8 @@ def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5
         inner_r: Inner (valley) radius
         num_points: Number of points (tips) on the star
         shape_factor: 0.0 = Triangle, 0.5 = Sine, 1.0 = Square
+        tip_angle: Angle a dart tip points at (Y-up here, so the label
+            side is -svg_engine.DART_TIP_ANGLE)
 
     Returns:
         List of (x, y) points forming a closed star shape
@@ -691,7 +693,7 @@ def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5
     for i in range(steps + 1):
         theta = i * angle_step
 
-        raw_wave = math.cos(num_points * theta)
+        raw_wave = dart_wave_raw(num_points, theta, tip_angle)
         shaped_wave = _wave_value(raw_wave, shape_factor)
 
         r = avg_r + amplitude * shaped_wave
@@ -981,7 +983,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         # Mirrors svg_engine.
         dart_valley_r = dart_valley_radius(pad_size, radius, sizing, dart_cfg, settings) if is_dart_pad else None
         label_edge_r = radius
-        if is_dart_pad and settings.get("darted_out_from_valley", False):
+        from_valley = is_dart_pad and settings.get("darted_out_from_valley", False)
+        if from_valley:
             label_edge_r = dart_valley_r
 
         # Engraving
@@ -1011,7 +1014,10 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             # baseline, but get_text_strokes()/get_filled_text_strokes() are
             # already center-anchored.
             if mode == 'from_outside':
-                engraving_y = cy + (label_edge_r - value)
+                # From the dart valley: the gap to the top of the number,
+                # not its middle. Mirrors svg_engine.
+                to_near_edge = font_size / 2 if from_valley else 0
+                engraving_y = cy + (label_edge_r - value - to_near_edge)
             elif mode == 'from_inside':
                 hole_r = disc_hole_dia / 2 if disc_hole_dia > 0 else 0
                 engraving_y = cy + (hole_r + value)
@@ -1106,7 +1112,9 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
                 num_points += 1
 
             shape_factor = dart_cfg.get("shape_factor", 0.5)
-            star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
+            # `placed` is Y-flipped, so the label side is +90° here.
+            star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor,
+                                                tip_angle=-DART_TIP_ANGLE)
             disc_cut.append(star_points)
         else:
             cut_radius = radius + kerf_offset

@@ -21,6 +21,7 @@ from config import (
 from svg_engine import (
     placed_disc_area,
     get_disc_diameter, get_felt_thickness_mm, _wave_value,
+    dart_wave_raw, DART_TIP_ANGLE,
     feeds_speeds_label_geometry,
     locator_mark_geometry, locator_circle_points,
     polygon_anchor_vertex,
@@ -977,9 +978,10 @@ class OptionsWindow:
         add_tooltip(valley_cb, _(
             "On darted leather pads the dart valley sits inside the cut edge, "
             "and deeper on bigger pads. With this on, the darted leather \"out\" "
-            "distance is measured inward from the valley, so one value keeps "
-            "the label just inside the darts at every size. Off: measured from "
-            "the cut edge, as before."))
+            "value is the gap between the valley and the top of the number "
+            "(0 = touching), so one value keeps the label just inside the "
+            "darts at every size. Off: measured from the cut edge to the "
+            "middle of the number, as before."))
 
         ep_mode_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         ep_mode_frame.pack(fill="x", pady=2)
@@ -1018,8 +1020,8 @@ class OptionsWindow:
         }
         mode_help = (
             "out = distance measured inward from the outer edge "
-            "(for darted leather: from the dart valley instead, when that "
-            "box is ticked).\n"
+            "(for darted leather with that box ticked: the gap between the "
+            "dart valley and the top of the number).\n"
             "int = distance measured outward from the center hole "
             "(from the center, if the pad has no hole).\n"
             "mid = halfway between the center hole (or the center, if "
@@ -2607,7 +2609,8 @@ class PadPreviewWindow(tk.Toplevel):
         coords = []
         for i in range(steps + 1):
             theta = 2 * math.pi * i / steps
-            raw = math.cos(num_points * theta)
+            # Canvas is Y-down like the SVG: a tip at 12 o'clock.
+            raw = dart_wave_raw(num_points, theta, DART_TIP_ANGLE)
             shaped = _wave_value(raw, shape_factor)
             r = avg_r_px + amp_px * shaped
             x = cx + r * math.cos(theta)

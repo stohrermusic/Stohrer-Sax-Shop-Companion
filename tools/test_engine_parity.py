@@ -170,8 +170,10 @@ def gcode_label_center_y_h(gcode_text, hole_dia):
 
 # Darted leather: "out" measures from the dart valley (the star's inner
 # radius), not the cut edge, so one value sits the label just inside the
-# valley at every size (Matt, 2026-10-26). Both engines must agree, and the
-# SVG label must land value mm inside the valley exactly.
+# valley at every size (Matt, 2026-10-26). From the valley the value is the
+# gap to the TOP of the number (its middle sits value + font/2 inside), so
+# 0 means touching rather than half into the darts; from the cut edge it is
+# still the distance to the middle. Both engines must agree.
 from svg_engine import dart_valley_radius, get_disc_diameter  # noqa: E402
 from config import get_sizing_for_size, get_dart_settings_for_size  # noqa: E402
 for pad, from_valley in ((12.0, True), (30.0, True), (30.0, False)):
@@ -205,11 +207,74 @@ for pad, from_valley in ((12.0, True), (30.0, True), (30.0, False)):
     ys = [float(mm.group(2)) for mm in re.finditer(r'^G1 X([0-9.-]+)Y([0-9.-]+)', engraving_block, re.M)]
     gc_off = (min(ys) + max(ys)) / 2 - gc_cy
     ref = valley if from_valley else r
+    expected = ref - 3.0 - (font / 2 if from_valley else 0)
     check(f"darted {pad} mm, from_valley={from_valley}: svg label {svg_off:.3f} from center == "
-          f"{'valley' if from_valley else 'cut edge'} {ref:.3f} - 3.0",
-          abs(svg_off - (ref - 3.0)) < 0.05)
+          f"{expected:.3f} ({'valley' if from_valley else 'cut edge'} {ref:.3f} - 3.0"
+          f"{' - font/2' if from_valley else ''})",
+          abs(svg_off - expected) < 0.05)
+    if from_valley:
+        # The burned digits' top edge: value from the valley, less the stroke
+        # font's own margin inside its box (0.05 x font), never more.
+        top = max(ys) - gc_cy
+        check(f"darted {pad} mm: gcode digits' top is 3.0 mm inside the valley "
+              f"(gap {valley - top:.3f})", 3.0 <= valley - top <= 3.0 + 0.1 * font)
     check(f"darted {pad} mm, from_valley={from_valley}: gcode label agrees with svg "
           f"(err {abs(gc_off - svg_off):.3f} mm)", abs(gc_off - svg_off) < 0.3)
+
+# ============================================================
+print("\n=== Dart tip over the label (both engines) ===")
+# ============================================================
+# Matt (2026-10-26): a dart tip always sits at 12 o'clock, over the size
+# label, so the number gets a tip's room rather than a notch. Before this
+# the darts started at 3 o'clock, which put a notch over the label on every
+# size whose dart count is 2 mod 4 (10 and 12 under his preset).
+from svg_engine import DART_TIP_ANGLE  # noqa: E402
+
+# Engine helpers: the G-code star (Y-up, tip at -DART_TIP_ANGLE) is the
+# mirror image of the SVG star (Y-down, tip at DART_TIP_ANGLE), any count.
+for n in (12, 13, 14):
+    svg_pts = parse_star_path(calculate_star_path(CX, CY, OUTER_R, INNER_R, num_points=n,
+                                                  shape_factor=0.5, tip_angle=DART_TIP_ANGLE))
+    gc_pts = _generate_star_points(CX, CY, OUTER_R, INNER_R, n, 0.5, tip_angle=-DART_TIP_ANGLE)
+    mirrored = [(x, 2 * CY - y) for x, y in reversed(gc_pts)]
+    dev = max(math.hypot(sx - gx, sy - gy) for (sx, sy), (gx, gy) in zip(svg_pts, mirrored))
+    check(f"{n} darts: gcode star is the svg star mirrored (dev {dev:.4f})", dev < 0.002)
+
+
+def tip_over_center(points, cx, cy, up):
+    """Distance from the centre of the outline point straight above it."""
+    above = [(x, y) for x, y in points if abs(x - cx) < 1e-3 and ((y > cy) if up else (y < cy))]
+    assert above, "no outline point straight above the centre"
+    return max(math.hypot(x - cx, y - cy) for x, y in above)
+
+
+settings = copy.deepcopy(DEFAULT_SETTINGS)
+settings["dart_threshold"] = 100.0
+for mat_cfg in settings["gcode_settings"].values():
+    mat_cfg["kerf_width"] = 0.0
+counts_seen = set()
+for pad in (7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 20.0, 25.0, 30.0, 39.5):
+    r = get_disc_diameter(pad, "leather", settings) / 2
+    cx, cy = SHEET_W / 2, SHEET_H / 2
+    with tempfile.TemporaryDirectory() as td:
+        svg_path = os.path.join(td, "tip.svg")
+        gc_path = os.path.join(td, "tip.gcode")
+        generate_svg_from_placed([(pad, cx, cy, r)], "leather", SHEET_W, SHEET_H, svg_path, 0, settings)
+        generate_gcode_from_placed([(pad, cx, cy, r)], "leather", SHEET_W, SHEET_H, gc_path, 0, settings)
+        svg_text = open(svg_path).read()
+        gc_text = open(gc_path).read()
+    svg_star = parse_star_path(re.search(r'<path[^>]*\sd="([^"]+)"', svg_text).group(1))
+    counts_seen.add(((len(svg_star) - 1) // 8) % 4)
+    svg_top = tip_over_center(svg_star, cx, cy, up=False)
+    cut_block = gc_text.split('; Cut @')[-1].split("\n; return to origin")[0]
+    gc_star = [(float(m.group(1)), float(m.group(2)))
+               for m in re.finditer(r'^G[01] X([0-9.-]+) ?Y([0-9.-]+)', cut_block, re.M)]
+    gc_top = tip_over_center(gc_star, cx, SHEET_H - cy, up=True)
+    check(f"darted {pad} mm: a dart tip over the label in svg ({svg_top:.3f}) and "
+          f"gcode ({gc_top:.3f}), cut radius {r:.3f}",
+          abs(svg_top - r) < 0.01 and abs(gc_top - r) < 0.01)
+check(f"the sizes above include dart counts both 0 and 2 mod 4 (saw {sorted(counts_seen)})",
+      counts_seen == {0, 2})
 
 HOLE_SCENARIOS = (
     # label, hole option (mm), min_hole_size, hole radius the label should use
