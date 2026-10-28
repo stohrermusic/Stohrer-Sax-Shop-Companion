@@ -1022,11 +1022,11 @@ class OptionsWindow:
             "out = distance measured inward from the outer edge "
             "(for darted leather with that box ticked: the gap between the "
             "dart valley and the top of the number).\n"
-            "int = distance measured outward from the center hole "
-            "(from the center, if the pad has no hole).\n"
             "mid = halfway between the center hole (or the center, if "
             "the pad has no hole) and the outer edge. The mm value is "
-            "not used."
+            "not used.\n"
+            "int = distance measured outward from the center hole "
+            "(from the center, if the pad has no hole)."
         )
         self.eng_placement_universal_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         for mat in placement_materials:
@@ -1039,14 +1039,15 @@ class OptionsWindow:
             mode_var = tk.StringVar(value=loc['mode'])
             val_var = tk.DoubleVar(value=loc['value'])
             self.engraving_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
+            # Order out / mid / int: outer edge to centre (Matt, 2026-10-28).
             rb_out = tk.Radiobutton(frame, text=_("out"), variable=mode_var, value="from_outside", bg=DIALOG_BG)
             rb_out.pack(side="left")
+            rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr.pack(side="left")
             # "int" (not "in") so the msgid doesn't collide with the
             # inches unit "in" used in tooling/felt-thickness pickers.
             rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
-            rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
-            rb_ctr.pack(side="left")
             val_ent = tk.Entry(frame, textvariable=val_var, width=5)
             val_ent.pack(side="left", padx=5)
             mm_lbl = tk.Label(frame, text=_("mm"), bg=DIALOG_BG)
@@ -1097,10 +1098,10 @@ class OptionsWindow:
             self.eng_placement_range_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
             rb_out = tk.Radiobutton(frame, text=_("out"), variable=mode_var, value="from_outside", bg=DIALOG_BG)
             rb_out.pack(side="left")
-            rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
-            rb_in.pack(side="left")
             rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
             rb_ctr.pack(side="left")
+            rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
+            rb_in.pack(side="left")
             val_ent = tk.Entry(frame, textvariable=val_var, width=5)
             val_ent.pack(side="left", padx=5)
             mm_lbl = tk.Label(frame, text=_("mm"), bg=DIALOG_BG)
