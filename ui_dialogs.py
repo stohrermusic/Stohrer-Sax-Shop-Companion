@@ -225,6 +225,22 @@ def add_tooltips(text, *widgets, **kwargs):
     return [Tooltip(w, text, **kwargs) for w in widgets]
 
 
+def grey_value_when_mid(mode_var, *widgets):
+    """Disable a placement row's mm entry and unit label while it is set to
+    "mid" (mode "centered"), whose position ignores the value, so the number
+    doesn't look like it's in use (Matt, 2026-10-28). Follows the mode var,
+    so a preset load or a range switch updates it too."""
+    def sync(*_args):
+        state = "disabled" if mode_var.get() == "centered" else "normal"
+        for w in widgets:
+            try:
+                w.config(state=state)
+            except tk.TclError:
+                pass  # dialog already gone
+    mode_var.trace_add("write", sync)
+    sync()
+
+
 # ==========================================
 # HELPER UTILS
 # ==========================================
@@ -422,6 +438,8 @@ class OptionsWindow:
             value=self.settings.get("locator_marks_dashed", False))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
+        # (mode_var, mm entry) for every placement row, universal and range
+        self.placement_value_entries = []
 
         # Dart Engraving Vars (universal mode)
         self.dart_engraving_on_var = tk.BooleanVar(value=self.settings.get("dart_engraving_on", True))
@@ -1052,6 +1070,8 @@ class OptionsWindow:
             val_ent.pack(side="left", padx=5)
             mm_lbl = tk.Label(frame, text=_("mm"), bg=DIALOG_BG)
             mm_lbl.pack(side="left")
+            grey_value_when_mid(mode_var, val_ent, mm_lbl)
+            self.placement_value_entries.append((mode_var, val_ent))
             add_tooltip(row_lbl, placement_help[mat])
             add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
             add_tooltips(
@@ -1106,6 +1126,8 @@ class OptionsWindow:
             val_ent.pack(side="left", padx=5)
             mm_lbl = tk.Label(frame, text=_("mm"), bg=DIALOG_BG)
             mm_lbl.pack(side="left")
+            grey_value_when_mid(mode_var, val_ent, mm_lbl)
+            self.placement_value_entries.append((mode_var, val_ent))
             add_tooltip(row_lbl, placement_help[mat] + " (this size range)")
             add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
             add_tooltips(
