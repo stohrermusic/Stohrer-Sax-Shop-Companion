@@ -225,6 +225,40 @@ def main():
             opts.top.destroy()
     check("Preview renders cleanly under dart-range mode (in-range and out-of-range)", render_with_dart_range_mode)
 
+    def dart_tip_over_label():
+        # The engines cut a dart tip at 12 o'clock, over the size label
+        # (2026-10-26); the preview must draw the same shape. A 10 mm pad
+        # has a dart count of 2 mod 4, where the old orientation put a
+        # notch there.
+        import math
+        from svg_engine import get_disc_diameter
+        opts = make_options()
+        try:
+            preview = PadPreviewWindow(opts)
+            preview.withdraw()
+            preview._cancel_poll()
+            try:
+                s = copy.deepcopy(settings)
+                s["dart_threshold"] = 100.0
+                scale, cx, cy = 10.0, 200.0, 200.0
+                outer_mm = get_disc_diameter(10.0, 'leather', s) / 2
+                preview.canvas.delete("all")
+                preview._draw_leather(cx, cy, 10.0, s, outer_mm * scale, "#000", scale)
+                lines = [i for i in preview.canvas.find_all()
+                         if preview.canvas.type(i) == "line" and "locator" not in preview.canvas.gettags(i)]
+                assert len(lines) == 1, f"expected one dart outline, got {len(lines)}"
+                c = preview.canvas.coords(lines[0])
+                above = [math.hypot(x - cx, y - cy) for x, y in zip(c[0::2], c[1::2])
+                         if abs(x - cx) < 1e-3 and y < cy]
+                assert above, "no outline point straight above the centre"
+                assert abs(max(above) - outer_mm * scale) < 0.01, \
+                    f"notch over the label: {max(above) / scale:.3f} mm vs cut radius {outer_mm:.3f}"
+            finally:
+                preview.destroy()
+        finally:
+            opts.top.destroy()
+    check("Preview draws a dart tip over the label, like the engines", dart_tip_over_label)
+
     def render_at_shape_anchors():
         # Triangle / sine / square anchors should each produce a renderable
         # leather dart shape without exception.

@@ -179,13 +179,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.86"
+APP_VERSION = "2.9"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-10-14"
+    manual = "2026-10-27"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -440,6 +440,7 @@ SIZING_PRESET_KEYS = (
     "engraving_settings_range_mode", "engraving_settings_ranges",
     "engraving_location",
     "engraving_placement_range_mode", "engraving_placement_ranges",
+    "darted_out_from_valley",
     # Labeled zones (lives in this dialog). Only the three user-facing
     # fields — gutter / border / label font are global tuning constants
     # with no UI, so they aren't part of a preset.
@@ -661,6 +662,11 @@ DEFAULT_SETTINGS = {
     # ENGRAVING PLACEMENT RANGE MODE
     "engraving_placement_range_mode": "universal",
     "engraving_placement_ranges": [],  # list of {"min_size", "max_size", "engraving_location": {material: {mode, value}}}
+    # Darted leather: measure the "out" placement from the dart valley
+    # (the star's inner radius) instead of the cut edge, so one value keeps
+    # the label just inside the valley at every size. Off = cut edge, as
+    # before 2026-10-26. Matt's own preset turns it on.
+    "darted_out_from_valley": False,
 
     # LABELED ZONES — group same-size small pads into a bordered, labeled
     # block on the sheet so they can be told apart when picking parts off

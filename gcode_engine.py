@@ -7,7 +7,7 @@ Includes a single-stroke digit font for engraving pad sizes.
 
 import math
 
-from svg_engine import (_wave_value, feeds_speeds_label_geometry,
+from svg_engine import (_wave_value, dart_wave_raw, DART_TIP_ANGLE, feeds_speeds_label_geometry,
                         locator_mark_geometry, locator_circle_points)
 
 # =============================================================================
@@ -659,7 +659,7 @@ def linearize_circle(cx, cy, radius, segments=72):
 # G-CODE GENERATION
 # =============================================================================
 
-def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5):
+def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5, tip_angle=0.0):
     """
     Generate star/dart pattern points for G-code.
 
@@ -673,6 +673,8 @@ def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5
         inner_r: Inner (valley) radius
         num_points: Number of points (tips) on the star
         shape_factor: 0.0 = Triangle, 0.5 = Sine, 1.0 = Square
+        tip_angle: Angle a dart tip points at (Y-up here, so the label
+            side is -svg_engine.DART_TIP_ANGLE)
 
     Returns:
         List of (x, y) points forming a closed star shape
@@ -691,7 +693,7 @@ def _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor=0.5
     for i in range(steps + 1):
         theta = i * angle_step
 
-        raw_wave = math.cos(num_points * theta)
+        raw_wave = dart_wave_raw(num_points, theta, tip_angle)
         shaped_wave = _wave_value(raw_wave, shape_factor)
 
         r = avg_r + amplitude * shaped_wave
@@ -883,7 +885,7 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             Borders and labels are engraved (never cut), so the sheet stays
             in one piece and no part can drop out early.
     """
-    from svg_engine import get_felt_thickness_mm
+    from svg_engine import dart_valley_radius
     from config import (get_dart_settings_for_size, get_sizing_for_size,
                         get_engraving_settings_for_size, get_engraving_placement_for_size)
 
@@ -966,8 +968,24 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
         plc_cfg = get_engraving_placement_for_size(pad_size, settings)
         font_size = eng_cfg.get("engraving_font_size", {}).get(material, 2.0)  # 2.0 matches svg_engine fallback
 
+        # This disc's hole: the preset size when the pad is large enough
+        # for one, else none. The SVG engine resolves it the same way
+        # (should_have_center_hole) before placing the label; until
+        # 2026-10-26 the label placement here used the preset size even
+        # for pads that get no hole, so "int" and "mid" labels on small
+        # pads sat in different places in the two outputs.
+        disc_hole_dia = hole_dia if (hole_dia > 0 and pad_size >= sizing.get("min_hole_size", 16.5)) else 0
+
         dart_cfg = get_dart_settings_for_size(pad_size, settings) if material == 'leather' else None
         is_dart_pad = dart_cfg is not None
+        # The edge the "out" placement measures from: the cut edge, or the
+        # dart valley on a darted disc when darted_out_from_valley is on.
+        # Mirrors svg_engine.
+        dart_valley_r = dart_valley_radius(pad_size, radius, sizing, dart_cfg, settings) if is_dart_pad else None
+        label_edge_r = radius
+        from_valley = is_dart_pad and settings.get("darted_out_from_valley", False)
+        if from_valley:
+            label_edge_r = dart_valley_r
 
         # Engraving
         should_engrave = False
@@ -996,12 +1014,15 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             # baseline, but get_text_strokes()/get_filled_text_strokes() are
             # already center-anchored.
             if mode == 'from_outside':
-                engraving_y = cy + (radius - value)
+                # From the dart valley: the gap to the top of the number,
+                # not its middle. Mirrors svg_engine.
+                to_near_edge = font_size / 2 if from_valley else 0
+                engraving_y = cy + (label_edge_r - value - to_near_edge)
             elif mode == 'from_inside':
-                hole_r = hole_dia / 2 if hole_dia > 0 else 0
+                hole_r = disc_hole_dia / 2 if disc_hole_dia > 0 else 0
                 engraving_y = cy + (hole_r + value)
-            else:  # centered
-                hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+            else:  # centered ("mid"): halfway between the hole edge and the cut edge
+                hole_r = disc_hole_dia / 2 if disc_hole_dia > 0 else 0
                 offset_from_center = (radius + hole_r) / 2
                 engraving_y = cy + offset_from_center
 
@@ -1056,8 +1077,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
             disc_eng.extend(text_strokes)
 
         # Center hole
-        if hole_dia > 0 and pad_size >= sizing.get("min_hole_size", 16.5):
-            hole_radius = (hole_dia / 2) - kerf_offset
+        if disc_hole_dia > 0:
+            hole_radius = (disc_hole_dia / 2) - kerf_offset
             if hole_radius > 0:
                 hole_points = linearize_circle(cx, cy, hole_radius, segments=36)
                 disc_hole.append(hole_points)
@@ -1076,15 +1097,8 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
         # Outer cut - circle or star pattern
         if is_dart_pad:
-            felt_thick = get_felt_thickness_mm(settings, sizing)
-            overwrap = dart_cfg.get("overwrap", 0.5)
-
-            felt_r = (pad_size - sizing.get("felt_offset", 0.75)) / 2
-            inner_r = felt_r + felt_thick + overwrap
+            inner_r = dart_valley_r
             outer_r = radius
-
-            if inner_r >= outer_r:
-                inner_r = outer_r - 0.2
 
             outer_r += kerf_offset
             inner_r += kerf_offset
@@ -1098,7 +1112,9 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
                 num_points += 1
 
             shape_factor = dart_cfg.get("shape_factor", 0.5)
-            star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor)
+            # `placed` is Y-flipped, so the label side is +90° here.
+            star_points = _generate_star_points(cx, cy, outer_r, inner_r, num_points, shape_factor,
+                                                tip_angle=-DART_TIP_ANGLE)
             disc_cut.append(star_points)
         else:
             cut_radius = radius + kerf_offset

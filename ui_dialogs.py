@@ -21,6 +21,7 @@ from config import (
 from svg_engine import (
     placed_disc_area,
     get_disc_diameter, get_felt_thickness_mm, _wave_value,
+    dart_wave_raw, DART_TIP_ANGLE,
     feeds_speeds_label_geometry,
     locator_mark_geometry, locator_circle_points,
     polygon_anchor_vertex,
@@ -224,6 +225,22 @@ def add_tooltips(text, *widgets, **kwargs):
     return [Tooltip(w, text, **kwargs) for w in widgets]
 
 
+def grey_value_when_mid(mode_var, *widgets):
+    """Disable a placement row's mm entry and unit label while it is set to
+    "mid" (mode "centered"), whose position ignores the value, so the number
+    doesn't look like it's in use (Matt, 2026-10-28). Follows the mode var,
+    so a preset load or a range switch updates it too."""
+    def sync(*_args):
+        state = "disabled" if mode_var.get() == "centered" else "normal"
+        for w in widgets:
+            try:
+                w.config(state=state)
+            except tk.TclError:
+                pass  # dialog already gone
+    mode_var.trace_add("write", sync)
+    sync()
+
+
 # ==========================================
 # HELPER UTILS
 # ==========================================
@@ -401,6 +418,8 @@ class OptionsWindow:
         # Labeled zones
         self.zone_labels_enabled_var = tk.BooleanVar(
             value=self.settings.get("zone_labels_enabled", False))
+        self.darted_out_from_valley_var = tk.BooleanVar(
+            value=self.settings.get("darted_out_from_valley", False))
         self.zone_label_min_var = tk.DoubleVar(
             value=self.settings.get("zone_label_min_size", 7.0))
         self.zone_label_max_var = tk.DoubleVar(
@@ -419,6 +438,8 @@ class OptionsWindow:
             value=self.settings.get("locator_marks_dashed", False))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
+        # (mode_var, mm entry) for every placement row, universal and range
+        self.placement_value_entries = []
 
         # Dart Engraving Vars (universal mode)
         self.dart_engraving_on_var = tk.BooleanVar(value=self.settings.get("dart_engraving_on", True))
@@ -966,6 +987,20 @@ class OptionsWindow:
         engraving_loc_frame = tk.LabelFrame(main_frame, text=_("Engraving Placement"), bg=DIALOG_BG, padx=5, pady=5)
         engraving_loc_frame.pack(fill="x", pady=5)
 
+        # Darted leather: "out" from the dart valley rather than the cut edge.
+        valley_cb = tk.Checkbutton(
+            engraving_loc_frame,
+            text=_("Darted leather: measure \"out\" from the dart valley"),
+            variable=self.darted_out_from_valley_var, bg=DIALOG_BG)
+        valley_cb.pack(anchor="w", pady=(0, 4))
+        add_tooltip(valley_cb, _(
+            "On darted leather pads the dart valley sits inside the cut edge, "
+            "and deeper on bigger pads. With this on, the darted leather \"out\" "
+            "value is the gap between the valley and the top of the number "
+            "(0 = touching), so one value keeps the label just inside the "
+            "darts at every size. Off: measured from the cut edge to the "
+            "middle of the number, as before."))
+
         ep_mode_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         ep_mode_frame.pack(fill="x", pady=2)
         ep_mode_tip = (
@@ -1002,9 +1037,14 @@ class OptionsWindow:
             'exact_size': "Where the size label sits on exact-size discs.",
         }
         mode_help = (
-            "out = distance measured inward from the outer edge.\n"
-            "in = distance measured outward from the center hole.\n"
-            "ctr = centered between the two."
+            "out = distance measured inward from the outer edge "
+            "(for darted leather with that box ticked: the gap between the "
+            "dart valley and the top of the number).\n"
+            "mid = halfway between the center hole (or the center, if "
+            "the pad has no hole) and the outer edge. The mm value is "
+            "not used.\n"
+            "int = distance measured outward from the center hole "
+            "(from the center, if the pad has no hole)."
         )
         self.eng_placement_universal_frame = tk.Frame(engraving_loc_frame, bg=DIALOG_BG)
         for mat in placement_materials:
@@ -1017,23 +1057,26 @@ class OptionsWindow:
             mode_var = tk.StringVar(value=loc['mode'])
             val_var = tk.DoubleVar(value=loc['value'])
             self.engraving_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
+            # Order out / mid / int: outer edge to centre (Matt, 2026-10-28).
             rb_out = tk.Radiobutton(frame, text=_("out"), variable=mode_var, value="from_outside", bg=DIALOG_BG)
             rb_out.pack(side="left")
+            rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr.pack(side="left")
             # "int" (not "in") so the msgid doesn't collide with the
             # inches unit "in" used in tooling/felt-thickness pickers.
             rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
-            rb_ctr = tk.Radiobutton(frame, text=_("ctr"), variable=mode_var, value="centered", bg=DIALOG_BG)
-            rb_ctr.pack(side="left")
             val_ent = tk.Entry(frame, textvariable=val_var, width=5)
             val_ent.pack(side="left", padx=5)
             mm_lbl = tk.Label(frame, text=_("mm"), bg=DIALOG_BG)
             mm_lbl.pack(side="left")
+            grey_value_when_mid(mode_var, val_ent, mm_lbl)
+            self.placement_value_entries.append((mode_var, val_ent))
             add_tooltip(row_lbl, placement_help[mat])
             add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
             add_tooltips(
                 _("Distance in millimeters from the chosen reference "
-                "(outside, inside, or centered)."),
+                "(out or int; mid does not use it)."),
                 val_ent, mm_lbl,
             )
 
@@ -1075,18 +1118,21 @@ class OptionsWindow:
             self.eng_placement_range_loc_vars[mat] = {'mode': mode_var, 'value': val_var}
             rb_out = tk.Radiobutton(frame, text=_("out"), variable=mode_var, value="from_outside", bg=DIALOG_BG)
             rb_out.pack(side="left")
+            rb_ctr = tk.Radiobutton(frame, text=_("mid"), variable=mode_var, value="centered", bg=DIALOG_BG)
+            rb_ctr.pack(side="left")
             rb_in = tk.Radiobutton(frame, text=_("int"), variable=mode_var, value="from_inside", bg=DIALOG_BG)
             rb_in.pack(side="left")
-            rb_ctr = tk.Radiobutton(frame, text=_("ctr"), variable=mode_var, value="centered", bg=DIALOG_BG)
-            rb_ctr.pack(side="left")
             val_ent = tk.Entry(frame, textvariable=val_var, width=5)
             val_ent.pack(side="left", padx=5)
             mm_lbl = tk.Label(frame, text=_("mm"), bg=DIALOG_BG)
             mm_lbl.pack(side="left")
+            grey_value_when_mid(mode_var, val_ent, mm_lbl)
+            self.placement_value_entries.append((mode_var, val_ent))
             add_tooltip(row_lbl, placement_help[mat] + " (this size range)")
             add_tooltips(mode_help, rb_out, rb_in, rb_ctr)
             add_tooltips(
-                _("Distance from the chosen reference, in millimeters."),
+                _("Distance from the chosen reference, in millimeters "
+                "(out or int; mid does not use it)."),
                 val_ent, mm_lbl,
             )
 
@@ -1833,6 +1879,7 @@ class OptionsWindow:
             self.settings["engraving_location"][material]['value'] = vars['value'].get()
         self.settings["engraving_placement_range_mode"] = self.eng_placement_range_mode_var.get()
         self.settings["engraving_placement_ranges"] = self.eng_placement_ranges
+        self.settings["darted_out_from_valley"] = self.darted_out_from_valley_var.get()
 
         # STAR ENGRAVING SAVE
         self.settings["dart_engraving_on"] = self.dart_engraving_on_var.get()
@@ -1904,6 +1951,7 @@ class OptionsWindow:
                  
             # Revert Star Engraving
             self.dart_engraving_on_var.set(True)
+            self.darted_out_from_valley_var.set(DEFAULT_SETTINGS["darted_out_from_valley"])
 
             # Labeled zones
             self.zone_labels_enabled_var.set(DEFAULT_SETTINGS["zone_labels_enabled"])
@@ -1959,6 +2007,7 @@ class OptionsWindow:
             },
             "engraving_placement_range_mode": self.eng_placement_range_mode_var.get(),
             "engraving_placement_ranges": copy.deepcopy(self.eng_placement_ranges),
+            "darted_out_from_valley": self.darted_out_from_valley_var.get(),
             # Labeled zones
             "zone_labels_enabled": self.zone_labels_enabled_var.get(),
             "zone_label_min_size": self.zone_label_min_var.get(),
@@ -2026,6 +2075,8 @@ class OptionsWindow:
         self.eng_placement_ranges = copy.deepcopy(list(source.get("engraving_placement_ranges", [])))
         self._refresh_eng_placement_range_combo()
         self._toggle_eng_placement_mode()
+        self.darted_out_from_valley_var.set(
+            source.get("darted_out_from_valley", d["darted_out_from_valley"]))
 
         # Labeled zones
         self.zone_labels_enabled_var.set(source.get("zone_labels_enabled", d["zone_labels_enabled"]))
@@ -2581,7 +2632,8 @@ class PadPreviewWindow(tk.Toplevel):
         coords = []
         for i in range(steps + 1):
             theta = 2 * math.pi * i / steps
-            raw = math.cos(num_points * theta)
+            # Canvas is Y-down like the SVG: a tip at 12 o'clock.
+            raw = dart_wave_raw(num_points, theta, DART_TIP_ANGLE)
             shaped = _wave_value(raw, shape_factor)
             r = avg_r_px + amp_px * shaped
             x = cx + r * math.cos(theta)
@@ -9510,6 +9562,58 @@ def _decode_grbl_error(msg):
     return None
 
 
+class LidClosedDialog(tk.Toplevel):
+    """The one question asked before the laser comes on: is the lid closed?
+
+    Two buttons with real labels, "Yes, Start Frame" and "No, Cancel",
+    because tk's askyesno can only say Yes / No and Matt wanted the
+    buttons to say what they do (2026-10-26). `result` is True only for
+    the Yes button; No, the close box and Escape all answer False.
+    """
+
+    def __init__(self, parent, title, message, yes_label, no_label):
+        super().__init__(parent)
+        self.title(title)
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.resizable(False, False)
+        self.result = False
+
+        tk.Label(self, text=message, wraplength=380, bg=DIALOG_BG,
+                 justify="left", font=("Helvetica", 11)).pack(padx=24, pady=(18, 10))
+        buttons = tk.Frame(self, bg=DIALOG_BG)
+        buttons.pack(pady=(4, 16))
+        yes_btn = tk.Button(buttons, text=yes_label, width=16, command=self._on_yes)
+        yes_btn.pack(side="left", padx=8)
+        tk.Button(buttons, text=no_label, width=16, command=self._on_no).pack(side="left", padx=8)
+
+        self.bind("<Return>", lambda e: self._on_yes())
+        self.bind("<Escape>", lambda e: self._on_no())
+        self.protocol("WM_DELETE_WINDOW", self._on_no)
+
+        # Size to content and centre over the parent dialog.
+        self.update_idletasks()
+        self.geometry("")
+        try:
+            w, h = self.winfo_reqwidth(), self.winfo_reqheight()
+            x = parent.winfo_rootx() + (parent.winfo_width() - w) // 2
+            y = parent.winfo_rooty() + (parent.winfo_height() - h) // 2
+            self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        except tk.TclError:
+            pass
+        yes_btn.focus_set()
+        self.grab_set()
+        self.wait_window(self)
+
+    def _on_yes(self):
+        self.result = True
+        self.destroy()
+
+    def _on_no(self):
+        self.result = False
+        self.destroy()
+
+
 class FalconRunDialog(tk.Toplevel):
     """Live-progress dialog while G-code streams to the Falcon.
 
@@ -9956,8 +10060,15 @@ class FalconRunDialog(tk.Toplevel):
         """Poll Grbl's state until it's Idle (any pending jog has
         finished), then restart the stream. Sending the next iter's
         M3 while Grbl is still in JOG state would trigger error:9
-        (G-code locked out during alarm or jog)."""
-        if self._finished or self._cut_requested:
+        (G-code locked out during alarm or jog).
+
+        If Cut (or Done) was clicked during this between-pass wait,
+        the last pass already finished cleanly: still wait for Idle,
+        then end the loop instead of starting another pass. This used
+        to bail out on _cut_requested and leave nothing to end the
+        loop, so the dialog sat on "finishing current framing pass"
+        forever with the head stopped (Matt, 2026-10-26)."""
+        if self._finished:
             return
         # Guard against the dialog being destroyed while a deferred
         # call is in flight — accessing tk widgets after destroy
@@ -9973,6 +10084,9 @@ class FalconRunDialog(tk.Toplevel):
             st = None
         state = (st or {}).get('state')
         if state in ('Idle', None):
+            if self._cut_requested:
+                self._on_done("complete")
+                return
             # Settle delay before restart: gives any in-flight jog its
             # ok-byte time to land in the OS serial buffer so
             # start_stream's reset_input_buffer can flush it (without
@@ -10003,8 +10117,12 @@ class FalconRunDialog(tk.Toplevel):
         ``gcode_provider`` callback is set, calls it to get fresh
         gcode (used by the calibration dialog so the framing trace
         follows the head as the user jogs between passes). Bails
-        silently if the user has since stopped."""
-        if self._finished or self._cut_requested:
+        silently if the user has since stopped, and ends the loop if
+        Cut was clicked during the settle delay."""
+        if self._finished:
+            return
+        if self._cut_requested:
+            self._on_done("complete")
             return
         if self._gcode_provider is not None:
             try:
@@ -10024,13 +10142,20 @@ class FalconRunDialog(tk.Toplevel):
             self._final_reason = "error"
 
     def _remind_lid_closed(self):
-        """Plain OK-only popup shown once, before the cut.
+        """Ask "Is the lid closed?" once, before the laser comes on, and
+        return True to proceed or False to stay put.
 
-        Not a yes/no gate; there's nothing to decline, clicking the
-        (only) button is what lets the caller proceed. An open lid
-        wedges the stream because Grbl blocks motion in Door state (no
-        error returned, just an unresponsive controller), which costs a
-        laser power cycle AND an app restart to recover.
+        Two buttons, "Yes, Start Frame" and "No, Cancel" (Matt,
+        2026-10-26). From 2026-08-05 to 2026-10-26 this was a single-OK
+        reminder with nothing to decline, on the reasoning that a yes/no
+        gate just gets clicked through; in the shop the single button
+        turned out to read as "the app thinks the lid is closed" rather
+        than a question, so the answer now has two real options. No
+        keeps the jog dialog open: close the lid, click Start Frame
+        again, nothing has been consumed. An open lid wedges the stream
+        because Grbl blocks motion in Door state (no error returned,
+        just an unresponsive controller), which costs a laser power
+        cycle AND an app restart to recover.
 
         It fires once per Frame & Cut run, on **Start Frame** — the
         boundary where the laser first comes on. Framing runs at low
@@ -10059,10 +10184,9 @@ class FalconRunDialog(tk.Toplevel):
         reminder every time is simpler and honest about what the app
         knows.
         """
-        messagebox.showinfo(
-            _("Lid Closed?"),
-            _("Is the lid closed?"),
-            parent=self)
+        dlg = LidClosedDialog(self, _("Lid Closed?"), _("Is the lid closed?"),
+                              _("Yes, Start Frame"), _("No, Cancel"))
+        return bool(dlg.result)
 
     def _on_cut_clicked(self):
         """User clicked 'Looks Good — Cut!' during loop mode. Flag the
@@ -10121,10 +10245,7 @@ class FalconRunDialog(tk.Toplevel):
                     _("Homing will abort the run in progress. Continue?"),
                     parent=self):
                 return
-            try:
-                self._sender.stop()
-            except Exception:
-                pass
+            self._stop_stream()
         import threading
         try:
             self._home_btn.config(state="disabled", text=_("Homing..."))
@@ -10224,9 +10345,11 @@ class FalconRunDialog(tk.Toplevel):
         Callers that advance straight into a laser-firing pass set
         remind_lid_on_advance, which puts the lid reminder here — the
         framing pass energises the laser, and an open lid at that
-        moment costs a power cycle plus an app restart."""
-        if self._remind_lid_on_advance:
-            self._remind_lid_closed()
+        moment costs a power cycle plus an app restart. "No, Cancel"
+        returns without closing: the jog dialog stays up, the user shuts
+        the lid and clicks Start Frame again."""
+        if self._remind_lid_on_advance and not self._remind_lid_closed():
+            return
         self.destroy()
 
     def _on_stop_clicked(self):
@@ -10266,11 +10389,23 @@ class FalconRunDialog(tk.Toplevel):
                       "Material in progress may be ruined."),
                     parent=self):
                 return
+        self._stop_stream()
+
+    def _stop_stream(self):
+        """Stop the run. With a pass streaming, the soft-reset ends it and
+        the sender's on_done finishes the dialog. Between framing passes
+        nothing is streaming, so no on_done will ever come — finish here,
+        or Stop (and Home) do nothing at all."""
+        try:
+            streaming = self._sender.is_streaming()
+        except Exception:
+            streaming = True
         try:
             self._sender.stop()
         except Exception:
             pass
-        # Sender's on_done will set self._finished and update buttons.
+        if not streaming and not self._finished:
+            self._on_done("stopped")
 
     def _on_close_window(self):
         if not self._finished:

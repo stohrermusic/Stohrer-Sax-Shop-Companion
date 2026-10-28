@@ -56,7 +56,7 @@ def svg_autofit_result(pad_size, material, font_size, eng_loc, settings=None):
         hole_r = hole_dia / 2 if hole_dia > 0 else 0
         engraving_y = cy - (hole_r + value)
     else:
-        hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+        hole_r = hole_dia / 2 if hole_dia > 0 else 0
         offset_from_center = (r + hole_r) / 2
         engraving_y = cy - offset_from_center
 
@@ -139,7 +139,7 @@ def gcode_autofit_result(pad_size, material, font_size, eng_loc, settings=None):
         hole_r = hole_dia / 2 if hole_dia > 0 else 0
         engraving_y = cy - (hole_r + value)
     else:
-        hole_r = hole_dia / 2 if hole_dia > 0 else 1.75
+        hole_r = hole_dia / 2 if hole_dia > 0 else 0
         offset_from_center = (r + hole_r) / 2
         engraving_y = cy - offset_from_center
 

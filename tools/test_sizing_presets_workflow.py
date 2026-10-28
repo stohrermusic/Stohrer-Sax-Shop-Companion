@@ -364,6 +364,44 @@ def main():
             opts.top.destroy()
     check("Load refreshes range-edit fields when index is preserved (regression)", load_refreshes_range_edit_fields)
 
+    def mid_greys_out_the_value():
+        # "mid" ignores the mm value, so the entry is disabled while a row is
+        # on it (Matt, 2026-10-28) — on open, on a click, and when a range is
+        # loaded into the editor; and enabled again for out / int.
+        s = copy.deepcopy(settings)
+        s["engraving_location"]["card"] = {"mode": "centered", "value": 0.0}
+        s["engraving_location"]["leather"] = {"mode": "from_outside", "value": 2.5}
+        w = OptionsWindow(root, StubApp(), s, lambda: None, lambda: None,
+                          sizing_presets=presets, sizing_presets_save_callback=save_cb)
+        w.top.withdraw()
+        try:
+            rows = w.placement_value_entries
+            assert len(rows) == 10, f"expected 5 universal + 5 range rows, got {len(rows)}"
+            card_var = w.engraving_loc_vars["card"]["mode"]
+            leather_var = w.engraving_loc_vars["leather"]["mode"]
+            entry_of = {id(v): e for v, e in rows}
+            assert str(entry_of[id(card_var)].cget("state")) == "disabled", "mid row not greyed on open"
+            assert str(entry_of[id(leather_var)].cget("state")) == "normal", "out row greyed on open"
+            leather_var.set("centered")
+            assert str(entry_of[id(leather_var)].cget("state")) == "disabled", "clicking mid didn't grey it"
+            leather_var.set("from_inside")
+            assert str(entry_of[id(leather_var)].cget("state")) == "normal", "int left it greyed"
+            # A range loaded into the editor updates its rows too.
+            w.eng_placement_ranges = [{
+                "min_size": 0.0, "max_size": 20.0,
+                "engraving_location": {m: {"mode": "centered", "value": 0.0}
+                                       for m in w.eng_placement_range_loc_vars},
+            }]
+            w._load_eng_placement_range_fields(0)
+            for mat, vars_ in w.eng_placement_range_loc_vars.items():
+                state = str(entry_of[id(vars_["mode"])].cget("state"))
+                assert state == "disabled", f"range row {mat} not greyed after loading a mid range"
+            # Disabled entries still read and save their value.
+            assert w.engraving_loc_vars["card"]["value"].get() == 0.0
+        finally:
+            w.top.destroy()
+    check("Placement mm value greys out while 'mid' is selected", mid_greys_out_the_value)
+
     def save_dialog_defaults_to_overwrite_when_active():
         class NoWaitSavePresetDialog(SaveSizingPresetDialog):
             def wait_window(self, _w=None):
