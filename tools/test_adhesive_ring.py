@@ -29,8 +29,12 @@ Covers:
     with cut-only keys and the Default backfill; old settings files load
   - framing power: own entry, clamped
   - GUI (self-skips without a display): the enabling control is marked
-    beta; the material checkbox, Layer Colors row, G-code section and
-    Framing Power row exist only while enabled; the pad preview and the
+    beta; "Wrap clearance" is a spinbox (0.1 steps, -5.0 to 5.0, tooltip on
+    label, counter and unit) whose +1.0 / -1.0 move the inner cut in the
+    written SVG by 2.0 mm of diameter, whose every tenth survives Apply,
+    save and reopen, and which survives typed nonsense; the material
+    checkbox, Layer Colors row, G-code section and Framing Power row exist
+    only while enabled; the pad preview and the
     nesting preview draw the real ring; Frame & Cut takes rings as its one
     material and streams exactly what the file export writes, framing at
     the ring's own power with M4, in standard, polygon and scrap mode; job
@@ -844,12 +848,12 @@ def gui_tests(root):
         try:
             assert "beta" in w.ring_frame.cget("text").lower(), w.ring_frame.cget("text")
             assert w.ring_frame.master is w.lesser_body, "the section belongs in Lesser-used settings"
-            assert w.ring_cb.master is w.ring_frame and w.ring_trim_entry.winfo_toplevel() is w.top
+            assert w.ring_cb.master is w.ring_frame and w.ring_clearance_spin.winfo_toplevel() is w.top
             assert not w.lesser_open, "collapsed while nothing inside is active"
-            assert str(w.ring_trim_entry.cget("state")) == "disabled", "trim greyed while the feature is off"
+            assert str(w.ring_clearance_spin.cget("state")) == "disabled", "counter greyed while the feature is off"
             w.ring_enabled_var.set(True)
             w._toggle_ring_fields()
-            assert str(w.ring_trim_entry.cget("state")) == "normal"
+            assert str(w.ring_clearance_spin.cget("state")) == "normal"
         finally:
             w.top.destroy()
         w2 = options(on())
@@ -901,6 +905,201 @@ def gui_tests(root):
                 pass
     check("GUI: form round trip, Apply writes both keys, old presets still detected",
           form_round_trip_and_preset_detection)
+
+    # ---- Wrap clearance: the stored trim, shown as a counter ----------------
+    # Matt, 2026-11-05: "wrap clearance. then the tooltip says what it does";
+    # "negative clearance as being inside and hidden, positive clearance as
+    # being extra ring material". Same number and sign as the stored
+    # adhesive_ring_trim_mm; only the control and its name changed.
+
+    def type_clearance(w, text):
+        w.ring_clearance_spin.delete(0, tk.END)
+        w.ring_clearance_spin.insert(0, text)
+
+    def wrap_clearance_is_a_spinbox_with_a_tooltip():
+        w = options(on())
+        try:
+            spin = w.ring_clearance_spin
+            assert isinstance(spin, tk.Spinbox), type(spin)
+            assert not hasattr(w, "ring_trim_entry"), "the old entry is still there"
+            assert w.ring_clearance_label.cget("text") == "Wrap clearance:", w.ring_clearance_label.cget("text")
+            assert w.ring_clearance_unit.cget("text") == "mm"
+            assert (float(spin.cget("from")), float(spin.cget("to")), float(spin.cget("increment"))) == \
+                (-5.0, 5.0, 0.1), (spin.cget("from"), spin.cget("to"), spin.cget("increment"))
+            assert spin.cget("format") == "%.1f"
+            assert spin.master is w.ring_clearance_label.master is w.ring_clearance_unit.master
+            assert str(spin.cget("state")) == "normal" and spin.get() == "0.0", spin.get()
+            # The tooltip is on the label, the counter and the unit, and says what the sign does.
+            tips = w.ring_clearance_tips
+            assert [t.widget for t in tips] == [w.ring_clearance_label, spin, w.ring_clearance_unit]
+            for wid in (w.ring_clearance_label, spin, w.ring_clearance_unit):
+                assert wid.bind("<Enter>"), "no tooltip on part of the row"
+            text = tips[0].text
+            assert all(t.text == text for t in tips)
+            for phrase in ("past the edge of the wrap", "Positive", "extra ring", "Negative", "hidden under the wrap"):
+                assert phrase in text, f"tooltip does not say {phrase!r}: {text}"
+            # The arrows: 0.1 at a time, exactly, one decimal shown, stopping at both ends.
+            w.ring_trim_var.set(-5.0)
+            seen, shown = [], []
+            for _i in range(101):
+                seen.append(w.ring_trim_var.get())
+                shown.append(spin.get())
+                spin.invoke("buttonup")
+            assert seen == [round(-5.0 + 0.1 * i, 1) for i in range(101)], seen[:5]
+            assert shown == [f"{v:.1f}" for v in seen], shown[:5]
+            assert spin.get() == "5.0", "the up arrow must stop at 5.0"
+            w.ring_trim_var.set(-5.0)
+            spin.invoke("buttondown")
+            assert spin.get() == "-5.0", "the down arrow must stop at -5.0"
+            # Off: greyed, like before.
+            w.ring_enabled_var.set(False)
+            w._toggle_ring_fields()
+            assert str(spin.cget("state")) == "disabled"
+        finally:
+            w.top.destroy()
+        # The names that were tried and dropped are gone from what the user reads.
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        src = open(os.path.join(repo, "ui_dialogs.py"), encoding="utf-8").read()
+        pot = open(os.path.join(repo, "locale", "saxshop.pot"), encoding="utf-8").read()
+        for old_name in ("Ring width trim", "Inner edge clearance", "inner diameter adjustment"):
+            assert old_name not in src and old_name not in pot, f"{old_name!r} is still user-facing text"
+        assert 'msgid "Wrap clearance:"' in pot
+    check("GUI: Wrap clearance is a spinbox, -5.0 to 5.0 in 0.1 steps, with the tooltip on label, counter and unit",
+          wrap_clearance_is_a_spinbox_with_a_tooltip)
+
+    def wrap_clearance_plus_and_minus_one_in_the_written_svg():
+        # Typed into the counter, applied, generated, and read back from the file.
+        pad = 20.0
+
+        def cut_diameters(text):
+            s = on()
+            w = options(s)
+            type_clearance(w, text)
+            w.save_options()                       # Apply's last step; closes the dialog
+            assert s["adhesive_ring_trim_mm"] == float(text), s["adhesive_ring_trim_mm"]
+            g = se.adhesive_ring_geometry(pad, s)
+            with tempfile.TemporaryDirectory() as d:
+                path = os.path.join(d, "r.svg")
+                se.generate_svg_from_placed([(pad, 40.0, 40.0, g["footprint_r"])], RING, 80, 80, path, 3.5, s)
+                _polys, circles = svg_parts(open(path, encoding="utf-8").read())
+            radii = sorted(r for _x, _y, r in circles)
+            assert len(radii) == 2, radii
+            return 2 * radii[0], 2 * radii[1]
+        zero_in, zero_out = cut_diameters("0.0")
+        plus_in, plus_out = cut_diameters("1.0")
+        minus_in, minus_out = cut_diameters("-1.0")
+        assert zero_out == plus_out == minus_out, "the outer cut must not move"
+        assert math.isclose(zero_in - plus_in, 2.0, abs_tol=1e-9), \
+            f"+1.0 is extra ring: the hole should be 2.0 mm smaller, got {zero_in - plus_in:.4f}"
+        assert math.isclose(minus_in - zero_in, 2.0, abs_tol=1e-9), \
+            f"-1.0 pulls the edge back: the hole should be 2.0 mm larger, got {minus_in - zero_in:.4f}"
+        # Nothing else is shaping this size: not the 9.5 rule, the 2 mm cut-off or the 0.5 mm floor.
+        assert pad > se.ADHESIVE_RING_SOLID_MAX_PAD_MM and plus_in > se.ADHESIVE_RING_MIN_HOLE_MM + 1
+        assert (zero_out - minus_in) / 2 > se.ADHESIVE_RING_MIN_WIDTH_MM + 0.1
+    check("GUI: Wrap clearance +1.0 makes the inner cut 2.0 mm smaller in the written SVG, -1.0 makes it 2.0 mm larger",
+          wrap_clearance_plus_and_minus_one_in_the_written_svg)
+
+    def every_tenth_survives_apply_save_and_reopen():
+        # -5.0 ... 5.0: typed, applied (which saves it as a preset first), written
+        # to disk, loaded back, and shown again by a newly opened dialog.
+        class NamePrompt:
+            def __init__(self, parent, existing_names, default_existing=None, title=None, intro=None):
+                self.result = {"name": "Rings"}
+
+        class StubApp:
+            def open_resonance_window(self):
+                pass
+
+        def open_on(s, presets):
+            w = OptionsWindow(root, StubApp(), s, lambda: None, lambda: config.save_settings(s),
+                              sizing_presets=presets,
+                              sizing_presets_save_callback=lambda: config.save_presets(presets, config.SIZING_PRESET_FILE))
+            w.top.withdraw()
+            return w
+
+        keep = ui_dialogs.SaveSizingPresetDialog
+        ui_dialogs.SaveSizingPresetDialog = NamePrompt
+        w = open_on(on(), {"Default": config.settings_to_sizing_preset(base_settings())})
+        try:
+            for i in range(101):
+                v = round(-5.0 + 0.1 * i, 1)
+                type_clearance(w, f"{v:.1f}")
+                w.on_apply()                       # unsaved edit -> save as "Rings" -> apply -> close
+                assert not w.top.winfo_exists(), f"{v}: Apply did not go through"
+                s = config.load_settings()
+                presets = config.load_presets(config.SIZING_PRESET_FILE)
+                assert s["adhesive_ring_trim_mm"] == v, f"{v}: settings file has {s['adhesive_ring_trim_mm']!r}"
+                assert presets["Rings"]["adhesive_ring_trim_mm"] == v, f"{v}: preset file"
+                w = open_on(s, presets)
+                assert w.ring_clearance_spin.get() == f"{v:.1f}", f"{v}: reopened dialog shows {w.ring_clearance_spin.get()!r}"
+                assert w.ring_trim_var.get() == v and w._capture_form_to_dict()["adhesive_ring_trim_mm"] == v
+                assert w.active_preset_name == "Rings" and not w._is_dirty(), f"{v}: preset not detected on reopen"
+        finally:
+            ui_dialogs.SaveSizingPresetDialog = keep
+            if w.top.winfo_exists():
+                w.top.destroy()
+    check("GUI: every Wrap clearance from -5.0 to 5.0 in 0.1 steps survives Apply, save and reopen unchanged",
+          every_tenth_survives_apply_save_and_reopen)
+
+    def stored_finer_value_is_not_rounded_by_opening_the_dialog():
+        # Tk reformats a variable when a spinbox is created on it; a value saved
+        # with two decimals (typed, or from the entry this control replaced)
+        # must come back as it was saved, or its preset stops naming itself.
+        s = on(adhesive_ring_trim_mm=0.25)
+        w = options(s, presets={"Fine": config.settings_to_sizing_preset(s)})
+        try:
+            assert w.ring_clearance_spin.get() == "0.25", w.ring_clearance_spin.get()
+            assert w._capture_form_to_dict()["adhesive_ring_trim_mm"] == 0.25
+            assert w._detect_active_preset() == "Fine" and not w._is_dirty()
+            w._apply_dict_to_form(config.normalize_sizing_preset(dict(config.settings_to_sizing_preset(s),
+                                                                      adhesive_ring_trim_mm=-1.35)))
+            assert w.ring_clearance_spin.get() == "-1.35" and w.ring_trim_var.get() == -1.35
+            w.revert_to_defaults()                 # askyesno is answered Yes in this suite
+            assert w.ring_clearance_spin.get() == "0.0" and w.ring_enabled_var.get() is False
+        finally:
+            w.top.destroy()
+    check("GUI: a stored clearance with two decimals is shown and kept as saved (preset still detected)",
+          stored_finer_value_is_not_rounded_by_opening_the_dialog)
+
+    def typed_out_of_range_or_not_a_number_does_not_crash_apply():
+        # Out of range: held to the range, by Apply and by leaving the field.
+        for typed, stored in (("7.3", 5.0), ("-12", -5.0), ("5.0", 5.0), ("-5", -5.0), ("0.25", 0.25), (" 1.5 ", 1.5)):
+            s = on()
+            w = options(s)
+            type_clearance(w, typed)
+            assert w._capture_form_to_dict()["adhesive_ring_trim_mm"] == stored, (typed, stored)
+            w.save_options()
+            assert s["adhesive_ring_trim_mm"] == stored, (typed, s["adhesive_ring_trim_mm"])
+        w = options(on())
+        try:
+            type_clearance(w, "7.3")
+            w._clamp_ring_clearance()              # what leaving the field does
+            assert w.ring_clearance_spin.get() == "5.0", w.ring_clearance_spin.get()
+            type_clearance(w, "1.25")
+            w._clamp_ring_clearance()
+            assert w.ring_clearance_spin.get() == "1.25", "a value in range is left as typed"
+        finally:
+            w.top.destroy()
+        # Not a number: Apply says so, stores nothing, and the dialog stays open.
+        for typed in ("abc", "", "1,5", "--", "0.1.2"):
+            s = on(adhesive_ring_trim_mm=0.4)
+            w = options(s)
+            try:
+                type_clearance(w, typed)
+                boxes.clear()
+                w.on_apply()
+                assert w.top.winfo_exists(), f"{typed!r}: Apply closed the dialog"
+                assert s["adhesive_ring_trim_mm"] == 0.4, f"{typed!r}: something was stored"
+                assert [b[1] for b in boxes] == ["Invalid value"], f"{typed!r}: {boxes}"
+                w._clamp_ring_clearance()          # leaving the field must not raise either
+                assert w._is_dirty()
+                type_clearance(w, "0.4")           # fixed: clean again
+                assert not w._is_dirty()
+            finally:
+                if w.top.winfo_exists():
+                    w.top.destroy()
+    check("GUI: a typed Wrap clearance out of range is held to the range; not a number is refused without a crash",
+          typed_out_of_range_or_not_a_number_does_not_crash_apply)
 
     # ---- appears only when enabled -------------------------------------
     def material_checkbox_only_when_enabled():
@@ -1086,28 +1285,46 @@ def gui_tests(root):
         got = {}
 
         def probe(with_settings):
+            # The window blocks in wait_window() inside its constructor, so the
+            # inspection is scheduled first and runs inside that wait: Tk fires
+            # no timer before the constructor reaches it, so the window always
+            # exists by then, however slow the machine. Whatever happens in
+            # go(), the window is closed, or the constructor would never return.
+            tries = []
+
             def go():
                 wins = [c for c in root.winfo_children() if isinstance(c, NestingPreviewWindow)]
-                win = wins[0]
-                cv = win._canvas
-                cv.winfo_width = lambda: 640
-                cv.winfo_height = lambda: 480
-                win._draw()
-                got[with_settings] = {
-                    "rings": len(cv.find_withtag("ring")),
-                    "inner": len(cv.find_withtag("ring_inner")),
-                    "numbers": len(cv.find_withtag("ring_number")),
-                    "ovals": sum(1 for i in cv.find_all() if cv.type(i) == "oval"),
-                    "widest": max(cv.bbox(i)[2] - cv.bbox(i)[0] for i in cv.find_all() if cv.type(i) == "oval"),
-                }
-                win._on_adjust()
-            root.after(100, go)
+                if not wins and len(tries) < 400:
+                    tries.append(1)          # not built yet (should not happen): look again, don't guess a delay
+                    root.after(25, go)
+                    return
+                try:
+                    win = wins[0]
+                    cv = win._canvas
+                    cv.winfo_width = lambda: 640
+                    cv.winfo_height = lambda: 480
+                    win._draw()
+                    got[with_settings] = {
+                        "rings": len(cv.find_withtag("ring")),
+                        "inner": len(cv.find_withtag("ring_inner")),
+                        "numbers": len(cv.find_withtag("ring_number")),
+                        "ovals": sum(1 for i in cv.find_all() if cv.type(i) == "oval"),
+                        "widest": max(cv.bbox(i)[2] - cv.bbox(i)[0] for i in cv.find_all() if cv.type(i) == "oval"),
+                    }
+                except Exception as e:      # reported by the asserts below, not swallowed
+                    got[with_settings] = {"error": repr(e)}
+                finally:
+                    for w in wins:
+                        if w.winfo_exists():
+                            w._on_adjust()
+            root.after(0, go)
             NestingPreviewWindow(root, {RING: placed}, W, H, settings=s if with_settings else None)
         app.settings["seen_preview_tutorial"] = True
         probe(True)
         probe(False)
         holes = sum(1 for p, *_r in placed if se.adhesive_ring_geometry(p, s)["inner_r"] > 0)
         real, fallback = got[True], got[False]
+        assert "error" not in real and "error" not in fallback, (real, fallback)
         assert real["rings"] == len(placed) + holes and real["inner"] == holes, real
         assert real["numbers"] >= len(placed), real
         assert fallback["rings"] == 0 and fallback["ovals"] == len(placed), fallback

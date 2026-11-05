@@ -1300,18 +1300,36 @@ class OptionsWindow:
                       "rings material to the Pad Maker, with its own layer "
                       "color and G-code settings. Beta."))
 
+        # "Wrap clearance" (Matt's name, 2026-11-05) is the stored
+        # adhesive_ring_trim_mm, unchanged: mm of ring width per side,
+        # positive = the ring's inner edge reaches past the edge of the
+        # wrap (extra ring showing), negative = it stays hidden under the
+        # wrap. A counter in 0.1 steps; typing is still allowed.
         ring_row = tk.Frame(ring_frame, bg=DIALOG_BG)
         ring_row.pack(anchor='w', pady=(4, 0))
-        ring_trim_label = tk.Label(ring_row, text=_("Ring width trim:"), bg=DIALOG_BG)
-        ring_trim_label.pack(side="left")
-        self.ring_trim_entry = tk.Entry(ring_row, textvariable=self.ring_trim_var, width=6)
-        self.ring_trim_entry.pack(side="left", padx=4)
-        ring_trim_unit = tk.Label(ring_row, text=_("mm"), bg=DIALOG_BG)
-        ring_trim_unit.pack(side="left")
-        add_tooltips(_("The ring is as wide as the leather wrap for that pad "
-                       "size. Add to that here, or enter a negative number "
-                       "for a narrower ring."),
-                     ring_trim_label, self.ring_trim_entry, ring_trim_unit)
+        self.ring_clearance_label = tk.Label(ring_row, text=_("Wrap clearance:"), bg=DIALOG_BG)
+        self.ring_clearance_label.pack(side="left")
+        # Tk reformats and clamps the variable when a spinbox is created on
+        # it (a stored 0.25 would become 0.2 just by opening the dialog), so
+        # the stored value is put back afterwards, exactly as it was saved.
+        stored_clearance = self.ring_trim_var.get()
+        self.ring_clearance_spin = tk.Spinbox(
+            ring_row, textvariable=self.ring_trim_var, width=6,
+            from_=self.RING_CLEARANCE_MIN, to=self.RING_CLEARANCE_MAX,
+            increment=self.RING_CLEARANCE_STEP, format="%.1f")
+        self.ring_trim_var.set(stored_clearance)
+        self.ring_clearance_spin.pack(side="left", padx=4)
+        # Typed text isn't checked by Tk; pull it back into range when the
+        # field is left. (Apply clamps too, see _ring_clearance_value.)
+        self.ring_clearance_spin.bind("<FocusOut>", lambda _e: self._clamp_ring_clearance(), add="+")
+        self.ring_clearance_spin.bind("<Return>", lambda _e: self._clamp_ring_clearance(), add="+")
+        self.ring_clearance_unit = tk.Label(ring_row, text=_("mm"), bg=DIALOG_BG)
+        self.ring_clearance_unit.pack(side="left")
+        self.ring_clearance_tips = add_tooltips(
+            _("How far the ring's inner edge reaches past the edge of the "
+              "wrap. Positive leaves extra ring showing. Negative keeps the "
+              "ring's edge hidden under the wrap."),
+            self.ring_clearance_label, self.ring_clearance_spin, self.ring_clearance_unit)
 
         tk.Label(ring_frame,
                  text=_("The outer edge matches the card disc. Each ring's size is "
@@ -1367,10 +1385,32 @@ class OptionsWindow:
         arrow = "\u25bc" if self.lesser_open else "\u25b6"
         self.lesser_btn.config(text=f"{arrow} " + _("Lesser-used settings"))
 
+    # Wrap clearance counter (the stored adhesive_ring_trim_mm), in mm.
+    RING_CLEARANCE_MIN = -5.0
+    RING_CLEARANCE_MAX = 5.0
+    RING_CLEARANCE_STEP = 0.1
+
     def _toggle_ring_fields(self):
-        """Grey the ring width trim when adhesive rings are off."""
+        """Grey the wrap clearance counter when adhesive rings are off."""
         state = "normal" if self.ring_enabled_var.get() else "disabled"
-        self.ring_trim_entry.config(state=state)
+        self.ring_clearance_spin.config(state=state)
+
+    def _ring_clearance_value(self):
+        """The wrap clearance as it will be stored: what the counter shows,
+        held to its range. Raises tk.TclError while the field isn't a
+        number, like every other numeric field (see _form_is_valid)."""
+        value = self.ring_trim_var.get()
+        return max(self.RING_CLEARANCE_MIN, min(self.RING_CLEARANCE_MAX, value))
+
+    def _clamp_ring_clearance(self):
+        """Show a typed out-of-range clearance as the value that will be used."""
+        try:
+            value = self.ring_trim_var.get()
+        except tk.TclError:
+            return      # not a number yet; Apply says so
+        clamped = max(self.RING_CLEARANCE_MIN, min(self.RING_CLEARANCE_MAX, value))
+        if clamped != value:
+            self.ring_trim_var.set(clamped)
 
     def _toggle_locator_fields(self):
         """Grey the locator options when the marks are off."""
@@ -1962,7 +2002,7 @@ class OptionsWindow:
 
         # Adhesive rings
         self.settings["adhesive_ring_enabled"] = self.ring_enabled_var.get()
-        self.settings["adhesive_ring_trim_mm"] = self.ring_trim_var.get()
+        self.settings["adhesive_ring_trim_mm"] = self._ring_clearance_value()
 
         self.save_callback()
         self.update_callback()
@@ -2092,7 +2132,7 @@ class OptionsWindow:
             "locator_marks_dashed": self.locator_dashed_var.get(),
             # Adhesive rings
             "adhesive_ring_enabled": self.ring_enabled_var.get(),
-            "adhesive_ring_trim_mm": self.ring_trim_var.get(),
+            "adhesive_ring_trim_mm": self._ring_clearance_value(),
         }
 
     def _apply_dict_to_form(self, source):
@@ -5770,7 +5810,7 @@ class UserGuideWindow(tk.Toplevel):
                     "material to the Pad Maker: a ring of double-sided tape for each pad, for "
                     "sticking a silicone wrap to the back of the card. The outer edge matches "
                     "the card disc, and the ring is as wide as the leather wrap for that pad "
-                    "size. Ring width trim makes it wider or narrower."))
+                    "size. Wrap clearance makes it wider or narrower."))
         self._bullet(_("Each ring's pad size is cut as single-line digits in its hole, on the "
                       "piece that drops out. Where the hole is too small to read it, the "
                       "number goes just under the ring instead."))

@@ -135,10 +135,10 @@ def main():
             w._apply_dict_to_form(old)
             assert w.ring_enabled_var.get() is False and w.ring_trim_var.get() == 0.0, \
                 "loading a pre-feature preset turns rings off"
-            assert str(w.ring_trim_entry.cget("state")) == "disabled"
+            assert str(w.ring_clearance_spin.cget("state")) == "disabled"
             w._apply_dict_to_form(ring_preset)
             assert w.ring_enabled_var.get() is True and w.ring_trim_var.get() == 0.4
-            assert str(w.ring_trim_entry.cget("state")) == "normal"
+            assert str(w.ring_clearance_spin.cget("state")) == "normal"
         finally:
             w.top.destroy()
     check("Adhesive ring fields: dirty, detect, load, backfill of older presets",

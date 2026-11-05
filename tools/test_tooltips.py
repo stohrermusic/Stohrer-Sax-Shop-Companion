@@ -226,7 +226,7 @@ def main():
             walk(w.top, found)
             if name == "OptionsWindow(adhesive rings on)":
                 # The gate must actually have walked the ring widgets.
-                assert w.ring_cb.bind("<Enter>") and w.ring_trim_entry.bind("<Enter>")
+                assert w.ring_cb.bind("<Enter>") and w.ring_clearance_spin.bind("<Enter>")
             if name == "LayerColorWindow(adhesive rings on)":
                 assert "adhesive_ring_cut" in w.color_vars
             if name == "GcodeSettingsWindow(adhesive rings)":

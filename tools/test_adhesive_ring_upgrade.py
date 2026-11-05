@@ -27,7 +27,11 @@ Covers:
     folder with the feature on
   - the `--tour all` walk as a gate (run_tour) with the feature on and off:
     every stop, no errors, no stray windows, and the ring section and
-    preview show in the tour only while the feature is on
+    preview show in the tour only while the feature is on. What the tour's
+    Sizing Rules stop showed is sampled when the tour closes that dialog,
+    not on a timer, and the dialog is slowed past a whole tour step on
+    purpose, so the gate cannot depend on how fast the machine is (a timer
+    probe lost that race on CI's Intel Mac, 2026-11-05)
 
 Needs a display (self-skips without one).
 """
@@ -39,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,6 +57,13 @@ init_translation("en")
 
 RING = 'adhesive_ring'
 RING_KEYS = ("adhesive_ring_enabled", "adhesive_ring_trim_mm")
+
+# The tour gate. run_tour schedules each stop's finish BEFORE it opens the
+# stop, so a dialog that takes longer to build than one step is closed the
+# moment it is built. That is the normal case on a slow runner, and here it
+# is forced: the wrapped Sizing Rules dialog sleeps longer than a step.
+TOUR_STEP_MS = 350
+SLOW_DIALOG_S = float(os.environ.get("SSC_TEST_SLOW_DIALOG_S", "0.45"))
 results = []
 
 
@@ -290,7 +302,7 @@ def main():
         try:
             w.ring_cb.invoke()                       # the real checkbox
             assert w.ring_enabled_var.get() is True
-            assert str(w.ring_trim_entry.cget("state")) == "normal"
+            assert str(w.ring_clearance_spin.cget("state")) == "normal"
             w.ring_trim_var.set(0.3)
             assert w._is_dirty()
             w.on_apply()                             # asks to save as a preset first -> "Matt rings"
@@ -514,20 +526,34 @@ def main():
         app.settings["adhesive_ring_enabled"] = enabled
         app.update_ui_from_settings()
         app._toner_mic_checked = True
-        seen = {"gcode": None, "layer": None, "preview_ring": None, "lesser_open": None}
+        seen = {"gcode": None, "layer": None, "preview_ring": None, "lesser_open": None, "sampled": 0}
         real_opts, real_gc, real_lc = main_mod.OptionsWindow, main_mod.GcodeSettingsWindow, main_mod.LayerColorWindow
 
         class Opts(real_opts):
             def __init__(self, *a, **k):
                 super().__init__(*a, **k)
+                # Slower than a whole tour step, on purpose: the stop's finish
+                # is already due when this returns, exactly as on a slow CI
+                # runner. Nothing below may depend on the dialog staying open
+                # for any length of time.
+                time.sleep(SLOW_DIALOG_S)
+                # Sample what the stop showed at the moment the tour closes
+                # the dialog (it calls top.destroy()): by then the tour has
+                # opened the lesser-used section and the preview, however
+                # long that took. No timer, so nothing to race.
+                really_destroy = self.top.destroy
 
-                def probe():
-                    seen["lesser_open"] = self.lesser_open
-                    pv = self.preview_window
-                    if pv is not None and pv.winfo_exists():
-                        pv._render()
-                        seen["preview_ring"] = len(pv.canvas.find_withtag("ring"))
-                self.top.after(250, probe)
+                def sample_then_destroy():
+                    try:
+                        seen["sampled"] += 1
+                        seen["lesser_open"] = self.lesser_open
+                        pv = self.preview_window
+                        if pv is not None and pv.winfo_exists():
+                            pv._render()
+                            seen["preview_ring"] = len(pv.canvas.find_withtag("ring"))
+                    finally:
+                        really_destroy()
+                self.top.destroy = sample_then_destroy
 
         class Gc(real_gc):
             def __init__(self, *a, **k):
@@ -540,7 +566,7 @@ def main():
                 seen["layer"] = "adhesive_ring_cut" in self.color_vars
         main_mod.OptionsWindow, main_mod.GcodeSettingsWindow, main_mod.LayerColorWindow = Opts, Gc, Lc
         try:
-            log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=350, on_done=root.quit)
+            log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=TOUR_STEP_MS, on_done=root.quit)
             guard = root.after(180000, root.quit)
             root.mainloop()
             root.after_cancel(guard)
@@ -560,6 +586,8 @@ def main():
             want_gc = ["felt", "card", "leather"] + ([RING] if enabled else [])
             assert seen["gcode"] == want_gc, seen["gcode"]
             assert seen["layer"] is enabled, seen["layer"]
+            assert SLOW_DIALOG_S * 1000 > TOUR_STEP_MS, "the dialog must be slower than a tour step for this gate"
+            assert seen["sampled"] == 1, f"the Sizing Rules stop was sampled {seen['sampled']} times, wanted once"
             assert seen["lesser_open"] is True, "the tour opens the lesser-used section"
             if enabled:
                 assert seen["preview_ring"] and seen["preview_ring"] >= 1, f"no ring in the tour's preview: {seen}"

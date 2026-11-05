@@ -718,6 +718,13 @@ DEFAULT_SETTINGS = {
     # nominal figure tuned on real pads, not a measured overlap on the
     # card back, hence the trim (mm, either sign). Geometry lives in
     # svg_engine.adhesive_ring_geometry.
+    # The Sizing Rules dialog calls the trim "Wrap clearance" (the key
+    # keeps its name, like the dart_ keys behind "Darts"). Same number,
+    # same sign: mm of ring width per side. Matt, 2026-11-05: "I think of
+    # negative clearance as being inside and hidden, positive clearance as
+    # being extra ring material"; "I want negative numbers to be reducing
+    # the ring size (increasing ID) and positive numbers to be increasing
+    # ring size (shrinking ID)".
     "adhesive_ring_enabled": False,
     "adhesive_ring_trim_mm": 0.0,
     # Gap from the outermost disc edge to the engraved border, both sheet
