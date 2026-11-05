@@ -67,6 +67,11 @@ if _has_gpu:
 # ============================================================
 print("\n--- tuner_tab Module Flags ---")
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-gpu-tuner-")
+
 import tuner_tab
 
 test("_HAS_GPU_RENDERER flag exists", hasattr(tuner_tab, '_HAS_GPU_RENDERER'))

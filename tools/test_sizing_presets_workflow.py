@@ -19,6 +19,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-sizing-presets-workflow-")
+
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
@@ -92,6 +97,52 @@ def main():
         )
         w.top.withdraw()
         return w
+
+    def form_captures_exactly_the_preset_schema():
+        # A key in SIZING_PRESET_KEYS the form doesn't capture (or the other
+        # way round) breaks preset detection for every saved preset.
+        w = make_window()
+        try:
+            snap = w._capture_form_to_dict()
+            assert set(snap) == set(SIZING_PRESET_KEYS), set(snap) ^ set(SIZING_PRESET_KEYS)
+            for k in ("adhesive_ring_enabled", "adhesive_ring_trim_mm"):
+                assert k in snap, k
+        finally:
+            w.top.destroy()
+    check("The form captures exactly SIZING_PRESET_KEYS (adhesive ring keys included)",
+          form_captures_exactly_the_preset_schema)
+
+    def adhesive_ring_fields_follow_the_preset_workflow():
+        from config import normalize_sizing_preset
+        ring_preset = dict(settings_to_sizing_preset(settings),
+                           adhesive_ring_enabled=True, adhesive_ring_trim_mm=0.4)
+        # "Old" was saved before the feature existed: no ring keys at all.
+        old = {k: v for k, v in settings_to_sizing_preset(settings).items()
+               if not k.startswith("adhesive_ring_")}
+        lib = {"Old": old, "Rings": ring_preset}
+        w = OptionsWindow(root, StubApp(), copy.deepcopy(settings), lambda: None, lambda: None,
+                          sizing_presets=lib, sizing_presets_save_callback=save_cb)
+        w.top.withdraw()
+        try:
+            assert w._detect_active_preset() == "Old", "a pre-feature preset must still be recognised"
+            assert normalize_sizing_preset(old)["adhesive_ring_enabled"] is False
+            assert not w._is_dirty()
+            w.ring_trim_var.set(0.4)
+            assert w._is_dirty(), "the trim is part of the dirty check"
+            w.ring_enabled_var.set(True)
+            assert w._capture_form_to_dict() == normalize_sizing_preset(ring_preset)
+            assert w._detect_active_preset() == "Rings"
+            w._apply_dict_to_form(old)
+            assert w.ring_enabled_var.get() is False and w.ring_trim_var.get() == 0.0, \
+                "loading a pre-feature preset turns rings off"
+            assert str(w.ring_trim_entry.cget("state")) == "disabled"
+            w._apply_dict_to_form(ring_preset)
+            assert w.ring_enabled_var.get() is True and w.ring_trim_var.get() == 0.4
+            assert str(w.ring_trim_entry.cget("state")) == "normal"
+        finally:
+            w.top.destroy()
+    check("Adhesive ring fields: dirty, detect, load, backfill of older presets",
+          adhesive_ring_fields_follow_the_preset_workflow)
 
     def baseline_clean_on_open():
         w = make_window()

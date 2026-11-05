@@ -19,6 +19,10 @@ import unittest.mock
 sys.modules['tkinter'] = unittest.mock.MagicMock()
 sys.modules['tkinter.messagebox'] = unittest.mock.MagicMock()
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-release-1-9-")
+
 from config import DEFAULT_SETTINGS, load_settings
 from svg_engine import (
     get_disc_diameter, _nest_discs, can_all_pads_fit,

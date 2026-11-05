@@ -19,6 +19,10 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-camera-capture-")
+
 import camera_capture as cam
 
 passed = 0
@@ -386,8 +390,18 @@ path = cam.default_calibration_path()
 check("default_calibration_path returns a string", isinstance(path, str))
 check("path ends in camera_calibration.json",
       path.endswith('camera_calibration.json'))
+# This suite runs on an isolated profile, so the path is inside it ...
+check("path follows the isolated profile (SAXSHOP_CONFIG_DIR)",
+      os.path.dirname(path) == os.environ["SAXSHOP_CONFIG_DIR"])
+# ... and without the override it is the platform folder. Only the path is
+# computed here; nothing is read from or written to that folder.
+_saved_override = os.environ.pop("SAXSHOP_CONFIG_DIR")
+try:
+    _platform_path = cam.default_calibration_path()
+finally:
+    os.environ["SAXSHOP_CONFIG_DIR"] = _saved_override
 check("path includes StohrerSaxShopCompanion folder",
-      'StohrerSaxShopCompanion' in path)
+      'StohrerSaxShopCompanion' in _platform_path)
 
 # ============================================================
 print(f"\n=== Summary: {passed} passed, {failed} failed ===\n")

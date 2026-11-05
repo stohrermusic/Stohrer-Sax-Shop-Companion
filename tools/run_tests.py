@@ -14,10 +14,18 @@ xvfb); locally it's the "run everything before a release" command.
         # leave out suites by name (reported as skipped, never silently)
 
 Skips test_descriptor_validity unless its WAV corpus is on this machine.
+
+Every suite runs with its own temporary SAXSHOP_CONFIG_DIR (unless the
+environment already sets one), so a full run can never read or write the
+real settings folder of whoever runs it, whatever a suite forgets. Suites
+that can reach the config folder also set the override themselves, for
+direct runs; tools/test_config_isolation.py checks both.
 """
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,6 +42,21 @@ def summary_line(output):
         if "passed" in low or "fail" in low or "skip" in low:
             return ln
     return lines[-1] if lines else ""
+
+
+def suite_env(base_env, name):
+    """(environment for one suite, its temp config folder or None).
+
+    A fresh folder per suite, so one suite's leftovers can't steer the
+    next. An override already in the environment is left alone: a developer
+    pointing the whole run at a prepared profile means it.
+    """
+    env = dict(base_env)
+    if env.get("SAXSHOP_CONFIG_DIR"):
+        return env, None
+    folder = tempfile.mkdtemp(prefix=f"ssc-run-{name.replace('test_', '', 1)}-")
+    env["SAXSHOP_CONFIG_DIR"] = folder
+    return env, folder
 
 
 def main(argv):
@@ -66,13 +89,17 @@ def main(argv):
             print(f"skip {name:34s}        excluded by --skip")
             continue
         t0 = time.time()
+        run_env, config_folder = suite_env(env, name)
         try:
-            r = subprocess.run([sys.executable, os.path.join(TOOLS, fname)], cwd=ROOT, env=env,
+            r = subprocess.run([sys.executable, os.path.join(TOOLS, fname)], cwd=ROOT, env=run_env,
                                capture_output=True, text=True, encoding="utf-8", errors="replace",
                                timeout=TIMEOUT_S)
             code, out = r.returncode, (r.stdout or "") + (r.stderr or "")
         except subprocess.TimeoutExpired as e:
             code, out = 124, f"TIMEOUT after {TIMEOUT_S}s\n" + str(e.stdout or "")
+        finally:
+            if config_folder:
+                shutil.rmtree(config_folder, ignore_errors=True)
         ran += 1
         missing = next((m for m in allow_missing if f"No module named '{m}'" in out), None)
         if code != 0 and missing:

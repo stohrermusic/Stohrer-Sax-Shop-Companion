@@ -32,6 +32,12 @@ def test(name, condition):
 # 1. Config defaults
 # ============================================================
 print("\n--- Config Defaults ---")
+
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-tuner-updates-")
+
 from config import DEFAULT_SETTINGS
 
 ts = DEFAULT_SETTINGS["tuner_settings"]

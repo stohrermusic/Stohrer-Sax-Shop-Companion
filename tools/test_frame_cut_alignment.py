@@ -25,6 +25,10 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-frame-cut-alignment-")
+
 from config import DEFAULT_SETTINGS  # noqa: E402
 from gcode_engine import generate_gcode_from_placed, generate_polygon_framing_gcode  # noqa: E402
 

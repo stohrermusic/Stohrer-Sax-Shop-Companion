@@ -89,6 +89,32 @@ for mat in ("felt", "card", "leather", "exact_size"):
         check(f"{mat}, {'compatibility' if compat else 'default'} mode: parses, root is sane",
               _case(mat, compat))
 
+# Adhesive rings (opt-in material): circles plus stroke-font polylines.
+for compat in (False, True):
+    check(f"adhesive_ring, {'compatibility' if compat else 'default'} mode: parses, root is sane",
+          _case("adhesive_ring", compat, adhesive_ring_enabled=True))
+check("adhesive_ring with a trim and labeled zones on: parses (zones stand down)",
+      _case("adhesive_ring", False, adhesive_ring_enabled=True, adhesive_ring_trim_mm=0.5,
+            zone_labels_enabled=True))
+
+
+def ring_svg_is_circles_and_polylines_on_one_layer():
+    s = settings(adhesive_ring_enabled=True)
+    text, root = _render("adhesive_ring", s)
+    tags = {el.tag.split('}')[-1] for el in root.iter()} - {"svg", "defs"}
+    assert tags == {"circle", "polyline"}, tags
+    strokes = {el.get("stroke") for el in root.iter() if el.get("stroke")}
+    assert strokes == {s["layer_colors"]["adhesive_ring_cut"]}, strokes
+    for el in root.iter():
+        if el.tag.split('}')[-1] == "polyline":
+            pts = [tuple(float(v) for v in p.split(',')) for p in el.get("points").split()]
+            assert len(pts) >= 2
+            assert all(0 <= x <= W and 0 <= y <= H for x, y in pts), "number off the sheet"
+
+
+check("adhesive_ring: only circles and polylines, all on the ring's layer, on the sheet",
+      ring_svg_is_circles_and_polylines_on_one_layer)
+
 check("leather with locator marks (both styles, dashed): parses",
       _case("leather", False, locator_marks_enabled=True, locator_marks_style="both",
             locator_marks_dashed=True, locator_marks_max_size=40.0))

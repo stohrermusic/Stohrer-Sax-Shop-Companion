@@ -23,6 +23,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-framing-power-")
+
 import config  # noqa: E402
 from config import get_framing_power_s, GCODE_PRESET_MATERIALS, FRAMING_POWER_S_MAX  # noqa: E402
 import gcode_engine as ge  # noqa: E402
@@ -139,6 +144,30 @@ def test_all_preset_materials_have_an_entry():
     d = config.DEFAULT_SETTINGS['laser_framing_power_by_material']
     for mat in GCODE_PRESET_MATERIALS:
         assert mat in d, f"{mat} missing from the default framing-power map"
+
+
+def test_adhesive_rings_have_their_own_entry():
+    """Tape is its own material with its own framing power (default 10 like
+    the others), not a share of card's or the global fallback."""
+    assert 'adhesive_ring' in GCODE_PRESET_MATERIALS
+    s = {"laser_framing_power_s": 4,
+         "laser_framing_power_by_material": dict(config.DEFAULT_SETTINGS['laser_framing_power_by_material'])}
+    assert get_framing_power_s('adhesive_ring', s) == 10, "should read its own entry, not the fallback"
+    s["laser_framing_power_by_material"]["adhesive_ring"] = 22
+    assert get_framing_power_s('adhesive_ring', s) == 22
+    assert get_framing_power_s('card', s) == 10, "card must not move with the tape"
+    s["laser_framing_power_by_material"]["adhesive_ring"] = 999
+    assert get_framing_power_s('adhesive_ring', s) == FRAMING_POWER_S_MAX
+
+
+def test_dialog_keeps_values_for_rows_it_does_not_show():
+    """The adhesive ring row is only shown while that feature is on. Saving
+    the dialog without it must not drop the stored value."""
+    import inspect
+    import main
+    src = inspect.getsource(main.PadSVGGeneratorApp._on_machine_framing_power)
+    assert 'merged.update(parsed)' in src, "OK should merge into the stored map, not replace it"
+    assert "_adhesive_ring_enabled()" in src, "the ring row should depend on the feature being on"
 
 
 def test_ceiling_is_well_below_engraving_power():

@@ -17,6 +17,7 @@ from config import (
     SIZING_PRESET_KEYS, normalize_sizing_preset,
     APP_VERSION, APP_BUILD_DATE,
     get_dart_settings_for_size, get_sizing_for_size,
+    GCODE_CUT_ONLY_MATERIALS,
 )
 from svg_engine import (
     placed_disc_area,
@@ -25,6 +26,7 @@ from svg_engine import (
     feeds_speeds_label_geometry,
     locator_mark_geometry, locator_circle_points,
     polygon_anchor_vertex,
+    adhesive_ring_geometry, adhesive_ring_number_strokes,
 )
 
 # On macOS, use native system colors for dark/light mode support.
@@ -53,6 +55,13 @@ def _holds_port(method):
         with self._port_lock:
             return method(self, *args, **kwargs)
     return wrapper
+
+def material_display_name(material):
+    """A pad material key as the Pad Maker's Materials checkboxes show it."""
+    if material == 'adhesive_ring':
+        return _("Adhesive rings")
+    return _(material.replace('_', ' ').capitalize())
+
 
 # ==========================================
 # CROSS-PLATFORM SCROLL HELPER
@@ -436,6 +445,12 @@ class OptionsWindow:
             value=self.settings.get("locator_marks_style", "lines"))
         self.locator_dashed_var = tk.BooleanVar(
             value=self.settings.get("locator_marks_dashed", False))
+
+        # Adhesive rings (lesser-used section, beta)
+        self.ring_enabled_var = tk.BooleanVar(
+            value=self.settings.get("adhesive_ring_enabled", False))
+        self.ring_trim_var = tk.DoubleVar(
+            value=self.settings.get("adhesive_ring_trim_mm", 0.0))
         self.engraving_font_size_vars = {}
         self.engraving_loc_vars = {}
         # (mode_var, mm entry) for every placement row, universal and range
@@ -1163,7 +1178,7 @@ class OptionsWindow:
         self.lesser_btn.pack(fill="x")
         add_tooltip(self.lesser_btn,
                     _("Settings most people never touch: labeled zones, leather "
-                      "locator marks and SVG export compatibility."))
+                      "locator marks, adhesive rings and SVG export compatibility."))
         self.lesser_body = tk.Frame(lesser_frame, bg=DIALOG_BG)
 
         # --- Labeled Zones ---------------------------------------------
@@ -1265,6 +1280,47 @@ class OptionsWindow:
                  bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
                  justify="left", wraplength=420).pack(anchor='w', pady=(3, 0))
 
+        # --- Adhesive rings (beta) -------------------------------------
+        # An opt-in fifth Pad Maker material: a ring of double-sided tape
+        # per pad. Its rules (on/off and the width trim) live here; the
+        # material checkbox, its layer color, its G-code section and its
+        # framing power only appear while this is ticked.
+        ring_frame = tk.LabelFrame(self.lesser_body, text=_("Adhesive Rings (beta)"),
+                                   bg=DIALOG_BG, padx=5, pady=5)
+        ring_frame.pack(fill="x", pady=5)
+        self.ring_frame = ring_frame
+        self.ring_cb = tk.Checkbutton(
+            ring_frame, text=_("Add adhesive rings as a material"),
+            variable=self.ring_enabled_var, bg=DIALOG_BG,
+            command=self._toggle_ring_fields)
+        self.ring_cb.pack(anchor='w')
+        add_tooltip(self.ring_cb,
+                    _("Rings of double-sided tape, one per pad, for sticking a "
+                      "silicone wrap to the back of the card. Adds an Adhesive "
+                      "rings material to the Pad Maker, with its own layer "
+                      "color and G-code settings. Beta."))
+
+        ring_row = tk.Frame(ring_frame, bg=DIALOG_BG)
+        ring_row.pack(anchor='w', pady=(4, 0))
+        ring_trim_label = tk.Label(ring_row, text=_("Ring width trim:"), bg=DIALOG_BG)
+        ring_trim_label.pack(side="left")
+        self.ring_trim_entry = tk.Entry(ring_row, textvariable=self.ring_trim_var, width=6)
+        self.ring_trim_entry.pack(side="left", padx=4)
+        ring_trim_unit = tk.Label(ring_row, text=_("mm"), bg=DIALOG_BG)
+        ring_trim_unit.pack(side="left")
+        add_tooltips(_("The ring is as wide as the leather wrap for that pad "
+                       "size. Add to that here, or enter a negative number "
+                       "for a narrower ring."),
+                     ring_trim_label, self.ring_trim_entry, ring_trim_unit)
+
+        tk.Label(ring_frame,
+                 text=_("The outer edge matches the card disc. Each ring's size is "
+                        "cut in its hole, or just under the ring when the hole is "
+                        "too small to read it."),
+                 bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
+                 justify="left", wraplength=420).pack(anchor='w', pady=(3, 0))
+        self._toggle_ring_fields()
+
         export_frame = tk.LabelFrame(self.lesser_body, text=_("Export Settings"), bg=DIALOG_BG, padx=5, pady=5)
         export_frame.pack(fill="x", pady=5)
         compat_cb = tk.Checkbutton(export_frame,
@@ -1281,7 +1337,7 @@ class OptionsWindow:
         self._toggle_locator_fields()
 
         if (self.zone_labels_enabled_var.get() or self.locator_enabled_var.get()
-                or self.compatibility_mode_var.get()):
+                or self.compatibility_mode_var.get() or self.ring_enabled_var.get()):
             self._toggle_lesser_used()
         else:
             self._refresh_lesser_header()
@@ -1310,6 +1366,11 @@ class OptionsWindow:
     def _refresh_lesser_header(self):
         arrow = "\u25bc" if self.lesser_open else "\u25b6"
         self.lesser_btn.config(text=f"{arrow} " + _("Lesser-used settings"))
+
+    def _toggle_ring_fields(self):
+        """Grey the ring width trim when adhesive rings are off."""
+        state = "normal" if self.ring_enabled_var.get() else "disabled"
+        self.ring_trim_entry.config(state=state)
 
     def _toggle_locator_fields(self):
         """Grey the locator options when the marks are off."""
@@ -1899,6 +1960,10 @@ class OptionsWindow:
         self.settings["locator_marks_style"] = self.locator_style_var.get()
         self.settings["locator_marks_dashed"] = self.locator_dashed_var.get()
 
+        # Adhesive rings
+        self.settings["adhesive_ring_enabled"] = self.ring_enabled_var.get()
+        self.settings["adhesive_ring_trim_mm"] = self.ring_trim_var.get()
+
         self.save_callback()
         self.update_callback()
         self.top.destroy()
@@ -1970,6 +2035,11 @@ class OptionsWindow:
             self.locator_dashed_var.set(DEFAULT_SETTINGS["locator_marks_dashed"])
             self._toggle_locator_fields()
 
+            # Adhesive rings
+            self.ring_enabled_var.set(DEFAULT_SETTINGS["adhesive_ring_enabled"])
+            self.ring_trim_var.set(DEFAULT_SETTINGS["adhesive_ring_trim_mm"])
+            self._toggle_ring_fields()
+
     # ------------------------------------------------------------------
     # Sizing-rules preset support
     # ------------------------------------------------------------------
@@ -2020,6 +2090,9 @@ class OptionsWindow:
             "locator_marks_max_size": self.locator_max_var.get(),
             "locator_marks_style": self.locator_style_var.get(),
             "locator_marks_dashed": self.locator_dashed_var.get(),
+            # Adhesive rings
+            "adhesive_ring_enabled": self.ring_enabled_var.get(),
+            "adhesive_ring_trim_mm": self.ring_trim_var.get(),
         }
 
     def _apply_dict_to_form(self, source):
@@ -2094,6 +2167,11 @@ class OptionsWindow:
         self.locator_style_var.set(source.get("locator_marks_style", d["locator_marks_style"]))
         self.locator_dashed_var.set(source.get("locator_marks_dashed", d["locator_marks_dashed"]))
         self._toggle_locator_fields()
+
+        # Adhesive rings
+        self.ring_enabled_var.set(source.get("adhesive_ring_enabled", d["adhesive_ring_enabled"]))
+        self.ring_trim_var.set(source.get("adhesive_ring_trim_mm", d["adhesive_ring_trim_mm"]))
+        self._toggle_ring_fields()
 
     def _detect_active_preset(self):
         """Find a saved preset whose values match the form's current snapshot.
@@ -2321,14 +2399,18 @@ class PadPreviewWindow(tk.Toplevel):
         'felt':       '#A33333',
         'card':       '#C4A484',
         'exact_size': '#444444',
+        'adhesive_ring': '#B02FB0',
     }
     LABELS = {
         'leather':    _('Leather'),
         'felt':       _('Felt'),
         'card':       _('Card'),
         'exact_size': _('Exact size'),
+        'adhesive_ring': _('Adhesive rings'),
     }
-    MATERIALS = ('leather', 'felt', 'card', 'exact_size')
+    MATERIALS = ('leather', 'felt', 'card', 'exact_size', 'adhesive_ring')
+    # Adhesive rings are offered only while the parent form has the
+    # feature ticked (the checkbox comes and goes with it, live).
     POLL_MS = 200
 
     def __init__(self, parent_options):
@@ -2348,7 +2430,9 @@ class PadPreviewWindow(tk.Toplevel):
             'felt':       tk.BooleanVar(value=True),
             'card':       tk.BooleanVar(value=True),
             'exact_size': tk.BooleanVar(value=False),
+            'adhesive_ring': tk.BooleanVar(value=True),
         }
+        self._mat_checkbuttons = {}
         self.layout_var = tk.StringVar(value='layered')
 
         # Polling state
@@ -2395,7 +2479,10 @@ class PadPreviewWindow(tk.Toplevel):
                 variable=self.show_vars[mat], bg=DIALOG_BG,
                 command=self._render,
             )
-            cb.pack(side="left", padx=2)
+            self._mat_checkbuttons[mat] = cb
+            if mat != 'adhesive_ring':
+                cb.pack(side="left", padx=2)
+        self._sync_ring_checkbox(self._ring_enabled_in_form())
 
         # Layout row
         layout_row = tk.Frame(ctrls, bg=DIALOG_BG)
@@ -2453,6 +2540,24 @@ class PadPreviewWindow(tk.Toplevel):
             self._render()
         self._poll_after_id = self.after(self.POLL_MS, self._poll)
 
+    def _ring_enabled_in_form(self):
+        """Whether the parent form has adhesive rings ticked right now."""
+        try:
+            return bool(self.parent_options.ring_enabled_var.get())
+        except (tk.TclError, AttributeError):
+            return False
+
+    def _sync_ring_checkbox(self, enabled):
+        """Show the Adhesive rings checkbox only while the feature is on."""
+        cb = self._mat_checkbuttons.get('adhesive_ring')
+        if cb is None:
+            return
+        shown = bool(cb.winfo_manager())
+        if enabled and not shown:
+            cb.pack(side="left", padx=2)
+        elif shown and not enabled:
+            cb.pack_forget()
+
     def _cancel_poll(self):
         if self._poll_after_id is not None:
             try:
@@ -2495,7 +2600,10 @@ class PadPreviewWindow(tk.Toplevel):
             self._draw_message("Waiting for valid settings…")
             return
 
-        materials = [m for m in self.MATERIALS if self.show_vars[m].get()]
+        ring_on = bool(settings.get("adhesive_ring_enabled", False))
+        self._sync_ring_checkbox(ring_on)
+        materials = [m for m in self.MATERIALS if self.show_vars[m].get()
+                     and (m != 'adhesive_ring' or ring_on)]
         if not materials:
             self._draw_message("No materials selected")
             return
@@ -2504,7 +2612,11 @@ class PadPreviewWindow(tk.Toplevel):
         diams = {}
         for mat in materials:
             try:
-                d = get_disc_diameter(pad_size, mat, settings)
+                if mat == 'adhesive_ring':
+                    # The ring's cut, not its nesting footprint.
+                    d = adhesive_ring_geometry(pad_size, settings)["outer_r"] * 2
+                else:
+                    d = get_disc_diameter(pad_size, mat, settings)
             except Exception:
                 d = 0
             if d and d > 0:
@@ -2547,6 +2659,9 @@ class PadPreviewWindow(tk.Toplevel):
             color = self.COLORS[mat]
             if mat == 'leather':
                 self._draw_leather(cx, cy, pad_size, settings, r_px, color, scale)
+            elif mat == 'adhesive_ring':
+                self._draw_adhesive_ring(cx, cy, pad_size, settings, scale, color)
+                continue   # a ring has its own hole, not the pad's center hole
             else:
                 self.canvas.create_oval(
                     cx - r_px, cy - r_px, cx + r_px, cy + r_px,
@@ -2566,6 +2681,11 @@ class PadPreviewWindow(tk.Toplevel):
 
         total_w_mm = sum(d for _, d in ordered) + gap_mm * (len(ordered) - 1)
         max_h_mm = max(d for _, d in ordered)
+        if 'adhesive_ring' in diams:
+            # A number under a small ring hangs below the row of discs; leave
+            # it (and the caption under it) room, or it runs off the canvas.
+            ring = adhesive_ring_geometry(pad_size, settings)
+            max_h_mm = max(max_h_mm, 2 * ring["box"][3])
         avail_w = max(cw - 2 * margin, 50)
         avail_h = max(ch - 2 * margin - 26, 50)  # leave room for labels
         scale = min(avail_w / total_w_mm, avail_h / max_h_mm)
@@ -2578,16 +2698,23 @@ class PadPreviewWindow(tk.Toplevel):
             cx_px = cw / 2 + cx_mm * scale
             r_px = r_mm * scale
             color = self.COLORS[mat]
+            label_drop = 0.0
             if mat == 'leather':
                 self._draw_leather(cx_px, cy, pad_size, settings, r_px, color, scale)
+                self._draw_center_hole(cx_px, cy, mat, pad_size, settings, scale, color)
+            elif mat == 'adhesive_ring':
+                geom = self._draw_adhesive_ring(cx_px, cy, pad_size, settings, scale, color)
+                # Keep the caption clear of a number that sits under the ring.
+                if geom["placement"] == "outside":
+                    label_drop = (geom["box"][3] - geom["outer_r"]) * scale + 12
             else:
                 self.canvas.create_oval(
                     cx_px - r_px, cy - r_px, cx_px + r_px, cy + r_px,
                     outline=color, width=2, fill='',
                 )
-            self._draw_center_hole(cx_px, cy, mat, pad_size, settings, scale, color)
+                self._draw_center_hole(cx_px, cy, mat, pad_size, settings, scale, color)
             self.canvas.create_text(
-                cx_px, cy + r_px + 14,
+                cx_px, cy + r_px + 14 + label_drop,
                 text=_("{label}\n{mm:.1f} mm").format(label=self.LABELS[mat], mm=d_mm),
                 fill=color, justify="center",
                 font=("Helvetica", 9),
@@ -2643,6 +2770,24 @@ class PadPreviewWindow(tk.Toplevel):
         # interior, smoothing the perceived shape; we want crisp outlines).
         self.canvas.create_line(*coords, fill=color, width=2, smooth=False)
         self._draw_locator(cx, cy, pad_size, settings, outer_r_mm, scale)
+
+    # --- Adhesive ring (same geometry as both engines) ---
+
+    def _draw_adhesive_ring(self, cx, cy, pad_size, settings, scale, color):
+        """Outer cut, inner cut and the number where it will really go
+        (in the hole, or under the ring). Returns the geometry drawn."""
+        geom = adhesive_ring_geometry(pad_size, settings)
+        ro = geom["outer_r"] * scale
+        self.canvas.create_oval(cx - ro, cy - ro, cx + ro, cy + ro,
+                                outline=color, width=2, fill='', tags=("ring",))
+        if geom["inner_r"] > 0:
+            ri = geom["inner_r"] * scale
+            self.canvas.create_oval(cx - ri, cy - ri, cx + ri, cy + ri,
+                                    outline=color, width=2, fill='', tags=("ring", "ring_inner"))
+        for stroke in geom["strokes"]:
+            pts = [c for x, y in stroke for c in (cx + x * scale, cy + y * scale)]
+            self.canvas.create_line(*pts, fill=color, width=1, tags=("ring_number",))
+        return geom
 
     # --- Leather locator marks (same geometry as both engines) ---
 
@@ -2866,7 +3011,11 @@ class LayerColorWindow:
             'leather_outline', 'leather_center_hole', 'leather_engraving', 'leather_locator',
             'exact_size_outline', 'exact_size_center_hole', 'exact_size_engraving'
         ]
-        
+        # Adhesive rings: one layer for the ring and its number, listed
+        # only while the feature is on (Sizing Rules > Lesser-used settings).
+        if self.settings.get("adhesive_ring_enabled", False):
+            layer_map_keys.append('adhesive_ring_cut')
+
         op_word = {"outline": "outer cut",
                    "center_hole": "center hole",
                    "engraving": "engraving",
@@ -2891,6 +3040,9 @@ class LayerColorWindow:
             op_name = op_word.get(op_key, op_key.replace('_', ' '))
             tip = (f"LightBurn layer color used for the {mat} {op_name} "
                    "lines in the SVG output.")
+            if key == 'adhesive_ring_cut':
+                tip = ("LightBurn layer color used for the adhesive rings in the "
+                       "SVG output: the cuts and the size number share it.")
             add_tooltips(tip, row_lbl, combo)
 
         button_frame = tk.Frame(main_frame, bg=DIALOG_BG)
@@ -2901,6 +3053,13 @@ class LayerColorWindow:
         cancel_btn.pack(side="left", padx=10)
         add_tooltip(save_btn, _("Apply the color choices and close."))
         add_tooltip(cancel_btn, _("Close without changing layer colors."))
+
+        # An extra row (adhesive rings) must not push the buttons off the
+        # fixed-size window.
+        self.top.update_idletasks()
+        need_h = main_frame.winfo_reqheight() + 10
+        if need_h > 450:
+            self.top.geometry(f"450x{need_h}")
 
     def save_colors(self):
         for key, var in self.color_vars.items():
@@ -4460,30 +4619,26 @@ class GcodeSettingsWindow:
         frame = tk.Frame(mat_frame, bg=DIALOG_BG)
         frame.pack(fill="x")
 
-        # Header row
-        op_hdr = tk.Label(frame, text=_("Operation"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
-        op_hdr.grid(row=0, column=0, sticky="w", padx=5)
-        sp_hdr = tk.Label(frame, text=_("Speed (mm/min)"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
-        sp_hdr.grid(row=0, column=1, padx=5)
-        pw_hdr = tk.Label(frame, text=_("Power (%)"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
-        pw_hdr.grid(row=0, column=2, padx=5)
-        ps_hdr = tk.Label(frame, text=_("Passes"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
-        ps_hdr.grid(row=0, column=3, padx=5)
-        air_hdr = tk.Label(frame, text=_("Air"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
-        air_hdr.grid(row=0, column=4, padx=5)
-        add_tooltip(sp_hdr, _("Feed rate in millimeters per minute."))
-        add_tooltip(pw_hdr,
-                    _("Laser power, 0–100 %. Mapped onto Grbl's S0–S1000 "
-                    "scale, so check that your machine's $30 setting is "
-                    "1000 (`$30=1000` in your console) for the percentage "
-                    "to mean what it says."))
-        add_tooltip(ps_hdr,
-                    _("How many times to repeat each stroke in this layer. "
-                    "Two or more lower-power passes often cut thicker "
-                    "leather or acrylic cleaner than one high-power pass."))
-        add_tooltip(air_hdr,
-                    _("Per-operation air-assist toggle. Sends M8 (on) before "
-                    "the operation and M9 (off) after."))
+        self._add_header_row(frame)
+
+        if mat_key in GCODE_CUT_ONLY_MATERIALS:
+            # Adhesive rings: one cut row and the kerf. No engraving and no
+            # center hole exist for this material, so those rows (and their
+            # tk vars) are simply not built; _capture_material_to_dict and
+            # friends branch on the same tuple.
+            self._add_operation_row(
+                frame, mat_key, mat_settings, "cut", _("Cut (ring and number)"), 1,
+                descr="ring cuts and the size number", short="ring cut")
+            self._add_kerf_row(frame, mat_key, mat_settings, 2)
+            note = tk.Label(
+                mat_frame,
+                text=_("The number is traced at these same settings. The defaults "
+                       "are a starting point: dial them in with Tooling > Speed & "
+                       "Power Test."),
+                bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
+                justify="left", wraplength=520)
+            note.pack(anchor="w", pady=(4, 0))
+            return
 
         # --- Engraving mode section (rows 1-2) ---
         current_mode = mat_settings.get("engraving_mode", "line")
@@ -4609,46 +4764,82 @@ class GcodeSettingsWindow:
             "cut": ("outer disc cut", "outer cut"),
         }
         for i, (op_key, op_label) in enumerate(self.OPERATIONS, start=4):
-            self.vars[mat_key][op_key] = {}
-
-            default_speed = self._get_default(mat_key, f"{op_key}_speed")
-            default_power = self._get_default(mat_key, f"{op_key}_power")
-            default_passes = self._get_default(mat_key, f"{op_key}_passes", 1)
-            current_speed = mat_settings.get(f"{op_key}_speed", default_speed)
-            current_power = mat_settings.get(f"{op_key}_power", default_power)
-            current_passes = mat_settings.get(f"{op_key}_passes", default_passes)
-
-            speed_var = tk.IntVar(value=int(current_speed))
-            power_var = tk.DoubleVar(value=current_power)
-            passes_var = tk.IntVar(value=int(current_passes))
-
-            self.vars[mat_key][op_key]['speed'] = speed_var
-            self.vars[mat_key][op_key]['power'] = power_var
-            self.vars[mat_key][op_key]['passes'] = passes_var
-
             descr, short = op_help.get(op_key, (op_label.lower(), op_label.lower()))
-            row_lbl = tk.Label(frame, text=op_label, bg=DIALOG_BG)
-            row_lbl.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-            speed_ent = tk.Entry(frame, textvariable=speed_var, width=10)
-            speed_ent.grid(row=i, column=1, padx=5, pady=2)
-            power_ent = tk.Entry(frame, textvariable=power_var, width=10)
-            power_ent.grid(row=i, column=2, padx=5, pady=2)
-            passes_ent = tk.Spinbox(frame, textvariable=passes_var, from_=1, to=10, width=5)
-            passes_ent.grid(row=i, column=3, padx=5, pady=2)
-            add_tooltip(row_lbl, _("Settings for the {descr} on this material.").format(descr=descr))
-            add_tooltip(speed_ent, _("Feed rate for the {short} on this material.").format(short=short))
-            add_tooltip(power_ent, _("Laser power for the {short} on this material.").format(short=short))
-            add_tooltip(passes_ent,
-                        _("How many times to repeat the {short} on this material. Default 1; raise it for thicker stock where one high-power pass leaves rough edges.").format(short=short))
+            self._add_operation_row(frame, mat_key, mat_settings, op_key, op_label, i,
+                                    descr=descr, short=short)
 
-            air_var = tk.BooleanVar(value=mat_settings.get(f"air_assist_{op_key}", True))
-            self.vars[mat_key][f'air_assist_{op_key}'] = air_var
-            air_cb = tk.Checkbutton(frame, variable=air_var, bg=DIALOG_BG)
-            air_cb.grid(row=i, column=4, padx=5, pady=2)
-            add_tooltip(air_cb, _("Air-assist on during the {short} on this material.").format(short=short))
+        self._add_kerf_row(frame, mat_key, mat_settings, 4 + len(self.OPERATIONS))
 
-        # Kerf width row
-        kerf_row = 4 + len(self.OPERATIONS)
+    def _add_header_row(self, frame):
+        """The Operation / Speed / Power / Passes / Air column headers."""
+        op_hdr = tk.Label(frame, text=_("Operation"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        op_hdr.grid(row=0, column=0, sticky="w", padx=5)
+        sp_hdr = tk.Label(frame, text=_("Speed (mm/min)"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        sp_hdr.grid(row=0, column=1, padx=5)
+        pw_hdr = tk.Label(frame, text=_("Power (%)"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        pw_hdr.grid(row=0, column=2, padx=5)
+        ps_hdr = tk.Label(frame, text=_("Passes"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        ps_hdr.grid(row=0, column=3, padx=5)
+        air_hdr = tk.Label(frame, text=_("Air"), bg=DIALOG_BG, font=("Helvetica", 9, "bold"))
+        air_hdr.grid(row=0, column=4, padx=5)
+        add_tooltip(sp_hdr, _("Feed rate in millimeters per minute."))
+        add_tooltip(pw_hdr,
+                    _("Laser power, 0–100 %. Mapped onto Grbl's S0–S1000 "
+                    "scale, so check that your machine's $30 setting is "
+                    "1000 (`$30=1000` in your console) for the percentage "
+                    "to mean what it says."))
+        add_tooltip(ps_hdr,
+                    _("How many times to repeat each stroke in this layer. "
+                    "Two or more lower-power passes often cut thicker "
+                    "leather or acrylic cleaner than one high-power pass."))
+        add_tooltip(air_hdr,
+                    _("Per-operation air-assist toggle. Sends M8 (on) before "
+                    "the operation and M9 (off) after."))
+
+    def _add_operation_row(self, frame, mat_key, mat_settings, op_key, op_label, row,
+                           descr, short):
+        """One speed / power / passes / air row (center hole, outer cut, or
+        the single cut row of a cut-only material)."""
+        i = row
+        self.vars[mat_key][op_key] = {}
+
+        default_speed = self._get_default(mat_key, f"{op_key}_speed")
+        default_power = self._get_default(mat_key, f"{op_key}_power")
+        default_passes = self._get_default(mat_key, f"{op_key}_passes", 1)
+        current_speed = mat_settings.get(f"{op_key}_speed", default_speed)
+        current_power = mat_settings.get(f"{op_key}_power", default_power)
+        current_passes = mat_settings.get(f"{op_key}_passes", default_passes)
+
+        speed_var = tk.IntVar(value=int(current_speed))
+        power_var = tk.DoubleVar(value=current_power)
+        passes_var = tk.IntVar(value=int(current_passes))
+
+        self.vars[mat_key][op_key]['speed'] = speed_var
+        self.vars[mat_key][op_key]['power'] = power_var
+        self.vars[mat_key][op_key]['passes'] = passes_var
+
+        row_lbl = tk.Label(frame, text=op_label, bg=DIALOG_BG)
+        row_lbl.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+        speed_ent = tk.Entry(frame, textvariable=speed_var, width=10)
+        speed_ent.grid(row=i, column=1, padx=5, pady=2)
+        power_ent = tk.Entry(frame, textvariable=power_var, width=10)
+        power_ent.grid(row=i, column=2, padx=5, pady=2)
+        passes_ent = tk.Spinbox(frame, textvariable=passes_var, from_=1, to=10, width=5)
+        passes_ent.grid(row=i, column=3, padx=5, pady=2)
+        add_tooltip(row_lbl, _("Settings for the {descr} on this material.").format(descr=descr))
+        add_tooltip(speed_ent, _("Feed rate for the {short} on this material.").format(short=short))
+        add_tooltip(power_ent, _("Laser power for the {short} on this material.").format(short=short))
+        add_tooltip(passes_ent,
+                    _("How many times to repeat the {short} on this material. Default 1; raise it for thicker stock where one high-power pass leaves rough edges.").format(short=short))
+
+        air_var = tk.BooleanVar(value=mat_settings.get(f"air_assist_{op_key}", True))
+        self.vars[mat_key][f'air_assist_{op_key}'] = air_var
+        air_cb = tk.Checkbutton(frame, variable=air_var, bg=DIALOG_BG)
+        air_cb.grid(row=i, column=4, padx=5, pady=2)
+        add_tooltip(air_cb, _("Air-assist on during the {short} on this material.").format(short=short))
+
+    def _add_kerf_row(self, frame, mat_key, mat_settings, kerf_row):
+        """The kerf width spinbox for one material."""
         kerf_lbl = tk.Label(frame, text=_("Kerf width:"), bg=DIALOG_BG)
         kerf_lbl.grid(row=kerf_row, column=0, sticky="w", padx=5, pady=(8, 2))
 
@@ -4826,6 +5017,17 @@ class GcodeSettingsWindow:
         for save-as-preset.
         """
         v = self.vars[mat_key]
+        if mat_key in GCODE_CUT_ONLY_MATERIALS:
+            try:
+                return {
+                    "cut_speed": int(v['cut']['speed'].get()),
+                    "cut_power": float(v['cut']['power'].get()),
+                    "cut_passes": max(1, int(v['cut']['passes'].get())),
+                    "kerf_width": float(v['kerf_width'].get()),
+                    "air_assist_cut": bool(v['air_assist_cut'].get()),
+                }
+            except (tk.TclError, ValueError):
+                return {"_invalid": True}
         # Fill density slider maps to filled_line_spacing (same formula as _on_save).
         density_val = v['fill_density'].get()
         line_spacing = round(0.3 - (density_val / 100) * 0.22, 3)
@@ -4865,6 +5067,14 @@ class GcodeSettingsWindow:
 
         def g(key, fallback):
             return data.get(key, defaults.get(key, fallback))
+
+        if mat_key in GCODE_CUT_ONLY_MATERIALS:
+            v['cut']['speed'].set(int(g("cut_speed", 600)))
+            v['cut']['power'].set(g("cut_power", 60))
+            v['cut']['passes'].set(int(g("cut_passes", 1)))
+            v['kerf_width'].set(g("kerf_width", 0.0))
+            v['air_assist_cut'].set(bool(g("air_assist_cut", True)))
+            return
 
         v['engraving_mode'].set(g("engraving_mode", "line"))
         v['engraving']['speed'].set(int(g("engraving_speed", 1200)))
@@ -5109,6 +5319,24 @@ class GcodeSettingsWindow:
         for mat_key, _label in self.active_materials:
             new_gcode_settings[mat_key] = {}
 
+            if mat_key in GCODE_CUT_ONLY_MATERIALS:
+                # Cut, kerf and air only: this material has no engraving
+                # or center-hole settings to save.
+                try:
+                    new_gcode_settings[mat_key] = {
+                        "cut_speed": self.vars[mat_key]['cut']['speed'].get(),
+                        "cut_power": self.vars[mat_key]['cut']['power'].get(),
+                        "cut_passes": max(1, int(self.vars[mat_key]['cut']['passes'].get())),
+                        "kerf_width": self.vars[mat_key]['kerf_width'].get(),
+                        "air_assist_cut": self.vars[mat_key]['air_assist_cut'].get(),
+                    }
+                except tk.TclError:
+                    messagebox.showerror(_("Invalid Input"),
+                                         _("Invalid value for {mat} {op}. Please enter valid numbers.").format(mat=mat_key.replace('_', ' '), op="cut"),
+                                         parent=self.top)
+                    return
+                continue
+
             # Engraving mode
             new_gcode_settings[mat_key]["engraving_mode"] = self.vars[mat_key]['engraving_mode'].get()
 
@@ -5204,6 +5432,14 @@ class GcodeSettingsWindow:
 
         for mat_key, _label in self.active_materials:
             mat_defaults = default_gcode.get(mat_key, {})
+
+            if mat_key in GCODE_CUT_ONLY_MATERIALS:
+                self.vars[mat_key]['cut']['speed'].set(mat_defaults.get("cut_speed", 100))
+                self.vars[mat_key]['cut']['power'].set(mat_defaults.get("cut_power", 10))
+                self.vars[mat_key]['cut']['passes'].set(mat_defaults.get("cut_passes", 1))
+                self.vars[mat_key]['kerf_width'].set(mat_defaults.get("kerf_width", 0.0))
+                self.vars[mat_key]['air_assist_cut'].set(mat_defaults.get("air_assist_cut", True))
+                continue
 
             # Reset engraving mode
             self.vars[mat_key]['engraving_mode'].set(mat_defaults.get("engraving_mode", "line"))
@@ -5508,7 +5744,7 @@ class UserGuideWindow(tk.Toplevel):
         self._blank()
 
         self._h2(_("Lesser-used settings"))
-        self._body(_("Sizing Rules > Lesser-used settings holds three things most people never touch: Labeled Zones, Leather Locator Marks, and Export Settings. Click the header to open it; it opens itself when any of them is switched on."))
+        self._body(_("Sizing Rules > Lesser-used settings holds four things most people never touch: Labeled Zones, Leather Locator Marks, Adhesive Rings, and Export Settings. Click the header to open it; it opens itself when any of them is switched on."))
         self._blank()
 
         self._h2(_("Labeled Zones"))
@@ -5527,6 +5763,25 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("G-code output engraves them at the leather engraving settings — there is "
                       "no separate power for them yet. Use the SVG output if the marks need "
                       "their own power."))
+        self._blank()
+
+        self._h2(_("Adhesive Rings (beta)"))
+        self._body(_("Beta. Sizing Rules > Lesser-used settings > Adhesive Rings adds a fifth "
+                    "material to the Pad Maker: a ring of double-sided tape for each pad, for "
+                    "sticking a silicone wrap to the back of the card. The outer edge matches "
+                    "the card disc, and the ring is as wide as the leather wrap for that pad "
+                    "size. Ring width trim makes it wider or narrower."))
+        self._bullet(_("Each ring's pad size is cut as single-line digits in its hole, on the "
+                      "piece that drops out. Where the hole is too small to read it, the "
+                      "number goes just under the ring instead."))
+        self._bullet(_("Pads of 9.5 mm and under get a solid disc with no hole, and the number "
+                      "under it."))
+        self._bullet(_("SVG output puts the ring and its number on one layer (Options > Layer "
+                      "Colors). G-code cuts the number, then the inside, then the outside, all "
+                      "at the ring's cut settings (Options > G-code Settings)."))
+        self._bullet(_("The default G-code settings are a starting point, not tested values. "
+                      "Dial them in on your own material with Tooling > Speed & Power Test."))
+        self._bullet(_("Scrap Mode and Frame & Cut work as they do for the other materials."))
         self._blank()
 
         self._h2(_("Custom Shapes"))
@@ -6652,7 +6907,7 @@ class JobHistoryWindow(tk.Toplevel):
         mats = job.get("materials") or []
         if not mats:
             return "-"
-        return "+".join(_(m.replace('_', ' ').capitalize()) for m in mats)
+        return "+".join(material_display_name(m) for m in mats)
 
     def _materials_short(self, job):
         """Material names for the list column, or a count once the join
@@ -6891,6 +7146,7 @@ _PREVIEW_COLORS = {
     'card': '#CC8844',
     'leather': '#886633',
     'exact_size': '#66AA66',
+    'adhesive_ring': '#B02FB0',
 }
 
 
@@ -6905,7 +7161,7 @@ class NestingPreviewWindow(tk.Toplevel):
     """
 
     def __init__(self, parent, placements, width_mm, height_mm, polygon=None,
-                 proceed_label=None, zones=None):
+                 proceed_label=None, zones=None, settings=None):
         """
         Args:
             parent: Parent tk widget
@@ -6918,6 +7174,10 @@ class NestingPreviewWindow(tk.Toplevel):
                 laser rather than writing files. result is "save" either way.
             zones: Optional positioned zone dicts from nest_with_zones, drawn
                 as bordered labeled blocks so the preview matches the cut.
+            settings: App settings. Only adhesive rings need them: a ring's
+                radius in `placements` is its nesting footprint, so the real
+                ring and its number are drawn from adhesive_ring_geometry.
+                Without settings a ring job falls back to footprint circles.
         """
         super().__init__(parent)
         self.title(_("Nesting Preview"))
@@ -6927,6 +7187,7 @@ class NestingPreviewWindow(tk.Toplevel):
 
         self.result = None
         self._zones = list(zones or [])
+        self._settings = settings
 
         # First-run tutorial (persisted in settings via parent app)
         app = getattr(parent, 'settings', None) if not isinstance(parent, dict) else None
@@ -7087,10 +7348,31 @@ class NestingPreviewWindow(tk.Toplevel):
             cv.create_text(lx, ly, text=zone['label'], fill="#B0782A",
                            font=("Helvetica", label_px, "bold"))
 
+        ring_job = material == 'adhesive_ring' and self._settings is not None
+        ring_area = 0.0
         for pad_size, cx, cy, r in placed:
             sx = offset_x + cx * scale
             sy = offset_y + cy * scale
             sr = r * scale
+
+            if ring_job:
+                # The real part, not the footprint that nested: outer cut,
+                # hole, and the number where it will be traced.
+                geom = adhesive_ring_geometry(pad_size, self._settings)
+                ro = geom["outer_r"] * scale
+                cv.create_oval(sx - ro, sy - ro, sx + ro, sy + ro,
+                               fill=fill, outline=color, width=1, tags=("ring",))
+                if geom["inner_r"] > 0:
+                    ri = geom["inner_r"] * scale
+                    cv.create_oval(sx - ri, sy - ri, sx + ri, sy + ri,
+                                   fill="#F8F8F0", outline=color, width=1,
+                                   tags=("ring", "ring_inner"))
+                for stroke in adhesive_ring_number_strokes(geom, cx, cy):
+                    pts = [c for x, y in stroke
+                           for c in (offset_x + x * scale, offset_y + y * scale)]
+                    cv.create_line(*pts, fill=color, width=1, tags=("ring_number",))
+                ring_area += math.pi * geom["outer_r"] ** 2
+                continue
 
             cv.create_oval(sx - sr, sy - sr, sx + sr, sy + sr,
                            fill=fill, outline=color, width=1)
@@ -7114,6 +7396,8 @@ class NestingPreviewWindow(tk.Toplevel):
             sheet_area = abs(area) / 2
 
         pad_area = placed_disc_area(placed)   # same figure the optimizer ranks by
+        if ring_job:
+            pad_area = ring_area              # tape cut, not the nesting footprints
         usage_pct = pad_area / sheet_area * 100 if sheet_area > 0 else 0
 
         cv.create_text(cw - margin, ch - 5,
@@ -7123,7 +7407,7 @@ class NestingPreviewWindow(tk.Toplevel):
 
         # Update info label
         self._info_label.configure(
-            text=_("{count} pads ({material}) on {w:.0f} x {h:.0f} mm{shape}").format(count=len(placed), material=material, w=sheet_w, h=sheet_h, shape=_(' (custom shape)') if self._polygon else ''))
+            text=_("{count} pads ({material}) on {w:.0f} x {h:.0f} mm{shape}").format(count=len(placed), material=material.replace('_', ' '), w=sheet_w, h=sheet_h, shape=_(' (custom shape)') if self._polygon else ''))
 
     @staticmethod
     def _lighten(hex_color, factor):

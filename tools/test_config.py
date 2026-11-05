@@ -31,6 +31,10 @@ _fake_tk.messagebox = _fake_mb
 sys.modules.setdefault("tkinter", _fake_tk)
 sys.modules.setdefault("tkinter.messagebox", _fake_mb)
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-config-")
+
 import config
 from config import (
     DEFAULT_SETTINGS,

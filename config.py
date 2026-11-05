@@ -450,6 +450,8 @@ SIZING_PRESET_KEYS = (
     # Leather locator marks (lives in this dialog)
     "locator_marks_enabled", "locator_marks_min_size", "locator_marks_max_size",
     "locator_marks_style", "locator_marks_dashed",
+    # Adhesive rings (lives in this dialog)
+    "adhesive_ring_enabled", "adhesive_ring_trim_mm",
 )
 
 
@@ -504,7 +506,24 @@ GCODE_PRESET_KEYS = (
 
 # All materials a G-code preset can be saved/loaded for. Top-level keys
 # in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
-GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood")
+GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood",
+                          "adhesive_ring")
+
+# Materials that are only ever cut: no engraving and no center hole, so
+# their gcode_settings block (and their presets) carry just the cut keys.
+# The adhesive ring's number is traced on its cut layer, at the cut
+# settings, which is why it has no engraving block of its own.
+GCODE_CUT_ONLY_MATERIALS = ("adhesive_ring",)
+GCODE_CUT_ONLY_KEYS = (
+    "cut_speed", "cut_power", "cut_passes", "kerf_width", "air_assist_cut",
+)
+
+
+def gcode_preset_keys_for(material):
+    """The G-code preset keys one material's block holds."""
+    if material in GCODE_CUT_ONLY_MATERIALS:
+        return GCODE_CUT_ONLY_KEYS
+    return GCODE_PRESET_KEYS
 
 # Sane ceiling for the framing S value: 30 = 3%. Framing is a positioning
 # preview, not a cut — anything approaching real engraving power would mark
@@ -691,6 +710,16 @@ DEFAULT_SETTINGS = {
     "locator_marks_max_size": 16.0,   # inclusive, pad size in mm
     "locator_marks_style": "lines",   # "lines" | "circle" | "both"
     "locator_marks_dashed": False,
+    # ADHESIVE RINGS (beta, Matt 2026-11-05): a ring of double-sided tape
+    # per pad, for sticking a thin silicone wrap to the back of the card.
+    # A fifth Pad Maker material, off and invisible until enabled here.
+    # Outer diameter = the card disc; ring width = the back wrap the
+    # leather disc gets for that size, plus this trim. The wrap is a
+    # nominal figure tuned on real pads, not a measured overlap on the
+    # card back, hence the trim (mm, either sign). Geometry lives in
+    # svg_engine.adhesive_ring_geometry.
+    "adhesive_ring_enabled": False,
+    "adhesive_ring_trim_mm": 0.0,
     # Gap from the outermost disc edge to the engraved border, both sheet
     # types. 1.0 visually crowded the outer discs, which is what prompted
     # the larger value.
@@ -826,6 +855,26 @@ DEFAULT_SETTINGS = {
             "air_assist_engraving": True,
             "air_assist_filled_engraving": True,
             "air_assist_hole": True,
+            "air_assist_cut": True,
+        },
+        # Adhesive rings (double-sided tape). Cut-only: the ring's number
+        # is traced on the cut layer at these settings, so there is no
+        # engraving or hole block (config.GCODE_CUT_ONLY_MATERIALS).
+        # A STARTING POINT, NOT A TESTED VALUE (Matt, 2026-11-05). Nobody
+        # has cut this material with the app yet and no published figure
+        # fits. The numbers are a straight scale from the one diode data
+        # point found (a 20 W diode cutting 1.5-3 mm silicone sheet at
+        # 60-75 %, 200-300 mm/min) down to a 0.5 mm (0.020 in) sheet on a
+        # 40 W diode: about 0.72 J per mm of cut, i.e. 18 W at 25 mm/s.
+        # No margin on energy, on purpose ("that could roast it"): a cut
+        # that doesn't go through can be run again, a roasted part can't.
+        # Kerf is the card default. The dialog and the user guide say the
+        # same and point at Tooling > Speed & Power Test.
+        "adhesive_ring": {
+            "cut_speed": 1500,
+            "cut_power": 45,
+            "cut_passes": 1,
+            "kerf_width": 0.2,
             "air_assist_cut": True,
         },
     },
@@ -966,6 +1015,7 @@ DEFAULT_SETTINGS = {
     "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
     "laser_framing_power_by_material": {
         "felt": 10, "card": 10, "leather": 10, "acrylic": 10, "basswood": 10,
+        "adhesive_ring": 10,
     },
     "laser_framing_feed": 2000,     # mm/min during framing
     # Bed dimensions in machine-mm — defaults match the Creality Falcon2
@@ -1112,6 +1162,7 @@ DEFAULT_SETTINGS = {
         'exact_size_center_hole': '#A0A000',
         'exact_size_engraving': '#BB7784',
         'leather_locator': '#00E0E0',
+        'adhesive_ring_cut': '#FF00FF',
         'die_outer_cut': '#FF0000',
         'die_inner_cut': '#0000FF',
         'die_engraving': '#00E000',

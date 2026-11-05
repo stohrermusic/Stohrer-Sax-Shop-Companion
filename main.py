@@ -761,6 +761,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         mat_frame = tk.LabelFrame(mat_hole_row, text=_("Materials"), bg=self.root.cget('bg'), padx=5, pady=5)
         mat_frame.pack(side="left", fill="y")
+        self._mat_frame = mat_frame
         material_list = list(self.material_vars.items())
         for i, (m, var) in enumerate(material_list):
             row, col = i // 2, i % 2
@@ -768,6 +769,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                                variable=var, bg=self.root.cget('bg'))
             cb.grid(row=row, column=col, sticky='w', padx=(0, 10))
             self.material_checkboxes[m] = cb
+        # Adhesive rings join the list only while the feature is on.
+        self._refresh_adhesive_ring_ui()
 
         hole_frame = tk.LabelFrame(mat_hole_row, text=_("Center Hole"), bg=self.root.cget('bg'), padx=5, pady=5)
         hole_frame.pack(side="left", fill="both", expand=True, padx=(10, 0))
@@ -1774,6 +1777,42 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 pass
             self.scrap_remaining_window = None
 
+    def _adhesive_ring_enabled(self):
+        """True when the opt-in adhesive ring material is switched on
+        (Sizing Rules > Lesser-used settings)."""
+        return bool(self.settings.get("adhesive_ring_enabled", False))
+
+    def _refresh_adhesive_ring_ui(self):
+        """Add or remove the Adhesive rings material to match the setting.
+
+        The material is not merely hidden while the feature is off: its
+        entry leaves self.material_vars altogether, so every flow that
+        walks the checked materials (Generate, Frame & Cut, scrap mode,
+        job reload) can't pick it up from a checkbox nobody can see.
+        Called when the tab is built and whenever Sizing Rules is applied.
+        """
+        enabled = self._adhesive_ring_enabled()
+        present = 'adhesive_ring' in self.material_vars
+        session = getattr(self, 'scrap_session', None) or {}
+        if enabled and not present:
+            var = tk.BooleanVar(value=False)
+            i = len(self.material_checkboxes)
+            cb = tk.Checkbutton(self._mat_frame, text=_("Adhesive rings"),
+                                variable=var, bg=self._mat_frame.cget('bg'))
+            cb.grid(row=i // 2, column=i % 2, sticky='w', padx=(0, 10))
+            if session.get('active'):
+                cb.config(state='disabled')   # materials are locked for the session
+            self.material_vars['adhesive_ring'] = var
+            self.material_checkboxes['adhesive_ring'] = cb
+        elif present and not enabled:
+            # A scrap session cutting rings can't outlive the material.
+            if session.get('active') and session.get('material') == 'adhesive_ring':
+                self._clear_scrap_session()
+                self.scrap_mode_var.set(False)
+                self._update_scrap_status_display()
+            self.material_checkboxes.pop('adhesive_ring').destroy()
+            del self.material_vars['adhesive_ring']
+
     def _lock_material_selection(self, locked_material):
         """Disable material checkboxes during scrap session, keeping only the selected one checked."""
         for mat, cb in self.material_checkboxes.items():
@@ -1842,7 +1881,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # loose and unlabeled, which is the exact confusion zones exist
         # to prevent. Filling the leftover space with an ungrouped size
         # still works; it's only a max on a GROUPED size that can't.
-        if self.settings.get("zone_labels_enabled", False) and max_pads:
+        # Adhesive rings never group (nest_with_zones), so a job that is
+        # only rings has nothing to clash with.
+        zoned_materials = [m for m, v in self.material_vars.items()
+                           if v.get() and m != 'adhesive_ring']
+        if self.settings.get("zone_labels_enabled", False) and max_pads and zoned_materials:
             lo = float(self.settings.get("zone_label_min_size", 7.0))
             hi = float(self.settings.get("zone_label_max_size", 12.5))
             clash = [p['size'] for p in max_pads if lo <= p['size'] <= hi]
@@ -2133,7 +2176,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon, zones=zones)
+                        polygon=mat_polygon, zones=zones, settings=self.settings)
                     if preview.result != "save":
                         return  # User clicked Adjust — go back for this material
 
@@ -2228,7 +2271,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if self.preview_var.get():
                 preview = NestingPreviewWindow(
                     self.root, {material: placed}, mat_w, mat_h,
-                    polygon=mat_polygon)
+                    polygon=mat_polygon, settings=self.settings)
                 if preview.result != "save":
                     return
 
@@ -2779,9 +2822,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         grid = tk.Frame(dlg, bg=bg)
         grid.pack(padx=20, pady=(0, 10))
         vars_by_mat = {}
-        for row, mat in enumerate(GCODE_PRESET_MATERIALS):
-            tk.Label(grid, text=mat.replace('_', ' ').title() + ":",
-                     bg=bg, anchor='e', width=12).grid(
+        # Exposed for tests: which materials this dialog is showing.
+        dlg.vars_by_mat = vars_by_mat
+        # Adhesive rings get a row only while the feature is on.
+        shown = [m for m in GCODE_PRESET_MATERIALS
+                 if m != 'adhesive_ring' or self._adhesive_ring_enabled()]
+        for row, mat in enumerate(shown):
+            row_text = (_("Adhesive rings") if mat == 'adhesive_ring'
+                        else mat.replace('_', ' ').title()) + ":"
+            tk.Label(grid, text=row_text,
+                     bg=bg, anchor='e', width=max(12, len(row_text))).grid(
                 row=row, column=0, sticky='e', pady=2)
             # Shown and entered as a percentage, like every other power
             # field in the app. Stored as a Grbl S value (percent x 10) —
@@ -2826,7 +2876,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 # as 10% would silently raise everyone's framing power
                 # tenfold, and a botched migration here burns material.
                 parsed[mat] = int(round(pct * 10))
-            self.settings["laser_framing_power_by_material"] = parsed
+            # Merge rather than replace, so a material with no row here
+            # (adhesive rings while that feature is off) keeps its value.
+            by_mat = self.settings.get("laser_framing_power_by_material")
+            merged = dict(by_mat) if isinstance(by_mat, dict) else {}
+            merged.update(parsed)
+            self.settings["laser_framing_power_by_material"] = merged
             try:
                 save_settings(self.settings)
             except Exception as e:
@@ -3047,7 +3102,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # _frame_cut_scrap_advance), so nothing is consumed here.
             preview = NestingPreviewWindow(
                 self.root, {material: placed}, mat_w, mat_h,
-                polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones)
+                polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones,
+                settings=self.settings)
             if preview.result != "save":
                 return
 
@@ -3230,7 +3286,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     (g92_x, g92_y), flip_height_mm, mat_polygon, len(placed))
                 cut_dlg = FalconRunDialog(
                     self.root, sender, cut_lines,
-                    title=_("Cutting — {m}").format(m=material))
+                    title=_("Cutting — {m}").format(m=material.replace('_', ' ')))
 
                 # Log it before the scrap bookkeeping below, which can
                 # sit on a modal dialog. Stopped and errored cuts are
@@ -3326,7 +3382,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon, zones=zones)
+                        polygon=mat_polygon, zones=zones, settings=self.settings)
                     if preview.result != "save":
                         return
 
@@ -3422,7 +3478,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if self.preview_var.get():
                 preview = NestingPreviewWindow(
                     self.root, {material: placed}, mat_w, mat_h,
-                    polygon=mat_polygon)
+                    polygon=mat_polygon, settings=self.settings)
                 if preview.result != "save":
                     return
 
@@ -3818,6 +3874,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def open_gcode_settings_window(self):
         # Show only pad materials (felt/card/leather) from the pad generator tab
         pad_materials = [("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
+        # Adhesive rings get their section only while the feature is on.
+        if self._adhesive_ring_enabled():
+            pad_materials.append(("adhesive_ring", _("Adhesive rings")))
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
                             materials=pad_materials,
                             gcode_presets=self.gcode_presets,
@@ -4384,6 +4443,8 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
     def update_ui_from_settings(self):
         self.unit_label.config(text=_("Width ({units}):").format(units=self.settings['units']))
         self.height_label.config(text=_("Height ({units}):").format(units=self.settings['units']))
+        # Sizing Rules can switch the adhesive ring material on or off.
+        self._refresh_adhesive_ring_ui()
 
     def refresh_widgets_from_settings(self):
         """Repopulate main-tab widgets from self.settings after an import.
@@ -4557,7 +4618,9 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("layer-colors", lambda: LayerColorWindow(root, app.settings, lambda: None), destroy_new),
         ("gcode-settings", lambda: GcodeSettingsWindow(
             root, app.settings, lambda s: None,
-            materials=[("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))],
+            materials=([("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
+                       # as Options > G-code Settings: the ring section while that feature is on
+                       + ([("adhesive_ring", _("Adhesive rings"))] if app._adhesive_ring_enabled() else [])),
             gcode_presets=app.gcode_presets, gcode_presets_save_callback=lambda: None), destroy_new),
         ("nesting-preview", open_nesting_preview, destroy_new),
         ("polygon-draw", lambda: PolygonDrawWindow(root, unit="in", settings=app.settings), destroy_new),

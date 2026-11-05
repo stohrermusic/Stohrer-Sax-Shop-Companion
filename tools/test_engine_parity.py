@@ -11,7 +11,9 @@ Covers:
      (svg) across the full shape-factor spectrum.
   2. Pad engraving label placement parity through the real
      generate_*_from_placed pipelines, for all three placement modes.
-  3. Engine purity: gcode_engine/svg_engine importable without tkinter.
+  3. Adhesive rings: both engines draw the same ring and the same number
+     (stroke-font points), under the ring or in its hole, the right way up.
+  4. Engine purity: gcode_engine/svg_engine importable without tkinter.
 """
 
 import sys
@@ -311,6 +313,115 @@ for label, hole_dia, min_hole, exp_hole_r in HOLE_SCENARIOS:
         check(f"{mode}, {label}: gcode label agrees with svg "
               f"(err {abs(gc_off - svg_off):.3f} mm)", abs(gc_off - svg_off) < 0.3)
 
+
+
+# ============================================================
+print("\n=== Adhesive ring parity (ring and number, both engines) ===")
+# ============================================================
+# The ring's cut radius and its number come from one helper
+# (svg_engine.adhesive_ring_geometry). The radius in `placed` is the nesting
+# footprint, which is larger than the cut whenever the number sits outside
+# the ring, so an engine that trusted it would cut the wrong circle.
+
+import xml.etree.ElementTree as ET  # noqa: E402
+from svg_engine import adhesive_ring_geometry, get_disc_diameter  # noqa: E402
+
+RING_H, RING_W = 70.0, 140.0
+
+
+def ring_gcode_sections(text):
+    kinds = {"; Ring number": "number", "; Ring inner cut": "inner", "; Ring outer cut": "outer"}
+    out, cur = {"number": [], "inner": [], "outer": []}, None
+    for ln in text.splitlines():
+        if ln.strip() in kinds:
+            cur = out[kinds[ln.strip()]]
+            continue
+        if ln.startswith("; return to origin"):
+            cur = None
+        m = re.match(r"G([01]) X(-?[\d.]+)Y(-?[\d.]+)", ln)
+        if cur is None or not m:
+            continue
+        pt = (float(m.group(2)), float(m.group(3)))
+        if m.group(1) == "0":
+            cur.append([pt])
+        else:
+            cur[-1].append(pt)
+    return out
+
+
+for grouping in ("layer", "pad"):
+    ring_settings = copy.deepcopy(DEFAULT_SETTINGS)
+    ring_settings["adhesive_ring_enabled"] = True
+    ring_settings["gcode_cut_grouping"] = grouping
+    ring_settings["gcode_settings"]["adhesive_ring"]["kerf_width"] = 0.0
+    # 7.0: solid disc, number outside. 10.0: ring, number outside.
+    # 12.5: wide label, outside. 20.0 and 35.5: number in the hole.
+    ring_placed = []
+    x = 12.0
+    for pad in (7.0, 10.0, 12.5, 20.0, 35.5):
+        foot_r = get_disc_diameter(pad, 'adhesive_ring', ring_settings) / 2
+        ring_placed.append((pad, x + foot_r, 30.0, foot_r))
+        x += 2 * foot_r + 3.0
+    with tempfile.TemporaryDirectory() as d:
+        svg_path = os.path.join(d, "r.svg")
+        gc_path = os.path.join(d, "r.gcode")
+        generate_svg_from_placed(ring_placed, 'adhesive_ring', RING_W, RING_H, svg_path, 3.5, ring_settings)
+        generate_gcode_from_placed(ring_placed, 'adhesive_ring', RING_W, RING_H, gc_path, 3.5, ring_settings)
+        svg_root = ET.parse(svg_path).getroot()
+        with open(gc_path) as f:
+            sections = ring_gcode_sections(f.read())
+
+    svg_polys = [[tuple(float(v) for v in p.split(',')) for p in el.get("points").split()]
+                 for el in svg_root.iter() if el.tag.endswith("polyline")]
+    svg_circles = [tuple(float(el.get(k).replace("mm", "")) for k in ("cx", "cy", "r"))
+                   for el in svg_root.iter() if el.tag.endswith("circle")]
+
+    worst = 0.0
+    same_shape = len(svg_polys) == len(sections["number"])
+    if same_shape:
+        for sp, gp in zip(svg_polys, sections["number"]):
+            if len(sp) != len(gp):
+                same_shape = False
+                break
+            for (sx, sy), (gx, gy) in zip(sp, gp):
+                worst = max(worst, abs(sx - gx), abs((RING_H - sy) - gy))
+    check(f"{grouping}: the number is the same strokes in SVG and G-code "
+          f"({len(svg_polys)} strokes, worst {worst:.4f} mm after the Y flip)",
+          same_shape and len(svg_polys) > 0 and worst < 0.002)
+
+    g_circles = []
+    for stroke in sections["inner"] + sections["outer"]:
+        xs = [p[0] for p in stroke]
+        ys = [p[1] for p in stroke]
+        g_circles.append(((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (max(xs) - min(xs)) / 2))
+    unmatched = [c for c in g_circles
+                 if not any(abs(c[0] - sx) < 0.002 and abs(c[1] - (RING_H - sy)) < 0.002 and abs(c[2] - sr) < 0.002
+                            for sx, sy, sr in svg_circles)]
+    check(f"{grouping}: every G-code circle is an SVG circle, flipped "
+          f"({len(g_circles)} circles, {len(unmatched)} unmatched)",
+          len(g_circles) == len(svg_circles) and not unmatched)
+
+    cut_ok = True
+    side_ok = True
+    for pad, cx, cy, foot_r in ring_placed:
+        geom = adhesive_ring_geometry(pad, ring_settings)
+        card_r = get_disc_diameter(pad, 'card', ring_settings) / 2
+        radii = sorted(r for sx, sy, r in svg_circles if abs(sx - cx) < 1e-6 and abs(sy - cy) < 1e-6)
+        if not radii or abs(radii[-1] - card_r) > 1e-6:
+            cut_ok = False
+        if geom["placement"] == "outside":
+            for stroke in svg_polys:
+                if all(abs(px - cx) <= geom["box"][2] + 1e-6 for px, py in stroke):
+                    # this ring's number: under it in the SVG (Y-down)
+                    if min(py for px, py in stroke) < cy + card_r:
+                        side_ok = False
+            for stroke in sections["number"]:
+                if all(abs(px - cx) <= geom["box"][2] + 1e-6 for px, py in stroke):
+                    # ... and on the same physical side in the G-code (Y-up)
+                    if max(py for px, py in stroke) > (RING_H - cy) - card_r:
+                        side_ok = False
+    check(f"{grouping}: the outer cut is the card radius, not the nesting footprint", cut_ok)
+    check(f"{grouping}: an outside number is under its ring in both outputs", side_ok)
 
 
 # ============================================================

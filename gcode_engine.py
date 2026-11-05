@@ -8,7 +8,8 @@ Includes a single-stroke digit font for engraving pad sizes.
 import math
 
 from svg_engine import (_wave_value, dart_wave_raw, DART_TIP_ANGLE, feeds_speeds_label_geometry,
-                        locator_mark_geometry, locator_circle_points)
+                        locator_mark_geometry, locator_circle_points,
+                        ADHESIVE_RING, adhesive_ring_geometry, adhesive_ring_number_strokes)
 
 # =============================================================================
 # SINGLE-STROKE DIGIT FONT
@@ -860,7 +861,7 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 
 def can_generate_gcode(material):
     """Check if G-code generation is supported for a material."""
-    return material in ('felt', 'card', 'leather', 'die_ring', 'acrylic')
+    return material in ('felt', 'card', 'leather', 'die_ring', 'acrylic', ADHESIVE_RING)
 
 
 def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
@@ -909,6 +910,12 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     else:
         flip_height = sheet_height_mm
     placed = [(pad_size, cx, flip_height - cy, radius) for (pad_size, cx, cy, radius) in placed]
+
+    if material == ADHESIVE_RING:
+        # Cut-only material with its own geometry; nothing below (engraving
+        # modes, holes, darts, label placement, auto-fit, zones) applies.
+        _write_adhesive_ring_gcode(placed, sheet_width_mm, sheet_height_mm, filename, settings)
+        return
 
     # Get G-code settings for this material
     gcode_settings = settings.get("gcode_settings", {})
@@ -1234,6 +1241,91 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
     with open(filename, 'w') as f:
         f.write('\n'.join(gcode_lines))
+
+
+ADHESIVE_RING_LAYER = 'C07'   # LightBurn 07 Magenta, the ring's default SVG layer color
+# Both of a ring's cuts get the outer-cut segment count. The inner cut is
+# nearly as big as the outer one, not a 3 mm center hole: at the center-hole
+# figure (36) a 51 mm pad's inner cut had 3.7 mm flats, 0.08 mm off a true
+# circle, against 2.2 mm and 0.02 mm on its own outer cut (2026-11-05).
+ADHESIVE_RING_CUT_SEGMENTS = 72
+
+
+def _write_adhesive_ring_gcode(placed, sheet_width_mm, sheet_height_mm, filename, settings):
+    """G-code for adhesive rings. `placed` is already Y-flipped.
+
+    Per ring: the number, then the inner circle, then the outer, so a
+    number in the hole is traced while its plug is still attached to the
+    sheet. With "by layer" grouping that is all numbers, all inner cuts,
+    all outer cuts; with "by pad" it is the three steps ring by ring.
+
+    The number has no settings of its own: this material has no engraving
+    block, so it is traced as part of the cut layer, at the ring's cut
+    speed, power, passes and air. It is always the stroke font, whatever
+    engraving_mode any material is set to. Kerf goes inward on the inner
+    cut and outward on the outer one; none on the number.
+
+    The radius in `placed` is the nesting footprint (ring plus an outside
+    number), so the cut radii come from adhesive_ring_geometry.
+    """
+    from config import DEFAULT_SETTINGS
+
+    mat_settings = dict(DEFAULT_SETTINGS["gcode_settings"][ADHESIVE_RING])
+    mat_settings.update(settings.get("gcode_settings", {}).get(ADHESIVE_RING) or {})
+    cut_speed = mat_settings["cut_speed"]
+    cut_power = mat_settings["cut_power"]
+    cut_passes = mat_settings["cut_passes"]
+    air = mat_settings["air_assist_cut"]
+    kerf_offset = (mat_settings["kerf_width"] or 0.0) / 2
+
+    return_speed = settings.get("gcode_return_speed", 1000)
+    cut_grouping = settings.get("gcode_cut_grouping", "layer")
+
+    rings = []          # (number strokes, inner strokes, outer strokes) per ring
+    all_x, all_y = [], []
+    for pad_size, cx, cy, _footprint_r in placed:
+        geom = adhesive_ring_geometry(pad_size, settings)
+        if geom["outer_r"] <= 0:
+            continue
+        number = adhesive_ring_number_strokes(geom, cx, cy, y_up=True)
+        inner = []
+        inner_r = geom["inner_r"] - kerf_offset
+        if geom["inner_r"] > 0 and inner_r > 0:
+            inner.append(linearize_circle(cx, cy, inner_r, segments=ADHESIVE_RING_CUT_SEGMENTS))
+        outer_r = geom["outer_r"] + kerf_offset
+        outer = [linearize_circle(cx, cy, outer_r, segments=ADHESIVE_RING_CUT_SEGMENTS)]
+        rings.append((number, inner, outer))
+        all_x.extend([cx - outer_r, cx + outer_r])
+        all_y.extend([cy - outer_r, cy + outer_r])
+        for stroke in number:
+            all_x.extend(p[0] for p in stroke)
+            all_y.extend(p[1] for p in stroke)
+
+    lines = generate_gcode_header(min(all_x) if all_x else 0, min(all_y) if all_y else 0,
+                                  max(all_x) if all_x else sheet_width_mm,
+                                  max(all_y) if all_y else sheet_height_mm)
+    lines.append("; Adhesive rings: numbers are traced at the cut settings (no engraving settings)")
+
+    def _step(strokes, note):
+        if not strokes:
+            return
+        lines.append(f"; {note}")
+        lines.extend(generate_gcode_layer(strokes, cut_speed, cut_power, ADHESIVE_RING_LAYER,
+                                          air_assist=air, passes=cut_passes))
+
+    if cut_grouping == "pad":
+        for number, inner, outer in rings:
+            _step(number, "Ring number")
+            _step(inner, "Ring inner cut")
+            _step(outer, "Ring outer cut")
+    else:
+        _step([s for number, _i, _o in rings for s in number], "Ring number")
+        _step([s for _n, inner, _o in rings for s in inner], "Ring inner cut")
+        _step([s for _n, _i, outer in rings for s in outer], "Ring outer cut")
+
+    lines.extend(generate_gcode_footer(return_speed=return_speed))
+    with open(filename, 'w') as f:
+        f.write('\n'.join(lines))
 
 
 # ==========================================

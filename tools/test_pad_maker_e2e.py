@@ -1,8 +1,9 @@
 """Pad Maker end to end through the real Generate buttons.
 
-Types a pad list into the live form, picks all four materials, turns on
-labeled zones and leather locator marks, and clicks Generate SVG and
-Generate G-code exactly as a user would. Only the folder dialog and the
+Types a pad list into the live form, picks all five materials (adhesive
+rings switched on first, as Sizing Rules would), turns on labeled zones and
+leather locator marks, and clicks Generate SVG and Generate G-code exactly
+as a user would. Only the folder dialog and the
 message boxes are stubbed. Then the OUTPUT is checked, not the internals:
 one file per material, every SVG parses as XML with the right root, the
 leather SVG carries the locator layer, the felt SVG carries a zone box,
@@ -32,7 +33,7 @@ init_translation("en")
 results = []
 SHEET_W, SHEET_H = 200.0, 150.0
 PADS = "7.0 x 4\n9.5 x 3\n12.5 x 2\n20.0 x 2\n35.5 x 1"
-MATERIALS = ("felt", "card", "leather", "exact_size")
+MATERIALS = ("felt", "card", "leather", "exact_size", "adhesive_ring")
 
 
 def check(name, fn):
@@ -76,6 +77,13 @@ def main():
     app.settings['zone_labels_enabled'] = True
     app.settings['locator_marks_enabled'] = True
     app.settings['locator_marks_style'] = 'both'
+    # Adhesive rings are opt-in: off, the material isn't on the tab at all.
+    check("adhesive rings are not a material until the feature is on",
+          lambda: "adhesive_ring" not in app.material_vars)
+    app.settings['adhesive_ring_enabled'] = True
+    app.update_ui_from_settings()
+    check("switching the feature on adds the Adhesive rings checkbox",
+          lambda: app.material_checkboxes["adhesive_ring"].cget("text") == "Adhesive rings")
     app.preview_var.set(False)
     app.scrap_mode_var.set(False)
     app.custom_polygon = None
@@ -128,6 +136,19 @@ def main():
         assert "<rect" in text, "felt SVG has no zone box"
     check("felt SVG carries a labeled-zone box", felt_has_zone_box)
 
+    def ring_svg_is_rings_and_numbers_on_its_layer():
+        text = open(by_material(".svg")["adhesive_ring"], encoding="utf-8").read()
+        root_el = ET.fromstring(text)
+        tags = [el.tag.split('}')[-1] for el in root_el.iter()]
+        n_pads = 4 + 3 + 2 + 2 + 1
+        assert tags.count("circle") >= n_pads, "one outer cut per pad at least"
+        assert tags.count("polyline") >= n_pads, "every ring carries its size"
+        assert "text" not in tags and "rect" not in tags, "no <text>, and no zone box for rings"
+        colors = {el.get("stroke") for el in root_el.iter() if el.get("stroke")}
+        assert colors == {app.settings["layer_colors"]["adhesive_ring_cut"]}, colors
+    check("adhesive ring SVG: rings and stroke numbers on the ring layer, no zones",
+          ring_svg_is_rings_and_numbers_on_its_layer)
+
     # ---- G-code --------------------------------------------------------
     boxes.clear()
     app.on_generate_gcode()
@@ -158,6 +179,16 @@ def main():
         first_cut = min(i for i in (text.find("; Layer C02"), text.find("; Layer C03")) if i >= 0)
         assert first_loc < first_cut, "locator marks must be engraved before any cut"
     check("leather G-code engraves the locator marks before cutting", leather_gcode_has_locator_layer)
+
+    def ring_gcode_goes_number_inner_outer():
+        text = open(by_material(".gcode")["adhesive_ring"], encoding="utf-8").read()
+        i_num, i_in, i_out = (text.find(f"; Ring {k}") for k in ("number", "inner cut", "outer cut"))
+        assert 0 <= i_num < i_in < i_out, (i_num, i_in, i_out)
+        d = app.settings["gcode_settings"]["adhesive_ring"]
+        assert f"; Cut @ {d['cut_speed']} mm/min, {d['cut_power']}% power" in text
+        assert text.rstrip().endswith("M2") and "M5" in text
+    check("adhesive ring G-code: number, inner cut, outer cut, at the ring's cut settings",
+          ring_gcode_goes_number_inner_outer)
 
     # ---- Job history ---------------------------------------------------
     def history_recorded_both():

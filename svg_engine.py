@@ -119,9 +119,29 @@ def get_felt_thickness_mm(settings, sizing=None):
         return thickness * 25.4
     return thickness
 
+def leather_wrap_for_size(pad_size, settings, sizing=None):
+    """The back wrap the leather disc gets for this pad size, in mm: the
+    size's base wrap, plus the dart wrap bonus when the size has darts,
+    times the wrap multiplier. One place, because the leather disc and the
+    adhesive ring are both built from it and must not drift apart."""
+    if sizing is None:
+        sizing = get_sizing_for_size(pad_size, settings)
+    dart_cfg = get_dart_settings_for_size(pad_size, settings)
+    if dart_cfg:
+        bonus = dart_cfg.get("wrap_bonus", 0.75)
+        return leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"], extra_base=bonus)
+    return leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"])
+
+
 def get_disc_diameter(pad_size, material, settings):
     if material == 'die_ring':
         return 70.0 if pad_size >= 40.0 else 50.0
+
+    # The NESTING diameter of an adhesive ring, not its cut: the ring plus
+    # the number engraved beside it when that number doesn't fit in the
+    # hole. Renderers take the cut from adhesive_ring_geometry.
+    if material == ADHESIVE_RING:
+        return adhesive_ring_geometry(pad_size, settings)["footprint_r"] * 2
 
     sizing = get_sizing_for_size(pad_size, settings)
 
@@ -130,18 +150,127 @@ def get_disc_diameter(pad_size, material, settings):
     if material == 'exact_size': return pad_size
 
     if material == 'leather':
-        dart_cfg = get_dart_settings_for_size(pad_size, settings)
-        if dart_cfg:
-            bonus = dart_cfg.get("wrap_bonus", 0.75)
-            wrap = leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"], extra_base=bonus)
-        else:
-            wrap = leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"])
-
+        wrap = leather_wrap_for_size(pad_size, settings, sizing)
         felt_thickness_mm = get_felt_thickness_mm(settings, sizing)
         diameter = pad_size + 2 * (felt_thickness_mm + wrap)
         return round(diameter * 2) / 2
 
     return 0
+
+
+# --- Adhesive rings ---------------------------------------------------------
+# A ring of double-sided tape per pad, for sticking a thin silicone wrap to
+# the back of the card (beta, Matt 2026-11-05). Opt-in fifth Pad Maker
+# material. A plain ring: no engraving settings, no center-hole option, no
+# darts. Its pad size is traced as single-stroke digits on the ring's own
+# cut layer -- in the hole (on the waste plug) when the hole is big enough
+# to read it, otherwise on the scrap just under the ring.
+ADHESIVE_RING = 'adhesive_ring'
+ADHESIVE_RING_SOLID_MAX_PAD_MM = 9.5   # pads this size and under are solid discs, no inner cut (Matt)
+ADHESIVE_RING_MIN_HOLE_MM = 2.0        # above that size, an inner diameter under this is dropped too
+ADHESIVE_RING_MIN_WIDTH_MM = 0.5       # a trim can't thin the ring below this
+ADHESIVE_RING_LEGIBLE_FONT_MM = 2.5    # smallest number height worth tracing; decides inside vs outside
+ADHESIVE_RING_MAX_FONT_MM = 5.0        # cap for a number in a big hole
+ADHESIVE_RING_HOLE_CLEARANCE_MM = 1.0  # inside number to the inner cut, all round
+ADHESIVE_RING_OUTSIDE_GAP_MM = 1.0     # outer cut to the top of an outside number
+
+
+def adhesive_ring_geometry(pad_size, settings):
+    """Everything about one adhesive ring, relative to its center.
+
+    The single source for the SVG renderer, the G-code engine, the pad
+    preview and the nesting preview, and (through get_disc_diameter) for
+    the nester's footprint.
+
+      outer_r      cut radius = the card disc's radius for this pad size.
+      inner_r      inner cut radius, or 0.0 when the part is a solid disc:
+                   every pad of ADHESIVE_RING_SOLID_MAX_PAD_MM (9.5) and
+                   under (Matt, 2026-11-05), and any larger pad whose inner
+                   diameter would come out under ADHESIVE_RING_MIN_HOLE_MM.
+      width        outer_r - inner_r wanted: the leather disc's back wrap
+                   for this size (dart wrap bonus included) plus
+                   settings["adhesive_ring_trim_mm"], never under
+                   ADHESIVE_RING_MIN_WIDTH_MM.
+      text, font   the pad size as the other materials print it, and its
+                   height in mm.
+      placement    'inside': centered in the hole at the largest height
+                   that keeps ADHESIVE_RING_HOLE_CLEARANCE_MM to the inner
+                   cut, capped at ADHESIVE_RING_MAX_FONT_MM. Chosen when
+                   that height is at least ADHESIVE_RING_LEGIBLE_FONT_MM.
+                   'outside': at the legible height on the scrap, centered
+                   under the ring, ADHESIVE_RING_OUTSIDE_GAP_MM below the
+                   outer cut. Small rings and solid discs.
+      strokes      the number as stroke-font polylines (never filled),
+                   in Y-DOWN coordinates relative to the ring center, so
+                   "under" is +y. adhesive_ring_number_strokes() places
+                   them for either output.
+      box          (x0, y0, x1, y1) around the strokes, same frame.
+      footprint_r  radius of the circle, centered on the ring, that holds
+                   the ring and the number's box. Equal to outer_r for an
+                   inside number. This is what nests; see get_disc_diameter.
+
+    Returns the same keys with no strokes when the card disc itself has no
+    size (outer_r <= 0), so callers never have to special-case it.
+    """
+    outer_r = get_disc_diameter(pad_size, 'card', settings) / 2
+    try:
+        trim = float(settings.get("adhesive_ring_trim_mm", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        trim = 0.0
+    width = max(leather_wrap_for_size(pad_size, settings) + trim, ADHESIVE_RING_MIN_WIDTH_MM)
+    text = zone_label_text(pad_size)
+
+    if outer_r <= 0:
+        return {"outer_r": 0.0, "inner_r": 0.0, "width": width, "text": text,
+                "font": 0.0, "placement": "outside", "strokes": [],
+                "box": (0.0, 0.0, 0.0, 0.0), "footprint_r": 0.0}
+
+    inner_d = 2 * (outer_r - width)
+    solid = (pad_size <= ADHESIVE_RING_SOLID_MAX_PAD_MM + 1e-9
+             or inner_d < ADHESIVE_RING_MIN_HOLE_MM)
+    inner_r = 0.0 if solid else inner_d / 2
+
+    # The number at height 1, centered on its own stroke box (Y-up, as the
+    # stroke font is drawn). The font cell carries side bearings; centering
+    # the strokes themselves is what makes "centered" true on the material.
+    from gcode_engine import get_text_strokes
+    unit = get_text_strokes(text, 1.0, 0.0, 0.0)
+    pts = [p for stroke in unit for p in stroke]
+    ux0, ux1 = min(p[0] for p in pts), max(p[0] for p in pts)
+    uy0, uy1 = min(p[1] for p in pts), max(p[1] for p in pts)
+    mx, my = (ux0 + ux1) / 2, (uy0 + uy1) / 2
+    unit = [[(x - mx, y - my) for x, y in stroke] for stroke in unit]
+    half_w, half_h = (ux1 - ux0) / 2, (uy1 - uy0) / 2
+    reach = max(math.hypot(x, y) for stroke in unit for x, y in stroke)
+
+    placement, font, dy = "outside", ADHESIVE_RING_LEGIBLE_FONT_MM, 0.0
+    if inner_r > 0:
+        fit = (inner_r - ADHESIVE_RING_HOLE_CLEARANCE_MM) / reach
+        if fit >= ADHESIVE_RING_LEGIBLE_FONT_MM:
+            placement, font = "inside", min(fit, ADHESIVE_RING_MAX_FONT_MM)
+    if placement == "outside":
+        dy = outer_r + ADHESIVE_RING_OUTSIDE_GAP_MM + half_h * font
+
+    # Y-up font -> Y-down frame: the glyphs' tops point at -y, so the
+    # number reads upright in the SVG as it is, and in the G-code once the
+    # whole frame is flipped (adhesive_ring_number_strokes, y_up=True).
+    strokes = [[(x * font, dy - y * font) for x, y in stroke] for stroke in unit]
+    box = (-half_w * font, dy - half_h * font, half_w * font, dy + half_h * font)
+    footprint_r = outer_r
+    if placement == "outside":
+        footprint_r = max(outer_r, max(math.hypot(bx, by)
+                                       for bx in (box[0], box[2]) for by in (box[1], box[3])))
+    return {"outer_r": outer_r, "inner_r": inner_r, "width": width, "text": text,
+            "font": font, "placement": placement, "strokes": strokes,
+            "box": box, "footprint_r": footprint_r}
+
+
+def adhesive_ring_number_strokes(geom, cx, cy, y_up=False):
+    """The ring's number as absolute polylines around a ring centered at
+    (cx, cy). y_up=False for SVG and canvases; y_up=True for G-code, where
+    cy is the already-flipped center -- the same physical points."""
+    sign = -1.0 if y_up else 1.0
+    return [[(cx + x, cy + sign * y) for x, y in stroke] for stroke in geom["strokes"]]
 
 # --- Leather locator marks -------------------------------------------------
 # Engraved guides on the leather showing where the felt sits, so a pad with
@@ -274,6 +403,9 @@ def check_for_oversized_engravings(pads, material_vars, settings):
     oversized = {}
     for material, var in material_vars.items():
         if not var.get(): continue
+        # Adhesive rings carry no engraving settings; their number sizes
+        # itself (adhesive_ring_geometry), so there is nothing to warn about.
+        if material == ADHESIVE_RING: continue
 
         oversized_sizes = set()
         for pad in pads:
@@ -1689,7 +1821,10 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     Scrap mode passes zones=[] from the caller — a scrap only takes part of
     a size's count, so a group would have to be re-sized per piece.
     """
-    if not settings.get("zone_labels_enabled", False):
+    # Adhesive rings never group: a ring's number travels with the ring
+    # (in its hole or just under it), and a zone's border and label are an
+    # engraving layer, which this material doesn't have.
+    if material == ADHESIVE_RING or not settings.get("zone_labels_enabled", False):
         placed, fp, ft = _nest_discs(pads, material, width_mm, height_mm,
                                      settings, spacing_mm, polygon)
         return placed, [], fp, ft
@@ -1755,6 +1890,12 @@ def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None
 
 def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w):
     """Render placed discs (outlines, holes, engravings) into an SVG drawing."""
+    if material == ADHESIVE_RING:
+        # Its own renderer: none of the hole / dart / label-placement /
+        # auto-fit / locator logic below applies to a ring of tape.
+        _render_svg_adhesive_rings(dwg, placed, settings, compatibility_mode, stroke_w)
+        return
+
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
 
     for pad_size, cx, cy, r in placed:
@@ -1901,6 +2042,39 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                                  text_anchor="middle",
                                  font_size=f"{font_size}mm",
                                  fill=layer_colors[f'{material}_engraving']))
+
+
+def _render_svg_adhesive_rings(dwg, placed, settings, compatibility_mode, stroke_w):
+    """Draw adhesive rings: number, inner cut, outer cut, all on the ring's
+    one layer color (the number is part of the cut layer; this material has
+    no engraving settings).
+
+    The radius in `placed` is the nesting footprint, which is larger than
+    the ring whenever the number sits outside it, so the cut radius comes
+    from adhesive_ring_geometry, never from `placed`. The number is emitted
+    as polylines of the stroke font rather than a <text> element, so it
+    arrives in LightBurn as single lines, the same points the G-code traces.
+    """
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    color = layer_colors.get('adhesive_ring_cut', DEFAULT_SETTINGS["layer_colors"]['adhesive_ring_cut'])
+
+    def _u(v):
+        return v if compatibility_mode else f"{v}mm"
+
+    for pad_size, cx, cy, _footprint_r in placed:
+        geom = adhesive_ring_geometry(pad_size, settings)
+        if geom["outer_r"] <= 0:
+            continue
+        # Raw numbers (no unit suffix) so svgwrite's Tiny 1.2 polyline
+        # validator accepts them; the viewBox maps one unit to one mm.
+        for stroke in adhesive_ring_number_strokes(geom, cx, cy):
+            dwg.add(dwg.polyline(points=[(round(x, 4), round(y, 4)) for x, y in stroke],
+                                 stroke=color, fill='none', stroke_width=stroke_w))
+        if geom["inner_r"] > 0:
+            dwg.add(dwg.circle(center=(_u(cx), _u(cy)), r=_u(geom["inner_r"]),
+                               stroke=color, fill='none', stroke_width=stroke_w))
+        dwg.add(dwg.circle(center=(_u(cx), _u(cy)), r=_u(geom["outer_r"]),
+                           stroke=color, fill='none', stroke_width=stroke_w))
 
 
 def _render_svg_locator(dwg, cx, cy, loc, color, compatibility_mode, stroke_w):

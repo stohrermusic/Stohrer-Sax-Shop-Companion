@@ -21,6 +21,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-gcode-presets-workflow-")
+
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
@@ -54,6 +59,7 @@ def main():
     from config import (
         DEFAULT_SETTINGS,
         GCODE_PRESET_KEYS, GCODE_PRESET_MATERIALS,
+        GCODE_CUT_ONLY_MATERIALS, GCODE_CUT_ONLY_KEYS, gcode_preset_keys_for,
         material_settings_to_gcode_preset, settings_to_gcode_presets,
     )
     from ui_dialogs import GcodeSettingsWindow
@@ -76,9 +82,24 @@ def main():
         for mat in GCODE_PRESET_MATERIALS:
             assert mat in boot, f"missing material {mat}"
             assert "Default" in boot[mat], f"{mat} missing Default preset"
-            for k in GCODE_PRESET_KEYS:
-                assert k in boot[mat]["Default"], f"{mat}.Default missing {k}"
+            # Cut-only materials (adhesive rings) carry just the cut keys.
+            assert set(boot[mat]["Default"]) == set(gcode_preset_keys_for(mat)), \
+                f"{mat}.Default has the wrong keys: {sorted(boot[mat]['Default'])}"
     check("settings_to_gcode_presets bootstraps one Default per material", helper_bootstrap)
+
+    def cut_only_materials_have_cut_keys_only():
+        assert "adhesive_ring" in GCODE_PRESET_MATERIALS
+        assert GCODE_CUT_ONLY_MATERIALS == ("adhesive_ring",)
+        assert set(GCODE_CUT_ONLY_KEYS) < set(GCODE_PRESET_KEYS)
+        assert not any(k.startswith(("engraving", "filled", "hole", "air_assist_engraving",
+                                     "air_assist_filled", "air_assist_hole"))
+                       for k in GCODE_CUT_ONLY_KEYS), GCODE_CUT_ONLY_KEYS
+        for mat in GCODE_PRESET_MATERIALS:
+            block = DEFAULT_SETTINGS["gcode_settings"][mat]
+            assert set(block) == set(gcode_preset_keys_for(mat)), f"{mat}: {sorted(block)}"
+            assert material_settings_to_gcode_preset(block) == block
+    check("Every material's default block matches its preset keys (rings: cut only)",
+          cut_only_materials_have_cut_keys_only)
 
     settings = copy.deepcopy(DEFAULT_SETTINGS)
     pad_materials = [("felt", "Felt"), ("card", "Card"), ("leather", "Leather")]
@@ -259,7 +280,34 @@ def main():
         for mat in GCODE_PRESET_MATERIALS:
             assert mat in partial, f"backfill missed {mat}"
             assert partial[mat], f"backfill left {mat} empty"
+        # The material added after a user's library was written gets its Default too.
+        assert partial["adhesive_ring"] == {"Default": settings["gcode_settings"]["adhesive_ring"]}
     check("Startup backfill fills in any missing materials", backfills_missing_material_on_startup)
+
+    def ring_section_round_trips_like_any_material():
+        s = copy.deepcopy(DEFAULT_SETTINGS)
+        lib = settings_to_gcode_presets(s)
+        lib["adhesive_ring"]["Thin tape"] = dict(lib["adhesive_ring"]["Default"], cut_power=9.5, cut_passes=2)
+        w = GcodeSettingsWindow(
+            root, s, lambda _s: None,
+            materials=pad_materials + [("adhesive_ring", "Adhesive rings")],
+            gcode_presets=lib, gcode_presets_save_callback=save_cb)
+        w.top.withdraw()
+        try:
+            assert w.active_preset_name["adhesive_ring"] == "Default"
+            assert not w._dirty_materials(), "clean on open, tape included"
+            w.preset_combos["adhesive_ring"].set("Thin tape")
+            w._on_load_gcode_preset("adhesive_ring")
+            assert w.active_preset_name["adhesive_ring"] == "Thin tape"
+            assert w._capture_material_to_dict("adhesive_ring") == lib["adhesive_ring"]["Thin tape"]
+            assert not w._material_is_dirty("adhesive_ring"), "Load resets the baseline"
+            w.vars["adhesive_ring"]["cut"]["power"].set(12.0)
+            assert w._dirty_materials() == ["adhesive_ring"], "tape edits don't dirty felt/card/leather"
+            assert "engraving" not in w.vars["adhesive_ring"] and "hole" not in w.vars["adhesive_ring"]
+        finally:
+            w.top.destroy()
+    check("Adhesive ring section: detect, load, dirty tracking with cut-only keys",
+          ring_section_round_trips_like_any_material)
 
     try:
         root.destroy()

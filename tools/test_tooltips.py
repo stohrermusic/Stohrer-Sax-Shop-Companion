@@ -17,6 +17,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-tooltips-")
+
 # ui_dialogs evaluates _() at class-definition time (UserGuideWindow.
 # SECTION_TITLES), so the gettext _ must be installed before importing it.
 from i18n import init_translation  # noqa: E402
@@ -191,7 +196,18 @@ def main():
                 walk(child, out)
 
         s = copy.deepcopy(DEFAULT_SETTINGS)
+        # Adhesive rings add widgets only while the feature is on: a
+        # section in Sizing Rules, a Layer Colors row, a G-code section.
+        s_rings = copy.deepcopy(DEFAULT_SETTINGS)
+        s_rings["adhesive_ring_enabled"] = True
         dialogs = {
+            "OptionsWindow(adhesive rings on)": lambda: OptionsWindow(
+                root, StubApp(), s_rings, lambda: None, lambda: None,
+                sizing_presets={}, sizing_presets_save_callback=lambda: None),
+            "LayerColorWindow(adhesive rings on)": lambda: LayerColorWindow(root, s_rings, lambda: None),
+            "GcodeSettingsWindow(adhesive rings)": lambda: GcodeSettingsWindow(
+                root, s_rings, lambda _s: None,
+                materials=[("felt", "Felt"), ("adhesive_ring", "Adhesive rings")]),
             "OptionsWindow": lambda: OptionsWindow(
                 root, StubApp(), s, lambda: None, lambda: None,
                 sizing_presets={}, sizing_presets_save_callback=lambda: None),
@@ -208,6 +224,13 @@ def main():
             w.top.withdraw()
             found = []
             walk(w.top, found)
+            if name == "OptionsWindow(adhesive rings on)":
+                # The gate must actually have walked the ring widgets.
+                assert w.ring_cb.bind("<Enter>") and w.ring_trim_entry.bind("<Enter>")
+            if name == "LayerColorWindow(adhesive rings on)":
+                assert "adhesive_ring_cut" in w.color_vars
+            if name == "GcodeSettingsWindow(adhesive rings)":
+                assert "adhesive_ring" in w.vars
             w.top.destroy()
             if found:
                 missing[name] = found

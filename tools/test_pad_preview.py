@@ -19,6 +19,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-pad-preview-")
+
 # ui_dialogs evaluates _() at class-definition time (UserGuideWindow.
 # SECTION_TITLES), so the gettext _ must be installed before importing it.
 from i18n import init_translation  # noqa: E402

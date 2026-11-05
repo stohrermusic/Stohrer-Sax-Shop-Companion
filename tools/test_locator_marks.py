@@ -29,6 +29,10 @@ import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-locator-marks-")
+
 import config  # noqa: E402
 import svg_engine as se  # noqa: E402
 import gcode_engine as ge  # noqa: E402
