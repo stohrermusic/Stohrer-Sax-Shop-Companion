@@ -4057,11 +4057,9 @@ class PolygonDrawWindow(tk.Toplevel):
 
         def _worker():
             try:
-                cap = camera_capture.open_camera(cam_idx)
-                ok, _frame = cap.read()
-                if not ok:
-                    cap.release()
-                    raise RuntimeError(_("Camera no frame"))
+                cap, used, _frame = camera_capture.open_camera_or_fallback(
+                    cam_idx, (self._settings or {}).get("camera_index_override"))
+                self._camera_index = used
                 self.after(0, self._camera_overlay_ready, cap)
             except Exception as e:
                 self.after(0, self._camera_overlay_failed, e)
@@ -6021,6 +6019,9 @@ class UserGuideWindow(tk.Toplevel):
                       "marked with a * — so missing pads have an explanation"))
         self._bullet(_("In scrap mode each scrap is logged separately, numbered to "
                       "match the session"))
+        self._bullet(_("Tooling outputs are listed too (dies, holders, the organizer, kerf and "
+                      "speed tests, crescents), named by tool; those rows can't be loaded into "
+                      "the Pad Maker's form"))
         self._bullet(_("Delete single entries or clear the whole log; it holds the "
                       "last 300 jobs"))
         self._blank()
@@ -6055,6 +6056,9 @@ class UserGuideWindow(tk.Toplevel):
                     "Generate SVG / Generate G-code. It generates the G-code in memory, "
                     "lets you position the head, traces the cut outline at low power for "
                     "verification, then streams the cut to the laser."))
+        self._bullet(_("The laser can be plugged in or switched on after the app has started: "
+                      "the button appears within a few seconds, and goes away again while the "
+                      "laser is unplugged."))
         self._bullet(_("Position dialog: Home Laser button (re-home if MPos has drifted); "
                       "jog arrows; Try Auto Locate (drives head to the polygon's bottom-"
                       "left vertex when available and the laser is homed)."))
@@ -7099,8 +7103,29 @@ class PadNotesWindow(tk.Toplevel):
         self.destroy()
 
 
+def tooling_tool_name(tool):
+    """The Tooling section's title for a Job History entry's `tool` key
+    (the keys are the section keys in tooling_tab.create_tooling_tab)."""
+    return {
+        'die_inserts': _("Die Inserts"),
+        'die_holders': _("Die Holders"),
+        'die_organizer': _("Die Organizer"),
+        'kerf_test': _("Kerf Test"),
+        'feeds_speeds_tester': _("Speed & Power Test"),
+        'tonehole_crescent': _("Tonehole Crescent"),
+    }.get(tool) or str(tool)
+
+
+def tooling_job_not_loadable():
+    """Why a Tooling row has no Load: said in the detail pane and on a
+    double-click, the one place the sentence is written."""
+    return _("This is a Tooling run. Only Pad Maker jobs can be loaded into the form.")
+
+
 class JobHistoryWindow(tk.Toplevel):
-    """Browse past pad jobs that reached an output stage.
+    """Browse past jobs that reached an output stage: the Pad Maker's
+    batches and, since 2026-11-09, the Tooling tab's outputs (entries with
+    a `tool` key: shown with the tool's name, never loaded into the form).
 
     `jobs` is the list from config.load_job_history() (newest first);
     `save_history` is config.save_job_history, called after a delete so
@@ -7215,6 +7240,8 @@ class JobHistoryWindow(tk.Toplevel):
             return _("G-code")
         if out == "svg":
             return _("SVG")
+        if out == "stl":
+            return "STL"        # a tonehole crescent print; the format's name is the same in every language
         return out or "?"
 
     @staticmethod
@@ -7262,9 +7289,13 @@ class JobHistoryWindow(tk.Toplevel):
         return [_("When"), _("Output"), _("Material"), _("Pads"), _("Sheet")]
 
     def _cells(self, job):
-        """The five column values for one job, unpadded."""
-        pads = self._pad_count(job)
-        pad_txt = ngettext("{n} pad", "{n} pads", pads).format(n=pads)
+        """The five column values for one job, unpadded. A Tooling row
+        names its tool where a pad row counts its pads."""
+        if job.get("tool"):
+            pad_txt = tooling_tool_name(job["tool"])
+        else:
+            pads = self._pad_count(job)
+            pad_txt = ngettext("{n} pad", "{n} pads", pads).format(n=pads)
         if job.get("scrap_num"):
             pad_txt += f" #{job['scrap_num']}"
         return [
@@ -7343,13 +7374,15 @@ class JobHistoryWindow(tk.Toplevel):
     def _on_select(self):
         job = self._selected_job()
         state = "normal" if job else "disabled"
-        self.load_btn.config(state=state)
+        # A Tooling row has nothing to put back into the Pad Maker's form.
+        self.load_btn.config(state="disabled" if (not job or job.get("tool")) else "normal")
         self.delete_btn.config(state=state)
         self._set_detail(self._detail_text(job) if job else "")
 
     def _detail_text(self, job):
         lines = []
         out = job.get("output")
+        tooling = bool(job.get("tool"))
         if out == "laser":
             what = _("Sent to the laser")
             status = job.get("status")
@@ -7359,9 +7392,14 @@ class JobHistoryWindow(tk.Toplevel):
             what = _("G-code files written")
         elif out == "svg":
             what = _("SVG files written")
+        elif out == "stl":
+            what = _("STL file written")
         else:
             what = str(out)
         lines.append(f"{self._when(job)}  —  {what}")
+
+        if tooling:
+            lines.append(tooling_tool_name(job["tool"]))
 
         if job.get("scrap_num"):
             lines.append(_("Scrap piece #{n} of a scrap-mode session").format(
@@ -7370,8 +7408,12 @@ class JobHistoryWindow(tk.Toplevel):
         lines.append(_("Material: {m}").format(m=self._materials_label(job)))
 
         pads = self._pad_count(job)
-        pad_line = ngettext("{n} pad on the sheet", "{n} pads on the sheet",
-                            pads).format(n=pads)
+        if tooling:
+            pad_line = ngettext("{n} piece on the sheet", "{n} pieces on the sheet",
+                                pads).format(n=pads)
+        else:
+            pad_line = ngettext("{n} pad on the sheet", "{n} pads on the sheet",
+                                pads).format(n=pads)
         if job.get("has_max"):
             pad_line += _(" (a 'max' line filled the leftover space)")
         lines.append(pad_line)
@@ -7402,13 +7444,22 @@ class JobHistoryWindow(tk.Toplevel):
                 job["polygon_vertices"]).format(n=job["polygon_vertices"]))
 
         pad_text = job.get("pad_text")
-        if pad_text:
+        if pad_text and tooling:
+            # The tool's own description of the job (die sizes, holder
+            # variant, the kerf test's cut settings, ...), as it stands.
+            lines.append("")
+            lines.append(pad_text)
+        elif pad_text:
             lines.append("")
             # One comma-joined run rather than one line per size — a
             # 20-size tenor set would otherwise push everything else out
             # of the pane. The Text widget word-wraps it.
             entries = [ln.strip() for ln in pad_text.splitlines() if ln.strip()]
             lines.append(_("Pad list: {list}").format(list=", ".join(entries)))
+
+        if tooling:
+            lines.append("")
+            lines.append(tooling_job_not_loadable())
 
         return "\n".join(lines)
 
@@ -7417,6 +7468,10 @@ class JobHistoryWindow(tk.Toplevel):
     def on_load(self):
         job = self._selected_job()
         if not job:
+            return
+        if job.get("tool"):
+            # The button is disabled for these rows; this is the double-click.
+            messagebox.showinfo(_("Load Job"), tooling_job_not_loadable())
             return
         if not messagebox.askyesno(
                 _("Load Job"),
@@ -9080,11 +9135,9 @@ class CameraCalibrationDialog(tk.Toplevel):
 
         def _worker():
             try:
-                cap = self._cam_mod.open_camera(self._camera_index)
-                ok, frame = cap.read()
-                if not ok or frame is None:
-                    cap.release()
-                    raise RuntimeError(_("Camera opened but returned no frame."))
+                cap, used, frame = self._cam_mod.open_camera_or_fallback(
+                    self._camera_index, (self._settings or {}).get("camera_index_override"))
+                self._camera_index = used
                 self.after(0, self._camera_ready, cap, frame)
             except Exception as e:
                 self.after(0, self._camera_failed, e)
@@ -9965,11 +10018,9 @@ class CameraCaptureDialog(tk.Toplevel):
 
         def _worker():
             try:
-                cap = self._cam_mod.open_camera(self._camera_index)
-                ok, _frame = cap.read()
-                if not ok:
-                    cap.release()
-                    raise RuntimeError(_("Camera opened but returned no frame."))
+                cap, used, _frame = self._cam_mod.open_camera_or_fallback(
+                    self._camera_index, (self._settings or {}).get("camera_index_override"))
+                self._camera_index = used
                 self.after(0, self._camera_ready, cap)
             except Exception as e:
                 self.after(0, self._camera_failed, e)
@@ -11192,7 +11243,9 @@ class LiveCameraWindow(tk.Toplevel):
 
         def _worker():
             try:
-                cap = self._cam_mod.open_camera(self._camera_index)
+                cap, used, _frame = self._cam_mod.open_camera_or_fallback(
+                    self._camera_index, (self._settings or {}).get("camera_index_override"))
+                self._camera_index = used
                 self.after(0, self._camera_ready, cap)
             except Exception:
                 pass

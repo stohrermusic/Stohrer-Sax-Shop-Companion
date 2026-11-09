@@ -2070,6 +2070,51 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except Exception:
             logging.getLogger(__name__).exception("Could not record job history")
 
+    def _record_tooling_job(self, job, output, status="complete", save_dir=None):
+        """Log a Tooling job that reached an output stage (Matt,
+        2026-11-09: "tooling runs go into job history if easy").
+
+        `job` carries the fields ToolingTabMixin._tooling_history builds
+        (tool, description, material, count, sheet in mm, base, scrap
+        number); `output` is "svg", "gcode", "stl" or "laser". The entry
+        has the same shape as _record_job's so the storage, the list and
+        delete work untouched, with `tool` added and the description where
+        the pad list goes. The dialog shows the tool's name on these rows
+        and does not load them into the Pad Maker's form. Swallows every
+        error, for the same reason _record_job does.
+        """
+        try:
+            count = job.get('count')
+            entry = {
+                "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                "output": output,
+                "status": status,
+                "materials": [job['material']] if job.get('material') else [],
+                "tool": job['tool'],
+                "pad_text": job.get('description') or "",
+                "pads": [],
+                "requested_count": count,
+                "has_max": False,
+                "placed_count": count,
+                "base": job.get('base'),
+                "units": None,
+                "sheet_w": None,
+                "sheet_h": None,
+                "sheet_w_mm": job.get('sheet_w_mm'),
+                "sheet_h_mm": job.get('sheet_h_mm'),
+                "card_paper": False,
+                "hole_option": None,
+                "custom_hole": "",
+                "scrap_num": job.get('scrap_num'),
+                "save_dir": save_dir,
+                "preset_library": None,
+                "preset_name": None,
+                "polygon_vertices": 0,
+            }
+            append_job_history(entry)
+        except Exception:
+            logging.getLogger(__name__).exception("Could not record job history")
+
     def open_job_history(self):
         """File > Job History — browse past jobs, optionally reload one."""
         dlg = JobHistoryWindow(self.root, load_job_history(), save_job_history)
@@ -2086,6 +2131,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         camera-captured polygon is anchored to a scrap that no longer
         exists.
         """
+        # A Tooling entry has no pad list to put back; the dialog refuses
+        # it before it gets here, this is the backstop.
+        if job.get("tool"):
+            return
         # A live scrap session owns its own pad list and locks the
         # material checkboxes; loading over the top would desync them.
         if self.scrap_session.get('active'):
@@ -2344,49 +2393,147 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             # A nest that never became a file is not "on this scrap".
             self._scrap_abandon_pending()
 
-    def _detect_falcon_async(self):
-        """Probe USB serial ports for a Grbl controller; show the button if found.
+    # ---- the laser watch -------------------------------------------------------
+    # Matt, 2026-11-09: "is there a way for the ssc to be ok with a user
+    # plugging in the laser when the ssc is already running? I feel like now
+    # it has to be plugged in first." Until then the app probed every serial
+    # port every 10 s until a laser answered, then never looked again: a
+    # laser unplugged, power-cycled or moved to another socket left a stale
+    # port (Frame & Cut failed to connect until a restart, the buttons stayed
+    # up) and its homed flag, so Try Auto Locate stayed enabled after the
+    # machine had lost its zero. Now falcon_sender.LaserWatch decides what to
+    # probe from the port list every LASER_WATCH_PERIOD_MS, on a worker
+    # thread (one at a time), and every state change happens here, on the Tk
+    # thread. Started from the __main__ block only: building the app starts
+    # no watch, no thread and no timer.
 
-        Runs in a background thread (Probe takes ~1-2 seconds per port) and
-        marshals the result back to the Tk main thread. Safe to call any
-        time the user wants to re-scan.
-        """
-        if self._falcon_detect_attempted:
-            return
-        self._falcon_detect_attempted = True
+    def _start_laser_watch(self):
+        """Begin watching the serial ports for the laser. Launch path only."""
         try:
             import falcon_sender
-            if not falcon_sender.HAS_PYSERIAL:
-                return
         except ImportError:
             return
+        if not falcon_sender.HAS_PYSERIAL or not self._machine_enabled():
+            return
+        if getattr(self, '_laser_watch', None) is not None:
+            return
+        self._laser_watch = falcon_sender.LaserWatch()
+        self._laser_watch_busy = False
+        logging.getLogger("ssc.machine").info("laser watch started (every %d ms)", LASER_WATCH_PERIOD_MS)
+        self._laser_watch_tick()
 
-        import threading
+    def _laser_watch_tick(self):
+        """One look at the ports, on a worker; then the next tick."""
+        if getattr(self, '_laser_watch', None) is None:
+            return
+        try:
+            if not self.root.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not self._laser_watch_busy:
+            self._laser_watch_busy = True
+            import threading
+            threading.Thread(target=self._laser_watch_worker, name='laser-watch', daemon=True).start()
+        self.root.after(LASER_WATCH_PERIOD_MS, self._laser_watch_tick)
 
-        def _worker():
-            try:
-                port = falcon_sender.auto_detect_falcon()
-            except Exception:
-                port = None
-            self.root.after(0, self._on_falcon_detected, port)
+    def _laser_watch_worker(self):
+        """Worker thread: list, decide, probe; hand the events to the Tk
+        thread. Must not raise, least of all after the window is gone."""
+        import time as _time
+        try:
+            import falcon_sender
+            events = self._laser_watch_pass(falcon_sender.list_serial_ports,
+                                            falcon_sender.probe_grbl_port, _time.monotonic)
+        except Exception as e:
+            events = [('error', str(e))]
+        finally:
+            self._laser_watch_busy = False
+        try:
+            self.root.after(0, self._laser_watch_apply, events)
+        except (RuntimeError, tk.TclError):
+            pass                                # the window is gone; nothing to tell
 
-        threading.Thread(target=_worker, name='falcon-detect', daemon=True).start()
+    def _laser_watch_pass(self, list_ports, probe, now):
+        """One pass of the watch, synchronously: what the worker does, and
+        what the tests call with a simulated port list, a fake probe and a
+        fake clock. Returns the watch's events."""
+        watch = self._laser_watch
+        ports = list_ports()
+        for p in watch.look(ports, now()):
+            watch.probed(p['device'], probe(p['device']), now())
+            if watch.known_port:
+                break               # the laser answered: no other port is opened
+        watch.finish()
+        return watch.pop_events()
+
+    def _laser_watch_apply(self, events):
+        """Tk thread: act on what a pass found."""
+        try:
+            if not self.root.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        machine_log = logging.getLogger("ssc.machine")
+        for event in events:
+            kind = event[0]
+            if kind == 'found':
+                _k, device, how, info = event
+                machine_log.info("laser found on %s (%s, %s:%s) by %s", device,
+                                 info.get('description', ''),
+                                 f"{info['vid']:04X}" if info.get('vid') else "-",
+                                 f"{info['pid']:04X}" if info.get('pid') else "-",
+                                 "its status report" if how == 'status' else "the boot banner after a reset")
+                self._on_falcon_detected(device)
+            elif kind == 'lost':
+                self._on_falcon_lost(event[1])
+            elif kind == 'silent':
+                _k, device, info = event
+                machine_log.info("port %s (%s) did not answer the probe", device, info.get('description', ''))
+            elif kind == 'rescan':
+                _k, probed, found = event
+                machine_log.info("rescan asked for: %d port(s) probed, %s", probed,
+                                 f"laser on {found}" if found else "no laser")
+            elif kind == 'error':
+                # A pass that raised (port enumeration failing, say) would
+                # otherwise say so every 2 s: once per distinct message.
+                if event[1] != getattr(self, '_laser_watch_last_error', None):
+                    self._laser_watch_last_error = event[1]
+                    machine_log.warning("laser watch: %s", event[1])
 
     def _on_falcon_detected(self, port):
-        """Called on the Tk main thread once detection finishes."""
+        """Tk thread: a laser answered on `port`."""
         if port:
             self.falcon_port = port
             # Frame & Cut (both tabs) shows once a Falcon is detected;
             # _refresh_machine_ui_state holds the rule.
             self._refresh_machine_ui_state()
+
+    def _on_falcon_lost(self, port):
+        """Tk thread: the known port is no longer listed. The machine may
+        have been power-cycled, so its zero is gone with it: the homed flag
+        goes too, and Try Auto Locate (a G53 move) is not offered until the
+        laser is homed again."""
+        logging.getLogger("ssc.machine").info("laser gone from %s", port)
+        self.falcon_port = None
+        self._falcon_homed_this_session = False
+        self._refresh_machine_ui_state()
+
+    def _detect_falcon_async(self):
+        """The user asked for the laser (a Machine menu item with none
+        detected, Frame & Cut with none, a connect that failed): a full
+        rescan, every port present, Bluetooth last. Only while the watch
+        is running, which is every real launch with machine integration on;
+        in a suite or a tour nothing is probed. The name is kept because
+        suites and outside scripts stand in for it."""
+        watch = getattr(self, '_laser_watch', None)
+        if watch is None:
             return
-        # Not found this round. Auto-retry in 10s so users who started
-        # SSC before powering on the Falcon get the button as soon as
-        # the controller comes online — without having to restart the
-        # app or click a Machine menu item to manually retrigger
-        # detection. Stops retrying once a port is found.
-        self._falcon_detect_attempted = False
-        self.root.after(10000, self._detect_falcon_async)
+        watch.request_rescan()
+        if not self._laser_watch_busy:
+            self._laser_watch_busy = True
+            import threading
+            threading.Thread(target=self._laser_watch_worker, name='laser-watch', daemon=True).start()
 
     def _machine_enabled(self):
         """True iff the user has opted into machine integration.
@@ -2671,6 +2818,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 sender.disconnect()
             except Exception:
                 pass
+            self._detect_falcon_async()         # the port may be stale: look again
             return
         success = self._run_blocking_home(sender)
         try:
@@ -2705,6 +2853,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 sender.disconnect()
             except Exception:
                 pass
+            self._detect_falcon_async()         # the port may be stale: look again
             return
         finally:
             pass
@@ -2753,6 +2902,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 sender.disconnect()
             except Exception:
                 pass
+            self._detect_falcon_async()         # the port may be stale: look again
             return
         finally:
             pass
@@ -3303,6 +3453,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showerror(_("Connection Failed"),
                                       _("Could not connect to the Falcon at "
                                         "{p}: {e}").format(p=self.falcon_port, e=e))
+                self._detect_falcon_async()     # the port may be stale: look again
                 return
 
             # From here on the port is open: every way out (jog cancelled,
@@ -3436,12 +3587,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     title=_("Cutting — {m}").format(m=material.replace('_', ' ')))
 
                 if tooling_job is not None:
+                    # Logged like a pad run, stopped and errored cuts too
+                    # (the material went under the laser); the Die Scrap
+                    # sheet number travels with the job. Since 2026-11-09;
+                    # before, Job History took no Tooling runs.
+                    if job.get('tool'):
+                        self._record_tooling_job(job, "laser",
+                                                 status=cut_dlg._final_reason or "stopped")
                     # Tooling's own bookkeeping (its scrap session, the
                     # kerf test's measuring steps). It is told how the cut
                     # ended and decides for itself what "complete" earns.
-                    # Job History is the Pad Maker's log (a pad list that
-                    # can be loaded back into its form) and takes no
-                    # Tooling runs.
                     after_cut = job.get('after_cut')
                     if after_cut is not None:
                         after_cut(cut_dlg._final_reason)
@@ -4688,6 +4843,9 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
 
 # Per-tab horizontal padding Aqua adds round a notebook label, plus slack.
 TAB_LABEL_PADDING_PX = 30
+# How often the laser watch lists the serial ports (enumeration only; a port
+# is opened only when LaserWatch says so). See _start_laser_watch.
+LASER_WATCH_PERIOD_MS = 2000
 # Room around the Tooling tab's content when the window is sized to it: the
 # notebook's own padding and border (see _fit_window_to_tabs).
 TOOLING_CONTENT_MARGIN_PX = 24
@@ -5038,7 +5196,7 @@ if __name__ == '__main__':
     # no point probing USB serial ports for a user who never plans to
     # use direct Falcon control.
     if app._machine_enabled():
-        root.after(500, app._detect_falcon_async)
+        root.after(500, app._start_laser_watch)
 
     # The Welcome window, on the first launch of each version. Only here,
     # in a real launch: --selftest has exited above, a --tour has its own

@@ -133,30 +133,61 @@ def list_serial_ports():
     return out
 
 
-def _probe_for_grbl(port, baud=DEFAULT_BAUD, timeout_s=CONNECT_WAKEUP_DELAY_S):
-    """Open a port, send a soft-reset, wait for the Grbl banner.
+PROBE_ASK_TIMEOUT_S = 0.5     # how long "?" is given to answer before the reset is tried
 
-    A passive listen doesn't work for the Falcon2 Pro 40W's ESP32-S3
-    controller — it boots silently and only emits the banner in response
-    to ``\\x18`` (Ctrl-X soft-reset). The reset is harmless to send to a
-    non-Grbl device; pyserial will just close the port and we'll move on.
+
+def probe_grbl_port(port, baud=DEFAULT_BAUD, timeout_s=CONNECT_WAKEUP_DELAY_S,
+                    ask_timeout_s=PROBE_ASK_TIMEOUT_S, settle_s=0.2, serial_factory=None):
+    """Is there a Grbl controller on this port? Returns how it answered,
+    'status' or 'banner', or None.
+
+    Ask before resetting (2026-11-09, Matt: the laser may be plugged in
+    while the app runs). After the port settles, the real-time status
+    query ``?`` goes out, the same non-destructive first step connect()
+    takes, and a Grbl status report (``<Idle|...>``, any state) is
+    accepted as the answer: a laser that is alive, even one in the middle
+    of an SD-card job, is recognised without being touched. Only when no
+    status report comes back does the old path run, unchanged: the
+    soft-reset ``\\x18`` (Ctrl-X) and the wait for the boot banner, which
+    is what the Falcon2 Pro 40W's ESP32-S3 controller needs when it has
+    booted silently. The reset is harmless to a non-Grbl device; pyserial
+    just closes the port and we move on.
+
+    `serial_factory` stands in for serial.Serial in tests; no real port is
+    ever opened there.
     """
-    if not HAS_PYSERIAL:
-        return False
+    if not HAS_PYSERIAL and serial_factory is None:
+        return None
+    opener = serial_factory or serial.Serial
+    errors = (serial.SerialException, OSError) if HAS_PYSERIAL else (OSError,)
     try:
-        s = serial.Serial(port, baud, timeout=0.2)
-    except (serial.SerialException, OSError):
-        return False
+        s = opener(port, baud, timeout=0.2)
+    except errors:
+        return None
     try:
-        # Give the port a moment to settle after enumeration, drain
-        # whatever the OS buffered, then kick the controller and listen
-        # for its boot banner.
-        time.sleep(0.2)
+        # Give the port a moment to settle after enumeration and drain
+        # whatever the OS buffered.
+        time.sleep(settle_s)
         try:
             s.reset_input_buffer()
+            s.write(RT_STATUS)
+        except errors:
+            return None
+        deadline = time.monotonic() + ask_timeout_s
+        buf = b''
+        while time.monotonic() < deadline:
+            chunk = s.read(256)
+            if chunk:
+                buf += chunk
+                for line in buf.decode('ascii', 'replace').splitlines():
+                    status = parse_status(line)
+                    if status and status.get('state'):
+                        return 'status'
+        # Silent: kick the controller and listen for its boot banner.
+        try:
             s.write(RT_SOFT_RESET)
-        except (serial.SerialException, OSError):
-            return False
+        except errors:
+            return None
         deadline = time.monotonic() + timeout_s
         buf = b''
         while time.monotonic() < deadline:
@@ -164,13 +195,154 @@ def _probe_for_grbl(port, baud=DEFAULT_BAUD, timeout_s=CONNECT_WAKEUP_DELAY_S):
             if chunk:
                 buf += chunk
                 if b'Grbl' in buf:
-                    return True
-        return b'Grbl' in buf
+                    return 'banner'
+        return 'banner' if b'Grbl' in buf else None
     finally:
         try:
             s.close()
         except Exception:
             pass
+
+
+def _probe_for_grbl(port, baud=DEFAULT_BAUD, timeout_s=CONNECT_WAKEUP_DELAY_S):
+    """True when probe_grbl_port finds a Grbl controller on the port."""
+    return probe_grbl_port(port, baud, timeout_s) is not None
+
+
+# =============================================================================
+# The laser watch: which ports to probe, and when. No Tk, no threads.
+# =============================================================================
+
+LIKELY_RETRY_S = 10.0         # a laser-looking port that has not answered is asked again this often
+BLUETOOTH_MARKERS = ('bthenum', 'bluetooth')
+
+
+def port_priority(p):
+    """0 for a known Falcon VID:PID, 1 for a laser-looking description,
+    2 for any other port (the order auto_detect_falcon has always used)."""
+    if p.get('vid') and p.get('pid') and (p['vid'], p['pid']) in FALCON_VID_PID_HINTS:
+        return 0
+    desc = (p.get('description', '') + ' ' + p.get('hwid', '')).lower()
+    if 'falcon' in desc or 'ch340' in desc or 'creality' in desc:
+        return 1
+    return 2
+
+
+def port_looks_like_a_laser(p):
+    return port_priority(p) < 2
+
+
+def port_is_bluetooth(p):
+    """Windows lists one as 'Standard Serial over Bluetooth link' with a
+    BTHENUM hwid; macOS as /dev/cu.Bluetooth-Incoming-Port with 'n/a' for
+    description and hwid, so the device path counts too."""
+    desc = (p.get('device', '') + ' ' + p.get('description', '') + ' ' + p.get('hwid', '')).lower()
+    return any(m in desc for m in BLUETOOTH_MARKERS)
+
+
+class LaserWatch:
+    """Decides which serial ports to probe for the laser, and when, from a
+    list of the ports present and the time. Pure bookkeeping: whoever runs
+    it lists the ports, probes what look() returns, reports each result
+    with probed(), calls finish(), and acts on pop_events(). In the app
+    that is a worker thread every couple of seconds (main.py); in the
+    tests it is a loop with a fake clock.
+
+    Rules (Matt, 2026-11-09: "is there a way for the ssc to be ok with a
+    user plugging in the laser when the ssc is already running?"):
+      - a port that has just appeared is probed at once;
+      - a port that looks like a laser (known VID:PID, or falcon / ch340 /
+        creality in its description) and has not answered is asked again
+        every LIKELY_RETRY_S: the cable is in, the laser is switched off;
+      - any other port is probed once per appearance and then left alone
+        until it goes away and comes back, or the user asks;
+      - a Bluetooth serial port is never probed on the watch's own account;
+      - while a laser is known nothing is probed, so nothing can disturb a
+        running cut;
+      - when the known port is no longer listed the laser is 'lost', and
+        the watch looks for it again;
+      - a rescan (the user asked, or a connect failed) probes every port
+        present, Bluetooth last, in priority order.
+    Events: ('found', device, how, info), ('lost', device),
+    ('silent', device, info) once per appearance, ('rescan', probed, found).
+    """
+
+    def __init__(self):
+        self.known_port = None
+        self.ports = {}             # device -> {'info', 'last_probe', 'probes'}
+        self.rescan_wanted = False
+        self._rescan = None         # {'previous': port, 'found': device or None, 'probed': n} while one runs
+        self.events = []
+
+    # ---- what to probe -----------------------------------------------------
+    def look(self, ports, now):
+        """Record which ports are present and return those to probe now,
+        in priority order."""
+        present = {p['device']: p for p in ports}
+        for device in list(self.ports):
+            if device not in present:
+                del self.ports[device]
+                if device == self.known_port:
+                    self.known_port = None
+                    self.events.append(('lost', device))
+        for device, p in present.items():
+            entry = self.ports.setdefault(device, {'info': p, 'last_probe': None, 'probes': 0})
+            entry['info'] = p
+        if self.rescan_wanted:
+            self.rescan_wanted = False
+            self._rescan = {'previous': self.known_port, 'found': None, 'probed': 0}
+            self.known_port = None
+            return self._ordered(present.values(), bluetooth_too=True)
+        if self.known_port:
+            return []
+        due = []
+        for device, entry in self.ports.items():
+            p = entry['info']
+            if port_is_bluetooth(p):
+                continue
+            if entry['last_probe'] is None:
+                due.append(p)
+            elif port_looks_like_a_laser(p) and now - entry['last_probe'] >= LIKELY_RETRY_S:
+                due.append(p)
+        return self._ordered(due, bluetooth_too=False)
+
+    @staticmethod
+    def _ordered(ports, bluetooth_too):
+        ports = [p for p in ports if bluetooth_too or not port_is_bluetooth(p)]
+        return sorted(ports, key=lambda p: (port_is_bluetooth(p), port_priority(p), p['device']))
+
+    # ---- what the probes said ------------------------------------------------
+    def probed(self, device, how, now):
+        """`how` is probe_grbl_port's answer: 'status', 'banner' or None."""
+        entry = self.ports.setdefault(device, {'info': {'device': device}, 'last_probe': None, 'probes': 0})
+        entry['last_probe'] = now
+        entry['probes'] += 1
+        if self._rescan is not None:
+            self._rescan['probed'] += 1
+        if how:
+            if self.known_port is None:
+                self.known_port = device
+                if self._rescan is not None:
+                    self._rescan['found'] = device
+                self.events.append(('found', device, how, dict(entry['info'])))
+        elif entry['probes'] == 1:
+            self.events.append(('silent', device, dict(entry['info'])))
+
+    def finish(self):
+        """End of one pass (and of a rescan, if one was running)."""
+        if self._rescan is not None:
+            r, self._rescan = self._rescan, None
+            if r['found'] is None and r['previous'] and r['previous'] not in (e[1] for e in self.events if e[0] == 'lost'):
+                self.events.append(('lost', r['previous']))
+            self.events.append(('rescan', r['probed'], r['found']))
+
+    def request_rescan(self):
+        """The user asked, or a connect failed: the next look probes every port."""
+        self.rescan_wanted = True
+
+    def pop_events(self):
+        events, self.events = self.events, []
+        return events
 
 
 def auto_detect_falcon():

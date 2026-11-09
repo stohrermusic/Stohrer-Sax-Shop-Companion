@@ -313,17 +313,17 @@ def main():
         app.organizer_filename_var.set("org")
 
     TOOLS = [
-        {"name": "die inserts", "setup": setup_die, "export": app._on_generate_die_gcode,
+        {"name": "die inserts", "tool": "die_inserts", "setup": setup_die, "export": app._on_generate_die_gcode,
          "click": app._on_frame_cut_die, "material": "acrylic", "legend": False},
-        {"name": "die holder", "setup": setup_holder, "export": app._on_generate_holder_gcode,
+        {"name": "die holder", "tool": "die_holders", "setup": setup_holder, "export": app._on_generate_holder_gcode,
          "click": app._on_frame_cut_holder, "material": "acrylic", "legend": False},
-        {"name": "kerf test", "setup": setup_kerf, "export": app._on_generate_kerf_gcode,
+        {"name": "kerf test", "tool": "kerf_test", "setup": setup_kerf, "export": app._on_generate_kerf_gcode,
          "click": app._on_frame_cut_kerf, "material": "felt", "legend": False},
-        {"name": "speed & power test", "setup": setup_fs, "export": app._on_generate_feeds_speeds_gcode,
+        {"name": "speed & power test", "tool": "feeds_speeds_tester", "setup": setup_fs, "export": app._on_generate_feeds_speeds_gcode,
          "click": app._on_frame_cut_feeds_speeds, "material": "leather", "legend": True},
-        {"name": "tonehole crescent", "setup": setup_crescent, "export": app._on_generate_crescent_gcode,
+        {"name": "tonehole crescent", "tool": "tonehole_crescent", "setup": setup_crescent, "export": app._on_generate_crescent_gcode,
          "click": app._on_frame_cut_crescent, "material": "cork", "legend": False},
-        {"name": "die organizer lower", "setup": setup_organizer, "export": app._on_generate_organizer_gcode,
+        {"name": "die organizer lower", "tool": "die_organizer", "setup": setup_organizer, "export": app._on_generate_organizer_gcode,
          "click": app._on_frame_cut_organizer, "material": "basswood", "legend": False},
     ]
 
@@ -533,10 +533,10 @@ def main():
 
     for tool in TOOLS:
         def streams_what_the_export_writes(tool=tool):
+            hist = len(pad_job_history())
             want = exported(tool)
             files_before = set(os.listdir(out))
             dialogs_before = len(saved)
-            hist = len(pad_job_history())
             got = machine(tool["click"])
             assert not errors(), errors()
             assert len(got) == 3, f"jog, framing, cut expected; got {[r['ends'] for r in got]}"
@@ -545,12 +545,26 @@ def main():
             assert cut["lines"][0] == G92_ZERO, cut["lines"][0]
             assert cut["lines"][1:] == want, "Frame & Cut streamed something other than the exported file"
             assert cut["kw"].get("title") == f"Cutting — {tool['material']}", cut["kw"].get("title")
-            # Kept for the audit, one log line, and no Pad Maker job history.
+            # Kept for the audit, one log line, and (since 2026-11-09, Matt:
+            # "tooling runs go into job history if easy") two Job History
+            # entries: the export's and the run's, newest first, the same
+            # job described the same way, with the tool's key.
             assert read_lines(kept_path) == cut["lines"]
             assert len(log_lines) == 1, log_lines
             assert log_lines[0].startswith(f"frame&cut tooling {tool['name']} ({tool['material']}) scrap -: "), log_lines
             assert " pieces, " in log_lines[0] and "G92 X0.000 Y0.000" in log_lines[0], log_lines
-            assert len(pad_job_history()) == hist, "Tooling runs stay out of Job History"
+            pieces = int(log_lines[0].split(": ")[1].split(" pieces")[0])
+            new_hist = pad_job_history()[:len(pad_job_history()) - hist]
+            assert [j.get("output") for j in new_hist] == ["laser", "gcode"], \
+                f"export then Frame & Cut should each leave one entry: {[(j.get('output'), j.get('tool')) for j in new_hist]}"
+            run, export = new_hist
+            for j in (run, export):
+                assert j["tool"] == tool["tool"] and j["materials"] == [tool["material"]], j
+                assert j["status"] == "complete" and j["placed_count"] == pieces and j["pads"] == [], j
+                assert j["scrap_num"] is None and j["pad_text"], j
+            assert run["pad_text"] == export["pad_text"], "the same job, described differently"
+            assert export["save_dir"] == out and run["save_dir"] is None, (export["save_dir"], run["save_dir"])
+            assert export["base"] == os.path.splitext(os.path.basename(saved[dialogs_before - 1]))[0], export["base"]
             # Nothing in the user's folders but the Speed & Power legend.
             new_files = set(os.listdir(out)) - files_before
             new_dialogs = saved[dialogs_before:]
@@ -625,7 +639,11 @@ def main():
                 assert not kerf_shown, f"{script}: the kerf measuring steps belong after a finished cut"
                 assert not [b for b in boxes if b[0] == "showinfo"], boxes
                 assert not app.tooling_scrap_session["active"]
-            assert len(pad_job_history()) == hist
+            # Nothing cut, nothing logged; a cut that was stopped or errored
+            # is in Job History with its status, as a pad run is.
+            new_hist = pad_job_history()[:len(pad_job_history()) - hist]
+            assert [(j.get("output"), j.get("status"), j.get("tool")) for j in new_hist] == \
+                [("laser", "error", tool["tool"]), ("laser", "stopped", tool["tool"])], new_hist
         check(f"{tool['name']}: cancel at the jog step, stop while framing, stop or error in the cut: nothing consumed",
               cancelling_consumes_nothing)
 
@@ -836,6 +854,16 @@ def main():
             assert sess()["scrap_count"] == 2
             assert app._count_die_remaining() == total - len(placed1) - len(placed2)
             assert log_lines[0].startswith("frame&cut tooling die inserts (acrylic) scrap 2: "), log_lines
+            # Job History so far, newest first: sheet 2, sheet 1, then the
+            # errored and the stopped tries of sheet 1 (not counted by the
+            # session, logged all the same), each with its sheet number.
+            hist = pad_job_history()
+            assert [(j["output"], j["status"], j["scrap_num"], j["placed_count"]) for j in hist[:4]] == [
+                ("laser", "complete", 2, len(placed2)), ("laser", "complete", 1, len(placed1)),
+                ("laser", "error", 1, len(placed1)), ("laser", "stopped", 1, len(placed1))], hist[:4]
+            assert all(j["tool"] == "die_inserts" for j in hist[:4])
+            sizes_logged = [float(x.split(" ")[0]) for x in hist[0]["pad_text"].removesuffix(" mm").split(", ")]
+            assert sorted(sizes_logged) == sorted(set(die_sizes_in(placed2))), (hist[0]["pad_text"], die_sizes_in(placed2))
 
             assert app._count_die_remaining() > 0, "fixture: dies should be left for the file export below"
             # A file export joining a session Frame & Cut started has no
@@ -858,6 +886,10 @@ def main():
             assert os.path.isfile(os.path.join(out, "dies_scrap4.gcode")), sorted(os.listdir(out))
             stray = [f for f in set(os.listdir(os.getcwd())) - cwd_before if "scrap" in f]
             assert not stray, f"a scrap file was written into the working directory: {stray}"
+            # The two exports are in Job History with their sheet numbers and the folder.
+            hist = pad_job_history()
+            assert [(j["output"], j["scrap_num"], j["save_dir"], j["base"]) for j in hist[:2]] == [
+                ("gcode", 4, out, "dies_scrap4"), ("svg", 3, out, "dies_scrap3")], hist[:2]
         finally:
             app._clear_die_scrap_session()
             app.die_scrap_var.set(False)

@@ -141,11 +141,17 @@ def child(lang):
         for key, btn in app._tooling_buttons.items():
             text = str(btn.cget("text"))
             plain = tk.Button(btn.master, text=text, font=btn.cget("font"))
+            grid = btn.grid_info()
             buttons.append({
                 "key": key, "text": text, "chars": int(btn.cget("width")),
                 "width": btn.winfo_width(), "label_asks": plain.winfo_reqwidth(),
                 "x": btn.winfo_rootx() - root.winfo_rootx(),
                 "y": btn.winfo_rooty() - root.winfo_rooty(),
+                # Evidence for a failure nobody can reproduce locally (the
+                # Macs, 2026-11-09): what the port asked for this button
+                # and how it was configured, beside what it got.
+                "relief": str(btn.cget("relief")), "reqwidth": btn.winfo_reqwidth(),
+                "row": grid.get("row"), "col": grid.get("column"),
             })
             plain.destroy()
         probe = tk.Button(root, text="x", width=22)
@@ -153,6 +159,7 @@ def child(lang):
         probe.destroy()
         visible = [t for t in app.notebook.tabs() if app.notebook.tab(t, "state") != "hidden"]
         return {"window": root.winfo_width(), "buttons": buttons, "chars22": chars22, "tabs": len(visible),
+                "section_open": app._active_tooling_section,
                 "content_need": app.tooling_tab_frame.winfo_reqwidth() + getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0)}
 
     # With the default tabs, as the app starts; then as it would start with
@@ -166,6 +173,14 @@ def child(lang):
     root.geometry(f"640x{max(root.winfo_height(), 400)}")
     app._fit_window_to_tabs()
     fewest = measure()
+    # And with a section open: the active button's relief is "sunken", which
+    # a port may draw and size differently (Aqua draws a classic button
+    # natively only in its default look). Measured so the CI log says what
+    # each port asks for it; the uniform grid keeps the seven one width
+    # whatever that is.
+    app._show_tooling_section("die_inserts")
+    opened = measure()
+    app._show_tooling_section("die_inserts")        # toggles it closed again
 
     # The lid question, built by the app's own code in this language. The
     # real dialog takes the grab and waits for an answer; this one is the
@@ -294,7 +309,7 @@ def child(lang):
     root.update()
     organizer_boxes = [list(b) for b in box_guard.GUARD.shown[shown_before:]]
 
-    print("REPORT " + json.dumps({"lang": lang, "own": own, "fewest": fewest, "lid": lid,
+    print("REPORT " + json.dumps({"lang": lang, "own": own, "fewest": fewest, "open": opened, "lid": lid,
                                   "start_frame": _t("Start Frame →"),
                                   "translated": translated, "labels": labels, "dropdowns": dropdowns,
                                   "keys_back": keys_back, "speed_power": speed_power, "crescent": crescent,
@@ -459,6 +474,8 @@ GUARDED_SUITES = (
     "test_locator_marks", "test_pad_maker_e2e", "test_pad_preview", "test_release_2_86", "test_scrap_live_list",
     "test_scrap_pending", "test_sizing_presets_workflow", "test_smoke_ui", "test_tonehole_crescent",
     "test_toner_live", "test_tooltips", "test_tuner_canvas", "test_zone_labels",
+    # the laser watch's app-level checks (2026-11-09, the connection work)
+    "test_laser_watch",
 )
 
 
@@ -582,6 +599,18 @@ def box_guard_checks():
 # ---------------------------------------------------------------------------
 # Fix 4, the parent's side.
 # ---------------------------------------------------------------------------
+def button_evidence(m):
+    """One line per section button for a failure message: what each was
+    given, what it asked for, what it got, and where it sits; plus whether
+    a section was open when it was measured."""
+    lines = [f"section open: {m.get('section_open')!r}; window {m['window']} px; 22 chars = {m['chars22']} px"]
+    for b in m["buttons"]:
+        lines.append(f"  {b['text']!r}: relief {b.get('relief')}, {b['chars']} chars, asks {b.get('reqwidth')} px, "
+                     f"got {b['width']} px, label alone {b['label_asks']} px, row {b.get('row')} col {b.get('col')}, "
+                     f"x {b['x']} y {b['y']}")
+    return "\n".join(lines)
+
+
 def section_button_checks():
     reports = {}
 
@@ -615,17 +644,43 @@ def section_button_checks():
                     f"{lang}, {m['tabs']} tabs: the window is {m['window']} px wide, the Tooling tab's content "
                     f"needs {m['content_need']} px: the section buttons are being squeezed")
                 widths = {b["width"] for b in m["buttons"]}
-                assert len(widths) == 1, f"{lang}, {m['tabs']} tabs: the seven buttons are not one width: {sorted(widths)}"
+                assert len(widths) == 1, (
+                    f"{lang}, {m['tabs']} tabs: the seven buttons are not one width: {sorted(widths)}\n"
+                    + button_evidence(m))
+                # The columns of one uniform grid: every button is as wide as
+                # the widest request among the seven, so a port that asks
+                # more for one button cannot make it stand out.
+                assert min(widths) >= max(b["reqwidth"] for b in m["buttons"]), (
+                    f"{lang}, {m['tabs']} tabs: a button got less than the widest request\n" + button_evidence(m))
                 for b in m["buttons"]:
                     assert b["width"] > 1, f"fixture, {lang}: {b['text']!r} was measured before it was laid out"
                     assert b["width"] >= b["label_asks"], (
                         f"{lang}, {m['tabs']} tabs, window {m['window']} px: {b['text']!r} is on a {b['width']} px "
-                        f"button, a button with that label asks for {b['label_asks']} px")
+                        f"button, a button with that label asks for {b['label_asks']} px\n" + button_evidence(m))
                     assert b["x"] >= 0 and b["x"] + b["width"] <= m["window"], (
                         f"{lang}, {m['tabs']} tabs, window {m['window']} px: {b['text']!r} runs from {b['x']} to "
-                        f"{b['x'] + b['width']} px, past the window's edge")
+                        f"{b['x'] + b['width']} px, past the window's edge\n" + button_evidence(m))
         check(f"section buttons, {lang}: one width, no label cut off, the window never narrower than the Tooling "
               "content, with the default tabs and with the fewest", no_label_is_cut_off)
+
+        def one_width_with_a_section_open(lang=lang):
+            m = measured(lang)["open"]
+            assert m["section_open"] == "die_inserts", f"fixture: no section open when measured: {m['section_open']!r}"
+            reliefs = {b["key"]: b["relief"] for b in m["buttons"]}
+            assert reliefs["die_inserts"] == "sunken" and all(
+                r == "raised" for k, r in reliefs.items() if k != "die_inserts"), reliefs
+            widths = {b["width"] for b in m["buttons"]}
+            assert len(widths) == 1, f"{lang}: with a section open the seven buttons are not one width\n" + button_evidence(m)
+            for b in m["buttons"]:
+                assert b["width"] >= b["label_asks"], f"{lang}: {b['text']!r} narrower than its label\n" + button_evidence(m)
+            # Said in the log on every run: what this port asks for the
+            # sunken button against the raised ones (nobody here has a Mac).
+            asks = {b["relief"]: sorted({x["reqwidth"] for x in m["buttons"] if x["relief"] == b["relief"]})
+                    for b in m["buttons"]}
+            print(f"        ({lang}: a section open: requests by relief {asks}, all got {widths.pop()} px, "
+                  f"window {m['window']} px, content needs {m['content_need']} px)")
+        check(f"section buttons, {lang}: with a section open (its button sunken) still one width, none narrower "
+              "than its label", one_width_with_a_section_open)
 
     for lang in ("en", "de", "es", "fr", "it"):
         def the_lid_question_fits(lang=lang):
@@ -698,7 +753,12 @@ def section_button_checks():
         b = m["buttons"]
         assert [x["text"] for x in b] == ["Die Inserts", "Die Holders", "Die Organizer", "Kerf Test",
                                           "Speed & Power Test", "Pad Press Spacers", "Tonehole Crescent"]
-        assert len({x["width"] for x in b}) == 1 and len({x["chars"] for x in b}) == 1, "English buttons are all one width"
+        assert len({x["width"] for x in b}) == 1 and len({x["chars"] for x in b}) == 1, \
+            "English buttons are all one width\n" + button_evidence(m)
+        # Row 3's single button is in column 0 of the same uniform group
+        # as the other six: one grid, not three row frames.
+        assert [(x["row"], x["col"]) for x in b] == [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0)], \
+            "one grid, three columns, in order\n" + button_evidence(m)
         # 22 characters wide where 22 characters hold every label (Windows'
         # font), and no narrower than any label otherwise (Linux's wider
         # font needs more than 22 for "Pad Press Spacers"): the rule, not a

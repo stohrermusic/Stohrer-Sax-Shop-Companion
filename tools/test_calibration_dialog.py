@@ -265,6 +265,78 @@ def run_fix_cases(root, ui, cam, frame, seen):
         check("camera fails to open: the control panel and Cancel stay on "
               "screen; engrave phase fits its controls", controls_survive)
 
+        # ---- the saved camera number falls back (2026-11-09) -------------
+        # Matt, of the camera: "same deal?" as the laser being plugged in
+        # later. The dialog asked for the saved number (1) cannot open it;
+        # it runs on the other camera, logs one line, saves nothing.
+        real_find = cam.find_falcon_camera_index
+        real_names = cam._list_camera_names
+        opened, enumerated, logged = [], [], []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                logged.append((record.levelname, record.getMessage()))
+        grab = Grab()
+        cam.log.addHandler(grab)
+
+        def open_or_fail(index, *a, **k):
+            opened.append(index)
+            if index == 1:
+                raise RuntimeError("camera 1 unplugged (test)")
+            return good_open(index, *a, **k)
+
+        def enum():
+            enumerated.append(True)
+            return [{'index': 0, 'name': 'Integrated Camera'}]
+        cam.open_camera = open_or_fail
+        cam.enumerate_cameras = enum
+        cam.find_falcon_camera_index = lambda *a, **k: None
+        cam._list_camera_names = lambda *a, **k: ["Integrated Camera"]
+        saved = {"camera_index_override": 1}
+
+        def live(tag):
+            def look(d):
+                seen[tag] = (d._camera_index, d._cap is not None, d._status_var.get())
+            return look
+        try:
+            run_dialog(root, ui, [(1200, live('fallback'))], args=(1, os.path.join(_PROFILE, "calib.json")),
+                       settings=saved)
+            seen['fallback_opened'] = list(opened)
+            seen['fallback_enumerated'] = len(enumerated)
+            seen['fallback_saved'] = dict(saved)
+            seen['fallback_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+            # The saved number opens: one open call, no enumeration, no warning.
+            del opened[:], enumerated[:], logged[:]
+            cam.open_camera = lambda index, *a, **k: (opened.append(index), good_open(index, *a, **k))[1]
+            run_dialog(root, ui, [(1200, live('saved_ok'))], args=(1, os.path.join(_PROFILE, "calib.json")),
+                       settings=saved)
+            seen['saved_ok_opened'] = list(opened)
+            seen['saved_ok_enumerated'] = len(enumerated)
+            seen['saved_ok_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+        finally:
+            cam.open_camera = good_open
+            cam.enumerate_cameras = real_enum
+            cam.find_falcon_camera_index = real_find
+            cam._list_camera_names = real_names
+            cam.log.removeHandler(grab)
+
+        def saved_number_falls_back_in_the_real_dialog():
+            index, has_cap, status = seen['fallback']
+            assert index == 0 and has_cap, f"the dialog did not run on the other camera: {seen['fallback']}"
+            assert status.startswith("Detected ") or "Camera live" in status, status
+            assert seen['fallback_opened'] == [1, 0], seen['fallback_opened']
+            assert seen['fallback_enumerated'] == 1, seen['fallback_enumerated']
+            assert seen['fallback_saved'] == {"camera_index_override": 1}, "the saved number was changed"
+            w = seen['fallback_warnings']
+            assert len(w) == 1 and "camera #1" in w[0] and "camera #0" in w[0] and "Integrated Camera" in w[0], w
+            index, has_cap, _status = seen['saved_ok']
+            assert index == 1 and has_cap and seen['saved_ok_opened'] == [1], (seen['saved_ok'], seen['saved_ok_opened'])
+            assert seen['saved_ok_enumerated'] == 0 and seen['saved_ok_warnings'] == [], \
+                (seen['saved_ok_enumerated'], seen['saved_ok_warnings'])
+        check("the saved camera number cannot be opened: the real dialog runs on the other camera, one "
+              "warning names both numbers, the setting is untouched; when it opens, one call and no enumeration",
+              saved_number_falls_back_in_the_real_dialog)
+
         # ---- #3 status messages are not overwritten by the preview -------
         ui.CameraCalibrationDialog.STATUS_HOLD_S = 1.0
 

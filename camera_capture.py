@@ -269,6 +269,84 @@ def open_camera(index, request_width=None, request_height=None):
     return cap
 
 
+def open_camera_or_fallback(index, saved_index, settings=None):
+    """Open the camera a window asked for and read its first frame:
+    (cap, index_used, first_frame). The caller releases the capture.
+
+    Every window that opens a camera comes through here, so they cannot
+    drift (the polygon dialog's overlay, CameraCalibrationDialog,
+    CameraCaptureDialog, LiveCameraWindow).
+
+    When `index` is the SAVED camera number (settings camera_index_override,
+    written by a calibration or Switch camera) and it cannot be opened, or
+    opens and gives no frame, the rest of the resolver is tried once,
+    skipping that number: the Falcon-named camera, then the last camera
+    found. If one opens, this window runs on it and one line is logged
+    (the number that failed, the number in use, and the camera names the
+    system reports). Nothing is saved: only a calibration or Switch camera
+    may change the saved number, as before (Matt, 2026-11-09: "same deal?"
+    about the camera when the saved number cannot be opened, "Yes").
+
+    When the saved camera opens there is no enumeration and no extra
+    delay. When nothing opens, the first error is raised, as before.
+    """
+    def opened(i):
+        cap = open_camera(i)
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            # The sentence the camera windows showed for this before the
+            # helper existed, so it stays translated; `_` is the gettext
+            # builtin i18n.init_translation installs (as config.py uses it).
+            try:
+                text = _("Camera opened but returned no frame.")
+            except NameError:                   # this module used on its own, no catalog installed
+                text = "Camera opened but returned no frame."
+            raise RuntimeError(f"{text} (#{i})")
+        return cap, frame
+
+    try:
+        cap, frame = opened(index)
+        return cap, index, frame
+    except Exception as first:
+        if saved_index is None or index != saved_index:
+            raise
+        candidates = []
+        try:
+            falcon = find_falcon_camera_index()
+        except Exception:
+            falcon = None
+        if falcon is not None and falcon != saved_index:
+            candidates.append(falcon)
+        try:
+            cams = enumerate_cameras()
+        except Exception:
+            cams = []
+        # The resolver's "last camera found", with the saved number left out
+        # (it may well be the last one: the Falcon camera on a laptop with an
+        # integrated camera at 0).
+        others = [c['index'] for c in cams if c['index'] != saved_index and c['index'] not in candidates]
+        if others:
+            candidates.append(others[-1])
+        for other in candidates:
+            try:
+                cap, frame = opened(other)
+            except Exception:
+                continue
+            try:
+                names = _list_camera_names()
+            except Exception:
+                names = []
+            log.warning("camera #%s (the saved number) could not be used (%s); this window runs on camera #%s "
+                        "instead, the saved number is unchanged. Cameras reported by the system: %s",
+                        saved_index, first, other, names or "none")
+            return cap, other, frame
+        raise first
+
+
 def describe_capture(cap):
     """One-line summary of what the driver says it is delivering, for the
     log. Every property read is best-effort: a backend that doesn't

@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import webbrowser
+from collections import Counter
 
 from svg_engine import (
     _nest_discs, try_nest_partial, can_all_pads_fit,
@@ -140,15 +141,22 @@ class ToolingTabMixin:
         # entry point `generate_calibration_card_gcode` lives on in
         # gcode_engine.py and is invoked by the calibration dialog.
         per_row = 3  # four 22-character buttons overflow the default window
-        row_frames = []
-        for r in range((len(tool_names) + per_row - 1) // per_row):
-            row_frames.append(tk.Frame(selector_frame, bg=bg))
-            row_frames[-1].pack(fill='x', pady=(4 if r else 0, 0))
+        # One grid, its three columns in one uniform group, every button
+        # stuck to both sides of its cell: "one width" is a property of the
+        # layout, not of seven separate requests. Tk sizes the columns of a
+        # uniform group alike, to the widest cell any of them holds, so
+        # whatever a port asks for one button (Aqua gave two widths to the
+        # seven when they were packed into row frames, CI 2026-11-09, a gap
+        # that depended on the labels) every button is stretched to the
+        # same cell. Row 3's single button sits in column 0 of the same
+        # group. The character width below is the cells' minimum.
+        for c in range(per_row):
+            selector_frame.grid_columnconfigure(c, uniform="tooling-sections")
         for idx, (key, label) in enumerate(tool_names):
-            row = row_frames[idx // per_row]
-            btn = tk.Button(row, text=label,
+            r, c = divmod(idx, per_row)
+            btn = tk.Button(selector_frame, text=label,
                             command=lambda k=key: self._show_tooling_section(k))
-            btn.pack(side='left', padx=(0, 5))
+            btn.grid(row=r, column=c, sticky="ew", padx=(0, 5), pady=(4 if r else 0, 0))
             self._tooling_buttons[key] = btn
         # One width for all seven: 22 characters, as always, when every
         # label fits that (English on Windows), else as many as the longest
@@ -1183,6 +1191,9 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             placed = generate_die_svg(pads, width_mm, height_mm, save_path, settings)
+            self._record_tooling_export("svg", save_path, tool='die_inserts',
+                                        description=self._die_description(placed), material='acrylic',
+                                        count=len(placed), sheet_mm=(width_mm, height_mm))
 
             messagebox.showinfo(_("Done"),
                 _("Generated {n} die rings.\n\nSaved to: {path}").format(n=len(placed), path=save_path))
@@ -1240,6 +1251,9 @@ class ToolingTabMixin:
 
             placed, _unused_a, _unused_b = _nest_discs(pads, 'die_ring', width_mm, height_mm, settings)
             generate_die_gcode_from_placed(placed, width_mm, height_mm, save_path, settings)
+            self._record_tooling_export("gcode", save_path, tool='die_inserts',
+                                        description=self._die_description(placed), material='acrylic',
+                                        count=len(placed), sheet_mm=(width_mm, height_mm))
 
             messagebox.showinfo(_("Done"),
                 _("Generated G-code for {n} die rings.\n\nSaved to: {path}").format(n=len(placed), path=save_path)
@@ -1247,6 +1261,76 @@ class ToolingTabMixin:
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    # ========================================
+    # JOB HISTORY
+    # ========================================
+    # Matt, 2026-11-09: "tooling runs go into job history if easy". Every
+    # Tooling output (a file written, a Frame & Cut run) is logged with the
+    # Pad Maker's jobs, as an entry of the same shape with a `tool` key and
+    # a one-line description in the user's terms where the pad list goes
+    # (main._record_tooling_job). The dialog shows the tool's name on those
+    # rows and will not load them into the Pad Maker's form. Nothing here
+    # changes what is written or streamed: each line below runs after the
+    # file exists or the cut dialog has closed, and the recorder swallows
+    # its own errors.
+
+    @staticmethod
+    def _tooling_history(tool, description, material, count, sheet_mm=None, base=None, scrap_num=None):
+        """The history fields of a Tooling job: merged into a Frame & Cut
+        job dict, or handed to _record_tooling_export after a write."""
+        w, h = sheet_mm if sheet_mm else (None, None)
+        return {'tool': tool, 'description': description, 'material': material, 'count': count,
+                'sheet_w_mm': w, 'sheet_h_mm': h, 'base': base, 'scrap_num': scrap_num}
+
+    def _record_tooling_export(self, output, save_path, **fields):
+        """One line after a Tooling file is written: `output` is "svg",
+        "gcode" or "stl"; the file's own name is the entry's base."""
+        fields.setdefault('base', os.path.splitext(os.path.basename(save_path))[0])
+        self._record_tooling_job(self._tooling_history(**fields), output,
+                                 save_dir=os.path.dirname(save_path))
+
+    @staticmethod
+    def _die_description(placed):
+        """The die sizes on the sheet, in mm, with a count where a size repeats."""
+        counts = Counter(float(p[0]) for p in placed)
+        return ", ".join(f"{s:g}" + (f" ×{n}" if n > 1 else "") for s, n in sorted(counts.items())) + " mm"
+
+    @staticmethod
+    def _holder_description(variant, layer_count):
+        variant_label = {"large": _("Large (40–60mm)"), "small": _("Small (7–39.5mm)"),
+                         "both": _("Both (Small + Large)")}.get(variant, str(variant))
+        layer_label = {5: _("5-layer (2× pin)"), 6: _("6-layer (3× pin)")}.get(layer_count, str(layer_count))
+        return f"{variant_label}, {layer_label}"
+
+    @staticmethod
+    def _organizer_description(variant):
+        return {"upper": _("Upper (slotted)"), "lower": _("Lower (base)")}.get(variant, str(variant))
+
+    @staticmethod
+    def _kerf_description(job):
+        """The cut settings the pattern was cut with: that is what a kerf test measures."""
+        return f"{job['cut_speed']:g} mm/min, {job['cut_power']:g}%"
+
+    @staticmethod
+    def _feeds_speeds_description(test_pieces):
+        """The matrix: disc size, then the speeds and powers swept."""
+        def values(key):
+            return ", ".join(f"{v:g}" for v in sorted({p[key] for p in test_pieces}))
+        diameter = test_pieces[0]['diameter'] if test_pieces else 0
+        return (_("Disc diameter: {d:.1f} mm").format(d=diameter)
+                + f"; {values('speed')} mm/min; {values('power')}%")
+
+    @staticmethod
+    def _crescent_description(entries):
+        """The list as the tab shows it, one entry after another."""
+        rows = []
+        for n, e in enumerate(entries, 1):
+            g = tonehole_crescent_geometry(e['tonehole_d'], e['percent'], e['curve'])
+            rows.append(_("{n}.  {d} mm, {pct}%, inner edge radius {r} mm, × {qty}").format(
+                n=n, d=f"{e['tonehole_d']:g}", pct=f"{e['percent']:g}",
+                r=f"{g['inner_radius']:.1f}", qty=e['qty']))
+        return "; ".join(rows)
 
     # ========================================
     # FRAME & CUT (straight to the laser)
@@ -1293,7 +1377,10 @@ class ToolingTabMixin:
                 lambda path: generate_die_gcode_from_placed(
                     placed, width_mm, height_mm, path, settings))
             return {'gcode_text': text, 'material': 'acrylic',
-                    'label': 'die inserts', 'count': len(placed)}
+                    'label': 'die inserts', 'count': len(placed),
+                    **self._tooling_history('die_inserts', self._die_description(placed), 'acrylic',
+                                            len(placed), sheet_mm=(width_mm, height_mm),
+                                            base=self.die_filename_var.get().strip() or None)}
         self.on_frame_and_cut(tooling_job=prepare)
 
     def _die_scrap_machine_job(self):
@@ -1344,8 +1431,11 @@ class ToolingTabMixin:
 
         return {'gcode_text': text, 'material': 'acrylic',
                 'label': 'die inserts', 'count': len(placed),
-                'scrap_num': self.tooling_scrap_session['scrap_count'] + 1,
-                'after_cut': after_cut}
+                'after_cut': after_cut,
+                **self._tooling_history('die_inserts', self._die_description(placed), 'acrylic',
+                                        len(placed), sheet_mm=(width_mm, height_mm),
+                                        base=self.die_filename_var.get().strip() or None,
+                                        scrap_num=self.tooling_scrap_session['scrap_count'] + 1)}
 
     # ========================================
     # DIE SCRAP MODE
@@ -1506,6 +1596,9 @@ class ToolingTabMixin:
             filename = os.path.join(save_dir, f"{base}_scrap{scrap_num}.svg")
 
             generate_die_svg_from_placed(placed, width_mm, height_mm, filename, settings)
+            self._record_tooling_export("svg", filename, tool='die_inserts',
+                                        description=self._die_description(placed), material='acrylic',
+                                        count=len(placed), sheet_mm=(width_mm, height_mm), scrap_num=scrap_num)
 
             self.tooling_scrap_session['remaining_pads'] = remaining
             self._update_die_scrap_status()
@@ -1545,6 +1638,9 @@ class ToolingTabMixin:
             filename = os.path.join(save_dir, f"{base}_scrap{scrap_num}.gcode")
 
             generate_die_gcode_from_placed(placed, width_mm, height_mm, filename, settings)
+            self._record_tooling_export("gcode", filename, tool='die_inserts',
+                                        description=self._die_description(placed), material='acrylic',
+                                        count=len(placed), sheet_mm=(width_mm, height_mm), scrap_num=scrap_num)
 
             self.tooling_scrap_session['remaining_pads'] = remaining
             self._update_die_scrap_status()
@@ -1837,6 +1933,10 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             generate_kerf_test_svg(material_name, save_path, self.settings)
+            # The SVG carries no cut settings (LightBurn's are used), so its
+            # entry has no description beyond the material.
+            self._record_tooling_export("svg", save_path, tool='kerf_test', description="",
+                                        material=self._get_kerf_material_key(), count=len(KERF_TEST_DIAMETERS))
             self._show_kerf_instructions(material_name)
 
         except Exception as e:
@@ -1913,6 +2013,9 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             self._write_kerf_gcode(job, save_path)
+            self._record_tooling_export("gcode", save_path, tool='kerf_test',
+                                        description=self._kerf_description(job), material=job['mat_key'],
+                                        count=len(KERF_TEST_DIAMETERS))
             # A Done box of its own (2026-11-09): the measuring steps below
             # stop showing once "Don't show this again" is ticked, and then
             # this export said nothing at all, not even that it had worked.
@@ -1944,7 +2047,9 @@ class ToolingTabMixin:
                     self._show_kerf_instructions(job['material_name'])
             return {'gcode_text': text, 'material': job['mat_key'],
                     'label': 'kerf test', 'count': len(KERF_TEST_DIAMETERS),
-                    'after_cut': after_cut}
+                    'after_cut': after_cut,
+                    **self._tooling_history('kerf_test', self._kerf_description(job), job['mat_key'],
+                                            len(KERF_TEST_DIAMETERS))}
         self.on_frame_and_cut(tooling_job=prepare)
 
     # ========================================
@@ -2366,7 +2471,10 @@ class ToolingTabMixin:
                 legend_path=legend_path)
             return {'gcode_text': text,
                     'material': self._get_feeds_speeds_material_key(),
-                    'label': 'speed & power test', 'count': len(test_pieces)}
+                    'label': 'speed & power test', 'count': len(test_pieces),
+                    **self._tooling_history('feeds_speeds_tester', self._feeds_speeds_description(test_pieces),
+                                            self._get_feeds_speeds_material_key(), len(test_pieces),
+                                            sheet_mm=(sheet_w, sheet_h), base=base)}
         self.on_frame_and_cut(tooling_job=prepare)
 
     def _on_generate_feeds_speeds_gcode(self):
@@ -2410,6 +2518,10 @@ class ToolingTabMixin:
                 material_display=self.fs_material_var.get(),
                 air_assist=bool(self.fs_air_assist_var.get()),
                 eng_speed=eng_speed, eng_power=eng_power)
+            self._record_tooling_export("gcode", save_path, tool='feeds_speeds_tester',
+                                        description=self._feeds_speeds_description(test_pieces),
+                                        material=self._get_feeds_speeds_material_key(),
+                                        count=len(test_pieces), sheet_mm=(sheet_w, sheet_h))
             parts = [_("Wrote {n} test discs to:\n{p}\n\nLegend saved to:\n{l}").format(
                 n=len(test_pieces), p=save_path, l=legend_path)]
             if self._feeds_speeds_ids_skipped(prepared):
@@ -2459,6 +2571,10 @@ class ToolingTabMixin:
             except ValueError as ve:
                 messagebox.showerror(_("Sheet too small"), str(ve))
                 return
+            self._record_tooling_export("svg", save_path, tool='die_holders',
+                                        description=self._holder_description(variant, layer_count),
+                                        material='acrylic', count=len(_holder_pieces_for(variant, layer_count)),
+                                        sheet_mm=(sheet_w, sheet_h))
 
             variant_label = {"large": _("Large (40\u201360mm)"),
                              "small": _("Small (7\u201339.5mm)"),
@@ -2505,7 +2621,11 @@ class ToolingTabMixin:
                 return None
             return {'gcode_text': text, 'material': 'acrylic',
                     'label': 'die holder',
-                    'count': len(_holder_pieces_for(variant, layer_count))}
+                    'count': len(_holder_pieces_for(variant, layer_count)),
+                    **self._tooling_history('die_holders', self._holder_description(variant, layer_count),
+                                            'acrylic', len(_holder_pieces_for(variant, layer_count)),
+                                            sheet_mm=(sheet_w, sheet_h),
+                                            base=self.holder_filename_var.get().strip() or None)}
         self.on_frame_and_cut(tooling_job=prepare)
 
     def _on_generate_holder_gcode(self):
@@ -2535,6 +2655,10 @@ class ToolingTabMixin:
             except ValueError as ve:
                 messagebox.showerror(_("Sheet too small"), str(ve))
                 return
+            self._record_tooling_export("gcode", save_path, tool='die_holders',
+                                        description=self._holder_description(variant, layer_count),
+                                        material='acrylic', count=len(_holder_pieces_for(variant, layer_count)),
+                                        sheet_mm=(sheet_w, sheet_h))
 
             variant_label = {"large": _("Large (40\u201360mm)"),
                              "small": _("Small (7\u201339.5mm)"),
@@ -2563,6 +2687,9 @@ class ToolingTabMixin:
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             generate_die_organizer_svg(variant, save_path, self.settings)
+            # The drawing as Matt drew it: no material, no sheet (LightBurn's).
+            self._record_tooling_export("svg", save_path, tool='die_organizer',
+                                        description=self._organizer_description(variant), material=None, count=1)
 
             variant_label = {"upper": _("Upper (slotted)"), "lower": _("Lower (base)")}[variant]
             messagebox.showinfo(_("Done"),
@@ -2662,12 +2789,16 @@ class ToolingTabMixin:
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
-            if self._write_organizer_gcode(job, save_path) is None:
+            info = self._write_organizer_gcode(job, save_path)
+            if info is None:
                 try:
                     os.remove(save_path)        # nothing usable was written
                 except OSError:
                     pass
                 return
+            self._record_tooling_export("gcode", save_path, tool='die_organizer',
+                                        description=self._organizer_description(variant), material=job[1],
+                                        count=sum(info['counts'].values()), sheet_mm=(job[2], job[3]))
             variant_label = {"upper": _("Upper (slotted)"), "lower": _("Lower (base)")}[variant]
             messagebox.showinfo(_("Done"),
                 _("Generated {variant_label} die organizer.\n\nSaved to: {path}").format(variant_label=variant_label, path=save_path)
@@ -2692,7 +2823,10 @@ class ToolingTabMixin:
                 return None
             return {'gcode_text': text, 'material': job[1],
                     'label': f'die organizer {job[0]}',
-                    'count': sum(got['info']['counts'].values())}
+                    'count': sum(got['info']['counts'].values()),
+                    **self._tooling_history('die_organizer', self._organizer_description(job[0]), job[1],
+                                            sum(got['info']['counts'].values()), sheet_mm=(job[2], job[3]),
+                                            base=self.organizer_filename_var.get().strip() or None)}
         self.on_frame_and_cut(tooling_job=prepare)
 
     def _save_pad_spacer_stl(self, stl_filename):
@@ -2908,6 +3042,9 @@ class ToolingTabMixin:
                 except OSError:
                     pass
                 return
+            self._record_tooling_export("gcode", save_path, tool='tonehole_crescent',
+                                        description=self._crescent_description(entries), material=material,
+                                        count=len(info['parts']))
             parts = [_("Saved to: {d}").format(d=save_path)]
             if info['numbers_skipped']:
                 parts.append(self._engraving_not_set_notice(material, 'numbers'))
@@ -2939,7 +3076,9 @@ class ToolingTabMixin:
                     self._engraving_not_set_notice(material, 'numbers')):
                 return None
             return {'gcode_text': text, 'material': material,
-                    'label': 'tonehole crescent', 'count': len(info['parts'])}
+                    'label': 'tonehole crescent', 'count': len(info['parts']),
+                    **self._tooling_history('tonehole_crescent', self._crescent_description(entries),
+                                            material, len(info['parts']))}
         self.on_frame_and_cut(tooling_job=prepare)
 
     def _generate_crescent(self, kind):
@@ -2977,6 +3116,11 @@ class ToolingTabMixin:
                 generate_tonehole_crescent_svg(entries, save_path, self.settings)
             else:
                 generate_tonehole_crescent_stl(entries, thickness, save_path)
+            # Neither knows a material: the SVG is cut with LightBurn's
+            # settings, the STL is printed.
+            self._record_tooling_export(kind, save_path, tool='tonehole_crescent',
+                                        description=self._crescent_description(entries), material=None,
+                                        count=sum(e['qty'] for e in entries))
             messagebox.showinfo(_("Done"), _("Saved to: {d}").format(d=save_path))
 
         except Exception as e:
