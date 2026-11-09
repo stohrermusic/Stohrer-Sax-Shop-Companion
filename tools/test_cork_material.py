@@ -354,6 +354,56 @@ def gui():
     check("Tooling settings dialog: cork shows its tested cut, 0/0 engraving and its note, and applies with 0/0",
           the_settings_dialog_shows_cork_and_takes_zero)
 
+    def only_the_cork_section_carries_the_note():
+        """The "tested on 3/32 in cork" note belongs to cork alone: with the
+        Tooling dialog's three materials open together, and the Pad Maker's
+        three, exactly one section carries it, and it is cork's."""
+        s = copy.deepcopy(app.settings)
+
+        def sections_with_note(materials):
+            w = ui_dialogs.GcodeSettingsWindow(root, copy.deepcopy(s), lambda st: None,
+                                               materials=materials, show_tooling_engraving=True)
+            w.top.withdraw()
+            try:
+                found = {}
+
+                def walk(x, section):
+                    for c in x.winfo_children():
+                        if isinstance(c, tk.LabelFrame):
+                            section = str(c.cget("text"))
+                        if isinstance(c, tk.Label) and "3/32" in str(c.cget("text")):
+                            found[section] = found.get(section, 0) + 1
+                        walk(c, section)
+                walk(w.top, None)
+                return found
+            finally:
+                if w.top.winfo_exists():
+                    w.top.destroy()
+        tooling = sections_with_note([("acrylic", "Acrylic"), ("basswood", "Basswood"), ("cork", "Cork")])
+        assert tooling == {"Cork": 1}, f"the 3/32 in cork note is on these sections: {tooling}"
+        pad = sections_with_note([("felt", "Felt"), ("card", "Card"), ("leather", "Leather")])
+        assert pad == {}, f"the Pad Maker's materials carry cork's note: {pad}"
+        # The note's own words name no other material's values.
+        w = ui_dialogs.GcodeSettingsWindow(root, copy.deepcopy(s), lambda st: None,
+                                           materials=[("basswood", "Basswood")], show_tooling_engraving=True)
+        w.top.withdraw()
+        try:
+            texts = []
+
+            def walk(x):
+                for c in x.winfo_children():
+                    if isinstance(c, tk.Label):
+                        texts.append(str(c.cget("text")))
+                    walk(c)
+            walk(w.top)
+            assert not [t for t in texts if "tested" in t or "starting point" in t], \
+                f"basswood's section says something about tested or starting values: {texts}"
+        finally:
+            if w.top.winfo_exists():
+                w.top.destroy()
+    check("Tooling settings dialog: the 3/32 in cork note is on cork's section and on no other material's",
+          only_the_cork_section_carries_the_note)
+
     def layers_in(path):
         return re.findall(r"^; Layer (\w+)", open(path).read(), flags=re.M)
 

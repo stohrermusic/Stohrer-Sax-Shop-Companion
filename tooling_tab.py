@@ -16,7 +16,7 @@ from svg_engine import (
     generate_die_svg, generate_die_svg_from_placed,
     generate_holder_svg, generate_kerf_test_svg, check_holder_sheet,
     generate_die_organizer_svg, _holder_pieces_for, KERF_TEST_DIAMETERS,
-    CrescentKerfError, OrganizerDrawingError, die_organizer_min_sheet,
+    CrescentKerfError, OrganizerDrawingError, OrganizerKerfError, die_organizer_min_sheet,
     _min_feeds_speeds_sheet, _grid_pack_discs,
     build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
     CRESCENT_CURVE_STANDARD, CRESCENT_MAX_PERCENT, CRESCENT_MAX_TONEHOLE_MM,
@@ -26,7 +26,7 @@ from svg_engine import (
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode,
     generate_feeds_speeds_test_gcode,
-    generate_tonehole_crescent_gcode, generate_die_organizer_gcode,
+    generate_tonehole_crescent_gcode, generate_die_organizer_gcode, NoCutSettingsError,
 )
 from config import engraving_is_set, TOOLING_GCODE_MATERIALS
 from ui_dialogs import GcodeSettingsWindow, SpeedPowerTestPreview, add_tooltip, gcode_file_note
@@ -148,17 +148,29 @@ class ToolingTabMixin:
             row = row_frames[idx // per_row]
             btn = tk.Button(row, text=label,
                             command=lambda k=key: self._show_tooling_section(k))
-            # 22 characters wide, as always, unless the label is longer in
-            # this language: then the button takes the width its own label
-            # asks for. At a fixed 22, "Geschwindigkeits- und
-            # Leistungstest" (German) and "Espaciadores de prensa de
-            # zapatillas" (Spanish) were cut off at both ends.
-            natural = btn.winfo_reqwidth()
-            btn.config(width=22)
-            if btn.winfo_reqwidth() < natural:
-                btn.config(width=0)
             btn.pack(side='left', padx=(0, 5))
             self._tooling_buttons[key] = btn
+        # One width for all seven: 22 characters, as always, when every
+        # label fits that (English on Windows), else as many as the longest
+        # label needs. At a fixed 22, "Geschwindigkeits- und Leistungstest"
+        # (German) and "Espaciadores de prensa de zapatillas" (Spanish) were
+        # cut off at both ends, and so was English "Pad Press Spacers" with
+        # Linux's wider font (CI, 2026-11-09). Measured, not assumed: a
+        # button's requested width is computed when it is configured, on
+        # every Tk port, so the labels' natural widths are read first and
+        # the character width is raised until the button asks for at least
+        # the widest of them. The window is sized to these rows by
+        # main._fit_window_to_tabs, so they are never squeezed either.
+        buttons = list(self._tooling_buttons.values())
+        widest = max(b.winfo_reqwidth() for b in buttons)
+        width = 22
+        probe = buttons[0]
+        probe.config(width=width)
+        while probe.winfo_reqwidth() < widest and width < 80:
+            width += 1
+            probe.config(width=width)
+        for b in buttons:
+            b.config(width=width)
 
         # Content area (each section is a frame, only one visible at a time)
         self._tooling_content = tk.Frame(parent, bg=bg)
@@ -2241,6 +2253,13 @@ class ToolingTabMixin:
         if legend_path is None:
             base, _ext = os.path.splitext(save_path)
             legend_path = base + "_legend.txt"
+            header = _("Speed & Power Test — {fname}").format(fname=os.path.basename(save_path))
+        else:
+            # A Frame & Cut run has no G-code file to name: say what the run
+            # was and when (it used to name the legend file itself).
+            from datetime import datetime
+            header = _("Speed & Power Test — sent to the laser with Frame & Cut, {when}").format(
+                when=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
         # Show "Air assist" as a per-piece value if the pieces vary; otherwise
         # collapse to the single global state.
@@ -2248,7 +2267,7 @@ class ToolingTabMixin:
         air_varies = len(air_states) > 1
 
         lines = []
-        lines.append(_("Speed & Power Test — {fname}").format(fname=os.path.basename(save_path)))
+        lines.append(header)
         lines.append(_("Material: {m}").format(m=material_display))
         lines.append(_("Disc diameter: {d:.1f} mm").format(d=diameter))
         inner = test_pieces[0].get('inner_diameter', 0) if test_pieces else 0
@@ -2595,11 +2614,30 @@ class ToolingTabMixin:
         try:
             return generate_die_organizer_gcode(variant, material, path, self.settings,
                                                 sheet_width_mm=sheet_w, sheet_height_mm=sheet_h)
+        except OrganizerKerfError as e:
+            messagebox.showerror(_("Invalid Input"), self._organizer_kerf_message(material, e))
         except OrganizerDrawingError as e:
             messagebox.showerror(_("Error"), str(e))
-        except ValueError:
+        except NoCutSettingsError:
+            # Only this case gets this sentence. Any other ValueError (the
+            # engine's own sheet check, a settings value that is not a
+            # number) goes up to the handler's "Something went wrong" box as
+            # what it is; until 2026-11-09 it was reported as missing cut
+            # settings.
             messagebox.showerror(_("Invalid Input"), self._no_cut_settings_message(material))
         return None
+
+    def _organizer_kerf_message(self, material, e):
+        """The organizer's kerf refusal in the user's language (the engine's
+        words are English), the way the crescent's kerf refusals have one."""
+        name = self._tooling_material_label(material)
+        where = self._material_settings_place(material)
+        if e.opening is None:
+            return _("The {material} kerf is negative ({kerf} mm). Check it in {where}.").format(
+                material=name, kerf=f"{e.kerf_mm:g}", where=where)
+        return _("The {material} kerf ({kerf} mm) is too wide for an opening of {opening} mm in the "
+                 "organizer plate. Check it in {where}.").format(
+                     material=name, kerf=f"{e.kerf_mm:g}", opening=e.opening, where=where)
 
     def _no_cut_settings_message(self, material_key):
         return _("{material} has no cut speed and power set ({where}).").format(
@@ -2838,7 +2876,8 @@ class ToolingTabMixin:
                                 material=name, kerf=f"{e.kerf_mm:g}",
                                 where=self._material_settings_place(material))
             messagebox.showerror(_("Invalid Input"), message)
-        except ValueError:
+        except NoCutSettingsError:
+            # Only the no-cut-settings case; see _write_organizer_gcode.
             messagebox.showerror(_("Invalid Input"), self._no_cut_settings_message(material))
         return None
 

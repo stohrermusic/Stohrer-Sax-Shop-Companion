@@ -63,6 +63,9 @@ import gcode_engine as ge  # noqa: E402
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 RING = 'adhesive_ring'
 RING_COLOR = config.DEFAULT_SETTINGS["layer_colors"]["adhesive_ring_cut"]
 EPS = 1e-6
@@ -73,10 +76,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -823,8 +827,6 @@ def gui_tests(root):
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(main_mod.messagebox, name,
                 lambda title, msg, _n=name, **k: boxes.append((_n, str(title), str(msg))))
-    main_mod.messagebox.askyesno = lambda *a, **k: True
-    main_mod.messagebox.askokcancel = lambda *a, **k: True
 
     def set_feature(enabled):
         app.settings["adhesive_ring_enabled"] = enabled
@@ -1024,6 +1026,7 @@ def gui_tests(root):
             for i in range(101):
                 v = round(-5.0 + 0.1 * i, 1)
                 type_clearance(w, f"{v:.1f}")
+                box_guard.GUARD.expect("Save changes as a preset?", answer=True)
                 w.on_apply()                       # unsaved edit -> save as "Rings" -> apply -> close
                 assert not w.top.winfo_exists(), f"{v}: Apply did not go through"
                 s = config.load_settings()
@@ -1054,6 +1057,7 @@ def gui_tests(root):
             w._apply_dict_to_form(config.normalize_sizing_preset(dict(config.settings_to_sizing_preset(s),
                                                                       adhesive_ring_trim_mm=-1.35)))
             assert w.ring_clearance_spin.get() == "-1.35" and w.ring_trim_var.get() == -1.35
+            box_guard.GUARD.expect("Revert to Program Defaults", answer=True)
             w.revert_to_defaults()                 # askyesno is answered Yes in this suite
             assert w.ring_clearance_spin.get() == "0.0" and w.ring_enabled_var.get() is False
         finally:

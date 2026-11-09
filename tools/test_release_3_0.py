@@ -13,12 +13,26 @@
   5. The no-laser return came after the sleep lock was taken and before the
      try whose finally releases it. No way out leaves the lock held.
   3. Die inserts nested with the Pad Maker's Edge Bias, whose default starts
-     in the middle of the sheet. Dies always nest from the bottom-left
-     corner as drawn, one rule for the SVG, the G-code, Frame & Cut, the fit
-     check and Scrap Mode, and the Pad Maker's setting is never written to.
+     in the middle of the sheet. Dies always nest in rows from the
+     bottom-left corner as drawn, largest first, one rule for the SVG, the
+     G-code, Frame & Cut, the fit check and Scrap Mode, and the Pad Maker's
+     setting is never written to. (Rows, not the corner scan that also
+     starts there: that one places smallest first and needs more sheets.)
+  8. Labeled Zones, a Pad Maker setting, reached the die FIT CHECK through
+     the shared settings and refused dies that fit. Dies are never grouped.
+  9. Behaviour nothing pinned (a bug-planting pass found it): in a
+     translated app the Tooling material dropdowns show translated names
+     that map back to their keys, the Speed & Power and crescent Frame &
+     Cut jobs frame at the CHOSEN material's power and name it in the cut
+     dialog, and the organizer's kerf refusal is the tab's translated
+     message, not the engine's English.
   4. Tooling's section buttons were a fixed 22 characters wide and cut off
-     longer labels in German and Spanish. A button whose label needs more
-     takes the width its label asks for; English is unchanged.
+     longer labels in German and Spanish (and English "Pad Press Spacers"
+     with Linux's font). All seven are one width: 22 characters where that
+     holds every label, else what the longest label asks for; and the
+     window is never narrower than the Tooling tab's content, so the rows
+     are never squeezed (with fewer tabs shown a Mac or Linux window used
+     to stay at the 640 px it starts at and cut the buttons down).
 
   6. No suite may put a native message box on the screen (tools/box_guard.py).
      A suite stood in for askyesno but not askokcancel, a planted bug made a
@@ -103,21 +117,26 @@ def child(lang):
     root.update()                        # runs the after_idle tab fit
     app.notebook.select(app.tooling_tab_frame)
 
-    def measure(width=None):
-        # Wait for the layout itself, not for a number of update() calls: on
-        # a busy machine the tab's first layout can arrive after two of them
-        # (seen once as a 1 px button). Bounded, and it says so if it never
-        # happens.
-        deadline = time.time() + 60
+    def measure():
+        """The window as the app itself has sized it, and the seven buttons
+        in it. Waits for the layout and for the window's width to settle
+        (two equal reads), bounded, rather than for a number of update()
+        calls: on a busy machine the first layout can arrive late, and on
+        macOS the window manager applies a new geometry a moment after it
+        is asked for."""
+        deadline = time.time() + 20
+        last = None
         while True:
             root.update()
             laid_out = all(b.winfo_ismapped() and b.winfo_width() > 1 for b in app._tooling_buttons.values())
-            if laid_out and width in (None, root.winfo_width()):
+            w = root.winfo_width()
+            need = app.tooling_tab_frame.winfo_reqwidth() + getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0)
+            if laid_out and w > 1 and w == last and w >= need:
                 break
             if time.time() > deadline:
-                raise RuntimeError(f"the Tooling tab was never laid out (window {root.winfo_width()} px, wanted {width})")
+                break           # report what there is; the checks say what is wrong
+            last = w
             time.sleep(0.05)
-        root.update()
         buttons = []
         for key, btn in app._tooling_buttons.items():
             text = str(btn.cget("text"))
@@ -129,11 +148,24 @@ def child(lang):
                 "y": btn.winfo_rooty() - root.winfo_rooty(),
             })
             plain.destroy()
-        return {"window": root.winfo_width(), "buttons": buttons}
+        probe = tk.Button(root, text="x", width=22)
+        chars22 = probe.winfo_reqwidth()
+        probe.destroy()
+        visible = [t for t in app.notebook.tabs() if app.notebook.tab(t, "state") != "hidden"]
+        return {"window": root.winfo_width(), "buttons": buttons, "chars22": chars22, "tabs": len(visible),
+                "content_need": app.tooling_tab_frame.winfo_reqwidth() + getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0)}
 
+    # With the default tabs, as the app starts; then as it would start with
+    # the fewest tabs Feature Set allows while Tooling is shown (the window
+    # back at the 640 px it starts from, the optional tabs hidden, the app's
+    # own fit run again): the configuration in which the window used to
+    # stay at 640 px on macOS and Linux and squeeze these buttons.
     own = measure()
-    root.geometry("640x720")             # the width the app starts from
-    narrow = measure(width=640)
+    for tab in (app.key_tab, app.serial_tab, app.screw_tab, app.tuner_tab_frame, app.toner_tab_frame):
+        app.notebook.hide(tab)
+    root.geometry(f"640x{max(root.winfo_height(), 400)}")
+    app._fit_window_to_tabs()
+    fewest = measure()
 
     # The lid question, built by the app's own code in this language. The
     # real dialog takes the grab and waits for an answer; this one is the
@@ -170,8 +202,104 @@ def child(lang):
                             "asks": btn.winfo_reqwidth(), "label_asks": plain.winfo_reqwidth()})
                 plain.destroy()
         dlg.destroy()
-    print("REPORT " + json.dumps({"lang": lang, "own": own, "narrow": narrow, "lid": lid,
-                                  "start_frame": builtins._("Start Frame →")}))
+    # Tooling in this language: the material dropdowns, and two Frame & Cut
+    # jobs against a mock laser, so what they report as their material (the
+    # framing power, the cut dialog's title) can be read.
+    from tkinter import ttk
+    import falcon_sender
+    import sleep_lock
+    import tooling_tab
+    import ui_dialogs
+    _t = builtins._
+    names = ("Felt", "Card", "Leather", "Acrylic", "Basswood", "Cork")
+    translated = {n: _t(n) for n in names}
+    labels = {n.lower(): app._tooling_material_label(n.lower()) for n in names}
+
+    def walk(w):
+        for c in w.winfo_children():
+            yield c
+            yield from walk(c)
+
+    def values_of(var):
+        for w in walk(app.tooling_tab_frame):
+            if isinstance(w, ttk.Combobox) and str(w.cget("textvariable")) == str(var):
+                return [str(v) for v in root.tk.splitlist(w.cget("values"))]
+        return None
+    dropdowns = {"kerf": values_of(app.kerf_material_var), "speed_power": values_of(app.fs_material_var),
+                 "crescent": values_of(app.crescent_material_var), "organizer": values_of(app.organizer_material_var)}
+    keys_back = {name: [app._tooling_material_key(v) for v in vals] for name, vals in dropdowns.items() if vals}
+
+    out = tempfile.mkdtemp(prefix=f"ssc-3-0-{lang}-out-")
+    runs = []
+
+    class FakeRun:
+        def __init__(self, parent, sender, lines, **kw):
+            self._final_reason = "complete"
+            runs.append({"lines": list(lines), "kw": dict(kw)})
+
+    class FakeSender:
+        def __init__(self, port=None):
+            pass
+
+        def connect(self):
+            pass
+
+        def unlock(self):
+            pass
+
+        def disconnect(self):
+            pass
+
+    ui_dialogs.FalconRunDialog, falcon_sender.FalconSender = FakeRun, FakeSender
+    sleep_lock.prevent_sleep = sleep_lock.allow_sleep = lambda *a, **k: None
+    tooling_tab.filedialog.asksaveasfilename = lambda **kw: os.path.join(out, kw.get("initialfile") or "f.txt")
+    app.falcon_port = "TEST"
+    app.settings["laser_framing_power_by_material"].update(FRAMING_S)
+
+    def framing_s(lines):
+        return max((int(m) for ln in lines for m in re.findall(r"\bS(\d+)", ln)), default=None)
+
+    def frame_cut(fn):
+        del runs[:]
+        fn()
+        root.update()
+        if len(runs) != 3:
+            return {"dialogs": len(runs)}
+        return {"dialogs": 3, "framing_s": framing_s(runs[1]["lines"]), "cut_title": str(runs[2]["kw"].get("title"))}
+
+    app.fs_material_var.set(translated["Leather"])
+    app.fs_show_preview_var.set(False)
+    app.fs_filename_var.set("sp")
+    app.fs_diameter_var.set("20")
+    app.fs_inner_diameter_var.set("0")
+    speed_power = dict(shown=translated["Leather"], **frame_cut(app._on_frame_cut_feeds_speeds))
+    app.crescent_list.clear()
+    app._refresh_crescent_list()
+    app.crescent_tonehole_var.set("43")
+    app.crescent_percent_var.set("20")
+    app.crescent_curve_var.set(75)
+    app.crescent_qty_var.set("1")
+    app.crescent_material_var.set(translated["Acrylic"])
+    crescent = dict(shown=translated["Acrylic"], **frame_cut(app._on_frame_cut_crescent))
+    # The organizer's kerf refusal, in this language.
+    app.organizer_variant_var.set("upper")
+    app.organizer_material_var.set(translated["Basswood"])
+    app.organizer_units_var.set("mm")
+    app.organizer_width_var.set("300")
+    app.organizer_height_var.set("400")
+    app.organizer_filename_var.set("org")
+    app.settings["gcode_settings"]["basswood"]["kerf_width"] = 20.0
+    shown_before = len(box_guard.GUARD.shown)
+    app._on_generate_organizer_gcode()
+    root.update()
+    organizer_boxes = [list(b) for b in box_guard.GUARD.shown[shown_before:]]
+
+    print("REPORT " + json.dumps({"lang": lang, "own": own, "fewest": fewest, "lid": lid,
+                                  "start_frame": _t("Start Frame →"),
+                                  "translated": translated, "labels": labels, "dropdowns": dropdowns,
+                                  "keys_back": keys_back, "speed_power": speed_power, "crescent": crescent,
+                                  "organizer_boxes": organizer_boxes,
+                                  "unexpected": list(box_guard.GUARD.unexpected)}))
     root.destroy()
 
 
@@ -196,31 +324,42 @@ def engine_checks():
     four = [{"size": s, "qty": 1} for s in SEVEN_DIES[:4]]
     mixed = [{"size": s, "qty": 1} for s in (30.0, 32.0, 42.0)]
 
-    def dies_nest_from_the_corner_under_every_bias():
+    def dies_nest_by_rows_from_the_corner_under_every_bias():
         nests = {}
         for bias in BIASES:
             s = settings_with(bias)
             placed, remaining, any_placed = se.try_nest_partial(seven, "die_ring", 130.0, 130.0, s)
             assert s["edge_bias"] == bias, f"the nest wrote edge_bias = {s['edge_bias']!r} into the settings"
             nests[bias] = (placed, remaining)
-        placed, remaining = nests["sw"]
+        placed, remaining = nests["center"]
         for bias in BIASES:
-            assert nests[bias] == nests["sw"], \
-                f"edge bias {bias!r}: {len(nests[bias][0])} dies placed, {len(placed)} with 'sw': the layouts differ"
-        assert len(placed) == 4, f"seven dies on 130 x 130 mm: {len(placed)} placed, 4 fit"
-        assert sorted(p["size"] for p in remaining) == [38.0, 42.0, 44.0], remaining
-        # Bottom-left as drawn: SVG y runs down, so the first die sits
-        # against x = 0 and y = the sheet's height (the nester keeps its
-        # 1 mm spacing from the edges).
+            assert nests[bias] == nests["center"], (
+                f"edge bias {bias!r}: {len(nests[bias][0])} dies placed, {len(placed)} with 'center': "
+                "the layouts differ")
+        # Largest first: the first sheet takes both 70 mm rings and one
+        # 50 mm ring, and the four 50 mm rings left make the second and
+        # last sheet. (From the middle the first sheet took one ring and
+        # the job three sheets; the corner scan took four small rings first
+        # and left both large ones for later.)
+        assert len(placed) == 3, f"seven dies on 130 x 130 mm: {len(placed)} on the first sheet, 3 by rows"
+        assert {42.0, 44.0} <= {d[0] for d in placed}, \
+            f"the two 70 mm rings are not on the first sheet: {sorted(d[0] for d in placed)}"
+        assert sorted(p["size"] for p in remaining) == [32.0, 34.0, 36.0, 38.0], remaining
+        second, left_over, _any = se.try_nest_partial(remaining, "die_ring", 130.0, 130.0, settings_with("center"))
+        assert len(second) == 4 and not left_over, f"the second sheet took {len(second)} of the four 50 mm rings"
+        # Bottom-left as drawn: SVG y runs down, so the first die, a 70 mm
+        # ring, sits against x = 0 and y = the sheet's height (the nester
+        # keeps its 1 mm spacing from the edges).
         _size, cx, cy, r = placed[0]
         left, below = cx - r, 130.0 - (cy + r)
+        assert r == 35.0, f"the first die placed is a {2 * r:g} mm ring, not one of the 70 mm ones"
         assert 0 <= left <= 1.0 and 0 <= below <= 1.0, \
             f"the first die is {left} mm from the left edge and {below} mm from the bottom, not in that corner"
-    check("dies: the same layout under every Edge Bias, from the bottom-left corner (130 x 130 mm takes 4 of 7)",
-          dies_nest_from_the_corner_under_every_bias)
+    check("dies: the same layout under every Edge Bias, by rows from the bottom-left corner, largest first "
+          "(seven dies on 130 x 130 mm: 3, then 4)", dies_nest_by_rows_from_the_corner_under_every_bias)
 
     def every_die_path_nests_that_layout():
-        want = se._nest_discs(four, "die_ring", 130.0, 130.0, settings_with("sw"))[0]
+        want = se._nest_discs(four, "die_ring", 130.0, 130.0, settings_with("center"))[0]
         assert len(want) == 4
         with tempfile.TemporaryDirectory() as d:
             svgs = {}
@@ -242,14 +381,15 @@ def engine_checks():
         # on a polygon in the app; one rule all the same).
         poly = [(0.0, 0.0), (140.0, 0.0), (140.0, 140.0), (0.0, 140.0)]
         on_poly = {b: se._nest_discs(four, "die_ring", 0, 0, settings_with(b), polygon=poly)[0] for b in BIASES}
-        assert all(v == on_poly["sw"] for v in on_poly.values()), "the polygon nester still reads the Pad Maker's bias for dies"
+        assert all(v == on_poly["center"] for v in on_poly.values()), \
+            "the polygon nester still reads the Pad Maker's bias for dies"
     check("dies: the fit check, the plain nest, the preview nest and the SVG all use that one layout",
           every_die_path_nests_that_layout)
 
     def pads_still_follow_the_setting():
         for bias in BIASES:
             s = settings_with(bias)
-            assert se.nest_edge_bias("die_ring", s) == "sw" == se.DIE_NEST_EDGE_BIAS
+            assert se.nest_edge_bias("die_ring", s) == "s" == se.DIE_NEST_EDGE_BIAS
             for material in ("felt", "card", "leather", "exact_size", "adhesive_ring", "acrylic"):
                 assert se.nest_edge_bias(material, s) == bias, (material, bias)
         s = settings_with("center")
@@ -268,13 +408,58 @@ def engine_checks():
         assert a != b, "fixture: Edge Bias should move a leather nest on a polygon"
     check("pads: every other material still nests with the Pad Maker's Edge Bias", pads_still_follow_the_setting)
 
+    def labeled_zones_never_reach_dies():
+        nine = [{"size": x, "qty": 1} for x in (7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0)]
+
+        def zones(on):
+            s = settings_with("center")
+            s["zone_labels_enabled"] = on
+            s["zone_label_min_size"], s["zone_label_max_size"] = 7.0, 12.5
+            return s
+        off, on = zones(False), zones(True)
+        # Fixture: for pads these sizes ARE grouped while zones are on.
+        assert se.nest_with_zones([{"size": 7.0, "qty": 6}], "felt", 200.0, 150.0, on)[1], \
+            "fixture: a felt job in the zone range should be grouped"
+        want = se._nest_discs(nine, "die_ring", 160.0, 190.0, off)[0]
+        assert len(want) == 9, f"fixture: nine 50 mm rings should fit 160 x 190 mm, {len(want)} placed"
+        assert se.can_all_pads_fit(nine, "die_ring", 160.0, 190.0, off)
+        assert se.can_all_pads_fit(nine, "die_ring", 160.0, 190.0, on), \
+            "with Labeled Zones on for pads, the die fit check refuses nine dies that fit a 160 x 190 mm sheet"
+        placed, die_zones, fixed_placed, fixed_total = se.nest_with_zones(nine, "die_ring", 160.0, 190.0, on)
+        assert die_zones == [] and placed == want and (fixed_placed, fixed_total) == (9, 9), \
+            f"dies were grouped: {len(die_zones)} zones, {fixed_placed} of {fixed_total} placed"
+        assert se.nest_pads(nine, "die_ring", 160.0, 190.0, on) == want
+        assert se._nest_discs(nine, "die_ring", 160.0, 190.0, on)[0] == want
+        assert se.try_nest_partial(nine, "die_ring", 110.0, 110.0, on) == \
+            se.try_nest_partial(nine, "die_ring", 110.0, 110.0, off), "Scrap Mode's nest changes with Labeled Zones"
+        with tempfile.TemporaryDirectory() as d:
+            texts = []
+            for name, s in (("off.svg", off), ("on.svg", on)):
+                path = os.path.join(d, name)
+                assert se.generate_die_svg(nine, 160.0, 190.0, path, s) == want
+                with open(path, encoding="utf-8") as f:
+                    texts.append(f.read())
+            assert texts[0] == texts[1], "the die SVG changes with Labeled Zones"
+        assert se.ZONE_FREE_MATERIALS == ("adhesive_ring", "die_ring")
+    check("dies: Labeled Zones switched on for pads changes nothing about a die nest, its SVG or its fit check",
+          labeled_zones_never_reach_dies)
+
 
 # ---------------------------------------------------------------------------
 # No native boxes: the guard itself, and the suites that must carry it.
 # ---------------------------------------------------------------------------
-GUARDED_SUITES = ("test_adhesive_ring_upgrade", "test_cork_material", "test_die_organizer_gcode",
-                  "test_gcode_file_note", "test_mac_paths", "test_release_3_0", "test_tonehole_crescent_gcode",
-                  "test_tooling_e2e", "test_tooling_frame_cut", "test_welcome")
+GUARDED_SUITES = (
+    # the ten from the first pass
+    "test_adhesive_ring_upgrade", "test_cork_material", "test_die_organizer_gcode", "test_gcode_file_note",
+    "test_mac_paths", "test_release_3_0", "test_tonehole_crescent_gcode", "test_tooling_e2e",
+    "test_tooling_frame_cut", "test_welcome",
+    # the twenty-one older suites that build a window (wired 2026-11-09, round 2)
+    "test_adhesive_ring", "test_calibration_dialog", "test_card_paper_size", "test_frame_cut_scrap",
+    "test_gcode_presets_workflow", "test_gpu_tuner", "test_job_history", "test_library_tabs_e2e",
+    "test_locator_marks", "test_pad_maker_e2e", "test_pad_preview", "test_release_2_86", "test_scrap_live_list",
+    "test_scrap_pending", "test_sizing_presets_workflow", "test_smoke_ui", "test_tonehole_crescent",
+    "test_toner_live", "test_tooltips", "test_tuner_canvas", "test_zone_labels",
+)
 
 
 def raises(fn, *words):
@@ -379,13 +564,18 @@ def box_guard_checks():
                 src = f.read()
             head = src.split("\ndef ", 1)[0]
             assert "box_guard.install()" in head, f"{name} does not install the guard before its first function"
-            body = src.split("def check(name, fn):", 1)[1].split("\ndef ", 1)[0]
-            assert "box_guard.settle()" in body, f"{name}: check() does not fail on a question nobody expected"
+            # The suite's per-check helper (check(...) or test(...)) settles,
+            # and clears what is pending when a check fails.
+            m = re.search(r"\ndef (check|test)\(", src)
+            assert m, f"{name}: no check() or test() helper found"
+            body = src[m.start():].split("\ndef ", 2)[1]
+            assert "box_guard.settle()" in body or "box_guard.reset()" in body, \
+                f"{name}: its check helper does not fail on a question nobody expected"
             assert "box_guard.reset()" in body, f"{name}: a failed check leaves its questions for the next one"
             for fn in box_guard.ASKS:
                 assert f".{fn} = lambda" not in src, (
                     f"{name} answers every {fn} with a lambda again; name the question with guard.expect()")
-    check("box guard: the ten suites install it before anything else, settle in check(), and answer nothing blindly",
+    check("box guard: every suite that builds a window installs it first, settles in its check helper, and answers nothing blindly",
           the_suites_that_drive_the_app_carry_the_guard)
 
 
@@ -415,21 +605,27 @@ def section_button_checks():
     for lang in ("en", "de", "es", "fr", "it"):
         def no_label_is_cut_off(lang=lang):
             r = measured(lang)
-            for where in ("own", "narrow"):
+            for where in ("own", "fewest"):
                 m = r[where]
                 assert len(m["buttons"]) == 7
-                if where == "narrow":
-                    assert m["window"] == 640, f"fixture: the window should be 640 px wide, is {m['window']}"
+                if where == "fewest":
+                    assert m["tabs"] < r["own"]["tabs"], "fixture: fewer tabs should be shown the second time"
+                # The window is never narrower than the Tooling tab's content needs.
+                assert m["window"] >= m["content_need"], (
+                    f"{lang}, {m['tabs']} tabs: the window is {m['window']} px wide, the Tooling tab's content "
+                    f"needs {m['content_need']} px: the section buttons are being squeezed")
+                widths = {b["width"] for b in m["buttons"]}
+                assert len(widths) == 1, f"{lang}, {m['tabs']} tabs: the seven buttons are not one width: {sorted(widths)}"
                 for b in m["buttons"]:
                     assert b["width"] > 1, f"fixture, {lang}: {b['text']!r} was measured before it was laid out"
                     assert b["width"] >= b["label_asks"], (
-                        f"{lang}, window {m['window']} px: {b['text']!r} is on a {b['width']} px button, "
-                        f"a button with that label asks for {b['label_asks']} px")
+                        f"{lang}, {m['tabs']} tabs, window {m['window']} px: {b['text']!r} is on a {b['width']} px "
+                        f"button, a button with that label asks for {b['label_asks']} px")
                     assert b["x"] >= 0 and b["x"] + b["width"] <= m["window"], (
-                        f"{lang}, window {m['window']} px: {b['text']!r} runs from {b['x']} to "
+                        f"{lang}, {m['tabs']} tabs, window {m['window']} px: {b['text']!r} runs from {b['x']} to "
                         f"{b['x'] + b['width']} px, past the window's edge")
-        check(f"section buttons, {lang}: no label is cut off, at the window's own width and at 640 px",
-              no_label_is_cut_off)
+        check(f"section buttons, {lang}: one width, no label cut off, the window never narrower than the Tooling "
+              "content, with the default tabs and with the fewest", no_label_is_cut_off)
 
     for lang in ("en", "de", "es", "fr", "it"):
         def the_lid_question_fits(lang=lang):
@@ -453,12 +649,66 @@ def section_button_checks():
         check(f"lid question, {lang}: both labels fit their buttons, one width, and Yes names the Start Frame button",
               the_lid_question_fits)
 
+    for lang in ("en", "de", "es", "fr", "it"):
+        def tooling_in_translation(lang=lang):
+            r = measured(lang)
+            assert r["unexpected"] == [], f"{lang}: a question or dialog nobody expected: {r['unexpected']}"
+            t = r["translated"]
+            if lang != "en":
+                assert t["Leather"] != "Leather" and t["Acrylic"] != "Acrylic" and t["Basswood"] != "Basswood", \
+                    f"fixture, {lang}: the material names should differ from English: {t}"
+            # (f) every Tooling material dropdown shows the translated names, and each maps back to its key.
+            for name, values in r["dropdowns"].items():
+                assert values, f"{lang}: the {name} dropdown was not found"
+                strange = [v for v in values if v not in t.values()]
+                assert not strange, f"{lang}: the {name} dropdown shows {strange}, not the translated names {list(t.values())}"
+                for shown, key in zip(values, r["keys_back"][name]):
+                    want = [n.lower() for n in t if t[n] == shown][0]
+                    assert key == want, f"{lang}: {name} dropdown: {shown!r} maps back to {key!r}, not {want!r}"
+            for key, label in r["labels"].items():
+                assert label == t[key.capitalize()], f"{lang}: _tooling_material_label({key!r}) is {label!r}"
+            # (d) Speed & Power Frame & Cut reports the chosen material by its key:
+            # framing at leather's power, the cut dialog named after leather.
+            sp = r["speed_power"]
+            assert sp["dialogs"] == 3, f"{lang}: Speed & Power Frame & Cut opened {sp['dialogs']} dialogs, not 3"
+            assert sp["framing_s"] == FRAMING_S["leather"], (
+                f"{lang}: Speed & Power with {sp['shown']!r} framed at S{sp['framing_s']}, "
+                f"leather's is S{FRAMING_S['leather']}")
+            assert "leather" in sp["cut_title"], f"{lang}: the cut dialog is titled {sp['cut_title']!r}"
+            # (e) the crescent's Frame & Cut reports the material chosen, not cork.
+            cr = r["crescent"]
+            assert cr["dialogs"] == 3, f"{lang}: crescent Frame & Cut opened {cr['dialogs']} dialogs, not 3"
+            assert cr["framing_s"] == FRAMING_S["acrylic"], (
+                f"{lang}: a crescent in {cr['shown']!r} framed at S{cr['framing_s']}, acrylic's is S{FRAMING_S['acrylic']}")
+            assert "acrylic" in cr["cut_title"], f"{lang}: the cut dialog is titled {cr['cut_title']!r}"
+            # The organizer's kerf refusal is the tab's translated message, not the engine's English.
+            errs = [b for b in r["organizer_boxes"] if b[0] == "showerror"]
+            assert len(errs) == 1 and not [b for b in r["organizer_boxes"] if b[0] == "showinfo"], r["organizer_boxes"]
+            msg = errs[0][2]
+            assert t["Basswood"] in msg and "20" in msg, f"{lang}: the kerf refusal does not name the material and kerf: {msg!r}"
+            assert "too small for a kerf" not in msg, f"{lang}: the engine's English reached the user: {msg!r}"
+            if lang != "en":
+                assert "organizer plate" not in msg and "Check it in" not in msg, f"{lang}: untranslated: {msg!r}"
+        check(f"Tooling, {lang}: translated material dropdowns that map back to their keys; Speed & Power and crescent "
+              "Frame & Cut frame at the chosen material's power; the organizer's kerf refusal is translated",
+              tooling_in_translation)
+
     def english_is_as_it_was():
-        b = measured("en")["own"]["buttons"]
+        m = measured("en")["own"]
+        b = m["buttons"]
         assert [x["text"] for x in b] == ["Die Inserts", "Die Holders", "Die Organizer", "Kerf Test",
                                           "Speed & Power Test", "Pad Press Spacers", "Tonehole Crescent"]
-        assert [x["chars"] for x in b] == [22] * 7, f"English buttons are 22 characters wide: {[x['chars'] for x in b]}"
-        assert len({x["width"] for x in b}) == 1, "English buttons are all one width"
+        assert len({x["width"] for x in b}) == 1 and len({x["chars"] for x in b}) == 1, "English buttons are all one width"
+        # 22 characters wide where 22 characters hold every label (Windows'
+        # font), and no narrower than any label otherwise (Linux's wider
+        # font needs more than 22 for "Pad Press Spacers"): the rule, not a
+        # platform's number.
+        widest = max(x["label_asks"] for x in b)
+        if widest <= m["chars22"]:
+            assert b[0]["chars"] == 22, f"every label fits 22 characters, so the buttons should be 22: {b[0]['chars']}"
+        else:
+            assert b[0]["chars"] > 22 and b[0]["width"] >= widest, \
+                f"a label asks for {widest} px, more than 22 characters ({m['chars22']} px): {b[0]['chars']} characters"
         rows = [b[0:3], b[3:6], b[6:7]]
         assert all(len({x["y"] for x in row}) == 1 for row in rows), "three buttons to a row"
         ys = [row[0]["y"] for row in rows]
@@ -467,8 +717,8 @@ def section_button_checks():
             assert [x["x"] for x in row] == sorted(x["x"] for x in row)
         assert [x["x"] for x in rows[0]] == [x["x"] for x in rows[1]], "the columns line up"
         assert rows[2][0]["x"] == rows[0][0]["x"]
-    check("section buttons, English: the same seven buttons, 22 characters wide, three to a row, in order",
-          english_is_as_it_was)
+    check("section buttons, English: the same seven buttons, one width (22 characters where that holds every label), "
+          "three to a row, in order", english_is_as_it_was)
 
 
 # ---------------------------------------------------------------------------
@@ -915,7 +1165,7 @@ def app_checks(root):
         seen = {}
         keep_bias = app.settings.get("edge_bias", "center")
         try:
-            for bias in ("center", "off", "ne", "w", "sw"):
+            for bias in ("center", "off", "ne", "sw", "s"):
                 app._set_edge_bias(bias)
                 disk_before = settings_on_disk().get("edge_bias")
 
@@ -948,7 +1198,8 @@ def app_checks(root):
                 assert got["cut"] == [G92_ZERO] + got["gcode"], "Frame & Cut does not stream the exported die file"
                 same_setting("Frame & Cut")
 
-                # Scrap Mode: seven dies, the first 130 x 130 mm sheet takes four.
+                # Scrap Mode: seven dies, the first 130 x 130 mm sheet takes three
+                # (both 70 mm rings and a 50 mm one).
                 for kind, handler, name in (("scrap svg", app._on_generate_die_svg, "s_scrap1.svg"),
                                             ("scrap gcode", app._on_generate_die_gcode, "s_scrap1.gcode")):
                     die_form(sizes="30, 32, 34, 36, 38, 42, 44", w="130", h="130", name="s")
@@ -962,8 +1213,8 @@ def app_checks(root):
                     if app.tooling_scrap_window is not None:
                         app.tooling_scrap_window.withdraw()
                     assert not errors(), f"edge bias {bias!r}, {kind}: {errors()}"
-                    assert app._count_die_remaining() == 3, \
-                        f"edge bias {bias!r}, {kind}: the first sheet took {7 - app._count_die_remaining()} dies, 4 fit"
+                    assert app._count_die_remaining() == 4, \
+                        f"edge bias {bias!r}, {kind}: the first sheet took {7 - app._count_die_remaining()} dies, 3 by rows"
                     with open(target, encoding="utf-8") as f:
                         got[kind] = f.read()
                     same_setting(kind)
@@ -976,30 +1227,52 @@ def app_checks(root):
                 got["scrap cut"] = runs_[2]["lines"]
                 assert got["scrap cut"] == [G92_ZERO] + got["scrap gcode"].splitlines(), \
                     "scrap Frame & Cut does not stream the exported sheet"
-                assert app._count_die_remaining() == 3
+                assert app._count_die_remaining() == 4
                 same_setting("scrap Frame & Cut")
                 seen[bias] = got
             for bias, got in seen.items():
                 for kind in got:
-                    assert got[kind] == seen["sw"][kind], \
-                        f"die inserts, {kind}: the output under Edge Bias {bias!r} differs from 'sw'"
-            # And it is the corner layout: the engine's own, asked for 'sw'.
+                    assert got[kind] == seen["center"][kind], \
+                        f"die inserts, {kind}: the output under Edge Bias {bias!r} differs from 'center'"
+            # And it is the engine's die layout.
             want = se._nest_discs([{"size": s, "qty": 1} for s in SEVEN_DIES[:4]], "die_ring", 130.0, 130.0,
-                                  dict(app.settings, edge_bias="sw"))[0]
+                                  dict(app.settings, edge_bias="center"))[0]
             with tempfile.TemporaryDirectory() as d:
                 path = os.path.join(d, "want.gcode")
                 ge.generate_die_gcode_from_placed(want, 130.0, 130.0, path, app._get_die_settings())
                 assert seen["center"]["gcode"] == read_lines(path), "the die file is not the bottom-left corner layout"
-            # Read off the file itself, whatever the engine calls its corner:
-            # four 50 mm rings make a 2 x 2 block about 101 mm square, and on
-            # a 130 mm sheet it sits against the origin (G-code Y runs up, so
-            # that is the bottom-left as drawn), leaving the far 28 mm empty.
+            # Read off the file itself, whatever the engine calls its rule:
+            # by rows from the bottom, four 50 mm rings on a 130 mm sheet make
+            # two rows (two rings, then two more nestled above them) about
+            # 96 mm tall, against the origin side (G-code Y runs up, so that
+            # is the bottom as drawn), and the top 30 mm of the sheet is
+            # left empty. Rows from the top would reach y = 129.
             moves = [ln for ln in seen["center"]["gcode"] if ln.startswith(("G0", "G1"))]
             xs = [float(v) for ln in moves for v in re.findall(r"X(-?\d+(?:\.\d+)?)", ln)]
             ys = [float(v) for ln in moves for v in re.findall(r"Y(-?\d+(?:\.\d+)?)", ln)]
-            assert 0 <= min(xs) and 0 <= min(ys) and max(xs) < 104 and max(ys) < 104, \
-                f"the die block is not against the origin: x {min(xs)}..{max(xs)}, y {min(ys)}..{max(ys)}"
-            assert max(xs) > 99 and max(ys) > 99, "fixture: four 50 mm rings should span about 101 mm each way"
+            assert 0 <= min(xs) and 0 <= min(ys) and max(xs) <= 130 and max(ys) < 100, \
+                f"the dies are not in rows from the bottom: x {min(xs)}..{max(xs)}, y {min(ys)}..{max(ys)}"
+            assert max(ys) > 90, "fixture: two rows of 50 mm rings should be about 96 mm tall"
+            # Rows, largest first, read off a written file too: in a job of
+            # two 50 mm rings and one 70 mm ring the 70 mm one goes down
+            # first, in the bottom-left corner as drawn (SVG y runs down),
+            # 1 mm from the left edge and 1 mm from the bottom. The corner
+            # scan put a 50 mm ring there, and a scan from the top edge
+            # puts the big ring at the top.
+            app._set_edge_bias("center")
+            die_form(sizes="30, 32, 42", w="130", h="130", name="m")
+            del boxes[:]
+            app._on_generate_die_svg()
+            root.update()
+            assert not errors(), errors()
+            with open(os.path.join(out, "m.svg"), encoding="utf-8") as f:
+                circles = re.findall(r'<circle cx="([\d.]+)mm" cy="([\d.]+)mm"[^>]* r="([\d.]+)mm"', f.read())
+            big = [(float(x), float(y), float(r)) for x, y, r in circles if float(r) == 35.0]
+            assert len(big) == 1, f"fixture: one 70 mm outer cut expected in the SVG, found {len(big)} of {len(circles)}"
+            x, y, r = big[0]
+            assert (x - r, 130.0 - (y + r)) == (1.0, 1.0), (
+                f"the 70 mm ring is {x - r} mm from the left edge and {130.0 - (y + r)} mm from the bottom, "
+                "not in the bottom-left corner")
         finally:
             app._set_edge_bias(keep_bias)
             app._clear_die_scrap_session()
@@ -1028,6 +1301,76 @@ def app_checks(root):
             die_form()
     check("die inserts: with the default Edge Bias (center) three dies that fit a 130 x 130 mm sheet are cut, not refused",
           the_default_edge_bias_no_longer_refuses_dies_that_fit)
+
+    # =======================================================================
+    # Labeled Zones is a Pad Maker setting: nothing about a die job changes
+    # =======================================================================
+    def labeled_zones_on_the_pad_maker_change_nothing_for_dies():
+        zone_keys = ("zone_labels_enabled", "zone_label_min_size", "zone_label_max_size")
+        keep = {k: app.settings.get(k) for k in zone_keys}
+        nine = "7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11"     # every size inside the zone range
+        seen = {}
+        try:
+            for zones in (False, True):
+                where = f"Labeled Zones {'on' if zones else 'off'}"
+                app.settings["zone_labels_enabled"] = zones
+                app.settings["zone_label_min_size"], app.settings["zone_label_max_size"] = 7.0, 12.5
+                got = {}
+                # Standard mode: nine 50 mm rings fit a 160 x 190 mm sheet.
+                die_form(sizes=nine, w="160", h="190", name="z")
+                del boxes[:]
+                app._on_generate_die_svg()
+                root.update()
+                assert not errors(), f"{where}, Generate SVG: {errors()}"
+                with open(os.path.join(out, "z.svg"), encoding="utf-8") as f:
+                    got["svg"] = f.read()
+                del boxes[:]
+                app._on_generate_die_gcode()
+                root.update()
+                assert not errors(), f"{where}, Generate G-code: {errors()}"
+                assert [b for b in boxes if b[0] == "showinfo" and "9 die rings" in b[2]], boxes
+                got["gcode"] = read_lines(os.path.join(out, "z.gcode"))
+                runs_ = machine(app._on_frame_cut_die)
+                assert not errors() and len(runs_) == 3, f"{where}, Frame & Cut: {errors()}"
+                got["framing"], got["cut"] = runs_[1]["lines"], runs_[2]["lines"]
+                # Scrap Mode, a sheet that takes only some of them.
+                for kind, handler, name in (("scrap svg", app._on_generate_die_svg, "zs_scrap1.svg"),
+                                            ("scrap gcode", app._on_generate_die_gcode, "zs_scrap1.gcode")):
+                    die_form(sizes=nine, w="110", h="110", name="zs")
+                    app.die_scrap_var.set(True)
+                    target = os.path.join(out, name)
+                    if os.path.exists(target):
+                        os.remove(target)
+                    del boxes[:]
+                    handler()
+                    root.update()
+                    if app.tooling_scrap_window is not None:
+                        app.tooling_scrap_window.withdraw()
+                    assert not errors(), f"{where}, {kind}: {errors()}"
+                    with open(target, encoding="utf-8") as f:
+                        got[kind] = f.read()
+                    got[kind + ", dies left"] = app._count_die_remaining()
+                    assert 0 < got[kind + ", dies left"] < 9, "fixture: the first 110 x 110 mm sheet takes some dies"
+                die_form(sizes=nine, w="110", h="110", name="zs")
+                app.die_scrap_var.set(True)
+                runs_ = machine(app._on_frame_cut_die)
+                if app.tooling_scrap_window is not None:
+                    app.tooling_scrap_window.withdraw()
+                assert not errors() and len(runs_) == 3, f"{where}, scrap Frame & Cut: {errors()}"
+                got["scrap cut"], got["scrap cut, dies left"] = runs_[2]["lines"], app._count_die_remaining()
+                seen[zones] = got
+            for kind in seen[False]:
+                assert seen[True][kind] == seen[False][kind], \
+                    f"die inserts, {kind}: switching Labeled Zones on in the Pad Maker changed it"
+        finally:
+            for k, v in keep.items():
+                app.settings[k] = v
+            app._clear_die_scrap_session()
+            app.die_scrap_var.set(False)
+            app._update_die_scrap_status()
+            die_form()
+    check("die inserts: with Labeled Zones on (Pad Maker) the fit check, SVG, G-code, Frame & Cut and Scrap Mode "
+          "are exactly as with it off", labeled_zones_on_the_pad_maker_change_nothing_for_dies)
 
 
 def main():

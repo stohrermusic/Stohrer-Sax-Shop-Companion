@@ -24,6 +24,9 @@ os.environ["SAXSHOP_CONFIG_DIR"] = _PROFILE
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 results = []
 
 
@@ -31,10 +34,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -60,7 +64,6 @@ def main():
     for mod in (lf, main_mod):
         for name in ("showinfo", "showwarning", "showerror"):
             setattr(mod.messagebox, name, lambda title, msg, _n=name, **k: boxes.append((_n, str(title), str(msg)[:100])))
-        mod.messagebox.askyesno = lambda *a, **k: True
     lf.simpledialog.askstring = lambda *a, **k: "E2E Set"
 
     # ---- Key heights -----------------------------------------------------
@@ -96,6 +99,7 @@ def main():
         app.key_preset_var.set("E2E Set")
         app.on_load_key_preset("E2E Set")
         assert app.key_field_vars["make"].get() == "Selmer", "reload did not restore the make"
+        box_guard.GUARD.expect("Delete Key Height Set", answer=True)
         app.on_delete_key_preset()
         assert "E2E Set" not in app.key_presets.get("E2E Library", {}), "set not deleted"
     check("key heights: reload the set, then delete it", key_reload_and_delete)
@@ -149,6 +153,7 @@ def main():
     def screw_delete():
         app.screw_maker_var.set("E2E Maker")
         app.screw_model_var.set("E2E Model")
+        box_guard.GUARD.expect("Confirm Delete", answer=True)
         app.delete_screw_spec()
         assert "E2E Maker" not in app.screw_data, "maker left behind after deleting its only model"
     check("screw specs: delete removes the model and the empty maker", screw_delete)

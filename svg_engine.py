@@ -167,6 +167,9 @@ def get_disc_diameter(pad_size, material, settings):
 # cut layer -- in the hole (on the waste plug) when the hole is big enough
 # to read it, otherwise on the scrap just under the ring.
 ADHESIVE_RING = 'adhesive_ring'
+# Materials Labeled Zones never groups, whatever the Pad Maker's setting:
+# adhesive rings, and Tooling's die inserts (see nest_with_zones).
+ZONE_FREE_MATERIALS = (ADHESIVE_RING, 'die_ring')
 ADHESIVE_RING_SOLID_MAX_PAD_MM = 9.5   # pads this size and under are solid discs, no inner cut (Matt)
 ADHESIVE_RING_MIN_HOLE_MM = 2.0        # above that size, an inner diameter under this is dropped too
 ADHESIVE_RING_MIN_WIDTH_MM = 0.5       # a trim can't thin the ring below this
@@ -667,9 +670,14 @@ def _scan_linear(*args, **kwargs):
     return _scan_linear_python(*args, **kwargs)
 
 
-# Die inserts always nest from the sheet's bottom-left corner as drawn, which
-# is the G-code origin and the corner the head is jogged to for Frame & Cut.
-DIE_NEST_EDGE_BIAS = "sw"
+# Die inserts always nest in rows from the sheet's bottom-left corner as
+# drawn: the bottom row left to right, then the next row up, largest first
+# (the "s" scan). That corner is the G-code origin and where the head is
+# jogged to for Frame & Cut. Not the corner scan ("sw"), which also starts
+# there: it places smallest first, so a mixed list leaves its 70 mm rings
+# for the last sheets and needs more of them (the full set 7 to 60 on a
+# 12 x 12 in sheet: 6 sheets from the corner scan, 5 by rows).
+DIE_NEST_EDGE_BIAS = "s"
 
 
 def nest_edge_bias(material, settings):
@@ -679,8 +687,9 @@ def nest_edge_bias(material, settings):
     not: they share the settings dict, so they used to inherit whatever the
     Pad Maker was set to, and its default ("center") starts in the middle
     of the sheet, which is the worst start for rings that are 50 and 70 mm
-    across (seven dies on a 130 x 130 mm sheet: 1 placed from the centre,
-    4 from the corner). Both nesters read the bias here and nowhere else,
+    across (seven dies, 30 to 44, on a 130 x 130 mm sheet: 1 placed from
+    the centre, 3 by rows, and the job done in two sheets where the centre
+    took three). Both nesters read the bias here and nowhere else,
     so every die path (SVG, G-code, Frame & Cut, the fit check, Scrap
     Mode) nests the same layout, and the Pad Maker's setting is never
     written to.
@@ -1848,7 +1857,15 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     # Adhesive rings never group: a ring's number travels with the ring
     # (in its hole or just under it), and a zone's border and label are an
     # engraving layer, which this material doesn't have.
-    if material == ADHESIVE_RING or not settings.get("zone_labels_enabled", False):
+    #
+    # Tooling's die inserts never group either. Labeled Zones is a Pad
+    # Maker setting, and the die generators nest plainly (_nest_discs), but
+    # the die FIT CHECK comes through here (can_all_pads_fit) with the
+    # shared settings: with zones switched on for pads it grouped the 7 to
+    # 12.5 mm die sizes, which are 50 mm rings, and refused jobs that fit
+    # (nine dies 7 to 11 on 160 x 160 mm: refused, where the nest places
+    # all nine).
+    if material in ZONE_FREE_MATERIALS or not settings.get("zone_labels_enabled", False):
         placed, fp, ft = _nest_discs(pads, material, width_mm, height_mm,
                                      settings, spacing_mm, polygon)
         return placed, [], fp, ft
@@ -2726,6 +2743,21 @@ class OrganizerDrawingError(ValueError):
     read, or a feature too small to cut with this kerf."""
 
 
+class OrganizerKerfError(OrganizerDrawingError):
+    """The organizer plate cannot be cut with this kerf: it is negative
+    (`opening` is None), or wider than one of the plate's openings
+    (`opening` is that opening's size as text, "60.6 x 15.5" for a slot or
+    an oval, "6.5" for a hole). The tab turns it into a translated message,
+    as it does for the crescent's kerf; str() is plain English."""
+
+    def __init__(self, kerf_mm, opening=None, what="opening"):
+        self.kerf_mm, self.opening, self.what = kerf_mm, opening, what
+        if opening is None:
+            super().__init__("the kerf cannot be negative")
+        else:
+            super().__init__(f"a {opening} mm {what} is too small for a kerf of {kerf_mm:g} mm")
+
+
 def read_die_organizer_drawing(variant=None, path=None):
     """Read an organizer plate drawing into shapes.
 
@@ -2840,8 +2872,7 @@ def organizer_shape_path(shape, grow_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
     if kind == 'rect':
         x, y, w, h = shape['x'] - g, shape['y'] - g, shape['w'] + 2 * g, shape['h'] + 2 * g
         if w <= 1e-9 or h <= 1e-9:
-            raise OrganizerDrawingError(
-                f"a {shape['w']:g} x {shape['h']:g} mm slot is too narrow for a kerf of {abs(2 * g):g} mm")
+            raise OrganizerKerfError(abs(2 * g), f"{shape['w']:g} x {shape['h']:g}", "slot")
         r = max(0.0, shape['r'] + g)
         r = min(r, w / 2, h / 2)
         pts = []
@@ -2854,8 +2885,7 @@ def organizer_shape_path(shape, grow_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
     elif kind == 'circle':
         r = shape['r'] + g
         if r <= 1e-9:
-            raise OrganizerDrawingError(
-                f"a {2 * shape['r']:g} mm hole is too small for a kerf of {abs(2 * g):g} mm")
+            raise OrganizerKerfError(abs(2 * g), f"{2 * shape['r']:g}", "hole")
         # Quarter by quarter, so the four extreme points are on the path and
         # the hole measures exactly its diameter across.
         pts = []
@@ -2867,8 +2897,7 @@ def organizer_shape_path(shape, grow_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
         a, b = shape['rx'], shape['ry']
         # Tightest curve of an ellipse is at the end of its long axis.
         if g < 0 and -g >= min(a * a / b, b * b / a) - 1e-9:
-            raise OrganizerDrawingError(
-                f"the {2 * a:g} x {2 * b:g} mm oval is too tight for a kerf of {abs(2 * g):g} mm")
+            raise OrganizerKerfError(abs(2 * g), f"{2 * a:g} x {2 * b:g}", "oval")
         step = 2.0 * math.acos(max(-1.0, 1.0 - tol / max(a, b)))
         n = max(16, math.ceil(2 * math.pi / step))
         pts = []
@@ -2891,7 +2920,7 @@ def die_organizer_toolpaths(variant, kerf_mm=0.0, path=None):
     path, 'counts': {kind: n}} in plate mm, y down."""
     kerf_mm = float(kerf_mm)
     if kerf_mm < 0:
-        raise OrganizerDrawingError("the kerf cannot be negative")
+        raise OrganizerKerfError(kerf_mm)
     drawing = read_die_organizer_drawing(variant, path=path)
     counts = {}
     for s in drawing['inner'] + [drawing['outer']]:

@@ -38,6 +38,9 @@ os.environ["SAXSHOP_CONFIG_DIR"] = _PROFILE
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 import config  # noqa: E402
 
 LOG_PATH = config.setup_logging()
@@ -49,10 +52,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -231,8 +235,6 @@ def run_fix_cases(root, ui, cam, frame, seen):
     ui.FalconRunDialog = FakeRun
     warnings = []
     ui.messagebox.showwarning = lambda title, msg, **k: warnings.append(str(title))
-    ui.messagebox.askyesno = lambda *a, **k: seen.get('yes', True)
-    ui.messagebox.askyesnocancel = lambda *a, **k: False  # "already homed"
     engrave_kw = {"falcon_port": "COM-FAKE", "settings": {}}
 
     def fail_open(*a, **k):
@@ -331,6 +333,7 @@ def run_fix_cases(root, ui, cam, frame, seen):
         seen['calls_no_done'] = len(calls)
         seen['warn_no_done'] = list(warnings)
         seen['yes'] = False  # decline to enter an offset by hand
+        box_guard.GUARD.expect("No Engrave Position", answer=False)
         run_dialog(root, ui, [(1000, moved_set(None))])
         seen['calls_no_offset'] = len(calls)
         seen['yes'] = True
@@ -361,8 +364,10 @@ def run_fix_cases(root, ui, cam, frame, seen):
 
         FakeRun.calls.clear()
         FakeRun.reason = None  # the window's X: soft reset mid-trace
+        box_guard.GUARD.expect("Home Laser First?", answer=False)  # "already homed"
         run_dialog(root, ui, [(800, frame_case('frame_abort'))], **engrave_kw)
         FakeRun.reason = "complete"
+        box_guard.GUARD.expect("Home Laser First?", answer=False)  # "already homed"
         run_dialog(root, ui, [(800, frame_case('frame_ok'))], **engrave_kw)
 
         def framing():
@@ -389,6 +394,8 @@ def run_fix_cases(root, ui, cam, frame, seen):
             seen['frame_state'] = str(d._frame_btn.cget('state'))
 
         FakeRun.calls.clear()
+        box_guard.GUARD.expect("Start Engrave?", answer=True)
+        box_guard.GUARD.expect("Engrave a New Card?", answer=True)
         run_dialog(root, ui, [(800, engrave_then_new)],
                    falcon_port="COM-FAKE", settings=settings)
 
@@ -450,6 +457,7 @@ def run_fix_cases(root, ui, cam, frame, seen):
             assert len(d._captures) == 1, "setup: no capture taken"
             d._on_switch_camera_clicked()
             seen['after_switch'] = (len(d._captures), d._reference_count)
+        box_guard.GUARD.expect("Switch Camera?", answer=True)
         run_dialog(root, ui, [(1000, switch)])
         cam.enumerate_cameras = real_enum
         check("Switch camera with captures: discarded, not mixed",
@@ -661,7 +669,6 @@ def main():
     import ui_dialogs as ui
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(ui.messagebox, name, lambda *a, **k: None)
-    ui.messagebox.askyesno = lambda *a, **k: True
 
     frame = board_frame(cam)
     real_open = cam.open_camera

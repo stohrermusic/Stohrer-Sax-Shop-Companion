@@ -35,6 +35,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import tempfile  # noqa: E402
 os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-scrap-pending-")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 import main  # noqa: E402
 
 results = []
@@ -43,10 +46,11 @@ results = []
 def check(name, fn):
     try:
         fn()
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -71,7 +75,6 @@ def main_test():
     main.messagebox.showinfo = lambda *a_, **k: None
     main.messagebox.showwarning = lambda *a_, **k: None
     main.messagebox.showerror = lambda *a_, **k: None
-    main.messagebox.askyesno = lambda *a_, **k: False
 
     # Keep the real progress window (its three columns are what's under
     # test) but never let it show.

@@ -422,16 +422,31 @@ def refusals():
     generate("upper", 0.2, sheet=(need_w, need_h))          # exactly big enough is fine
     try:
         generate("upper", 3.5)                               # wider than the 3.175 mm die slots
-    except se.OrganizerDrawingError as e:
-        assert "kerf" in str(e) and ("narrow" in str(e) or "small" in str(e)), str(e)
+    except se.OrganizerKerfError as e:
+        assert isinstance(e, se.OrganizerDrawingError) and isinstance(e, ValueError)
+        # The opening it names is one the kerf really bridges (the first in
+        # drawing order: the 3.2 mm pin holes come before the 3.175 mm slots).
+        assert e.kerf_mm == 3.5 and e.what in ("slot", "hole") and float(e.opening.split()[-1]) < 3.5,             (e.kerf_mm, e.what, e.opening)
+        assert "kerf" in str(e) and "small" in str(e), str(e)
     else:
         raise AssertionError("a kerf wider than the die slots was accepted")
+    # A negative kerf is refused, at the toolpaths and at the generator, and
+    # says so with no opening named (there is nothing too narrow for it).
+    for fn in (lambda: se.die_organizer_toolpaths("upper", -0.1), lambda: generate("upper", -0.1),
+               lambda: generate("lower", -2.0)):
+        try:
+            fn()
+        except se.OrganizerKerfError as e:
+            assert e.opening is None and e.kerf_mm < 0 and "negative" in str(e), (e.opening, e.kerf_mm, str(e))
+        else:
+            raise AssertionError("a negative kerf was accepted")
+    assert se.die_organizer_toolpaths("upper", 0.0)["counts"]["rect"] == 112, "kerf 0 is fine"
     # The slots themselves: narrower than the kerf is refused in so many words.
     slot = {"kind": "rect", "angle": 0.0, "tx": 0.0, "ty": 0.0, "x": 0.0, "y": 0.0, "w": 54.0, "h": 3.175, "r": 0.0}
     try:
         se.organizer_shape_path(slot, -3.2 / 2)
-    except se.OrganizerDrawingError as e:
-        assert "narrow" in str(e), str(e)
+    except se.OrganizerKerfError as e:
+        assert e.what == "slot" and e.opening == "54 x 3.175" and e.kerf_mm == 3.2, (e.what, e.opening, e.kerf_mm)
     else:
         raise AssertionError("a slot narrower than the kerf was given a path")
     assert len(se.organizer_shape_path(slot, -0.1)) == 5, "a square slot moved inward stays four square corners"
@@ -531,7 +546,11 @@ def gui():
 
     def a_small_sheet_is_refused_before_the_save_dialog():
         app.organizer_variant_var.set("upper")
-        for w, h, units in (("200", "300", "mm"), ("9", "12", "in"), ("wide", "400", "mm"), ("0", "400", "mm")):
+        # Too small in both directions, in one direction only (each way),
+        # by a hair, not a number, zero.
+        for w, h, units in (("200", "300", "mm"), ("9", "12", "in"), ("200", "400", "mm"), ("400", "200", "mm"),
+                            ("233.9", "334", "mm"), ("234", "333.9", "mm"), ("9.2", "14", "in"),
+                            ("wide", "400", "mm"), ("0", "400", "mm")):
             app.organizer_units_var.set(units)
             app.organizer_width_var.set(w)
             app.organizer_height_var.set(h)
@@ -542,8 +561,9 @@ def gui():
             assert len(saved) == before, f"{w} x {h} {units}: reached the save dialog"
             errs = [b for b in boxes if b[0] == "showerror"]
             assert len(errs) == 1, boxes
-            if w in ("200", "9"):
-                assert errs[0][1] == "Sheet too small" and "234" in errs[0][2] and "334" in errs[0][2], errs
+            if w not in ("wide", "0"):
+                assert errs[0][1] == "Sheet too small" and "234" in errs[0][2] and "334" in errs[0][2], \
+                    f"{w} x {h} {units}: {errs}"
         app.organizer_units_var.set("in")
         app.organizer_width_var.set("12")
         app.organizer_height_var.set("18")
@@ -567,10 +587,49 @@ def gui():
             root.update()
         finally:
             app.settings["gcode_settings"]["basswood"]["kerf_width"] = keep
-        assert [b for b in boxes if b[0] == "showerror"] and not [b for b in boxes if b[0] == "showinfo"], boxes
+        errs = [b for b in boxes if b[0] == "showerror"]
+        assert errs and not [b for b in boxes if b[0] == "showinfo"], boxes
         assert not os.path.exists(os.path.join(OUT, "refused_upper.gcode")), "a refused job left a file behind"
-    check("GUI: a job the engine refuses (kerf wider than the slots) says so and leaves no file",
-          a_refusal_leaves_no_file)
+        # The message is the tab's, in the user's words (translated), not the
+        # engine's English: it names the material, the kerf, the opening and
+        # where to change it.
+        where = app._material_settings_place("basswood")
+        assert errs[0][1] == "Invalid Input" and errs[0][2].startswith(
+            "The Basswood kerf (3.5 mm) is too wide for an opening of ") and errs[0][2].endswith(
+            f"in the organizer plate. Check it in {where}."), errs[0]
+        named = re.search(r"opening of ([\d.]+(?: x [\d.]+)?) mm", errs[0][2])
+        assert named and float(named.group(1).split()[-1]) < 3.5 and "narrow" not in errs[0][2], errs[0][2]
+        # A negative kerf, likewise.
+        app.settings["gcode_settings"]["basswood"]["kerf_width"] = -0.2
+        try:
+            del boxes[:]
+            app._on_generate_organizer_gcode()
+            root.update()
+        finally:
+            app.settings["gcode_settings"]["basswood"]["kerf_width"] = keep
+        errs = [b for b in boxes if b[0] == "showerror"]
+        assert errs and errs[0][2] == f"The Basswood kerf is negative (-0.2 mm). Check it in {where}.", errs
+        assert not os.path.exists(os.path.join(OUT, "refused_upper.gcode"))
+        # No cut settings gets its sentence; any other ValueError (a kerf that
+        # is not a number) does not: it reaches the user as what it is.
+        for value, want, forbidden in (("cut_speed", 0, None), ("kerf_width", "wide", "has no cut speed and power set")):
+            saved_value = app.settings["gcode_settings"]["basswood"][value]
+            app.settings["gcode_settings"]["basswood"][value] = want
+            try:
+                del boxes[:]
+                app._on_generate_organizer_gcode()
+                root.update()
+            finally:
+                app.settings["gcode_settings"]["basswood"][value] = saved_value
+            errs = [b for b in boxes if b[0] == "showerror"]
+            assert len(errs) == 1, (value, boxes)
+            if forbidden is None:
+                assert "Basswood has no cut speed and power set" in errs[0][2], errs[0]
+            else:
+                assert forbidden not in errs[0][2] and "wide" in errs[0][2],                     f"a kerf of 'wide' was reported as missing cut settings or not named: {errs[0]}"
+            assert not os.path.exists(os.path.join(OUT, "refused_upper.gcode"))
+    check("GUI: a job the engine refuses (kerf wider than the slots, or negative) says so in the tab's own words "
+          "and leaves no file", a_refusal_leaves_no_file)
 
     try:
         root.destroy()

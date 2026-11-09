@@ -234,6 +234,21 @@ def refusals_are_only_for_a_gap_narrower_than_the_kerf():
     else:
         raise AssertionError("a crescent whose horns are closer together than the kerf was given a path")
     se.tonehole_crescent_toolpath(closed, 0.0)             # with no kerf there is nothing to bridge
+    # The threshold is the gap itself, on both sides: a kerf a hair under
+    # the gap cuts, a hair over is refused. (Comparing the kerf with half
+    # the gap would refuse the first and nobody noticed.)
+    small = se.tonehole_crescent_geometry(1.4, 75.0, 100)
+    gap_mm = 2 * small["tip_x"]
+    assert 0.5 < gap_mm < se.CRESCENT_MAX_KERF_MM, f"fixture: a gap inside the kerf range, got {gap_mm}"
+    assert se.tonehole_crescent_toolpath(small, gap_mm - 0.001), "a kerf just narrower than the gap must cut"
+    assert se.tonehole_crescent_toolpath(small, gap_mm * 0.6), "a kerf well inside the gap must cut"
+    for too_wide in (gap_mm + 0.001, gap_mm):
+        try:
+            se.tonehole_crescent_toolpath(small, too_wide)
+        except se.CrescentKerfError as e:
+            assert e.reason == "gap" and abs(e.size_mm - gap_mm) < 1e-9, (e.reason, e.size_mm)
+        else:
+            raise AssertionError(f"a kerf of {too_wide} mm bridged a {gap_mm:.3f} mm gap and was accepted")
     g = se.tonehole_crescent_geometry(43.0, 20.0)
     for bad in (-0.1, se.CRESCENT_MAX_KERF_MM + 0.01, 5.0):
         try:
@@ -338,6 +353,67 @@ def numbers_first_then_one_closed_cut_each():
 
 check("G-code: list numbers are engraved first, under their parts; then one closed kerf path per crescent",
       numbers_first_then_one_closed_cut_each)
+
+
+def each_numbers_box_matches_the_svg_and_sits_in_its_own_strip():
+    """The SVG anchors its <text> at the baseline; the G-code's stroke font
+    is centre-anchored, so the G-code moves the centre up by 0.35 x font.
+    With that sign the wrong way round the numbers sit 2.1 mm too low and
+    run out of their strip. Pinned here against the SVG file's own text
+    and against the cut of the part each number belongs to, neither read
+    through the engine's placement formula."""
+    f, gap = se.CRESCENT_LABEL_FONT_MM, se.CRESCENT_LABEL_GAP_MM
+    kerf = 0.2
+    s = settings("acrylic", kerf=kerf, engraving_mode="line", engraving_speed=1500, engraving_power=12)
+    path, info = write(LIST, s=s, name="box")
+    svg_path = os.path.join(OUT, "box.svg")
+    se.generate_tonehole_crescent_svg(LIST, svg_path, s)
+    H = info["height"]
+    with open(svg_path, encoding="utf-8") as fh:
+        svg = fh.read()
+    texts = [(float(x), float(y), int(n)) for x, y, n in
+             re.findall(r'<text[^>]*x="([\d.]+)mm"[^>]*y="([\d.]+)mm"[^>]*>(\d+)</text>', svg)]
+    parts = info["parts"]
+    assert len(texts) == len(parts) == 6, f"fixture: {len(texts)} texts in the SVG for {len(parts)} parts"
+    got = layers(path)
+    assert [name for name, _s in got] == ["C03", "C02"]
+    number_strokes, cuts = got[0][1], got[1][1]
+    # Each stroke of a number belongs to the SVG text nearest its centre
+    # (the parts are many millimetres apart, the glyphs are 3 mm).
+    boxes = {i: [] for i in range(len(texts))}
+    for stroke in number_strokes:
+        xs = [p[0] for p in stroke]
+        ys = [p[1] for p in stroke]
+        cx, cy_svg = (min(xs) + max(xs)) / 2, H - (min(ys) + max(ys)) / 2
+        i = min(range(len(texts)), key=lambda k: (texts[k][0] - cx) ** 2 + (texts[k][1] - cy_svg) ** 2)
+        boxes[i].append((min(xs), min(ys), max(xs), max(ys)))
+    for i, (tx, ty, number) in enumerate(texts):
+        p = parts[i]
+        assert number == p["number"], (number, p["number"])
+        assert boxes[i], f"no strokes near the SVG's number {number} at ({tx}, {ty})"
+        x0 = min(b[0] for b in boxes[i])
+        y0 = min(b[1] for b in boxes[i])
+        x1 = max(b[2] for b in boxes[i])
+        y1 = max(b[3] for b in boxes[i])
+        centre_svg_y = H - (y0 + y1) / 2
+        # Against the SVG: the glyph box's centre is 0.35 x font above the text baseline.
+        assert abs(centre_svg_y - (ty - 0.35 * f)) < 0.02, (
+            f"number {number}: its G-code box is centred {centre_svg_y:.3f} mm down the sheet, "
+            f"the SVG's baseline is at {ty:.3f} (centre should be {ty - 0.35 * f:.3f})")
+        assert abs((x0 + x1) / 2 - tx) < 0.5 * f, f"number {number}: not centred on the SVG's x {tx}"
+        assert 0.8 * f < (y1 - y0) < 1.0 * f, f"number {number}: glyph box {y1 - y0:.2f} mm tall for a {f} mm font"
+        # Against its own part: entirely below the part's lowest cut point
+        # (G-code y runs up), and inside the strip the layout reserves
+        # under the part (gap + font), kerf allowed for.
+        cut_bottom = min(y for _x, y in cuts[i])
+        assert y1 < cut_bottom - 0.5, f"number {number}: its top ({y1:.2f}) runs into its part (cut bottom {cut_bottom:.2f})"
+        assert y0 > cut_bottom - (gap + f) - kerf / 2 - 0.05, (
+            f"number {number}: its bottom ({y0:.2f}) is below the strip under its part "
+            f"({cut_bottom - (gap + f):.2f})")
+
+
+check("G-code: each number's box matches the SVG's text (centre 0.35 x font above the baseline) and sits in the "
+      "strip under its own part", each_numbers_box_matches_the_svg_and_sits_in_its_own_strip)
 
 
 def same_layout_and_numbering_rule_as_the_svg():
@@ -601,8 +677,21 @@ def gui():
         errs = [b for b in shown if b[0] == "showerror"]
         assert len(errs) == 1 and "Cork has no cut speed and power set" in errs[0][2], shown
         assert not os.path.exists(new[0])
-    check("GUI: a horn gap narrower than the kerf, a bad field, and a material with no cut settings are each refused",
-          refusals_in_plain_words_and_no_file)
+        # Any OTHER ValueError on the way (here a kerf that is not a number)
+        # must not be dressed up as missing cut settings: it reaches the
+        # user as what it is, through the handler's own error box.
+        keep = app.settings["gcode_settings"]["cork"]["kerf_width"]
+        app.settings["gcode_settings"]["cork"]["kerf_width"] = "wide"
+        try:
+            new, shown = click(app._on_generate_crescent_gcode)
+        finally:
+            app.settings["gcode_settings"]["cork"]["kerf_width"] = keep
+        errs = [b for b in shown if b[0] == "showerror"]
+        assert len(errs) == 1 and "has no cut speed and power set" not in errs[0][2],             f"a kerf of 'wide' was reported as missing cut settings: {shown}"
+        assert "wide" in errs[0][2], f"the real problem is not named: {errs[0][2]!r}"
+        assert not [b for b in shown if b[0] == "showinfo"] and not os.path.exists(new[0])
+    check("GUI: a horn gap narrower than the kerf, a bad field, and a material with no cut settings are each refused; "
+          "another ValueError is not called missing cut settings", refusals_in_plain_words_and_no_file)
 
     try:
         root.destroy()

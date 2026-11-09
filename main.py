@@ -534,7 +534,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             help_menu.add_command(label=_("About"), command=self.open_about)
 
     def _fit_window_to_tabs(self):
-        """Widen the window so every visible tab label fits.
+        """Widen the window so every visible tab label fits, and so the
+        Tooling tab's rows of section buttons are never squeezed.
 
         Aqua's ttk notebook clips tab labels instead of growing the tab
         row: at the 640 px default, seven tabs read "Pad Mak / Toner
@@ -542,6 +543,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         the row, so there this is a no-op in practice. Measures the labels
         with the notebook's own font rather than trusting a requested
         width that Aqua may not report.
+
+        The Tooling tab's selector rows cannot shrink: three buttons to a
+        row, 22 characters each, is about 500 px on Windows but about 720
+        px in Aqua, so with fewer tabs shown a Mac or Linux window stayed
+        at the 640 px it starts at and cut the buttons down (CI, 2026-11-09;
+        with all seven tabs the tab row happened to widen the window
+        enough). Only that tab is counted, not the notebook's whole
+        request: the library and audio tabs ask for 850 px and more on
+        every platform and are built to live in less.
         """
         try:
             self.root.update_idletasks()
@@ -551,6 +561,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             visible = [t for t in self.notebook.tabs() if self.notebook.tab(t, 'state') != 'hidden']
             need = sum(font.measure(self.notebook.tab(t, 'text')) for t in visible)
             need += TAB_LABEL_PADDING_PX * len(visible) + 40
+            tooling = getattr(self, 'tooling_tab_frame', None)
+            if tooling is not None and str(tooling) in visible:
+                need = max(need, tooling.winfo_reqwidth() + TOOLING_CONTENT_MARGIN_PX)
             cur_w = self.root.winfo_width()
             if cur_w <= 1:
                 cur_w = 640
@@ -4675,6 +4688,9 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
 
 # Per-tab horizontal padding Aqua adds round a notebook label, plus slack.
 TAB_LABEL_PADDING_PX = 30
+# Room around the Tooling tab's content when the window is sized to it: the
+# notebook's own padding and border (see _fit_window_to_tabs).
+TOOLING_CONTENT_MARGIN_PX = 24
 
 
 def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=None):

@@ -28,6 +28,8 @@ os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-pad-preview-")
 # SECTION_TITLES), so the gettext _ must be installed before importing it.
 from i18n import init_translation  # noqa: E402
 init_translation("en")
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
 
 results = []
 
@@ -35,10 +37,11 @@ results = []
 def check(name, fn):
     try:
         fn()
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 

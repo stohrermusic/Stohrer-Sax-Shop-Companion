@@ -2128,14 +2128,25 @@ def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filena
         f.write('\n'.join(gcode_lines))
 
 
+class NoCutSettingsError(ValueError):
+    """A material with no cut speed or power set: nothing may be cut at
+    F0 or S0. Its own type, so the Tooling tab can say exactly that and
+    let every other ValueError (a sheet too small, a value that is not a
+    number) reach the user as what it is."""
+
+    def __init__(self, material):
+        self.material = material
+        super().__init__(f"no cut speed and power are set for {material}")
+
+
 def _material_cut_settings(material, settings):
     """(cut_speed, cut_power, cut_passes, kerf_width, air) for a material's
-    cut, from its gcode_settings block. Raises ValueError for a material
-    with no cut speed or power: nothing may be cut at F0 or S0."""
+    cut, from its gcode_settings block. Raises NoCutSettingsError for a
+    material with no cut speed or power."""
     mat = settings.get("gcode_settings", {}).get(material, {})
     speed, power = mat.get("cut_speed", 0), mat.get("cut_power", 0)
     if not (float(speed) > 0 and float(power) > 0):
-        raise ValueError(f"no cut speed and power are set for {material}")
+        raise NoCutSettingsError(material)
     return (speed, power, mat.get("cut_passes", 1), float(mat.get("kerf_width", 0.0) or 0.0),
             mat.get("air_assist_cut", True))
 
