@@ -55,6 +55,9 @@ import config  # noqa: E402
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 RING = 'adhesive_ring'
 RING_KEYS = ("adhesive_ring_enabled", "adhesive_ring_trim_mm")
 
@@ -71,10 +74,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -154,12 +158,10 @@ def main():
     import falcon_sender
     from tkinter import messagebox as mb
 
+    guard = box_guard.GUARD     # every question a check causes is named there, with its answer
     boxes = []
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(mb, name, lambda title=None, msg=None, _n=name, **k: boxes.append((_n, str(title), str(msg))))
-    mb.askyesno = lambda *a, **k: True
-    mb.askokcancel = lambda *a, **k: True
-    mb.askyesnocancel = lambda *a, **k: True
     out_dir = tempfile.mkdtemp(prefix="ssc-ring-upgrade-out-")
     main_mod.filedialog.askdirectory = lambda **k: out_dir
 
@@ -305,6 +307,7 @@ def main():
             assert str(w.ring_clearance_spin.cget("state")) == "normal"
             w.ring_trim_var.set(0.3)
             assert w._is_dirty()
+            guard.expect("Save changes as a preset?", answer=True)
             w.on_apply()                             # asks to save as a preset first -> "Matt rings"
         finally:
             ui_dialogs.SaveSizingPresetDialog = keep
@@ -336,10 +339,9 @@ def main():
             # The user tunes the tape and applies.
             g.vars[RING]["cut"]["power"].set(38.0)
             g.vars[RING]["cut"]["speed"].set(1350)
-            mb.askyesnocancel = lambda *a, **k: False        # "apply anyway", no preset
+            guard.expect("Unsaved changes", answer=False)     # "apply anyway", no preset
             g._on_apply_clicked()
         finally:
-            mb.askyesnocancel = lambda *a, **k: True
             close(g)
         disk = read_json("app_settings.json")["gcode_settings"]
         assert disk[RING]["cut_power"] == 38.0 and disk[RING]["cut_speed"] == 1350
@@ -517,7 +519,8 @@ def main():
 
     # --------------------------------------------------------------- tour ----
     expected = ["pad-maker", "sizing-rules-with-preview", "layer-colors", "gcode-settings", "nesting-preview",
-                "polygon-draw", "job-history", "feature-set", "user-guide", "about", "key-heights",
+                "polygon-draw", "job-history", "feature-set", "user-guide", "about", "welcome",
+                "quick-start", "key-heights",
                 "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner", "toner"]
     if not main_mod.audio_supported():
         expected = [s for s in expected if s not in ("tuner-no-mic", "tuner", "toner")]

@@ -507,7 +507,12 @@ GCODE_PRESET_KEYS = (
 # All materials a G-code preset can be saved/loaded for. Top-level keys
 # in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
 GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood",
-                          "adhesive_ring")
+                          "adhesive_ring", "cork")
+
+# The materials the Tooling tab works in (its G-code settings dialog, and
+# the Tonehole Crescent and Die Organizer material choices). Cork is a
+# Tooling material only: it is not offered on the Pad Maker.
+TOOLING_GCODE_MATERIALS = ("acrylic", "basswood", "cork")
 
 # Materials that are only ever cut: no engraving and no center hole, so
 # their gcode_settings block (and their presets) carry just the cut keys.
@@ -517,6 +522,24 @@ GCODE_CUT_ONLY_MATERIALS = ("adhesive_ring",)
 GCODE_CUT_ONLY_KEYS = (
     "cut_speed", "cut_power", "cut_passes", "kerf_width", "air_assist_cut",
 )
+
+
+def engraving_is_set(speed, power):
+    """True when an engraving speed and power are usable.
+
+    0 for either means "not set": cork ships that way on purpose, because
+    nobody has an engraving value for it and Matt wanted no guess in there
+    (2026-11-09). A generator must never write a zero feed (Grbl rejects
+    F0) or trace an engraving at S0, so the Tooling generators that
+    engrave with the chosen material (crescent list numbers, kerf test
+    labels, Speed & Power IDs) skip the engraving when this is False, still
+    write the cuts, and the tab tells the user (ENGRAVING_NOT_SET notices
+    in tooling_tab.py). Anything that isn't a number counts as not set.
+    """
+    try:
+        return float(speed) > 0 and float(power) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def gcode_preset_keys_for(material):
@@ -884,6 +907,51 @@ DEFAULT_SETTINGS = {
             "kerf_width": 0.2,
             "air_assist_cut": True,
         },
+        # Cork (Matt, 2026-11-09: "tonehole crescents are usually cork. we
+        # do not have that as a material yet"). A Tooling material only: it
+        # is in the Tooling settings dialog, the Kerf Test, the Speed &
+        # Power Test, Framing Power and the Tonehole Crescent (its
+        # default), and not on the Pad Maker.
+        #
+        # THE CUT IS A TESTED VALUE: 1000 mm/min at 30 %, one pass, air on,
+        # on 3/32 in (2.4 mm) sheet cork on a 40 W Falcon. It is what Matt
+        # cut a 43 mm, 20 % crescent with on 2026-10-14 (his file
+        # crescent_43mm_20pct.gcode: one layer, "Cut @ 1000 mm/min, 30%
+        # power", M4, M8), in his words "it was perfect for 3/32 cork".
+        # About 0.30 J per mm of cut per mm of thickness. Holes use the
+        # same values.
+        #
+        # THE KERF IS NOT MEASURED. 0.0 reproduces that crescent: its path
+        # encloses 290.45 mm2 and 20 % of a 43 mm tonehole is 290.44 mm2,
+        # so it was cut on the design line with no compensation. Measure
+        # it with Tooling > Kerf Test before trusting a size.
+        #
+        # THE ENGRAVING IS NOT SET, on purpose. Matt: "leave the engraving
+        # setting for cork at 0/0. don't want a guess in there." 0 means
+        # "not set" (engraving_is_set above): the generators skip the
+        # engraving and say so. Find a value with Tooling > Speed & Power
+        # Test. No text may call the kerf or the engraving tested.
+        "cork": {
+            "engraving_mode": "line",
+            "engraving_speed": 0,
+            "engraving_power": 0,
+            "engraving_passes": 1,
+            "filled_engraving_speed": 0,
+            "filled_engraving_power": 0,
+            "filled_engraving_passes": 1,
+            "filled_line_spacing": 0.15,
+            "hole_speed": 1000,
+            "hole_power": 30,
+            "hole_passes": 1,
+            "cut_speed": 1000,
+            "cut_power": 30,
+            "cut_passes": 1,
+            "kerf_width": 0.0,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
+        },
     },
 
     # TUNER SETTINGS
@@ -1022,7 +1090,7 @@ DEFAULT_SETTINGS = {
     "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
     "laser_framing_power_by_material": {
         "felt": 10, "card": 10, "leather": 10, "acrylic": 10, "basswood": 10,
-        "adhesive_ring": 10,
+        "adhesive_ring": 10, "cork": 10,
     },
     "laser_framing_feed": 2000,     # mm/min during framing
     # Bed dimensions in machine-mm — defaults match the Creality Falcon2
@@ -1079,6 +1147,11 @@ DEFAULT_SETTINGS = {
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
+    # The version whose Welcome window this install has already seen
+    # (main.maybe_show_welcome). It shows once on the first launch of each
+    # version, new install or update: "" here means never, so an existing
+    # user gets it once after updating to the first version that has it.
+    "welcomed_version": "",
     "seen_kerf_test_tutorial": False,
     "seen_calibration_tutorial": False,
 

@@ -18,7 +18,7 @@ config.py              → Settings I/O, constants, platform config paths, migra
 i18n.py                → gettext catalog init; must run in main.py BEFORE any UI module import
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)
+ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, WelcomeWindow, QuickStartWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 camera_capture.py       → OpenCV ChArUco calibration + scrap-polygon detection (optional dep; degrades gracefully if OpenCV missing)
 falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional). Includes a hard-wake-up via G4 P0.01 dwell + `$X` safety-unlock at stream start.
@@ -57,7 +57,7 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 
 ## Data Files (JSON, in platform config directory)
 
-- `app_settings.json` - User preferences
+- `app_settings.json` - User preferences (including `welcomed_version`, the version whose Welcome window this install has seen)
 - `pad_presets.json` - Saved pad size lists
 - `sizing_presets.json` - Saved Sizing Rules dialog presets (added v2.0; schema in config.py `SIZING_PRESET_KEYS`)
 - `gcode_presets.json` - Per-material G-code laser presets (added v2.6; nested `{material: {preset_name: data}}`; schema in config.py `GCODE_PRESET_KEYS` / `GCODE_PRESET_MATERIALS`)
@@ -92,13 +92,35 @@ The keys alone are **not sufficient**: PyInstaller ad-hoc signs the bundle durin
 
 Packaging must preserve symlinks too: CI zips the `.app` with `ditto -c -k --keepParent`, because `zip -r` follows the bundle's internal Frameworks↔Resources symlinks and stores them as duplicate real files (767 of them in the v2.62 zip, roughly doubling the download), which breaks the signature's resource seal on extraction. The `--dmg` path is fine as-is — hdiutil preserves symlinks. CI verifies all of it on both macOS runners: `plutil -extract` for both usage keys, `codesign --verify --deep --strict` on the built .app, and again on an unzipped copy of the final artifact. Users upgrading from a broken build may need `tccutil reset Microphone com.stohrer.saxshopcompanion` (and `Camera`) if macOS cached the old silent denial — the README documents this.
 
+## Welcome window, Quick Start Guide, User Guide search (2026-11-09)
+
+Matt: "each install shows a quick welcome, a version number, and thank you for installing, be sure to search the user guide with any questions, and says click here for the quick start guide", and of the guide: "whatever guide we write should be SUPER concise". He rejected captions under the Generate buttons as too busy, so nothing was added to the main tabs.
+
+**Welcome window** (`ui_dialogs.WelcomeWindow`). Shown once for each version: `main.maybe_show_welcome()` compares `settings["welcomed_version"]` (in `DEFAULT_SETTINGS`, "" for never) with `APP_VERSION`, records the version **when the window is shown** (a crash must not bring it back every launch) and opens it. So a new install sees it once, and an existing user once after each update. Help > Welcome opens it any time (`open_welcome`, one window at a time). **`maybe_show_welcome` is called from exactly one place: the `__main__` block of main.py, under `if not tour:`, on an `after(600)`** once the main window is up. Building the app never calls it, so `--selftest`, `--tour` and every suite that constructs `PadSVGGeneratorApp` never see a Welcome window they did not ask for, and startup is no slower. Keep it that way: a call in `__init__` would pop a window in dozens of test runs.
+- *Content, and nothing more*: the app name and version, "Thank you for installing.", "Questions? Search the User Guide." (a link: `open_user_guide_search`, the full guide with the cursor in its search box), "Click here for the quick start guide" (a link: `open_quick_start`), and Close.
+- *Look: plain, on purpose.* The app's ordinary dialog look (`DIALOG_BG`, the usual fonts, links as in the About dialog). Not modal: it takes no grab. **Do not style it.** The first version was a nod to an old dial-up sign-on screen (three framed panels that lit up one after another, then the text); the same day Matt first asked for no animation ("just a quick popup that doesn't get in the way") and then for no styling at all: "let's have the welcome screen be simple. if I have a detailed ui request I will give it." It has no canvas, no timers and no colours of its own, and the suite checks that none come back.
+
+**Quick Start Guide** (`ui_dialogs.QuickStartWindow`, Help > Quick Start Guide, above User Guide). One small page of labels: three ways to cut (SD card, LightBurn, Frame & Cut), "Do not mix them", and what to check before cutting. Each line is its own translatable string (`QuickStartWindow.lines`), because the wording is Matt's to change. The Frame & Cut line is only there when `machine_supported()`. No images, no scrolling (the window is as big as its text), not modal. It never opens by itself.
+
+**User Guide search.** The Welcome window tells people to search the guide, so `UserGuideWindow` has a search box: typing highlights every match (`search_hit`) and jumps to the first (`search_current`), Enter or Next goes to the next and wraps round, the count reads "3 of 12" or "No matches", Ctrl+F (Cmd+F on macOS) puts the cursor there. Case-insensitive, plain text. It always searches the whole guide: opened on one tab's section, the first search calls `_show_all()`.
+
+**The tour has a stop for each** ("welcome" and "quick-start", after "about"; 20 stops now), so both are in the Mac screenshots.
+
+Tests: `tools/test_welcome.py` (9): once per version from a fresh folder and from another stored version; the single call site and `--selftest` recording nothing; the window being a plain dialog (five lines and Close, the dialog background, no canvas, nothing scheduled, no grab, none of the animated version's attributes); both links; the guide's eleven lines; Help on every tab; search (count, highlight, wrap, case, no matches, a one-tab guide expanding); and, in a German child process, both windows fitting.
+
 ## Feature Set
 
 File > Feature Set lets users show/hide tabs. It only lists what the build can run: no Tuner/Toner on a Mac without the audio stack (`main.audio_supported`), no Machine menu toggle without pyserial (`main.machine_supported`) — i.e. the Intel Mac build. Saving merges into `visible_tabs` rather than replacing it, so a tab the build doesn't offer keeps its saved value. As of v2.0 the Tuner is default-on (no longer marked experimental); only the Toner remains hidden by default. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, three ways to use it, and setup steps: input device, recording folder, preset fields, required preset fields). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
 
 **Machine Integration (v2.5+, experimental, opt-in)** — File > Feature Set also exposes an `experimental_machine_menu` toggle (default False). When on, the Pad Maker tab gains an Options > Machine submenu, a Frame & Cut button, and the polygon-draw dialog grows its "Get from camera" + live overlay UI. When off, none of that surfaces — the app behaves like pre-v2.5. Helper `_machine_enabled()` in main.py is the single source of truth and is called by `_refresh_machine_ui_state()` whenever the toggle changes or the calibration file appears/disappears.
 
-The Machine submenu has TWO-LEVEL GATING: experimental toggle on AND a valid camera calibration on disk. Without the toggle: nothing shows. With the toggle but no calibration: only "Camera Calibration..." is enabled — everything else (Home Laser, Test Connection, etc.) greys out. With both: full menu live. This is enforced in `_refresh_machine_ui_state()`. Frame & Cut button visibility follows the same logic via `_camera_capture_ready()`.
+**Gating: the laser and the camera are gated separately (since 2026-11-09).** Matt was asked "Should Frame & Cut require a camera calibration?" and answered "No, on either tab". `_refresh_machine_ui_state()` is the one place it is enforced:
+
+- *Toggle off* (or no pyserial in the build, `machine_supported()`): nothing machine-related shows; the Machine menu is not built at all.
+- *Toggle on*: the Machine menu's laser items are enabled (Home Laser, Test Connection, Clear Errors, Reset Falcon, Framing Power: `main.MACHINE_MENU_LASER_ITEMS`), and Camera Calibration as always. Once a laser is detected (`falcon_port`), the Frame & Cut button shows on the Pad Maker and on every Tooling section that writes G-code. One rule for both tabs, no calibration.
+- *Toggle on and a camera calibration on disk*: everything that uses the camera. Camera-Polygon Inset Margin in the menu (`MACHINE_MENU_CAMERA_ITEMS`), the "Live camera preview" tick, and through `_camera_capture_ready()` (the toggle and `_camera_calibration_present()`) "Get from camera", the live overlay in the shape dialog, Try Auto Locate and "Re-capture from camera".
+
+Before that date the calibration gated all of it: without one, only "Camera Calibration..." was enabled and Frame & Cut was hidden (commit `021d8df`, 2026-05-26, "Two-level machine gating"). That was a rule, not a dependency: typed dimensions or a hand-drawn shape, jog to the corner, G92, framing loop, cut never read the calibration. With no calibration a Frame & Cut run opens no camera and has no Auto Locate target (`on_frame_and_cut` asks `_camera_capture_ready()` before either), even with a stale tick or position. The toggle itself is still restart-required, as the Feature Set dialog says; the buttons and items follow laser detection and calibration live.
 
 ## v2.5 Machine Integration Architecture
 
@@ -131,7 +153,14 @@ main._machine_enabled() + _refresh_machine_ui_state()
       ├─ Framing loop dialog (FalconRunDialog loop=True)
       │   └─ generate_polygon_framing_gcode (outline, BL-first rotation, G92 with LB offset)
       └─ Cut dialog (FalconRunDialog) — same G92 prefix as framing
+  Tooling > Frame & Cut buttons (Die Inserts, Die Holders, Die Organizer, Kerf Test,
+                                 Speed & Power Test, Tonehole Crescent)
+      └─ main.on_frame_and_cut(tooling_job=...) — the same routine from the
+         framing lines on; bounding-box framing, G92 X0 Y0, no polygon, no
+         Auto Locate
 ```
+
+Since 2026-11-09 the laser branches of this map (the Machine menu's Home / Test / Clear / Reset / Framing Power, and Frame & Cut on both tabs) need only the toggle and a detected laser. The camera branches (Camera-Polygon Inset Margin, the polygon dialog's overlay and "Get from camera", Try Auto Locate) still need a calibration. See "Feature Set" above.
 
 Key invariants the subsystem keeps:
 - `custom_polygon` (inset, normalized to outline's origin) drives nesting placements.
@@ -139,4 +168,6 @@ Key invariants the subsystem keeps:
 - `_custom_polygon_lb_machine` (absolute machine coords of the outline's anchor vertex, `svg_engine.polygon_anchor_vertex` — the same vertex the G92 uses) drives Try Auto Locate.
 - `_falcon_homed_this_session` (True after $H or after Machine > Reset Falcon) gates Try Auto Locate enabled state.
 - Frame G-code emits `G92 X{lb_x} Y{lb_y}` (LB-vertex in Y-flipped frame) so jogging to the visible scrap corner bridges to the polygon's bbox origin.
+- A job that was not nested on the loaded shape (card on "Fit card to paper", and every Tooling job) takes nothing from it: `on_shape` in `on_frame_and_cut` is False, so no outline is traced, the G92 is `X0 Y0`, the cut is not flipped with the shape's height and Try Auto Locate has no target.
+- Everything after a successful `sender.connect()` runs inside the `try` whose `finally` disconnects, and the sleep lock is taken after the last early return, so no way out leaves the port open or the lock held (`tools/test_release_3_0.py`).
 - `falcon_sender._stream_loop` starts every stream with two safety lines BEFORE the caller's G-code: (1) `G4 P0.01` wake-up dwell to prevent Grbl parser dormancy from eating the first command, and (2) `$X` unlock so a sticky Alarm from the previous stream (e.g. soft-limit triggered by a jog-shifted cut bbox in Frame & Cut) doesn't force a Falcon power cycle. `$X` is a no-op when Grbl is already Idle.

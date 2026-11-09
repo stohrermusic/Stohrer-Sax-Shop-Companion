@@ -258,10 +258,19 @@ def test_menu_item_is_wired_and_gated():
     src = inspect.getsource(main.PadSVGGeneratorApp)
     assert '_on_machine_framing_power' in src, "no Framing Power menu command"
     assert "'framing_power'" in src, "menu index not recorded"
-    # must grey out with the rest of the calibration-dependent items
-    gate = re.search(r"for key in \(([^)]*)\)", src)
-    assert gate and 'framing_power' in gate.group(1), \
-        "Framing Power is not gated with the other Machine items"
+    # Since 2026-11-09 Framing Power is one of the laser items: enabled by
+    # the machine-integration toggle alone, like Home Laser and the rest.
+    # It used to grey out until a camera calibration existed; Matt's answer
+    # to "Should Frame & Cut require a camera calibration?" was "No, on
+    # either tab", and the framing pass is part of Frame & Cut. Only the
+    # camera-polygon inset still waits for a calibration.
+    assert 'framing_power' in main.MACHINE_MENU_LASER_ITEMS, \
+        "Framing Power is not gated with the other laser items"
+    assert 'framing_power' not in main.MACHINE_MENU_CAMERA_ITEMS, \
+        "Framing Power must not wait for a camera calibration"
+    refresh = inspect.getsource(main.PadSVGGeneratorApp._refresh_machine_ui_state)
+    assert 'MACHINE_MENU_LASER_ITEMS' in refresh and 'MACHINE_MENU_CAMERA_ITEMS' in refresh, \
+        "_refresh_machine_ui_state no longer sets the Machine menu from the two lists"
 
 
 if __name__ == '__main__':

@@ -8,13 +8,15 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import os
 import sys
+import tempfile
 import webbrowser
 
 from svg_engine import (
     _nest_discs, try_nest_partial, can_all_pads_fit,
     generate_die_svg, generate_die_svg_from_placed,
     generate_holder_svg, generate_kerf_test_svg, check_holder_sheet,
-    generate_die_organizer_svg,
+    generate_die_organizer_svg, _holder_pieces_for, KERF_TEST_DIAMETERS,
+    CrescentKerfError, OrganizerDrawingError, die_organizer_min_sheet,
     _min_feeds_speeds_sheet, _grid_pack_discs,
     build_feeds_speeds_matrix, feeds_speeds_ring_fits_label,
     CRESCENT_CURVE_STANDARD, CRESCENT_MAX_PERCENT, CRESCENT_MAX_TONEHOLE_MM,
@@ -24,10 +26,21 @@ from svg_engine import (
 from gcode_engine import (
     generate_die_gcode_from_placed, generate_holder_gcode, generate_kerf_test_gcode,
     generate_feeds_speeds_test_gcode,
+    generate_tonehole_crescent_gcode, generate_die_organizer_gcode,
 )
-from ui_dialogs import GcodeSettingsWindow, SpeedPowerTestPreview
+from config import engraving_is_set, TOOLING_GCODE_MATERIALS
+from ui_dialogs import GcodeSettingsWindow, SpeedPowerTestPreview, add_tooltip, gcode_file_note
 
 IS_MACOS = sys.platform == 'darwin'
+
+# The materials the Tooling dropdowns offer, by their English names. Lower-
+# cased, each is its settings key. The dropdowns show translated names;
+# _tooling_material_key maps back.
+_TOOLING_MATERIALS = ("Felt", "Card", "Leather", "Acrylic", "Basswood", "Cork")
+# What the Tonehole Crescent and Die Organizer material choices offer, first
+# one the default: crescents are usually cork, the organizer usually wood.
+_CRESCENT_MATERIALS = ("cork", "acrylic", "basswood", "leather", "felt", "card")
+_ORGANIZER_MATERIALS = ("basswood", "acrylic", "cork")
 
 
 class ToolingTabMixin:
@@ -43,6 +56,28 @@ class ToolingTabMixin:
             'save_dir': '',
         }
         self.tooling_scrap_window = None
+        # (button, pack options) for each section's Frame & Cut button.
+        # main._refresh_machine_ui_state shows and hides them.
+        self._tooling_frame_cut_btns = []
+
+    def _add_tooling_frame_cut_button(self, parent, command, **pack_options):
+        """A Frame & Cut button beside a section's Generate G-code button:
+        the same job, sent straight to the laser instead of to a file.
+
+        Created but not packed. main._refresh_machine_ui_state packs it
+        when machine integration is switched on and a laser was detected,
+        and takes it away again otherwise. Unlike the Pad Maker's button
+        it does not wait for a camera calibration: a Tooling sheet is a
+        rectangle the head is jogged to by hand.
+        """
+        label = _("Frame & Cut")
+        # As wide as its neighbours, and never narrower than its own text:
+        # the German label is 20 characters and a fixed 15 would clip it.
+        btn = tk.Button(parent, text=label, width=max(15, len(label)), command=command)
+        btn.tooltip = add_tooltip(btn, _("Send this job straight to the laser: position "
+                                         "the head, frame the area, then cut."))
+        self._tooling_frame_cut_btns.append((btn, pack_options))
+        return btn
 
     def _build_phil_noy_credit(self, parent_frame, bg, lead_text):
         """Phil Noy credit block — inserted at the top of Die Inserts and
@@ -111,8 +146,17 @@ class ToolingTabMixin:
             row_frames[-1].pack(fill='x', pady=(4 if r else 0, 0))
         for idx, (key, label) in enumerate(tool_names):
             row = row_frames[idx // per_row]
-            btn = tk.Button(row, text=label, width=22,
+            btn = tk.Button(row, text=label,
                             command=lambda k=key: self._show_tooling_section(k))
+            # 22 characters wide, as always, unless the label is longer in
+            # this language: then the button takes the width its own label
+            # asks for. At a fixed 22, "Geschwindigkeits- und
+            # Leistungstest" (German) and "Espaciadores de prensa de
+            # zapatillas" (Spanish) were cut off at both ends.
+            natural = btn.winfo_reqwidth()
+            btn.config(width=22)
+            if btn.winfo_reqwidth() < natural:
+                btn.config(width=0)
             btn.pack(side='left', padx=(0, 5))
             self._tooling_buttons[key] = btn
 
@@ -221,6 +265,8 @@ class ToolingTabMixin:
                   command=self._on_generate_die_svg).pack(side='left', padx=(0, 10))
         tk.Button(gen_frame, text=_("Generate G-code"), width=15,
                   command=self._on_generate_die_gcode).pack(side='left')
+        self._add_tooling_frame_cut_button(
+            gen_frame, self._on_frame_cut_die, side='left', padx=(10, 0))
 
         self._tooling_sections['die_inserts'] = die_frame
 
@@ -296,6 +342,8 @@ class ToolingTabMixin:
                   command=self._on_generate_holder_svg).pack(side='left', padx=(0, 10))
         tk.Button(holder_gen_frame, text=_("Generate G-code"), width=15,
                   command=self._on_generate_holder_gcode).pack(side='left')
+        self._add_tooling_frame_cut_button(
+            holder_gen_frame, self._on_frame_cut_holder, side='left', padx=(10, 0))
 
         self._tooling_sections['die_holders'] = holder_frame
         self._update_holder_info()
@@ -307,9 +355,9 @@ class ToolingTabMixin:
 
         # Description + Matt's instructions
         organizer_info = tk.Label(organizer_frame, bg=bg, font=("Helvetica", 9), fg="gray",
-                                  text=_("Plate: 230 × 330 mm. Open the SVG in LightBurn or your "
-                                         "laser software to cut."),
-                                  justify="left")
+                                  text=_("Plate: 230 × 330 mm. Generate G-code to cut it with this "
+                                         "app, or open the SVG in LightBurn or your laser software."),
+                                  justify="left", wraplength=540)
         organizer_info.pack(anchor='w', pady=(0, 4))
 
         instructions_text = _(
@@ -336,6 +384,44 @@ class ToolingTabMixin:
                        variable=self.organizer_variant_var,
                        value="lower", bg=bg).pack(side='left')
 
+        # Material and sheet: the G-code needs both (the SVG is the bare
+        # drawing and takes neither).
+        organizer_mat_row = tk.Frame(organizer_frame, bg=bg)
+        organizer_mat_row.pack(fill='x', pady=(0, 5))
+        tk.Label(organizer_mat_row, text=_("Material:"), bg=bg).pack(side='left')
+        self.organizer_material_var = tk.StringVar(value=self._tooling_material_label(
+            tooling.get("organizer_material"), _ORGANIZER_MATERIALS))
+        organizer_mat_combo = ttk.Combobox(
+            organizer_mat_row, textvariable=self.organizer_material_var,
+            values=[self._tooling_material_label(k) for k in _ORGANIZER_MATERIALS],
+            state="readonly", width=12)
+        organizer_mat_combo.pack(side='left', padx=(5, 5))
+        organizer_mat_note = tk.Label(organizer_mat_row, text=_("(G-code only)"), bg=bg)
+        organizer_mat_note.pack(side='left')
+        add_tooltip(organizer_mat_combo,
+                    _("What the plate is cut from. The G-code takes its cut speed, power, "
+                      "passes and kerf from this material in Options > Settings."))
+
+        organizer_sheet_frame = tk.LabelFrame(organizer_frame, text=_("Sheet Size"), bg=bg, padx=5, pady=5)
+        organizer_sheet_frame.pack(fill='x', pady=(0, 5))
+        organizer_size_row = tk.Frame(organizer_sheet_frame, bg=bg)
+        organizer_size_row.pack(fill='x')
+        org_units = tooling.get("organizer_sheet_units") or (
+            "in" if self.settings.get("units", "in") == "in" else "mm")
+        tk.Label(organizer_size_row, text=_("Width:"), bg=bg).pack(side='left')
+        self.organizer_width_var = tk.StringVar(
+            value=tooling.get("organizer_sheet_width", "12" if org_units == "in" else "305"))
+        tk.Entry(organizer_size_row, textvariable=self.organizer_width_var, width=8).pack(side='left', padx=(2, 10))
+        tk.Label(organizer_size_row, text=_("Height:"), bg=bg).pack(side='left')
+        self.organizer_height_var = tk.StringVar(
+            value=tooling.get("organizer_sheet_height", "18" if org_units == "in" else "457"))
+        tk.Entry(organizer_size_row, textvariable=self.organizer_height_var, width=8).pack(side='left', padx=(2, 10))
+        self.organizer_units_var = tk.StringVar(value=org_units)
+        tk.Radiobutton(organizer_size_row, text=_("in"), variable=self.organizer_units_var,
+                       value="in", bg=bg).pack(side='left')
+        tk.Radiobutton(organizer_size_row, text=_("mm"), variable=self.organizer_units_var,
+                       value="mm", bg=bg).pack(side='left', padx=(5, 0))
+
         # Output filename
         organizer_name_frame = tk.Frame(organizer_frame, bg=bg)
         organizer_name_frame.pack(fill='x', pady=(0, 5))
@@ -347,7 +433,11 @@ class ToolingTabMixin:
         organizer_gen_frame = tk.Frame(organizer_frame, bg=bg)
         organizer_gen_frame.pack(fill='x', pady=(5, 0))
         tk.Button(organizer_gen_frame, text=_("Generate SVG"), width=15,
-                  command=self._on_generate_organizer_svg).pack(side='left')
+                  command=self._on_generate_organizer_svg).pack(side='left', padx=(0, 10))
+        tk.Button(organizer_gen_frame, text=_("Generate G-code"), width=15,
+                  command=self._on_generate_organizer_gcode).pack(side='left')
+        self._add_tooling_frame_cut_button(
+            organizer_gen_frame, self._on_frame_cut_organizer, side='left', padx=(10, 0))
 
         self._tooling_sections['die_organizer'] = organizer_frame
 
@@ -368,7 +458,7 @@ class ToolingTabMixin:
 
         tk.Label(mat_row, text=_("Material:"), bg=bg).pack(side='left')
         self.kerf_material_var = tk.StringVar(value="Acrylic")
-        kerf_materials = [_("Felt"), _("Card"), _("Leather"), _("Acrylic")]
+        kerf_materials = [_("Felt"), _("Card"), _("Leather"), _("Acrylic"), _("Cork")]
         kerf_dropdown = ttk.Combobox(mat_row, textvariable=self.kerf_material_var,
                                      values=kerf_materials, state="readonly", width=12)
         kerf_dropdown.pack(side='left', padx=(5, 0))
@@ -406,6 +496,8 @@ class ToolingTabMixin:
                   command=self._on_generate_kerf_svg).pack(side='left', padx=(0, 10))
         tk.Button(kerf_gen_frame, text=_("Generate G-code"), width=15,
                   command=self._on_generate_kerf_gcode).pack(side='left')
+        self._add_tooling_frame_cut_button(
+            kerf_gen_frame, self._on_frame_cut_kerf, side='left', padx=(10, 0))
 
         self._tooling_sections['kerf_test'] = kerf_frame
 
@@ -435,7 +527,7 @@ class ToolingTabMixin:
         fs_mat_combo = ttk.Combobox(
             fs_mat_row, textvariable=self.fs_material_var,
             values=[_("Felt"), _("Card"), _("Leather"), _("Acrylic"),
-                    _("Basswood")],
+                    _("Basswood"), _("Cork")],
             state="readonly", width=12)
         fs_mat_combo.pack(side='left', padx=(5, 10))
         tk.Button(fs_mat_row, text=_("Apply material defaults"),
@@ -607,9 +699,14 @@ class ToolingTabMixin:
                   ).pack(side='left', padx=(0, 15))
         self.fs_show_preview_var = tk.BooleanVar(
             value=fs_settings.get("show_preview", True))
-        tk.Checkbutton(fs_gen_frame, text=_("Preview before saving"),
-                       variable=self.fs_show_preview_var, bg=bg
-                       ).pack(side='left')
+        fs_preview_chk = tk.Checkbutton(
+            fs_gen_frame, text=_("Preview before saving"),
+            variable=self.fs_show_preview_var, bg=bg)
+        fs_preview_chk.pack(side='left')
+        # Between Generate G-code and the preview tick, which applies to both.
+        self._add_tooling_frame_cut_button(
+            fs_gen_frame, self._on_frame_cut_feeds_speeds,
+            side='left', padx=(0, 15), before=fs_preview_chk)
 
         self._tooling_sections['feeds_speeds_tester'] = fs_frame
 
@@ -665,8 +762,8 @@ class ToolingTabMixin:
         crescent_frame = tk.Frame(self._tooling_content, bg=bg)
 
         tk.Label(crescent_frame, bg=bg, font=("Helvetica", 9), fg="gray",
-                 text=_("The outer edge is the tonehole ID exactly; allow for kerf or "
-                        "print tolerance."),
+                 text=_("The outer edge is the tonehole ID exactly. G-code allows for the "
+                        "material's kerf; for SVG and STL allow for kerf or print tolerance yourself."),
                  justify="left", wraplength=540).pack(anchor='w', pady=(0, 8))
 
         cr_size_row = tk.Frame(crescent_frame, bg=bg)
@@ -741,14 +838,34 @@ class ToolingTabMixin:
         tk.Label(cr_stl_row, text=_("Print thickness:"), bg=bg).pack(side='left')
         self.crescent_thickness_var = tk.StringVar(value=str(tooling.get("crescent_thickness", "2.0")))
         tk.Entry(cr_stl_row, textvariable=self.crescent_thickness_var, width=6).pack(side='left', padx=(2, 2))
-        tk.Label(cr_stl_row, text=_("mm  (STL only)"), bg=bg).pack(side='left')
+        tk.Label(cr_stl_row, text=_("mm  (STL only)"), bg=bg).pack(side='left', padx=(0, 15))
+        # The G-code needs to know what it is cutting: speed, power and
+        # the kerf it compensates for all come from the material.
+        tk.Label(cr_stl_row, text=_("Material:"), bg=bg).pack(side='left')
+        self.crescent_material_var = tk.StringVar(value=self._tooling_material_label(
+            tooling.get("crescent_material"), _CRESCENT_MATERIALS))
+        cr_mat_combo = ttk.Combobox(
+            cr_stl_row, textvariable=self.crescent_material_var,
+            values=[self._tooling_material_label(k) for k in _CRESCENT_MATERIALS],
+            state="readonly", width=12)
+        cr_mat_combo.pack(side='left', padx=(5, 5))
+        cr_mat_note = tk.Label(cr_stl_row, text=_("(G-code only)"), bg=bg)
+        cr_mat_note.pack(side='left')
+        add_tooltip(cr_mat_combo,
+                    _("What the crescents are cut from. The G-code takes its cut speed, power, "
+                      "passes and kerf from this material, and cuts half a kerf outside the "
+                      "outline so the part comes out at size."))
 
         cr_gen_frame = tk.Frame(crescent_frame, bg=bg)
         cr_gen_frame.pack(fill='x', pady=(5, 0))
         tk.Button(cr_gen_frame, text=_("Generate SVG"), width=15,
                   command=self._on_generate_crescent_svg).pack(side='left', padx=(0, 10))
         tk.Button(cr_gen_frame, text=_("Generate STL"), width=15,
-                  command=self._on_generate_crescent_stl).pack(side='left')
+                  command=self._on_generate_crescent_stl).pack(side='left', padx=(0, 10))
+        tk.Button(cr_gen_frame, text=_("Generate G-code"), width=15,
+                  command=self._on_generate_crescent_gcode).pack(side='left')
+        self._add_tooling_frame_cut_button(
+            cr_gen_frame, self._on_frame_cut_crescent, side='left', padx=(10, 0))
 
         self._tooling_sections['tonehole_crescent'] = crescent_frame
         self._update_crescent_preview()
@@ -873,10 +990,8 @@ class ToolingTabMixin:
         calibration-card engrave reads from gcode_settings.basswood,
         so users can tune machine feeds here once."""
         from config import save_settings, save_presets, GCODE_PRESET_FILE
-        tooling_materials = [
-            ("acrylic", _("Acrylic")),
-            ("basswood", _("Basswood")),
-        ]
+        tooling_materials = [(key, self._tooling_material_label(key))
+                             for key in TOOLING_GCODE_MATERIALS]
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
                             materials=tooling_materials, show_tooling_engraving=True,
                             gcode_presets=self.gcode_presets,
@@ -957,6 +1072,13 @@ class ToolingTabMixin:
             tooling["holder_layer_count"] = int(self.holder_layer_count_var.get())
             tooling["holder_sheet_width"] = self.holder_width_var.get()
             tooling["holder_sheet_height"] = self.holder_height_var.get()
+        if hasattr(self, 'organizer_material_var'):
+            tooling["organizer_material"] = self._organizer_material_key()
+            tooling["organizer_sheet_width"] = self.organizer_width_var.get()
+            tooling["organizer_sheet_height"] = self.organizer_height_var.get()
+            tooling["organizer_sheet_units"] = self.organizer_units_var.get()
+        if hasattr(self, 'crescent_material_var'):
+            tooling["crescent_material"] = self._crescent_material_key()
         if hasattr(self, 'crescent_curve_var'):
             tooling["crescent_tonehole_d"] = self.crescent_tonehole_var.get()
             tooling["crescent_percent"] = self.crescent_percent_var.get()
@@ -1056,6 +1178,30 @@ class ToolingTabMixin:
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
 
+    def _validate_die_job(self):
+        """The Die Inserts form, checked: (pads, width_mm, height_mm,
+        settings), or None once the error has been shown. Generate G-code
+        and Frame & Cut both start here, so they refuse the same input in
+        the same words."""
+        sizes = self._parse_die_sizes()
+        if not sizes:
+            messagebox.showerror(_("Error"), _("No valid die sizes entered."))
+            return None
+
+        width_mm, height_mm = self._get_die_sheet_mm()
+        if width_mm is None:
+            return None
+
+        pads = self._sizes_to_pads(sizes)
+        settings = self._get_die_settings()
+
+        if not can_all_pads_fit(pads, 'die_ring', width_mm, height_mm, settings):
+            messagebox.showerror(_("Nesting Error"),
+                _("Could not fit all {n} dies on the specified sheet.\n"
+                  "Try a larger sheet or fewer sizes, or use Scrap Mode.").format(n=len(sizes)))
+            return None
+        return pads, width_mm, height_mm, settings
+
     def _on_generate_die_gcode(self):
         """Generate G-code for die inserts."""
         if self.die_scrap_var.get():
@@ -1063,23 +1209,10 @@ class ToolingTabMixin:
             return
 
         try:
-            sizes = self._parse_die_sizes()
-            if not sizes:
-                messagebox.showerror(_("Error"), _("No valid die sizes entered."))
+            job = self._validate_die_job()
+            if job is None:
                 return
-
-            width_mm, height_mm = self._get_die_sheet_mm()
-            if width_mm is None:
-                return
-
-            pads = self._sizes_to_pads(sizes)
-            settings = self._get_die_settings()
-
-            if not can_all_pads_fit(pads, 'die_ring', width_mm, height_mm, settings):
-                messagebox.showerror(_("Nesting Error"),
-                    _("Could not fit all {n} dies on the specified sheet.\n"
-                      "Try a larger sheet or fewer sizes, or use Scrap Mode.").format(n=len(sizes)))
-                return
+            pads, width_mm, height_mm, settings = job
 
             base = self.die_filename_var.get().strip() or "my_dies"
             save_path = filedialog.asksaveasfilename(
@@ -1097,10 +1230,110 @@ class ToolingTabMixin:
             generate_die_gcode_from_placed(placed, width_mm, height_mm, save_path, settings)
 
             messagebox.showinfo(_("Done"),
-                _("Generated G-code for {n} die rings.\n\nSaved to: {path}").format(n=len(placed), path=save_path))
+                _("Generated G-code for {n} die rings.\n\nSaved to: {path}").format(n=len(placed), path=save_path)
+                + "\n\n" + gcode_file_note())
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    # ========================================
+    # FRAME & CUT (straight to the laser)
+    # ========================================
+
+    @staticmethod
+    def _gcode_text_from(write):
+        """Run `write(path)`, a generator call that saves a .gcode file,
+        and return the text it wrote.
+
+        The path is a temp file that is gone again before this returns.
+        That is how Frame & Cut streams exactly what the file export would
+        have saved (the same generator call, read back) and leaves nothing
+        in the user's folders. Read with the encoding the generators write
+        with, the platform default, as the Pad Maker's Frame & Cut does.
+        """
+        with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False, mode='w') as tmp:
+            path = tmp.name
+        try:
+            write(path)
+            with open(path, 'r') as f:
+                return f.read()
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    def _on_frame_cut_die(self):
+        """Frame & Cut for die inserts: the Generate G-code job, sent to
+        the laser. Acrylic, like the file it would have written. In Scrap
+        Mode it is one sheet per click."""
+        if self.die_scrap_var.get():
+            self.on_frame_and_cut(tooling_job=self._die_scrap_machine_job)
+            return
+
+        def prepare():
+            job = self._validate_die_job()
+            if job is None:
+                return None
+            pads, width_mm, height_mm, settings = job
+            placed, _unused_a, _unused_b = _nest_discs(pads, 'die_ring', width_mm, height_mm, settings)
+            text = self._gcode_text_from(
+                lambda path: generate_die_gcode_from_placed(
+                    placed, width_mm, height_mm, path, settings))
+            return {'gcode_text': text, 'material': 'acrylic',
+                    'label': 'die inserts', 'count': len(placed)}
+        self.on_frame_and_cut(tooling_job=prepare)
+
+    def _die_scrap_machine_job(self):
+        """The Frame & Cut job for one sheet of a Die Scrap Mode session.
+
+        Preparing it counts nothing. The sheet is counted, and the dies on
+        it come off Remaining, only when its cut has streamed to the end:
+        a run cancelled at the jog step or during framing, or a cut that
+        was stopped or errored, leaves the session exactly as it was, so
+        the same dies are offered again (the Pad Maker's rule, see
+        main._frame_cut_scrap_advance).
+        """
+        begun = self._die_scrap_begin(None)
+        if begun is None:
+            return None
+        placed, remaining, width_mm, height_mm, settings = begun
+        text = self._gcode_text_from(
+            lambda path: generate_die_gcode_from_placed(
+                placed, width_mm, height_mm, path, settings))
+
+        def after_cut(reason):
+            if reason != "complete":
+                return
+            session = self.tooling_scrap_session
+            session['scrap_count'] += 1
+            scrap_num = session['scrap_count']
+            session['remaining_pads'] = remaining
+            self._update_die_scrap_status()
+            self._update_die_scrap_window()
+
+            placed_count = len(placed)
+            remaining_count = self._count_die_remaining()
+            if remaining_count == 0:
+                from config import save_settings
+                save_settings(self.settings)
+                messagebox.showinfo(_("Session Complete!"),
+                    _("Cut {placed_count} dies on sheet #{scrap_num}.\n\n"
+                      "All dies cut! Session complete.").format(
+                          placed_count=placed_count, scrap_num=scrap_num))
+            else:
+                messagebox.showinfo(_("Sheet Cut"),
+                    _("Cut {placed_count} dies on sheet #{scrap_num}.\n\n"
+                      "{remaining_count} dies remaining.\n"
+                      "Load the next sheet, adjust the sheet size if needed "
+                      "and click Frame & Cut again.").format(
+                          placed_count=placed_count, scrap_num=scrap_num,
+                          remaining_count=remaining_count))
+
+        return {'gcode_text': text, 'material': 'acrylic',
+                'label': 'die inserts', 'count': len(placed),
+                'scrap_num': self.tooling_scrap_session['scrap_count'] + 1,
+                'after_cut': after_cut}
 
     # ========================================
     # DIE SCRAP MODE
@@ -1180,47 +1413,79 @@ class ToolingTabMixin:
         }
         self._open_die_scrap_window()
 
+    def _die_scrap_begin(self, folder_title):
+        """Die Scrap Mode's front half, shared by Generate SVG, Generate
+        G-code and Frame & Cut so the session can't drift between them:
+        start the session or carry on with it, then nest what fits on
+        this sheet.
+
+        folder_title: the title of the folder prompt for the two file
+        exports, asked when a session starts. None for Frame & Cut, which
+        writes nothing and starts the session with no folder; a file
+        export joining such a session asks for its folder then, once.
+
+        Returns (placed, remaining, width_mm, height_mm, settings), or
+        None when there is nothing to do (every way out has shown its own
+        message). Nothing is counted here: the caller counts the sheet
+        once its file is written or its cut has finished.
+        """
+        width_mm, height_mm = self._get_die_sheet_mm()
+        if width_mm is None:
+            return None
+
+        settings = self._get_die_settings()
+
+        if not self.tooling_scrap_session['active']:
+            # Starting new session
+            sizes = self._parse_die_sizes()
+            if not sizes:
+                messagebox.showerror(_("Error"), _("No valid die sizes entered."))
+                return None
+            pads = self._sizes_to_pads(sizes)
+
+            save_dir = ''
+            if folder_title:
+                save_dir = filedialog.askdirectory(
+                    title=folder_title,
+                    initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
+                    return None
+                self.settings["last_output_dir"] = save_dir
+            self._start_die_scrap_session(pads, save_dir)
+        else:
+            if folder_title and not self.tooling_scrap_session.get('save_dir'):
+                save_dir = filedialog.askdirectory(
+                    title=folder_title,
+                    initialdir=self.settings.get("last_output_dir", ""))
+                if not save_dir:
+                    return None
+                self.settings["last_output_dir"] = save_dir
+                self.tooling_scrap_session['save_dir'] = save_dir
+            pads = self.tooling_scrap_session['remaining_pads']
+
+        if not pads:
+            messagebox.showinfo(_("Session Complete"), _("All dies have been placed!"))
+            return None
+
+        placed, remaining, any_placed = try_nest_partial(
+            pads, 'die_ring', width_mm, height_mm, settings)
+
+        if not any_placed:
+            min_size = min(p['size'] for p in pads)
+            messagebox.showwarning(_("No Dies Fit"),
+                _("No dies could be placed on this sheet.\n\n"
+                  "Smallest remaining die: {min_size}mm\n"
+                  "Try a larger sheet.").format(min_size=min_size))
+            return None
+        return placed, remaining, width_mm, height_mm, settings
+
     def _generate_die_svg_scrap(self):
         """Handle SVG generation in die scrap mode."""
         try:
-            width_mm, height_mm = self._get_die_sheet_mm()
-            if width_mm is None:
+            begun = self._die_scrap_begin(_("Select Folder to Save SVGs"))
+            if begun is None:
                 return
-
-            settings = self._get_die_settings()
-
-            if not self.tooling_scrap_session['active']:
-                # Starting new session
-                sizes = self._parse_die_sizes()
-                if not sizes:
-                    messagebox.showerror(_("Error"), _("No valid die sizes entered."))
-                    return
-                pads = self._sizes_to_pads(sizes)
-
-                save_dir = filedialog.askdirectory(
-                    title=_("Select Folder to Save SVGs"),
-                    initialdir=self.settings.get("last_output_dir", ""))
-                if not save_dir:
-                    return
-                self.settings["last_output_dir"] = save_dir
-                self._start_die_scrap_session(pads, save_dir)
-            else:
-                pads = self.tooling_scrap_session['remaining_pads']
-
-            if not pads:
-                messagebox.showinfo(_("Session Complete"), _("All dies have been placed!"))
-                return
-
-            placed, remaining, any_placed = try_nest_partial(
-                pads, 'die_ring', width_mm, height_mm, settings)
-
-            if not any_placed:
-                min_size = min(p['size'] for p in pads)
-                messagebox.showwarning(_("No Dies Fit"),
-                    _("No dies could be placed on this sheet.\n\n"
-                      "Smallest remaining die: {min_size}mm\n"
-                      "Try a larger sheet.").format(min_size=min_size))
-                return
+            placed, remaining, width_mm, height_mm, settings = begun
 
             self.tooling_scrap_session['scrap_count'] += 1
             scrap_num = self.tooling_scrap_session['scrap_count']
@@ -1256,43 +1521,10 @@ class ToolingTabMixin:
     def _generate_die_gcode_scrap(self):
         """Handle G-code generation in die scrap mode."""
         try:
-            width_mm, height_mm = self._get_die_sheet_mm()
-            if width_mm is None:
+            begun = self._die_scrap_begin(_("Select Folder to Save G-code"))
+            if begun is None:
                 return
-
-            settings = self._get_die_settings()
-
-            if not self.tooling_scrap_session['active']:
-                sizes = self._parse_die_sizes()
-                if not sizes:
-                    messagebox.showerror(_("Error"), _("No valid die sizes entered."))
-                    return
-                pads = self._sizes_to_pads(sizes)
-
-                save_dir = filedialog.askdirectory(
-                    title=_("Select Folder to Save G-code"),
-                    initialdir=self.settings.get("last_output_dir", ""))
-                if not save_dir:
-                    return
-                self.settings["last_output_dir"] = save_dir
-                self._start_die_scrap_session(pads, save_dir)
-            else:
-                pads = self.tooling_scrap_session['remaining_pads']
-
-            if not pads:
-                messagebox.showinfo(_("Session Complete"), _("All dies have been placed!"))
-                return
-
-            placed, remaining, any_placed = try_nest_partial(
-                pads, 'die_ring', width_mm, height_mm, settings)
-
-            if not any_placed:
-                min_size = min(p['size'] for p in pads)
-                messagebox.showwarning(_("No Dies Fit"),
-                    _("No dies could be placed on this sheet.\n\n"
-                      "Smallest remaining die: {min_size}mm\n"
-                      "Try a larger sheet.").format(min_size=min_size))
-                return
+            placed, remaining, width_mm, height_mm, settings = begun
 
             self.tooling_scrap_session['scrap_count'] += 1
             scrap_num = self.tooling_scrap_session['scrap_count']
@@ -1315,12 +1547,14 @@ class ToolingTabMixin:
                 messagebox.showinfo(_("Session Complete!"),
                     _("Generated G-code for {placed_count} dies on sheet #{scrap_num}.\n\n"
                       "All dies placed! Session complete.\n"
-                      "Files saved to: {save_dir}").format(placed_count=placed_count, scrap_num=scrap_num, save_dir=save_dir))
+                      "Files saved to: {save_dir}").format(placed_count=placed_count, scrap_num=scrap_num, save_dir=save_dir)
+                    + "\n\n" + gcode_file_note())
             else:
                 messagebox.showinfo(_("Sheet Generated"),
                     _("Generated G-code for {placed_count} dies on sheet #{scrap_num}.\n\n"
                       "{remaining_count} dies remaining.\n"
-                      "Adjust sheet size if needed and generate again.").format(placed_count=placed_count, scrap_num=scrap_num, remaining_count=remaining_count))
+                      "Adjust sheet size if needed and generate again.").format(placed_count=placed_count, scrap_num=scrap_num, remaining_count=remaining_count)
+                    + "\n\n" + gcode_file_note())
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
@@ -1454,9 +1688,74 @@ class ToolingTabMixin:
         else:
             self.kerf_custom_frame.pack(fill='x', pady=(0, 5))
 
+    @staticmethod
+    def _tooling_material_key(display):
+        """Settings key ('felt', 'acrylic', ...) for a material as a Tooling
+        dropdown shows it.
+
+        The dropdowns list translated names, and the key used to be the
+        shown name lower-cased, which is only right in English: with the
+        app in German, "Filz" looked up gcode_settings['filz'], found
+        nothing, and the kerf test ran at the fallback 180 mm/min and 100 %
+        instead of the user's felt settings (found 2026-11-09 while adding
+        Frame & Cut here, where that goes straight to the laser). Matches
+        the translated name first, then the English one; anything else
+        falls back to the old lower-casing.
+        """
+        shown = (display or "").strip()
+        for english in _TOOLING_MATERIALS:
+            if shown == _(english) or shown.lower() == english.lower():
+                return english.lower()
+        return shown.lower()
+
+    @staticmethod
+    def _tooling_material_label(key, choices=None):
+        """The name a Tooling dropdown shows for a material key, in the
+        app's language. With `choices`, a key that is missing or not one of
+        them gives the first choice's name (the default for that dropdown)."""
+        if choices is not None and key not in choices:
+            key = choices[0]
+        for english in _TOOLING_MATERIALS:
+            if english.lower() == key:
+                return _(english)
+        return str(key).replace('_', ' ').title()
+
+    @staticmethod
+    def _material_settings_place(material_key):
+        """Where a material's speeds and powers are edited, as the user
+        would follow it: the Tooling dialog for acrylic, basswood and cork,
+        the Pad Maker's for felt, card and leather."""
+        if material_key in TOOLING_GCODE_MATERIALS:
+            return _("Tooling > Options > Settings")
+        return _("Pad Maker > Options > G-code Settings")
+
+    def _engraving_not_set_notice(self, material_key, what):
+        """The one line said when engraving was left out because the
+        material has no engraving speed and power (0 means not set: cork
+        ships that way). Nothing is ever skipped silently: this goes in
+        the Done box for a file and is asked before a Frame & Cut run.
+        `what` is 'numbers' (crescent list), 'labels' (kerf test) or 'ids'
+        (Speed & Power, whose values come from its own Engraving fields).
+        """
+        if what == 'ids':
+            return _("The engraving speed and power are 0, so the disc IDs will not be "
+                     "engraved. Fill in the Engraving fields to label the discs.")
+        material = self._tooling_material_label(material_key)
+        where = self._material_settings_place(material_key)
+        if what == 'numbers':
+            return _("{material} has no engraving speed and power set ({where}), so the "
+                     "crescents will not be numbered.").format(material=material, where=where)
+        return _("{material} has no engraving speed and power set ({where}), so the pattern's "
+                 "title and sizes will not be engraved.").format(material=material, where=where)
+
+    def _confirm_engraving_skipped(self, notice):
+        """Before a Frame & Cut run that leaves engraving out: say so, and
+        let the user back out. True to go on."""
+        return bool(messagebox.askokcancel(_("Engraving Not Set"), notice))
+
     def _get_kerf_material_key(self):
         """Map display name to settings key."""
-        return self.kerf_material_var.get().lower()
+        return self._tooling_material_key(self.kerf_material_var.get())
 
     def _show_kerf_instructions(self, material_name):
         """Show kerf test measurement instructions with a don't-show-again option."""
@@ -1465,10 +1764,12 @@ class ToolingTabMixin:
 
         from config import save_settings
 
-        mat_key = material_name.lower()
+        mat_key = self._tooling_material_key(material_name)
         # Map to settings location
         if mat_key == "acrylic":
             settings_path = _("Tooling > Options > Settings > Acrylic > Kerf Width")
+        elif mat_key in TOOLING_GCODE_MATERIALS:
+            settings_path = _("Tooling > Options > Settings > {material_name} > Kerf Width").format(material_name=material_name)
         else:
             settings_path = _("Pad Generator > Options > G-code Settings > {material_name} > Kerf Width").format(material_name=material_name)
 
@@ -1529,56 +1830,110 @@ class ToolingTabMixin:
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
 
+    def _kerf_gcode_job(self):
+        """The Kerf Test form's G-code inputs, checked: a dict of what
+        generate_kerf_test_gcode takes, or None once the error has been
+        shown. Generate G-code and Frame & Cut both start here."""
+        material_name = self.kerf_material_var.get()
+        mat_key = self._get_kerf_material_key()
+
+        # Get cut speed/power
+        if self.kerf_use_existing_var.get():
+            gcode_settings = self.settings.get("gcode_settings", {})
+            mat_settings = gcode_settings.get(mat_key, {})
+            cut_speed = mat_settings.get("cut_speed", 180)
+            cut_power = mat_settings.get("cut_power", 100)
+            eng_mode = mat_settings.get("engraving_mode", "line")
+            if eng_mode == "filled":
+                eng_speed = mat_settings.get("filled_engraving_speed", 1000)
+                eng_power = mat_settings.get("filled_engraving_power", 15)
+            else:
+                eng_speed = mat_settings.get("engraving_speed", 1000)
+                eng_power = mat_settings.get("engraving_power", 15)
+            filled_spacing = mat_settings.get("filled_line_spacing", 0.15)
+        else:
+            try:
+                cut_speed = float(self.kerf_speed_var.get())
+                cut_power = float(self.kerf_power_var.get())
+            except (ValueError, TypeError):
+                messagebox.showerror(_("Invalid Input"), _("Speed and power must be valid numbers."))
+                return None
+            eng_mode = "line"
+            eng_speed = 1000
+            eng_power = 15
+            filled_spacing = 0.15
+        return {
+            'material_name': material_name, 'mat_key': mat_key,
+            'cut_speed': cut_speed, 'cut_power': cut_power,
+            'eng_speed': eng_speed, 'eng_power': eng_power,
+            'eng_mode': eng_mode, 'filled_spacing': filled_spacing,
+            # The material has no engraving settings (cork): the circles
+            # are cut, the title and sizes are left off, and the user is told.
+            'labels_skipped': not engraving_is_set(eng_speed, eng_power),
+        }
+
+    def _write_kerf_gcode(self, job, path):
+        """Write the kerf test G-code for a _kerf_gcode_job() to `path`."""
+        generate_kerf_test_gcode(job['material_name'], path, self.settings,
+                                 job['cut_speed'], job['cut_power'],
+                                 job['eng_speed'], job['eng_power'],
+                                 engraving_mode=job['eng_mode'],
+                                 filled_line_spacing=job['filled_spacing'])
+
     def _on_generate_kerf_gcode(self):
         """Generate G-code kerf test pattern."""
         try:
-            material_name = self.kerf_material_var.get()
-            mat_key = self._get_kerf_material_key()
-
-            # Get cut speed/power
-            if self.kerf_use_existing_var.get():
-                gcode_settings = self.settings.get("gcode_settings", {})
-                mat_settings = gcode_settings.get(mat_key, {})
-                cut_speed = mat_settings.get("cut_speed", 180)
-                cut_power = mat_settings.get("cut_power", 100)
-                eng_mode = mat_settings.get("engraving_mode", "line")
-                if eng_mode == "filled":
-                    eng_speed = mat_settings.get("filled_engraving_speed", 1000)
-                    eng_power = mat_settings.get("filled_engraving_power", 15)
-                else:
-                    eng_speed = mat_settings.get("engraving_speed", 1000)
-                    eng_power = mat_settings.get("engraving_power", 15)
-                filled_spacing = mat_settings.get("filled_line_spacing", 0.15)
-            else:
-                try:
-                    cut_speed = float(self.kerf_speed_var.get())
-                    cut_power = float(self.kerf_power_var.get())
-                except (ValueError, TypeError):
-                    messagebox.showerror(_("Invalid Input"), _("Speed and power must be valid numbers."))
-                    return
-                eng_mode = "line"
-                eng_speed = 1000
-                eng_power = 15
-                filled_spacing = 0.15
+            job = self._kerf_gcode_job()
+            if job is None:
+                return
+            material_name = job['material_name']
 
             save_path = filedialog.asksaveasfilename(
                 title=_("Save Kerf Test G-code"),
                 defaultextension=".gcode",
                 filetypes=[(_("G-code files"), "*.gcode")],
-                initialfile=f"kerf_test_{mat_key}.gcode",
+                # Named from what the dropdown shows, as the SVG is, so the
+                # file name a translated app suggests stays what it was.
+                initialfile=f"kerf_test_{material_name.lower()}.gcode",
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
-            generate_kerf_test_gcode(material_name, save_path, self.settings,
-                                     cut_speed, cut_power, eng_speed, eng_power,
-                                     engraving_mode=eng_mode,
-                                     filled_line_spacing=filled_spacing)
+            self._write_kerf_gcode(job, save_path)
+            # A Done box of its own (2026-11-09): the measuring steps below
+            # stop showing once "Don't show this again" is ticked, and then
+            # this export said nothing at all, not even that it had worked.
+            parts = [_("Saved to: {d}").format(d=save_path)]
+            if job['labels_skipped']:
+                parts.append(self._engraving_not_set_notice(job['mat_key'], 'labels'))
+            parts.append(gcode_file_note())
+            messagebox.showinfo(_("Done"), "\n\n".join(parts))
             self._show_kerf_instructions(material_name)
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    def _on_frame_cut_kerf(self):
+        """Frame & Cut for the kerf test: the Generate G-code job, sent to
+        the laser. Frames at the selected material's framing power."""
+        def prepare():
+            job = self._kerf_gcode_job()
+            if job is None:
+                return None
+            if job['labels_skipped'] and not self._confirm_engraving_skipped(
+                    self._engraving_not_set_notice(job['mat_key'], 'labels')):
+                return None
+            text = self._gcode_text_from(lambda path: self._write_kerf_gcode(job, path))
+
+            def after_cut(reason):
+                # The measuring steps belong after a pattern that was cut.
+                if reason == "complete":
+                    self._show_kerf_instructions(job['material_name'])
+            return {'gcode_text': text, 'material': job['mat_key'],
+                    'label': 'kerf test', 'count': len(KERF_TEST_DIAMETERS),
+                    'after_cut': after_cut}
+        self.on_frame_and_cut(tooling_job=prepare)
 
     # ========================================
     # FEEDS & SPEEDS TESTER
@@ -1586,7 +1941,7 @@ class ToolingTabMixin:
 
     def _get_feeds_speeds_material_key(self):
         """Map display name to settings key (mirrors kerf-test pattern)."""
-        return self.fs_material_var.get().lower()
+        return self._tooling_material_key(self.fs_material_var.get())
 
     def _get_feeds_speeds_sheet_mm(self):
         """Parse the feeds-speeds sheet W/H into mm. Returns (w, h) or (None, None)."""
@@ -1630,7 +1985,13 @@ class ToolingTabMixin:
             eng_speed = mat_settings.get("engraving_speed", 1200)
             eng_power = mat_settings.get("engraving_power", 10)
         self.fs_eng_speed_var.set(str(int(round(eng_speed))))
-        self.fs_eng_power_var.set(str(max(1, min(100, int(round(eng_power))))))
+        # A material with no engraving power (cork ships at 0, "not set")
+        # pre-fills as 0, not as a made-up 1 %: the test then runs without
+        # disc IDs and says so, or the user types a value of their own.
+        if eng_power <= 0:
+            self.fs_eng_power_var.set("0")
+        else:
+            self.fs_eng_power_var.set(str(max(1, min(100, int(round(eng_power))))))
 
     def _feeds_speeds_sweep_count(self, var_name):
         """How many discs this variable contributes: 1 if not swept, else stops (clamped 2-10)."""
@@ -1788,7 +2149,10 @@ class ToolingTabMixin:
             messagebox.showerror(_("Invalid Input"),
                                   _("Engraving speed and power must be valid numbers."))
             return None
-        if eng_speed <= 0 or eng_power <= 0 or eng_power > 100:
+        # 0 is allowed and means "not set" (cork pre-fills that way): the
+        # IDs are then left off and the user is told. Refusing here would
+        # only push them to type a guess. Negative, or over 100 %, is a typo.
+        if eng_speed < 0 or eng_power < 0 or eng_power > 100:
             messagebox.showerror(_("Invalid Input"),
                                   _("Engraving speed must be > 0 and power must be 1-100%."))
             return None
@@ -1836,7 +2200,7 @@ class ToolingTabMixin:
         # Warn (don't block) when a hole leaves the ring too thin to hold a
         # legible ID — the label would shrink to the floor and may run into
         # the cut. The legend + grid position still identify the disc.
-        if (engraving_on and inner_diameter > 0
+        if (engraving_on and inner_diameter > 0 and engraving_is_set(eng_speed, eng_power)
                 and not feeds_speeds_ring_fits_label(diameter, inner_diameter)):
             if not messagebox.askyesno(
                     _("Thin Ring"),
@@ -1866,10 +2230,17 @@ class ToolingTabMixin:
 
     def _write_feeds_speeds_legend(self, save_path, test_pieces, diameter,
                                     material_display, air_assist,
-                                    eng_speed, eng_power):
-        """Write the legend.txt mapping IDs to (speed, power, passes, air)."""
-        base, _ext = os.path.splitext(save_path)
-        legend_path = base + "_legend.txt"
+                                    eng_speed, eng_power, legend_path=None):
+        """Write the legend.txt mapping IDs to (speed, power, passes, air).
+
+        The file export derives the legend's name from the G-code's
+        (<name>_legend.txt beside it). Frame & Cut has no G-code file, so
+        it passes legend_path, the place the user chose, and the legend is
+        written exactly there.
+        """
+        if legend_path is None:
+            base, _ext = os.path.splitext(save_path)
+            legend_path = base + "_legend.txt"
 
         # Show "Air assist" as a per-piece value if the pieces vary; otherwise
         # collapse to the single global state.
@@ -1908,6 +2279,77 @@ class ToolingTabMixin:
             f.write('\n'.join(lines) + '\n')
         return legend_path
 
+    def _write_feeds_speeds_gcode(self, prepared, path):
+        """Write the Speed & Power test G-code for what
+        _prepare_feeds_speeds_pieces() returned to `path`. The one call
+        both the file export and Frame & Cut make, so what is streamed is
+        what would have been saved."""
+        test_pieces, sheet_w, sheet_h, eng_speed, eng_power = prepared
+        generate_feeds_speeds_test_gcode(
+            test_pieces, sheet_w, sheet_h, path, self.settings,
+            air_assist=bool(self.fs_air_assist_var.get()),
+            eng_speed_override=eng_speed,
+            eng_power_override=eng_power)
+
+    def _feeds_speeds_ids_skipped(self, prepared):
+        """True when the disc IDs were asked for but cannot be engraved:
+        the Engraving speed or power is 0 (not set)."""
+        _pieces, _w, _h, eng_speed, eng_power = prepared
+        return bool(self.fs_engraving_var.get()) and not engraving_is_set(eng_speed, eng_power)
+
+    def _on_frame_cut_feeds_speeds(self):
+        """Frame & Cut for the Speed & Power test: the Generate G-code job,
+        sent to the laser. Frames at the selected material's framing power.
+
+        The legend is the only record of which disc was cut at which
+        settings, so it is asked for and written before anything moves;
+        backing out of that prompt backs out of the run."""
+        def prepare():
+            prepared = self._prepare_feeds_speeds_pieces()
+            if prepared is None:
+                return None
+            test_pieces, sheet_w, sheet_h, eng_speed, eng_power = prepared
+
+            if self.fs_show_preview_var.get():
+                preview = SpeedPowerTestPreview(
+                    self.root, test_pieces, sheet_w, sheet_h,
+                    eng_speed=eng_speed, eng_power=eng_power,
+                    material_display=self.fs_material_var.get(),
+                    proceed_label=_("Continue →"))
+                if preview.result != "save":
+                    return None
+
+            if self._feeds_speeds_ids_skipped(prepared) and not self._confirm_engraving_skipped(
+                    self._engraving_not_set_notice(None, 'ids')):
+                return None
+
+            base = self.fs_filename_var.get().strip() or "speed_power_test"
+            mat_name = self.fs_material_var.get().lower()
+            legend_path = filedialog.asksaveasfilename(
+                title=_("Save Speed & Power Test Legend"),
+                defaultextension=".txt",
+                filetypes=[(_("Text files"), "*.txt")],
+                initialfile=f"{base}_{mat_name}_legend.txt",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not legend_path:
+                return None
+
+            self.settings["last_output_dir"] = os.path.dirname(legend_path)
+            self._persist_feeds_speeds_settings()
+            text = self._gcode_text_from(
+                lambda path: self._write_feeds_speeds_gcode(prepared, path))
+            self._write_feeds_speeds_legend(
+                legend_path, test_pieces,
+                diameter=test_pieces[0]['diameter'],
+                material_display=self.fs_material_var.get(),
+                air_assist=bool(self.fs_air_assist_var.get()),
+                eng_speed=eng_speed, eng_power=eng_power,
+                legend_path=legend_path)
+            return {'gcode_text': text,
+                    'material': self._get_feeds_speeds_material_key(),
+                    'label': 'speed & power test', 'count': len(test_pieces)}
+        self.on_frame_and_cut(tooling_job=prepare)
+
     def _on_generate_feeds_speeds_gcode(self):
         """Generate the Speed & Power test G-code and the matching legend.txt."""
         try:
@@ -1928,33 +2370,33 @@ class ToolingTabMixin:
                     return
 
             base = self.fs_filename_var.get().strip() or "speed_power_test"
-            mat_key = self._get_feeds_speeds_material_key()
+            # Named from what the dropdown shows, so the file name a
+            # translated app suggests stays what it was.
+            mat_name = self.fs_material_var.get().lower()
             save_path = filedialog.asksaveasfilename(
                 title=_("Save Speed & Power Test G-code"),
                 defaultextension=".gcode",
                 filetypes=[(_("G-code files"), "*.gcode")],
-                initialfile=f"{base}_{mat_key}.gcode",
+                initialfile=f"{base}_{mat_name}.gcode",
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             self._persist_feeds_speeds_settings()
-            generate_feeds_speeds_test_gcode(
-                test_pieces, sheet_w, sheet_h, save_path, self.settings,
-                air_assist=bool(self.fs_air_assist_var.get()),
-                eng_speed_override=eng_speed,
-                eng_power_override=eng_power)
+            self._write_feeds_speeds_gcode(prepared, save_path)
             legend_path = self._write_feeds_speeds_legend(
                 save_path, test_pieces,
                 diameter=test_pieces[0]['diameter'],
                 material_display=self.fs_material_var.get(),
                 air_assist=bool(self.fs_air_assist_var.get()),
                 eng_speed=eng_speed, eng_power=eng_power)
-            messagebox.showinfo(
-                _("G-code Generated"),
-                _("Wrote {n} test discs to:\n{p}\n\nLegend saved to:\n{l}").format(
-                    n=len(test_pieces), p=save_path, l=legend_path))
+            parts = [_("Wrote {n} test discs to:\n{p}\n\nLegend saved to:\n{l}").format(
+                n=len(test_pieces), p=save_path, l=legend_path)]
+            if self._feeds_speeds_ids_skipped(prepared):
+                parts.append(self._engraving_not_set_notice(None, 'ids'))
+            parts.append(gcode_file_note())
+            messagebox.showinfo(_("G-code Generated"), "\n\n".join(parts))
 
         except Exception as e:
             messagebox.showerror(_("Error"),
@@ -2008,21 +2450,53 @@ class ToolingTabMixin:
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
 
+    def _validate_holder_job(self):
+        """The Die Holders form, checked: (variant, layer_count, sheet_w,
+        sheet_h) in mm, or None once the error has been shown. Generate
+        G-code and Frame & Cut both start here."""
+        variant = self.holder_variant_var.get()
+        layer_count = int(self.holder_layer_count_var.get())
+
+        sheet_w, sheet_h = self._get_holder_sheet_mm()
+        if sheet_w is None:
+            return None
+        try:
+            check_holder_sheet(variant, layer_count, sheet_w, sheet_h)
+        except ValueError as ve:
+            messagebox.showerror(_("Sheet too small"), str(ve))
+            return None
+        return variant, layer_count, sheet_w, sheet_h
+
+    def _on_frame_cut_holder(self):
+        """Frame & Cut for die holders: the Generate G-code job, sent to
+        the laser. Acrylic, like the file it would have written."""
+        def prepare():
+            job = self._validate_holder_job()
+            if job is None:
+                return None
+            variant, layer_count, sheet_w, sheet_h = job
+            settings = self._get_die_settings()
+            try:
+                text = self._gcode_text_from(
+                    lambda path: generate_holder_gcode(
+                        variant, path, settings, layer_count=layer_count,
+                        sheet_width_mm=sheet_w, sheet_height_mm=sheet_h))
+            except ValueError as ve:
+                messagebox.showerror(_("Sheet too small"), str(ve))
+                return None
+            return {'gcode_text': text, 'material': 'acrylic',
+                    'label': 'die holder',
+                    'count': len(_holder_pieces_for(variant, layer_count))}
+        self.on_frame_and_cut(tooling_job=prepare)
+
     def _on_generate_holder_gcode(self):
         """Generate G-code for die holder pieces."""
         try:
-            variant = self.holder_variant_var.get()
-            layer_count = int(self.holder_layer_count_var.get())
+            job = self._validate_holder_job()
+            if job is None:
+                return
+            variant, layer_count, sheet_w, sheet_h = job
             base = self.holder_filename_var.get().strip() or "die_holder"
-
-            sheet_w, sheet_h = self._get_holder_sheet_mm()
-            if sheet_w is None:
-                return
-            try:
-                check_holder_sheet(variant, layer_count, sheet_w, sheet_h)
-            except ValueError as ve:
-                messagebox.showerror(_("Sheet too small"), str(ve))
-                return
 
             save_path = filedialog.asksaveasfilename(
                 title=_("Save Die Holder G-code"),
@@ -2047,7 +2521,8 @@ class ToolingTabMixin:
                              "small": _("Small (7\u201339.5mm)"),
                              "both": _("Both (Small + Large)")}[variant]
             messagebox.showinfo(_("Done"),
-                _("Generated {layer_count}-layer {variant_label} die holder G-code.\n\nSaved to: {path}").format(layer_count=layer_count, variant_label=variant_label, path=save_path))
+                _("Generated {layer_count}-layer {variant_label} die holder G-code.\n\nSaved to: {path}").format(layer_count=layer_count, variant_label=variant_label, path=save_path)
+                + "\n\n" + gcode_file_note())
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
@@ -2076,6 +2551,111 @@ class ToolingTabMixin:
 
         except Exception as e:
             messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    def _organizer_material_key(self):
+        """Settings key of the material picked for the organizer's G-code."""
+        key = self._tooling_material_key(self.organizer_material_var.get())
+        return key if key in _ORGANIZER_MATERIALS else _ORGANIZER_MATERIALS[0]
+
+    def _organizer_gcode_job(self):
+        """The Die Organizer form's G-code inputs, checked: (variant,
+        material, sheet_w, sheet_h) in mm, or None once the error has been
+        shown. Generate G-code and Frame & Cut both start here."""
+        variant = self.organizer_variant_var.get()
+        material = self._organizer_material_key()
+        try:
+            sheet_w = float(self.organizer_width_var.get())
+            sheet_h = float(self.organizer_height_var.get())
+        except (ValueError, TypeError):
+            messagebox.showerror(_("Invalid Input"), _("Sheet width and height must be valid numbers."))
+            return None
+        if sheet_w <= 0 or sheet_h <= 0:
+            messagebox.showerror(_("Invalid Input"), _("Sheet dimensions must be positive."))
+            return None
+        if self.organizer_units_var.get() == "in":
+            sheet_w *= 25.4
+            sheet_h *= 25.4
+        need_w, need_h = die_organizer_min_sheet(variant)
+        if sheet_w < need_w - 1e-6 or sheet_h < need_h - 1e-6:
+            messagebox.showerror(
+                _("Sheet too small"),
+                _("The organizer plate needs a sheet at least {w} × {h} mm ({w_in} × {h_in} in), "
+                  "upright as drawn.").format(
+                      w=f"{need_w:.0f}", h=f"{need_h:.0f}",
+                      w_in=f"{need_w / 25.4:.1f}", h_in=f"{need_h / 25.4:.1f}"))
+            return None
+        return variant, material, sheet_w, sheet_h
+
+    def _write_organizer_gcode(self, job, path):
+        """Write the organizer G-code for an _organizer_gcode_job() to
+        `path`. Returns the generator's info, or None once a refusal (no
+        cut settings, a slot narrower than the kerf, a drawing it cannot
+        read) has been shown."""
+        variant, material, sheet_w, sheet_h = job
+        try:
+            return generate_die_organizer_gcode(variant, material, path, self.settings,
+                                                sheet_width_mm=sheet_w, sheet_height_mm=sheet_h)
+        except OrganizerDrawingError as e:
+            messagebox.showerror(_("Error"), str(e))
+        except ValueError:
+            messagebox.showerror(_("Invalid Input"), self._no_cut_settings_message(material))
+        return None
+
+    def _no_cut_settings_message(self, material_key):
+        return _("{material} has no cut speed and power set ({where}).").format(
+            material=self._tooling_material_label(material_key),
+            where=self._material_settings_place(material_key))
+
+    def _on_generate_organizer_gcode(self):
+        """Generate G-code for the die organizer (upper or lower plate)."""
+        try:
+            job = self._organizer_gcode_job()
+            if job is None:
+                return
+            variant = job[0]
+            base = self.organizer_filename_var.get().strip() or "die_organizer"
+            save_path = filedialog.asksaveasfilename(
+                title=_("Save Die Organizer G-code"),
+                defaultextension=".gcode",
+                filetypes=[(_("G-code files"), "*.gcode")],
+                initialfile=f"{base}_{variant}.gcode",
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+            if self._write_organizer_gcode(job, save_path) is None:
+                try:
+                    os.remove(save_path)        # nothing usable was written
+                except OSError:
+                    pass
+                return
+            variant_label = {"upper": _("Upper (slotted)"), "lower": _("Lower (base)")}[variant]
+            messagebox.showinfo(_("Done"),
+                _("Generated {variant_label} die organizer.\n\nSaved to: {path}").format(variant_label=variant_label, path=save_path)
+                + "\n\n" + gcode_file_note())
+
+        except Exception as e:
+            messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    def _on_frame_cut_organizer(self):
+        """Frame & Cut for the die organizer: the Generate G-code job, sent
+        to the laser. Frames at the chosen material's framing power."""
+        def prepare():
+            job = self._organizer_gcode_job()
+            if job is None:
+                return None
+            got = {}
+
+            def write(path):
+                got['info'] = self._write_organizer_gcode(job, path)
+            text = self._gcode_text_from(write)
+            if got['info'] is None:
+                return None
+            return {'gcode_text': text, 'material': job[1],
+                    'label': f'die organizer {job[0]}',
+                    'count': sum(got['info']['counts'].values())}
+        self.on_frame_and_cut(tooling_job=prepare)
 
     def _save_pad_spacer_stl(self, stl_filename):
         """Copy a bundled pad-press-spacer STL to a user-chosen location."""
@@ -2219,16 +2799,115 @@ class ToolingTabMixin:
     def _on_generate_crescent_stl(self):
         self._generate_crescent("stl")
 
+    def _crescent_entries(self):
+        """What Generate makes: the list, or with an empty list the one
+        crescent in the fields. Raises ValueError for a bad field."""
+        if self.crescent_list:
+            return [dict(e) for e in self.crescent_list]
+        d, pct, curve = self._read_crescent_inputs()
+        return [{'tonehole_d': d, 'percent': pct, 'curve': curve,
+                 'qty': self._read_crescent_qty()}]
+
+    def _crescent_material_key(self):
+        """Settings key of the material picked for the crescents' G-code."""
+        key = self._tooling_material_key(self.crescent_material_var.get())
+        return key if key in _CRESCENT_MATERIALS else _CRESCENT_MATERIALS[0]
+
+    def _crescent_initial_name(self, entries, ext):
+        if len(entries) == 1:
+            return f"crescent_{entries[0]['tonehole_d']:g}mm_{entries[0]['percent']:g}pct{ext}"
+        return f"tonehole_crescents{ext}"
+
+    def _write_crescent_gcode(self, entries, material, path):
+        """Write the crescents' G-code to `path`. Returns the generator's
+        info, or None once a refusal has been shown: no cut settings for
+        the material, or a crescent whose horns are closer together than
+        the material's kerf (the beam would bridge the gap)."""
+        try:
+            return generate_tonehole_crescent_gcode(entries, material, path, self.settings)
+        except CrescentKerfError as e:
+            name = self._tooling_material_label(material)
+            if e.reason == 'gap':
+                message = _("The opening between this crescent's horns ({gap} mm) is narrower than "
+                            "the {material} kerf ({kerf} mm), so the laser cannot cut it. Use a "
+                            "smaller percentage or a flatter inner edge.").format(
+                                gap=f"{e.size_mm:.2f}", material=name, kerf=f"{e.kerf_mm:g}")
+            else:
+                message = _("The {material} kerf ({kerf} mm) is too large for this crescent. "
+                            "Check it in {where}.").format(
+                                material=name, kerf=f"{e.kerf_mm:g}",
+                                where=self._material_settings_place(material))
+            messagebox.showerror(_("Invalid Input"), message)
+        except ValueError:
+            messagebox.showerror(_("Invalid Input"), self._no_cut_settings_message(material))
+        return None
+
+    def _on_generate_crescent_gcode(self):
+        """Generate G-code for the list (or the crescent in the fields),
+        cut from the chosen material with its kerf compensated."""
+        try:
+            entries = self._crescent_entries()
+        except ValueError as e:
+            messagebox.showerror(_("Invalid Input"), str(e))
+            return
+        try:
+            material = self._crescent_material_key()
+            save_path = filedialog.asksaveasfilename(
+                title=_("Save Tonehole Crescent"),
+                defaultextension=".gcode",
+                filetypes=[(_("G-code files"), "*.gcode")],
+                initialfile=self._crescent_initial_name(entries, ".gcode"),
+                initialdir=self.settings.get("last_output_dir", ""))
+            if not save_path:
+                return
+
+            self.settings["last_output_dir"] = os.path.dirname(save_path)
+            info = self._write_crescent_gcode(entries, material, save_path)
+            if info is None:
+                try:
+                    os.remove(save_path)        # nothing usable was written
+                except OSError:
+                    pass
+                return
+            parts = [_("Saved to: {d}").format(d=save_path)]
+            if info['numbers_skipped']:
+                parts.append(self._engraving_not_set_notice(material, 'numbers'))
+            parts.append(gcode_file_note())
+            messagebox.showinfo(_("Done"), "\n\n".join(parts))
+
+        except Exception as e:
+            messagebox.showerror(_("Error"), _("Something went wrong:\n\n{e}").format(e=e))
+
+    def _on_frame_cut_crescent(self):
+        """Frame & Cut for tonehole crescents: the Generate G-code job,
+        sent to the laser. Frames at the chosen material's framing power."""
+        def prepare():
+            try:
+                entries = self._crescent_entries()
+            except ValueError as e:
+                messagebox.showerror(_("Invalid Input"), str(e))
+                return None
+            material = self._crescent_material_key()
+            got = {}
+
+            def write(path):
+                got['info'] = self._write_crescent_gcode(entries, material, path)
+            text = self._gcode_text_from(write)
+            info = got['info']
+            if info is None:
+                return None
+            if info['numbers_skipped'] and not self._confirm_engraving_skipped(
+                    self._engraving_not_set_notice(material, 'numbers')):
+                return None
+            return {'gcode_text': text, 'material': material,
+                    'label': 'tonehole crescent', 'count': len(info['parts'])}
+        self.on_frame_and_cut(tooling_job=prepare)
+
     def _generate_crescent(self, kind):
         """Save the list (or, with an empty list, the crescent in the fields)
         as SVG cut paths ("svg") or a printable STL ("stl")."""
         try:
-            if self.crescent_list:
-                entries = [dict(e) for e in self.crescent_list]
-            else:
-                d, pct, curve = self._read_crescent_inputs()
-                entries = [{'tonehole_d': d, 'percent': pct, 'curve': curve,
-                            'qty': self._read_crescent_qty()}]
+            entries = self._crescent_entries()
             thickness = None
             if kind == "stl":
                 try:
@@ -2244,10 +2923,7 @@ class ToolingTabMixin:
 
         try:
             ext = "." + kind
-            if len(entries) == 1:
-                initial = f"crescent_{entries[0]['tonehole_d']:g}mm_{entries[0]['percent']:g}pct{ext}"
-            else:
-                initial = f"tonehole_crescents{ext}"
+            initial = self._crescent_initial_name(entries, ext)
             save_path = filedialog.asksaveasfilename(
                 title=_("Save Tonehole Crescent"),
                 defaultextension=ext,

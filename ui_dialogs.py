@@ -224,6 +224,21 @@ class Tooltip:
         self._hide()
 
 
+def gcode_file_note():
+    """The line every "G-code written to a file" message box ends with.
+
+    A user imported die insert G-code into LightBurn, which drops the
+    speeds and powers the file carries, and was confused by what came out
+    (2026-11-09). Matt: "is there a dialog when the user generates gcode?
+    maybe we can put something in there (this is not for lightburn)", and
+    "short message for gcode is best". One string, defined here once, used
+    by the Pad Maker and every Tooling tool; never on an SVG or STL
+    message, and not on Frame & Cut, which writes no file. The why is in
+    the user guide. A function, so it follows the app's language.
+    """
+    return _("Send this file to the laser as it is. For LightBurn, use Generate SVG.")
+
+
 def add_tooltip(widget, text, **kwargs):
     """Attach a Tooltip to `widget`. Returns the Tooltip for further tweaking."""
     return Tooltip(widget, text, **kwargs)
@@ -4659,6 +4674,18 @@ class GcodeSettingsWindow:
         frame = tk.Frame(mat_frame, bg=DIALOG_BG)
         frame.pack(fill="x")
 
+        if mat_key == "cork":
+            # Packed after `frame`, so it sits under the rows built below.
+            # Only the cut may be called tested (see the cork defaults in
+            # config.py); the kerf and the engraving are the user's to find.
+            tk.Label(
+                mat_frame,
+                text=_("The default cut was tested on 3/32 in (2.4 mm) sheet cork on a "
+                       "40 W laser. Kerf is 0 and engraving is not set (0) until you "
+                       "measure them: Tooling > Kerf Test and Speed & Power Test."),
+                bg=DIALOG_BG, font=("Helvetica", 8), fg="#666666",
+                justify="left", wraplength=520).pack(anchor="w", pady=(4, 0))
+
         self._add_header_row(frame)
 
         if mat_key in GCODE_CUT_ONLY_MATERIALS:
@@ -5565,6 +5592,29 @@ class UserGuideWindow(tk.Toplevel):
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
 
+        # Search (2026-11-09): the Welcome window tells people to search
+        # the guide, so the guide can be searched. Typing highlights every
+        # match and jumps to the first; Enter or Next goes to the next and
+        # wraps round. It always searches the whole guide: opened on one
+        # tab's section, the first search switches to the full guide.
+        search_row = tk.Frame(self, bg=DIALOG_BG)
+        search_row.pack(fill="x", padx=10, pady=(10, 0))
+        tk.Label(search_row, text=_("Search:"), bg=DIALOG_BG).pack(side="left")
+        self._search_var = tk.StringVar()
+        self.search_entry = tk.Entry(search_row, textvariable=self._search_var, width=28)
+        self.search_entry.pack(side="left", padx=(5, 5))
+        self._search_next_btn = tk.Button(search_row, text=_("Next"), command=self.search_next)
+        self._search_next_btn.pack(side="left")
+        self._search_status_var = tk.StringVar(value="")
+        tk.Label(search_row, textvariable=self._search_status_var, bg=DIALOG_BG,
+                 fg="#555555").pack(side="left", padx=(8, 0))
+        self._search_hits = []          # (start, end) Text indexes, in reading order
+        self._search_at = -1
+        self._search_var.trace_add("write", lambda *a: self._search_update())
+        self.search_entry.bind("<Return>", lambda e: self.search_next())
+        self.search_entry.bind("<KP_Enter>", lambda e: self.search_next())
+        self.bind("<Command-f>" if IS_MACOS else "<Control-f>", lambda e: self.focus_search())
+
         # Scrollable text widget
         text_frame = tk.Frame(self, bg=DIALOG_BG)
         text_frame.pack(fill="both", expand=True, padx=10, pady=10)
@@ -5582,6 +5632,10 @@ class UserGuideWindow(tk.Toplevel):
         self.text.tag_configure("h2", font=("Helvetica", 13, "bold"), spacing1=12, spacing3=4)
         self.text.tag_configure("body", font=("Helvetica", 11), spacing1=2)
         self.text.tag_configure("bullet", font=("Helvetica", 11), lmargin1=20, lmargin2=35)
+        # Explicit colours, so a match shows the same in macOS dark mode.
+        self.text.tag_configure("search_hit", background="#FFE98A", foreground="#000000")
+        self.text.tag_configure("search_current", background="#FF9F1C", foreground="#000000")
+        self.text.tag_raise("search_current")
 
         self._insert_content()
         self.text.config(state="disabled")
@@ -5589,9 +5643,11 @@ class UserGuideWindow(tk.Toplevel):
         # Bottom buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=10)
+        self._show_all_btn = None
         if section:
-            tk.Button(btn_frame, text=_("Show Full Guide"),
-                      command=self._show_all).pack(side="left", padx=(0, 10))
+            self._show_all_btn = tk.Button(btn_frame, text=_("Show Full Guide"),
+                                           command=self._show_all)
+            self._show_all_btn.pack(side="left", padx=(0, 10))
         tk.Button(btn_frame, text=_("Close"), command=self.destroy).pack(side="left")
 
     def _show_all(self):
@@ -5602,6 +5658,69 @@ class UserGuideWindow(tk.Toplevel):
         self.text.delete("1.0", "end")
         self._insert_content()
         self.text.config(state="disabled")
+        if self._show_all_btn is not None:
+            self._show_all_btn.pack_forget()
+            self._show_all_btn = None
+        # The old matches pointed into the text that was just replaced.
+        if self._search_var.get().strip():
+            self._search_update()
+
+    # ---- search ----------------------------------------------------------
+
+    def focus_search(self):
+        """Put the cursor in the search box (Ctrl+F / Cmd+F, and the
+        Welcome window's "Search the User Guide" link)."""
+        self.search_entry.focus_set()
+        self.search_entry.select_range(0, "end")
+        return "break"
+
+    def _search_update(self):
+        """The search text changed: find every match afresh, highlight
+        them all and go to the first. Case-insensitive, plain text."""
+        query = self._search_var.get().strip()
+        if query and self._section is not None:
+            # Search the whole guide, not just the tab the guide opened on.
+            # _show_all calls back in here once the full text is in place.
+            self._show_all()
+            return
+        self.text.tag_remove("search_hit", "1.0", "end")
+        self.text.tag_remove("search_current", "1.0", "end")
+        self._search_hits, self._search_at = [], -1
+        if not query:
+            self._search_status_var.set("")
+            return
+        count = tk.IntVar()
+        pos = "1.0"
+        while True:
+            pos = self.text.search(query, pos, stopindex="end", nocase=True, count=count)
+            if not pos or count.get() == 0:
+                break
+            end = f"{pos}+{count.get()}c"
+            self._search_hits.append((pos, end))
+            self.text.tag_add("search_hit", pos, end)
+            pos = end
+        if not self._search_hits:
+            self._search_status_var.set(_("No matches"))
+            return
+        self._search_go(0)
+
+    def search_next(self):
+        """Go to the next match; after the last one, back to the first."""
+        if not self._search_hits:
+            if self._search_var.get().strip():
+                self._search_update()
+            return "break"
+        self._search_go((self._search_at + 1) % len(self._search_hits))
+        return "break"
+
+    def _search_go(self, index):
+        self.text.tag_remove("search_current", "1.0", "end")
+        self._search_at = index
+        start, end = self._search_hits[index]
+        self.text.tag_add("search_current", start, end)
+        self.text.see(start)
+        self._search_status_var.set(_("{n} of {total}").format(
+            n=index + 1, total=len(self._search_hits)))
 
     def _h1(self, text):
         self.text.insert("end", text + "\n", "h1")
@@ -5946,6 +6065,15 @@ class UserGuideWindow(tk.Toplevel):
                       "corner and the polygon's bbox origin so both framing and cutting "
                       "land where you expect."))
         self._bullet(_("Pause / Resume / Stop act in real time. Stop is a soft-reset."))
+        self._bullet(_("Frame & Cut itself needs no camera calibration: type the sheet size or "
+                      "draw the shape, jog to the corner, frame, cut."))
+        self._blank()
+
+        self._h2(_("G-code or SVG?"))
+        self._body(_("A G-code file carries its own speeds and powers, the ones set in this app. "
+                    "Send it to the laser as it is, on an SD card or with Frame & Cut. LightBurn "
+                    "ignores those values when it imports G-code, so for LightBurn use Generate "
+                    "SVG and set speed and power there."))
         self._blank()
 
         self._h2(_("SD Card & Eject"))
@@ -6031,7 +6159,9 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Align the four 1/8\" corner holes and glue the stack together \u2014 a book "
                       "press lightly clamps it nicely while the glue sets."))
         self._bullet(_("Resize the alignment holes to whatever pin you have."))
-        self._bullet(_("SVG only \u2014 open in LightBurn or your laser software to cut."))
+        self._bullet(_("Generate G-code cuts it with this app: pick the material and the sheet "
+                      "size. Every slot and hole is cut before the plate's edge. The SVG is the "
+                      "bare drawing, for LightBurn or other laser software."))
         self._blank()
 
         self._h2(_("Tooling \u2014 Kerf Test"))
@@ -6098,6 +6228,20 @@ class UserGuideWindow(tk.Toplevel):
                       "since crescents a little different in size look alike once cut."))
         self._bullet(_("Generate SVG to laser-cut it (no kerf compensation \u2014 set that in your "
                       "laser software), or Generate STL to 3D print it at the thickness you enter."))
+        self._bullet(_("Generate G-code cuts it from the material you pick (cork unless you change "
+                      "it), half a kerf outside the outline so the part comes out at size."))
+        self._blank()
+
+        self._h2(_("Tooling \u2014 Frame & Cut"))
+        self._body(_("G-code from any Tooling tool can go to the laser on an SD card, or "
+                    "straight over USB: with machine integration on (File > Feature Set) and a "
+                    "laser connected, a Frame & Cut button appears beside Generate G-code. It "
+                    "sends the same job the file would hold."))
+        self._bullet(_("Position the head at the sheet's bottom-left corner, click Start Frame, "
+                      "check the framed box, then cut. No camera calibration is needed."))
+        self._bullet(_("Speed & Power Test asks where to save its legend before it starts."))
+        self._bullet(_("In Scrap Mode each click cuts one sheet, and a sheet only counts once "
+                      "its cut has finished."))
         self._blank()
 
         self._h2(_("Tooling \u2014 Settings"))
@@ -6110,6 +6254,10 @@ class UserGuideWindow(tk.Toplevel):
                       "organizer (when you cut it in LightBurn)."))
         self._bullet(_("Die engraving: filled vs. line mode, font sizes for ring + cutout "
                       "engraving, ring engraving placement."))
+        self._bullet(_("Cork: the default cut was tested on 3/32 in (2.4 mm) sheet cork. Kerf and "
+                      "engraving are left at 0 for you to find with the Kerf Test and the Speed & "
+                      "Power Test; while engraving is 0 nothing is engraved on cork, and the app "
+                      "says so."))
         self._blank()
 
     def _section_tuner(self):
@@ -6689,6 +6837,135 @@ class UserGuideWindow(tk.Toplevel):
                     "here's the complete how-to on making saxophone pads:"))
         self._link(_("stohrermusic.com/articles/how-to-make-saxophone-pads/"),
                     "https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/")
+
+
+class QuickStartWindow(tk.Toplevel):
+    """The quick start guide: one small page of plain text for someone new
+    to the app or not computer-minded, so they don't get the three ways of
+    cutting backwards (Matt, 2026-11-09: "maybe some very basic instruction
+    would be handy so people don't get things backwards", and "whatever
+    guide we write should be SUPER concise").
+
+    Opened from Help > Quick Start Guide and from the Welcome window's
+    link, never by itself. No images, no steps, no scrolling: the window
+    is as big as its text. Not modal. Every line is its own translatable
+    string, because the wording is Matt's to change.
+
+    show_frame_cut: the Frame & Cut line is only for a build that can
+    drive a laser (main.machine_supported()).
+    """
+
+    WRAP = 460
+
+    @staticmethod
+    def lines(show_frame_cut=True):
+        """The page, top to bottom: (kind, text), kind 'h' or 'p'."""
+        page = [
+            ('h', _("Three ways to cut")),
+            ('p', _("SD card: Generate G-code, save it to the card, run it on the laser.")),
+            ('p', _("LightBurn: Generate SVG, open it in LightBurn, set speed and power for each color.")),
+        ]
+        if show_frame_cut:
+            page.append(('p', _("Frame & Cut: laser on USB, jog to the corner, frame, cut. "
+                                "Switch it on in File > Feature Set.")))
+        page += [
+            ('h', _("Do not mix them")),
+            ('p', _("G-code is not for LightBurn. SVG is not for the SD card.")),
+            ('h', _("Before you cut")),
+            ('p', _("Speeds and powers are in Options > G-code Settings (Pad Maker) and "
+                    "Options > Settings (Tooling).")),
+            ('p', _("Test on the material you will really cut.")),
+            ('p', _("Die inserts and holders use the Acrylic settings.")),
+            ('p', _("The rest is in Help > User Guide.")),
+        ]
+        return page
+
+    def __init__(self, parent, show_frame_cut=True):
+        super().__init__(parent)
+        self.title(_("Quick Start Guide"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.resizable(False, False)
+
+        body = tk.Frame(self, bg=DIALOG_BG)
+        body.pack(padx=22, pady=(14, 6))
+        self.line_labels = []
+        for kind, text in self.lines(show_frame_cut):
+            if kind == 'h':
+                label = tk.Label(body, text=text, bg=DIALOG_BG, font=("Helvetica", 12, "bold"),
+                                 justify="left", anchor="w", wraplength=self.WRAP)
+                label.pack(anchor="w", pady=(10, 2))
+            else:
+                label = tk.Label(body, text=text, bg=DIALOG_BG, font=("Helvetica", 10),
+                                 justify="left", anchor="w", wraplength=self.WRAP)
+                label.pack(anchor="w", pady=1)
+            self.line_labels.append(label)
+        tk.Button(self, text=_("Close"), width=10, command=self.destroy).pack(pady=(8, 14))
+
+
+class WelcomeWindow(tk.Toplevel):
+    """The Welcome window: shown once for each version on its first launch
+    (main.maybe_show_welcome), and any time from Help > Welcome.
+
+    Matt, 2026-11-09: "each install shows a quick welcome, a version
+    number, and thank you for installing, be sure to search the user guide
+    with any questions, and says click here for the quick start guide."
+
+    A plain, small window in the app's ordinary dialog look, and it holds
+    exactly this: the app name and version, the thank-you, two links
+    (search the User Guide, the quick start guide) and Close. A first
+    version was styled after an old dial-up sign-on screen, with three
+    panels that lit up; Matt took that back the same day: "let's have the
+    welcome screen be simple. if I have a detailed ui request I will give
+    it." So: no styling of its own, no pictures, no animation, no timers.
+    Do not add any.
+
+    Not modal: it takes no grab, so the main window can be used with it
+    open.
+    """
+
+    LINK = "#0066CC"
+    WRAP = 380
+
+    def __init__(self, parent, version, on_search_guide=None, on_quick_start=None):
+        super().__init__(parent)
+        self.title(_("Welcome"))
+        self.configure(bg=DIALOG_BG)
+        self.transient(parent)
+        self.resizable(False, False)
+
+        self._on_search_guide = on_search_guide
+        self._on_quick_start = on_quick_start
+
+        self.name_label = tk.Label(self, text=_("Stohrer Sax Shop Companion"), bg=DIALOG_BG,
+                                   font=("Helvetica", 14, "bold"), wraplength=self.WRAP)
+        self.name_label.pack(padx=28, pady=(18, 2))
+        self.version_label = tk.Label(self, text=_("Version {version}").format(version=version),
+                                      bg=DIALOG_BG, font=("Helvetica", 9), wraplength=self.WRAP)
+        self.version_label.pack()
+        self.thanks_label = tk.Label(self, text=_("Thank you for installing."), bg=DIALOG_BG,
+                                     font=("Helvetica", 10), wraplength=self.WRAP)
+        self.thanks_label.pack(padx=28, pady=(10, 10))
+        self.guide_link = self._link(_("Questions? Search the User Guide."), self._search_guide)
+        self.quick_start_link = self._link(_("Click here for the quick start guide"), self._quick_start)
+        self.close_button = tk.Button(self, text=_("Close"), width=10, command=self.destroy)
+        self.close_button.pack(pady=(14, 16))
+
+    def _link(self, text, command):
+        """A link in the app's usual link look (as in the About dialog)."""
+        label = tk.Label(self, text=text, bg=DIALOG_BG, fg=self.LINK,
+                         font=("Helvetica", 10, "underline"), cursor="hand2", wraplength=self.WRAP)
+        label.pack(padx=28, pady=2)
+        label.bind("<Button-1>", lambda e: command())
+        return label
+
+    def _search_guide(self):
+        if self._on_search_guide is not None:
+            self._on_search_guide()
+
+    def _quick_start(self):
+        if self._on_quick_start is not None:
+            self._on_quick_start()
 
 
 class AboutDialog(tk.Toplevel):
@@ -7472,6 +7749,11 @@ class SpeedPowerTestPreview(tk.Toplevel):
 
     Result:
         self.result = "save" if user clicks Save, None if Adjust/close.
+
+    proceed_label replaces "Save G-code" on the go-ahead button. Tooling's
+    Frame & Cut passes "Continue →": it streams to the laser and saves no
+    G-code, so "Save G-code" would mislead (the same reason
+    NestingPreviewWindow takes one).
     """
 
     AIR_ON_COLOR = "#3a78c2"   # blue outline
@@ -7479,7 +7761,7 @@ class SpeedPowerTestPreview(tk.Toplevel):
     NEUTRAL_COLOR = "#555555"  # dark gray when air doesn't vary
 
     def __init__(self, parent, test_pieces, sheet_w_mm, sheet_h_mm,
-                  eng_speed, eng_power, material_display):
+                  eng_speed, eng_power, material_display, proceed_label=None):
         super().__init__(parent)
         self.title(_("Speed & Power Test Preview"))
         self.configure(bg=DIALOG_BG)
@@ -7551,8 +7833,10 @@ class SpeedPowerTestPreview(tk.Toplevel):
         # Buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
         btn_frame.pack(pady=(0, 10))
-        tk.Button(btn_frame, text=_("Save G-code"), command=self._on_save,
-                  font=("Helvetica", 10, "bold"), width=12).pack(side="left", padx=5)
+        self._proceed_btn = tk.Button(
+            btn_frame, text=proceed_label or _("Save G-code"), command=self._on_save,
+            font=("Helvetica", 10, "bold"), width=12)
+        self._proceed_btn.pack(side="left", padx=5)
         tk.Button(btn_frame, text=_("Adjust"), command=self._on_adjust,
                   font=("Helvetica", 10), width=12).pack(side="left", padx=5)
 
@@ -9907,9 +10191,22 @@ class LidClosedDialog(tk.Toplevel):
                  justify="left", font=("Helvetica", 11)).pack(padx=24, pady=(18, 10))
         buttons = tk.Frame(self, bg=DIALOG_BG)
         buttons.pack(pady=(4, 16))
-        yes_btn = tk.Button(buttons, text=yes_label, width=16, command=self._on_yes)
+        yes_btn = tk.Button(buttons, text=yes_label, command=self._on_yes)
+        no_btn = tk.Button(buttons, text=no_label, command=self._on_no)
+        # Both buttons one width: 16 characters, as always, or as many as
+        # the longer label needs in this language. At a fixed 16 the French
+        # "Oui, démarrer l'encadrement" was cut off, and for a while the
+        # French and Italian labels were shortened to fit the button
+        # instead of the other way round.
+        needed = max(yes_btn.winfo_reqwidth(), no_btn.winfo_reqwidth())
+        width = 16
+        yes_btn.config(width=width)
+        while yes_btn.winfo_reqwidth() < needed and width < 60:
+            width += 1
+            yes_btn.config(width=width)
+        no_btn.config(width=width)
         yes_btn.pack(side="left", padx=8)
-        tk.Button(buttons, text=no_label, width=16, command=self._on_no).pack(side="left", padx=8)
+        no_btn.pack(side="left", padx=8)
 
         self.bind("<Return>", lambda e: self._on_yes())
         self.bind("<Escape>", lambda e: self._on_no())

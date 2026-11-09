@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import struct
 import sys
 import svgwrite
@@ -666,6 +667,29 @@ def _scan_linear(*args, **kwargs):
     return _scan_linear_python(*args, **kwargs)
 
 
+# Die inserts always nest from the sheet's bottom-left corner as drawn, which
+# is the G-code origin and the corner the head is jogged to for Frame & Cut.
+DIE_NEST_EDGE_BIAS = "sw"
+
+
+def nest_edge_bias(material, settings):
+    """The edge bias a nest of `material` scans with.
+
+    Pads use the Pad Maker's Edge Bias setting. Tooling's die inserts do
+    not: they share the settings dict, so they used to inherit whatever the
+    Pad Maker was set to, and its default ("center") starts in the middle
+    of the sheet, which is the worst start for rings that are 50 and 70 mm
+    across (seven dies on a 130 x 130 mm sheet: 1 placed from the centre,
+    4 from the corner). Both nesters read the bias here and nowhere else,
+    so every die path (SVG, G-code, Frame & Cut, the fit check, Scrap
+    Mode) nests the same layout, and the Pad Maker's setting is never
+    written to.
+    """
+    if material == 'die_ring':
+        return DIE_NEST_EDGE_BIAS
+    return settings.get("edge_bias", "center")
+
+
 def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, preplaced=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
@@ -702,7 +726,7 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     fixed_placed = 0
 
     # Edge bias scan direction
-    edge_bias = settings.get("edge_bias", "center")
+    edge_bias = nest_edge_bias(material, settings)
 
     # Corner bias: smallest first (small discs nestle into corners efficiently).
     # All others: largest first (standard greedy circle packing).
@@ -1235,7 +1259,7 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, prepl
         size_threshold = settings.get("dart_threshold", 18.0)
 
     # Edge bias: compute a target point that pulls discs toward the biased edge/corner
-    edge_bias = settings.get("edge_bias", "center")
+    edge_bias = nest_edge_bias(material, settings)
     # Map bias direction to a target point on/near the polygon bounding box
     _bias_targets = {
         "center": (centroid_x, centroid_y),
@@ -2648,10 +2672,17 @@ def generate_die_organizer_svg(variant, filename, settings=None):
     """Copy the bundled die-organizer template SVG to ``filename``.
 
     Static design (Matt's CAD output): three Upper plates plus one Lower
-    glue together with the four corner alignment holes. The asset ships
-    as-is — users open the file in LightBurn (or similar) to cut.
+    glue together with the four corner alignment holes. The SVG ships
+    as-is, byte for byte, for LightBurn or other laser software. The G-code
+    path reads the same drawing (read_die_organizer_drawing below).
     ``settings`` is accepted for API symmetry but unused.
     """
+    import shutil
+    shutil.copyfile(die_organizer_asset_path(variant), filename)
+
+
+def die_organizer_asset_path(variant):
+    """The bundled drawing for an organizer plate ('upper' or 'lower')."""
     if variant not in ('upper', 'lower'):
         raise ValueError(f"variant must be 'upper' or 'lower', got {variant!r}")
     if getattr(sys, 'frozen', False):
@@ -2661,8 +2692,221 @@ def generate_die_organizer_svg(variant, filename, settings=None):
     asset = os.path.join(base, 'tooling_assets', f'die_organizer_{variant}.svg')
     if not os.path.exists(asset):
         raise FileNotFoundError(f"Die organizer template missing: {asset}")
-    import shutil
-    shutil.copyfile(asset, filename)
+    return asset
+
+
+# ---- Die organizer: reading the drawing for G-code -------------------------
+#
+# The organizer is two CAD drawings, not something this app computes, and
+# for years it was SVG only. Since 2026-11-09 it has a G-code path too
+# (Matt: "building a gcode path for what needs it sounds like the right
+# call"; the aim is that nobody needs LightBurn). That path reads the same
+# bundled file the SVG button copies.
+#
+# The drawings are simple and the reader is deliberately no more than they
+# need: `rect` (some with `rx`), `circle` and `ellipse`, each a direct
+# child of <svg>, each moved by `translate(x,y)` or by a `matrix(...)` that
+# is a pure rotation plus a move (the upper plate's finger slot is an
+# ellipse turned 89 degrees that way). ANYTHING ELSE RAISES. A replacement
+# drawing with a path, a group, a scale or a unit suffix must fail loudly
+# here, never be half read and mis-cut.
+
+ORGANIZER_MARGIN_MM = 2.0     # plate to the sheet's left and bottom edges, in the G-code
+# How far a chord of a linearized arc may sag from the true curve, for the
+# G-code toolpaths computed here (organizer plates, tonehole crescents).
+TOOLPATH_ARC_TOLERANCE_MM = 0.002
+
+_ORG_NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
+_ORG_TRANSLATE = re.compile(rf'^\s*translate\(\s*({_ORG_NUMBER})\s*[, ]\s*({_ORG_NUMBER})\s*\)\s*$')
+_ORG_MATRIX = re.compile(r'^\s*matrix\(\s*' + r'\s*[, ]\s*'.join([f'({_ORG_NUMBER})'] * 6) + r'\s*\)\s*$')
+
+
+class OrganizerDrawingError(ValueError):
+    """The organizer drawing holds something the G-code path does not
+    read, or a feature too small to cut with this kerf."""
+
+
+def read_die_organizer_drawing(variant=None, path=None):
+    """Read an organizer plate drawing into shapes.
+
+    Returns {'width', 'height', 'outer', 'inner'}: the plate size in mm,
+    its outer boundary and its openings (slots, holes, the finger slot) in
+    file order. Each shape is a dict with 'kind' ('rect', 'circle' or
+    'ellipse'), its own numbers in its own frame ('x','y','w','h','r' /
+    'cx','cy','r' / 'cx','cy','rx','ry'), and 'angle', 'tx', 'ty': the
+    turn (radians) and move that put it on the plate, in mm with the
+    plate's top-left corner at (0, 0) and y down, as in the file.
+
+    Raises OrganizerDrawingError for anything it does not read (see the
+    note above), and when the drawing has no single rectangle that is the
+    whole plate.
+    """
+    import xml.etree.ElementTree as ET
+    source = path or die_organizer_asset_path(variant)
+    try:
+        root = ET.parse(source).getroot()
+    except ET.ParseError as e:
+        raise OrganizerDrawingError(f"the organizer drawing is not readable XML: {e}")
+
+    def num(el, name, default=None):
+        raw = el.get(name)
+        if raw is None:
+            if default is None:
+                raise OrganizerDrawingError(f"<{tag(el)}> has no {name}")
+            return default
+        if not re.fullmatch(_ORG_NUMBER, raw.strip()):
+            raise OrganizerDrawingError(f"<{tag(el)}> {name}={raw!r} is not a plain number in mm")
+        return float(raw)
+
+    def tag(el):
+        return el.tag.split('}')[-1]
+
+    if tag(root) != 'svg':
+        raise OrganizerDrawingError("the organizer drawing is not an SVG")
+    try:
+        min_x, min_y, width, height = (float(v) for v in root.get('viewBox', '').replace(',', ' ').split())
+    except ValueError:
+        raise OrganizerDrawingError("the organizer drawing has no usable viewBox")
+
+    shapes = []
+    for el in root:
+        kind = tag(el)
+        if kind not in ('rect', 'circle', 'ellipse'):
+            raise OrganizerDrawingError(
+                f"the organizer drawing holds a <{kind}>; only rect, circle and ellipse are read")
+        if len(el):
+            raise OrganizerDrawingError(f"<{kind}> has child elements")
+        transform = el.get('transform', 'translate(0,0)')
+        m = _ORG_TRANSLATE.match(transform)
+        if m:
+            angle, tx, ty = 0.0, float(m.group(1)), float(m.group(2))
+        else:
+            m = _ORG_MATRIX.match(transform)
+            if not m:
+                raise OrganizerDrawingError(f"<{kind}> transform {transform!r} is not a translate or a matrix")
+            a, b, c, d, tx, ty = (float(v) for v in m.groups())
+            # A turn and a move, nothing else: no scale, skew or mirror.
+            if (abs(a - d) > 1e-4 or abs(b + c) > 1e-4 or abs(a * a + b * b - 1.0) > 1e-4):
+                raise OrganizerDrawingError(f"<{kind}> transform {transform!r} scales, skews or mirrors")
+            angle = math.atan2(b, a)
+        shape = {'kind': kind, 'angle': angle, 'tx': tx - min_x, 'ty': ty - min_y}
+        if kind == 'rect':
+            r = num(el, 'rx', 0.0)
+            if el.get('ry') is not None and abs(num(el, 'ry') - r) > 1e-9:
+                raise OrganizerDrawingError("<rect> has different rx and ry")
+            shape.update(x=num(el, 'x', 0.0), y=num(el, 'y', 0.0),
+                         w=num(el, 'width'), h=num(el, 'height'), r=r)
+            if shape['w'] <= 0 or shape['h'] <= 0 or r < 0 or 2 * r > min(shape['w'], shape['h']) + 1e-9:
+                raise OrganizerDrawingError("<rect> has an impossible size or corner radius")
+        elif kind == 'circle':
+            shape.update(cx=num(el, 'cx', 0.0), cy=num(el, 'cy', 0.0), r=num(el, 'r'))
+            if shape['r'] <= 0:
+                raise OrganizerDrawingError("<circle> has no radius")
+        else:
+            shape.update(cx=num(el, 'cx', 0.0), cy=num(el, 'cy', 0.0), rx=num(el, 'rx'), ry=num(el, 'ry'))
+            if shape['rx'] <= 0 or shape['ry'] <= 0:
+                raise OrganizerDrawingError("<ellipse> has no size")
+        shapes.append(shape)
+
+    def is_plate(s):
+        if s['kind'] != 'rect' or abs(s['angle']) > 1e-9:
+            return False
+        return (abs(s['tx'] + s['x']) < 1e-6 and abs(s['ty'] + s['y']) < 1e-6
+                and abs(s['w'] - width) < 1e-6 and abs(s['h'] - height) < 1e-6)
+
+    plates = [s for s in shapes if is_plate(s)]
+    if len(plates) != 1:
+        raise OrganizerDrawingError(
+            f"the organizer drawing should have one rectangle that is the whole plate; found {len(plates)}")
+    return {'width': width, 'height': height, 'outer': plates[0],
+            'inner': [s for s in shapes if s is not plates[0]]}
+
+
+def organizer_shape_path(shape, grow_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
+    """The closed outline of one organizer shape on the plate (mm, y down,
+    first == last), moved `grow_mm` outward along its whole length (inward
+    when negative): its exact parallel curve, for kerf.
+
+    A rectangle's corners keep their centres and their radius changes by
+    grow_mm (a square corner stays square going inward and gets a radius
+    going outward); a circle's radius changes; an ellipse is offset along
+    its normals, since a grown ellipse is not an ellipse. Corner arcs are
+    true arcs, linearized to `tol`. Raises OrganizerDrawingError when the
+    shape is too small to survive the offset (a slot narrower than the
+    kerf).
+    """
+    g = float(grow_mm)
+    kind = shape['kind']
+    if kind == 'rect':
+        x, y, w, h = shape['x'] - g, shape['y'] - g, shape['w'] + 2 * g, shape['h'] + 2 * g
+        if w <= 1e-9 or h <= 1e-9:
+            raise OrganizerDrawingError(
+                f"a {shape['w']:g} x {shape['h']:g} mm slot is too narrow for a kerf of {abs(2 * g):g} mm")
+        r = max(0.0, shape['r'] + g)
+        r = min(r, w / 2, h / 2)
+        pts = []
+        # Clockwise on screen (y down), starting on the top edge.
+        for cx, cy, a0 in ((x + w - r, y + r, -math.pi / 2), (x + w - r, y + h - r, 0.0),
+                           (x + r, y + h - r, math.pi / 2), (x + r, y + r, math.pi)):
+            corner = _arc_points(cx, cy, r, a0, a0 + math.pi / 2, tol)
+            pts += corner if not pts else [p for p in corner if p != pts[-1]]
+        pts.append(pts[0])
+    elif kind == 'circle':
+        r = shape['r'] + g
+        if r <= 1e-9:
+            raise OrganizerDrawingError(
+                f"a {2 * shape['r']:g} mm hole is too small for a kerf of {abs(2 * g):g} mm")
+        # Quarter by quarter, so the four extreme points are on the path and
+        # the hole measures exactly its diameter across.
+        pts = []
+        for q in range(4):
+            quarter = _arc_points(shape['cx'], shape['cy'], r, q * math.pi / 2, (q + 1) * math.pi / 2, tol)
+            pts += quarter if not pts else quarter[1:]
+        pts[-1] = pts[0]
+    else:
+        a, b = shape['rx'], shape['ry']
+        # Tightest curve of an ellipse is at the end of its long axis.
+        if g < 0 and -g >= min(a * a / b, b * b / a) - 1e-9:
+            raise OrganizerDrawingError(
+                f"the {2 * a:g} x {2 * b:g} mm oval is too tight for a kerf of {abs(2 * g):g} mm")
+        step = 2.0 * math.acos(max(-1.0, 1.0 - tol / max(a, b)))
+        n = max(16, math.ceil(2 * math.pi / step))
+        pts = []
+        for i in range(n):
+            t = 2 * math.pi * i / n
+            nx, ny = b * math.cos(t), a * math.sin(t)          # outward normal, not yet unit length
+            length = math.hypot(nx, ny)
+            pts.append((shape['cx'] + a * math.cos(t) + g * nx / length,
+                        shape['cy'] + b * math.sin(t) + g * ny / length))
+        pts.append(pts[0])
+    ca, sa = math.cos(shape['angle']), math.sin(shape['angle'])
+    return [(shape['tx'] + ca * px - sa * py, shape['ty'] + sa * px + ca * py) for px, py in pts]
+
+
+def die_organizer_toolpaths(variant, kerf_mm=0.0, path=None):
+    """Everything the laser traces to cut an organizer plate, compensated
+    for kerf so the plate and its openings come out at drawn size:
+    openings moved half a kerf inward, the plate's own edge half a kerf
+    outward. Returns {'width', 'height', 'inner': [path, ...], 'outer':
+    path, 'counts': {kind: n}} in plate mm, y down."""
+    kerf_mm = float(kerf_mm)
+    if kerf_mm < 0:
+        raise OrganizerDrawingError("the kerf cannot be negative")
+    drawing = read_die_organizer_drawing(variant, path=path)
+    counts = {}
+    for s in drawing['inner'] + [drawing['outer']]:
+        counts[s['kind']] = counts.get(s['kind'], 0) + 1
+    return {'width': drawing['width'], 'height': drawing['height'],
+            'inner': [organizer_shape_path(s, -kerf_mm / 2) for s in drawing['inner']],
+            'outer': organizer_shape_path(drawing['outer'], kerf_mm / 2),
+            'counts': counts}
+
+
+def die_organizer_min_sheet(variant='upper'):
+    """(width, height) in mm of the smallest sheet an organizer plate fits
+    on: the plate plus ORGANIZER_MARGIN_MM all round."""
+    drawing = read_die_organizer_drawing(variant)
+    return drawing['width'] + 2 * ORGANIZER_MARGIN_MM, drawing['height'] + 2 * ORGANIZER_MARGIN_MM
 
 
 def generate_kerf_test_svg(material_name, filename, settings):
@@ -2753,6 +2997,7 @@ CRESCENT_MAX_QTY = 50            # per list entry
 CRESCENT_GAP_MM = 3.0            # between parts in a file with more than one
 CRESCENT_LABEL_FONT_MM = 3.0     # list number engraved under each part
 CRESCENT_LABEL_GAP_MM = 1.0      # part to top of its number
+CRESCENT_MAX_KERF_MM = 1.0       # G-code: beyond this a kerf is a typo, and half of it would reach the number
 
 
 def _circle_overlap_area(r1, r2, d):
@@ -2882,6 +3127,86 @@ def tonehole_crescent_svg_path(geom, cx, cy):
     return (f"M {lx:.8f},{ty:.8f} "
             f"A {R:.8f},{R:.8f} 0 {large_outer} 1 {rx:.8f},{ty:.8f} "
             f"A {Rc:.8f},{Rc:.8f} 0 {large_inner} 0 {lx:.8f},{ty:.8f} Z")
+
+
+class CrescentKerfError(ValueError):
+    """This crescent cannot be cut with this kerf. `reason` is 'kerf' (the
+    kerf itself is out of range), 'gap' (the opening between the horns is
+    narrower than the kerf) or 'inner' (the inner edge's radius is). The
+    tab turns it into a translated message; str() is plain English."""
+
+    def __init__(self, reason, size_mm, kerf_mm):
+        self.reason, self.size_mm, self.kerf_mm = reason, size_mm, kerf_mm
+        what = {'kerf': "the kerf must be between 0 and {m:g} mm".format(m=CRESCENT_MAX_KERF_MM),
+                'gap': f"the opening between the horns ({size_mm:.2f} mm) is narrower than the kerf",
+                'inner': f"the inner edge's radius ({size_mm:.2f} mm) is smaller than half the kerf"}[reason]
+        super().__init__(f"cannot cut this crescent with a {kerf_mm:g} mm kerf: {what}")
+
+
+def _arc_points(cx, cy, r, a0, a1, tol=TOOLPATH_ARC_TOLERANCE_MM):
+    """Points along a circular arc from angle a0 to a1 (radians, either
+    direction, y down like everything here), both ends included, close
+    enough together that no chord sags more than `tol` from the true arc.
+    A zero radius or a zero sweep is the single point."""
+    if r <= 1e-12 or abs(a1 - a0) < 1e-12:
+        return [(cx + r * math.cos(a0), cy + r * math.sin(a0))]
+    step = 2.0 * math.acos(max(-1.0, 1.0 - tol / r)) if r > tol else math.pi / 2
+    n = max(1, math.ceil(abs(a1 - a0) / step))
+    return [(cx + r * math.cos(a0 + (a1 - a0) * i / n),
+             cy + r * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
+
+
+def tonehole_crescent_toolpath(geom, kerf_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
+    """The closed laser path that cuts a crescent to its designed outline:
+    the curve half a kerf outside the design, all the way round.
+
+    The beam removes half its kerf on each side of the line it follows, so
+    a part cut on its own outline comes out small. This is the outline's
+    exact parallel curve, not a scaled copy: the outer edge is the tonehole
+    circle with its radius grown by kerf/2, the inner edge is the inner
+    circle with its radius shrunk by kerf/2 (same centres), and each horn
+    is wrapped by an arc of radius kerf/2 centred on the horn's tip. The
+    tip is then exactly half a kerf from the path on both sides, so the
+    horns come out as sharp as the beam can make them and where the design
+    put them.
+
+    The two offset circles are NOT run on to where they cross (a mitred
+    corner). The part would be the same, but on a thin crescent the edges
+    meet at a shallow angle and that crossing is far away: 6 mm past the
+    horns on a 43 mm tonehole at 2 % with a 0.2 mm kerf, straight through
+    the number engraved under the part and into its neighbour. The round
+    wrap never leaves the design by more than kerf/2.
+
+    With kerf 0 this is the design outline itself. Returns points (mm,
+    tonehole-centred, y down), first == last. Raises CrescentKerfError when
+    the kerf is out of range or wider than the opening between the horns:
+    a gap narrower than the kerf cannot be cut, the beam would bridge it.
+    Compensation never thins the part (the path only moves away from it),
+    so a thin crescent is never refused for being thin.
+    """
+    kerf_mm = float(kerf_mm)
+    if not (0.0 <= kerf_mm <= CRESCENT_MAX_KERF_MM):
+        raise CrescentKerfError('kerf', kerf_mm, kerf_mm)
+    h = kerf_mm / 2.0
+    R, Rc, off = geom['radius'], geom['inner_radius'], geom['offset']
+    tx, ty = geom['tip_x'], geom['tip_y']
+    if h > 0:
+        if 2.0 * tx <= kerf_mm:
+            raise CrescentKerfError('gap', 2.0 * tx, kerf_mm)
+        if Rc <= h:
+            raise CrescentKerfError('inner', Rc, kerf_mm)
+    a_r = math.atan2(ty, tx)                  # right horn, seen from the tonehole centre
+    b_r = math.atan2(ty - off, tx)            # right horn, seen from the inner circle's centre
+    # Outer edge, left horn to right horn over the mouthpiece side.
+    pts = _arc_points(0.0, 0.0, R + h, math.pi - a_r, 2 * math.pi + a_r, tol)
+    if h > 0:                                 # round the right horn, on its far side
+        pts += _arc_points(tx, ty, h, a_r, math.pi + b_r, tol)[1:]
+    # Inner edge back, right horn to left horn over the mouthpiece side.
+    pts += _arc_points(0.0, off, Rc - h, 2 * math.pi + b_r, math.pi - b_r, tol)[1:]
+    if h > 0:                                 # round the left horn
+        pts += _arc_points(-tx, ty, h, -b_r, math.pi - a_r, tol)[1:]
+    pts[-1] = pts[0]
+    return pts
 
 
 def layout_tonehole_crescents(entries, numbered=None):
