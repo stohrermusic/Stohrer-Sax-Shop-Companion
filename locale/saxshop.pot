@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-10 08:22-0500\n"
+"POT-Creation-Date: 2026-11-10 09:16-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -517,98 +517,98 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: machine_control.py:221 main.py:2235 main.py:2426 tooling_tab.py:1426
+#: machine_control.py:258 main.py:2235 main.py:2426 tooling_tab.py:1426
 #: tooling_tab.py:1620 tooling_tab.py:1662
 msgid "Session Complete!"
 msgstr ""
 
-#: machine_control.py:222 main.py:1515 main.py:2186
+#: machine_control.py:259 main.py:1515 main.py:2186
 msgid "All pads have been placed!"
 msgstr ""
 
-#: machine_control.py:561 machine_control.py:1123 ui_dialogs/machine.py:1520
+#: machine_control.py:598 machine_control.py:1162 ui_dialogs/machine.py:1520
 msgid "Falcon Not Detected"
 msgstr ""
 
-#: machine_control.py:562 machine_control.py:1124
+#: machine_control.py:599 machine_control.py:1163
 msgid "No Grbl controller detected. Plug in the Falcon over USB and try again."
 msgstr ""
 
-#: machine_control.py:659
+#: machine_control.py:696
 msgid "Homing Failed"
 msgstr ""
 
-#: machine_control.py:660
+#: machine_control.py:697
 #, python-brace-format
 msgid "Falcon returned: {m}"
 msgstr ""
 
-#: machine_control.py:671 machine_control.py:710 machine_control.py:761
-#: machine_control.py:810 machine_control.py:1118 ui_dialogs/machine.py:1558
+#: machine_control.py:708 machine_control.py:747 machine_control.py:798
+#: machine_control.py:847 machine_control.py:1157 ui_dialogs/machine.py:1558
 #: ui_dialogs/machine.py:1702
 msgid "Missing Dependency"
 msgstr ""
 
-#: machine_control.py:672
+#: machine_control.py:709
 #, python-brace-format
 msgid "Home needs pyserial: {e}"
 msgstr ""
 
-#: machine_control.py:675 ui_dialogs/machine.py:1270 ui_dialogs/machine.py:3784
+#: machine_control.py:712 ui_dialogs/machine.py:1270 ui_dialogs/machine.py:3784
 msgid "Home Laser?"
 msgstr ""
 
-#: machine_control.py:676
+#: machine_control.py:713
 msgid ""
 "Send the laser home? The head will travel to the home corner at full "
 "speed. Make sure nothing is in its path."
 msgstr ""
 
-#: machine_control.py:685 machine_control.py:719 machine_control.py:769
-#: machine_control.py:1333 ui_dialogs/machine.py:1279
+#: machine_control.py:722 machine_control.py:756 machine_control.py:806
+#: machine_control.py:1486 ui_dialogs/machine.py:1279
 #: ui_dialogs/machine.py:1570 ui_dialogs/machine.py:1714
 msgid "Connection Failed"
 msgstr ""
 
-#: machine_control.py:686 machine_control.py:770
+#: machine_control.py:723 machine_control.py:807
 #, python-brace-format
 msgid "Couldn't connect: {e}"
 msgstr ""
 
-#: machine_control.py:699
+#: machine_control.py:736
 msgid "Homed"
 msgstr ""
 
-#: machine_control.py:700
+#: machine_control.py:737
 msgid "Laser homed. Head is parked at the home corner."
 msgstr ""
 
-#: machine_control.py:711
+#: machine_control.py:748
 #, python-brace-format
 msgid "Test needs pyserial: {e}"
 msgstr ""
 
-#: machine_control.py:720
+#: machine_control.py:757
 #, python-brace-format
 msgid "Couldn't connect to the Falcon at {p}: {e}"
 msgstr ""
 
-#: machine_control.py:739
+#: machine_control.py:776
 msgid "Connected, no response"
 msgstr ""
 
-#: machine_control.py:740
+#: machine_control.py:777
 #, python-brace-format
 msgid ""
 "Port opened at {p}, but Grbl didn't reply to a status query. Try the "
 "Reset Falcon menu item, then test again."
 msgstr ""
 
-#: machine_control.py:746
+#: machine_control.py:783
 msgid "Connection OK"
 msgstr ""
 
-#: machine_control.py:747
+#: machine_control.py:784
 #, python-brace-format
 msgid ""
 "Falcon connected on {p}.\n"
@@ -617,26 +617,26 @@ msgid ""
 "MPos: X={x:.2f}  Y={y:.2f}  Z={z:.2f}"
 msgstr ""
 
-#: machine_control.py:762
+#: machine_control.py:799
 #, python-brace-format
 msgid "Clear needs pyserial: {e}"
 msgstr ""
 
-#: machine_control.py:784
+#: machine_control.py:821
 msgid "Errors Cleared"
 msgstr ""
 
-#: machine_control.py:785
+#: machine_control.py:822
 msgid ""
 "Sent $X unlock. Motion is allowed again. If the Falcon was in an alarm "
 "state, it should now be Idle — check with Test Connection."
 msgstr ""
 
-#: machine_control.py:796
+#: machine_control.py:833
 msgid "Reset Falcon?"
 msgstr ""
 
-#: machine_control.py:797
+#: machine_control.py:834
 msgid ""
 "Send a soft-reset (Ctrl-X) to the Falcon. This:\n"
 "  • Immediately stops any motion in progress\n"
@@ -650,50 +650,50 @@ msgid ""
 "Continue?"
 msgstr ""
 
-#: machine_control.py:811
+#: machine_control.py:848
 #, python-brace-format
 msgid "Reset needs pyserial: {e}"
 msgstr ""
 
-#: machine_control.py:823
+#: machine_control.py:860
 msgid "the reset byte could not be sent"
 msgstr ""
 
-#: machine_control.py:828
+#: machine_control.py:865
 msgid "Reset Failed"
 msgstr ""
 
-#: machine_control.py:829
+#: machine_control.py:866
 #, python-brace-format
 msgid "Couldn't reset: {e}"
 msgstr ""
 
-#: machine_control.py:840
+#: machine_control.py:877
 msgid "Falcon Reset"
 msgstr ""
 
-#: machine_control.py:841
+#: machine_control.py:878
 msgid ""
 "Soft-reset sent. The Falcon is now in alarm state — use Home Laser to "
 "recover, then jog as needed."
 msgstr ""
 
-#: machine_control.py:851 tooling_tab.py:1036
+#: machine_control.py:888 tooling_tab.py:1036
 msgid "OpenCV Required"
 msgstr ""
 
-#: machine_control.py:852
+#: machine_control.py:889
 msgid ""
 "Camera calibration needs OpenCV:\n"
 "\n"
 "    pip install opencv-python Pillow"
 msgstr ""
 
-#: machine_control.py:859
+#: machine_control.py:896
 msgid "Recalibrate Camera?"
 msgstr ""
 
-#: machine_control.py:860
+#: machine_control.py:897
 msgid ""
 "⚠ This will REPLACE your existing calibration. ⚠\n"
 "\n"
@@ -708,11 +708,11 @@ msgid ""
 "Proceed?"
 msgstr ""
 
-#: machine_control.py:889
+#: machine_control.py:926
 msgid "Framing Power"
 msgstr ""
 
-#: machine_control.py:900
+#: machine_control.py:937
 msgid ""
 "Laser power used for the framing pass, per material. Framing shows you "
 "where the cut will land — it should be bright enough to follow by eye "
@@ -723,37 +723,37 @@ msgid ""
 "that starts leaving a mark."
 msgstr ""
 
-#: machine_control.py:919 main.py:1717 main.py:2804 main.py:3608
+#: machine_control.py:956 main.py:1717 main.py:2804 main.py:3608
 #: ui_dialogs/common.py:26 ui_dialogs/sizing.py:2178
 msgid "Adhesive rings"
 msgstr ""
 
-#: machine_control.py:941
+#: machine_control.py:978
 #, python-brace-format
 msgid ""
 "Range: 0 to {max}%. Cutting power is typically 35-100%, so framing stays "
 "well below it."
 msgstr ""
 
-#: machine_control.py:955 machine_control.py:1027
+#: machine_control.py:992 machine_control.py:1064
 msgid "Invalid"
 msgstr ""
 
-#: machine_control.py:956
+#: machine_control.py:993
 #, python-brace-format
 msgid "{mat}: framing power must be a number from 0 to {max}%."
 msgstr ""
 
-#: machine_control.py:976 machine_control.py:1036
+#: machine_control.py:1013 machine_control.py:1073
 msgid "Save Failed"
 msgstr ""
 
-#: machine_control.py:982 toner_tab.py:1489 toner_tab.py:3134
+#: machine_control.py:1019 toner_tab.py:1489 toner_tab.py:3134
 #: tooling_tab.py:1926 ui_dialogs/guide.py:1422
 msgid "OK"
 msgstr ""
 
-#: machine_control.py:984 machine_control.py:1046 main.py:2895 main.py:2990
+#: machine_control.py:1021 machine_control.py:1083 main.py:2895 main.py:2990
 #: main.py:3223 main.py:3281 toner_tab.py:1491 toner_tab.py:1768
 #: toner_tab.py:1983 toner_tab.py:2049 toner_tab.py:2214 toner_tab.py:2317
 #: toner_tab.py:3554 toner_tab.py:5390 toner_tab.py:5521 toner_tab.py:5682
@@ -765,11 +765,11 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: machine_control.py:990
+#: machine_control.py:1027
 msgid "Camera-Polygon Inset Margin"
 msgstr ""
 
-#: machine_control.py:1000
+#: machine_control.py:1037
 msgid ""
 "Camera-captured polygons are shrunk by this many millimeters on every "
 "edge before nesting. This safety margin compensates for camera "
@@ -779,32 +779,32 @@ msgid ""
 "Typical: 2-5mm. Set to 0 to disable."
 msgstr ""
 
-#: machine_control.py:1012
+#: machine_control.py:1049
 msgid "Inset margin (mm):"
 msgstr ""
 
-#: machine_control.py:1028
+#: machine_control.py:1065
 msgid "Inset must be a number 0-50."
 msgstr ""
 
-#: machine_control.py:1043 toner_tab.py:1766 ui_dialogs/gcode_settings.py:603
+#: machine_control.py:1080 toner_tab.py:1766 ui_dialogs/gcode_settings.py:603
 #: ui_dialogs/presets_io.py:34 ui_dialogs/presets_io.py:543
 #: ui_dialogs/sizing.py:2695 ui_dialogs/sizing.py:2823
 msgid "Save"
 msgstr ""
 
-#: machine_control.py:1057 ui_dialogs/machine.py:3445
+#: machine_control.py:1094 ui_dialogs/machine.py:3445
 msgid "Homing"
 msgstr ""
 
-#: machine_control.py:1064
+#: machine_control.py:1101
 msgid ""
 "Homing the laser...\n"
 "\n"
 "Head is moving to the home corner."
 msgstr ""
 
-#: machine_control.py:1119
+#: machine_control.py:1158
 #, python-brace-format
 msgid ""
 "Frame & Cut needs pyserial:\n"
@@ -812,64 +812,64 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: machine_control.py:1166
-msgid "Pick One Material"
-msgstr ""
-
-#: machine_control.py:1167
-msgid ""
-"Frame & Cut works with one material at a time. Please select exactly one "
-"material (not Exact Size)."
-msgstr ""
-
-#: machine_control.py:1199 main.py:2104 main.py:2292 tooling_tab.py:1184
-#: tooling_tab.py:1229
-msgid "Nesting Error"
-msgstr ""
-
-#: machine_control.py:1200
-#, python-brace-format
-msgid "Could not fit all '{m}' pieces in the available area."
-msgstr ""
-
-#: machine_control.py:1213 tooling_tab.py:2449
-msgid "Continue →"
-msgstr ""
-
-#: machine_control.py:1334
-#, python-brace-format
-msgid "Could not connect to the Falcon at {p}: {e}"
-msgstr ""
-
-#: machine_control.py:1392
-msgid ""
-"Position the head at your material's bottom-left corner (jog here OR open"
-" the lid and physically move it), then click Start Frame"
-msgstr ""
-
-#: machine_control.py:1398
-msgid "Start Frame →"
-msgstr ""
-
-#: machine_control.py:1446
-msgid "Framing — verify cut area, jog if needed, click Cut when ready"
-msgstr ""
-
-#: machine_control.py:1468
-#, python-brace-format
-msgid "Cutting — {m}"
-msgstr ""
-
-#: machine_control.py:1516 main.py:2135 main.py:2244 main.py:2355 main.py:2438
+#: machine_control.py:1235 main.py:2135 main.py:2244 main.py:2355 main.py:2438
 msgid "An Error Occurred"
 msgstr ""
 
-#: machine_control.py:1517
+#: machine_control.py:1236
 #, python-brace-format
 msgid ""
 "Something went wrong during Frame & Cut:\n"
 "\n"
 "{error}"
+msgstr ""
+
+#: machine_control.py:1271
+msgid "Pick One Material"
+msgstr ""
+
+#: machine_control.py:1272
+msgid ""
+"Frame & Cut works with one material at a time. Please select exactly one "
+"material (not Exact Size)."
+msgstr ""
+
+#: machine_control.py:1304 main.py:2104 main.py:2292 tooling_tab.py:1184
+#: tooling_tab.py:1229
+msgid "Nesting Error"
+msgstr ""
+
+#: machine_control.py:1305
+#, python-brace-format
+msgid "Could not fit all '{m}' pieces in the available area."
+msgstr ""
+
+#: machine_control.py:1318 tooling_tab.py:2449
+msgid "Continue →"
+msgstr ""
+
+#: machine_control.py:1487
+#, python-brace-format
+msgid "Could not connect to the Falcon at {p}: {e}"
+msgstr ""
+
+#: machine_control.py:1548
+msgid ""
+"Position the head at your material's bottom-left corner (jog here OR open"
+" the lid and physically move it), then click Start Frame"
+msgstr ""
+
+#: machine_control.py:1554
+msgid "Start Frame →"
+msgstr ""
+
+#: machine_control.py:1618
+msgid "Framing — verify cut area, jog if needed, click Cut when ready"
+msgstr ""
+
+#: machine_control.py:1652
+#, python-brace-format
+msgid "Cutting — {m}"
 msgstr ""
 
 #: main.py:288 main.py:1995

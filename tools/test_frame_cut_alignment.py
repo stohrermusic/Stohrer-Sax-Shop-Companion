@@ -11,13 +11,12 @@ is the front row of pads on the scrap's edge). Found 2026-09-20.
 
 Fix: on_frame_and_cut passes flip_height_mm = the outline's height. This
 file checks the geometry at the engine level with the same G92 arithmetic
-as on_frame_and_cut, including the negative control, and checks that the
-call site actually passes the override.
+as on_frame_and_cut, including the negative control, and drives the steps of
+on_frame_and_cut that derive the override, pass it and keep the streamed cut.
 
 Headless: no Tk. Run:
     python tools/test_frame_cut_alignment.py
 """
-import inspect
 import os
 import re
 import sys
@@ -124,13 +123,128 @@ check("without the override the disc lands `inset` mm toward the machine front (
       abs((SCRAP_CENTER[1] - old[1]) - INSET) < 0.05 and abs(old[0] - SCRAP_CENTER[0]) < 0.05)
 
 # --- the call site passes the override ------------------------------------
+# on_frame_and_cut is a sequence of steps (machine_control, 2026-11-10). The
+# pad-job step is driven here on its own, headless: the form's answers are
+# canned, the nesting preview and the cut generator stood in, and what it
+# hands the generator and the machine half is read off the run. Until then
+# these three checks grepped on_frame_and_cut's source.
+import tkinter.messagebox as _mb  # noqa: E402
 import main  # noqa: E402
-src = inspect.getsource(main.PadSVGGeneratorApp.on_frame_and_cut)
-check("on_frame_and_cut passes flip_height_mm to the cut generator",
-      "flip_height_mm=flip_height_mm" in src)
-check("on_frame_and_cut derives it from the outline, falling back to the polygon",
-      "self.custom_polygon_outline or self.custom_polygon" in src.split("flip_height_mm =")[0])
-check("on_frame_and_cut keeps the streamed cut", "_keep_last_cut_gcode(" in src)
+import machine_control  # noqa: E402
+import ui_dialogs  # noqa: E402
+from machine_control import MachineControlMixin, FrameCutRun  # noqa: E402
+
+
+class FakeVar:
+    def __init__(self, value):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+
+class Stub(MachineControlMixin):
+    """The app as the pad-job step sees it: the camera scrap above loaded (outline
+    and inset), felt ticked, no calibration, nothing on screen."""
+    root = None
+    settings = settings
+    custom_polygon = custom_polygon
+    custom_polygon_outline = custom_polygon_outline
+    _custom_polygon_lb_machine = None
+    _falcon_homed_this_session = False
+    scrap_mode_var = FakeVar(False)
+    live_camera_var = FakeVar(False)
+    material_vars = {"felt": FakeVar(True), "card": FakeVar(False),
+                     "leather": FakeVar(False), "exact_size": FakeVar(False)}
+    scrap_session = {"scrap_count": 0}
+
+    def _prepare_generation(self):
+        return {'pads': [{'size': 20.0, 'qty': 1}], 'hole_dia': 0, 'base': 'pads',
+                'width_mm': 393.7, 'height_mm': 393.7, 'card_paper_dims': None}
+
+    def _get_material_dimensions(self, material, width_mm, height_mm, card_paper_dims):
+        return 393.7, 393.7, self.custom_polygon        # the loaded shape is the material
+
+    def _camera_capture_ready(self):
+        return False
+
+
+class FakePreview:
+    def __init__(self, parent, placements, w_mm, h_mm, **kw):
+        self.result = "save"
+
+
+def attempt(fn):
+    """fn() -> (True, its value) or (False, the error), so a check can say which."""
+    try:
+        return True, fn()
+    except Exception as e:          # printed by the check below
+        return False, f"{type(e).__name__}: {e}"
+
+
+boxes = []
+for _name in ("showerror", "showwarning", "showinfo"):
+    setattr(_mb, _name, lambda title, msg, _n=_name, **k: boxes.append((_n, str(title))))
+
+generated = []
+_real_generate = machine_control.generate_gcode_from_placed
+
+
+def _recording_generate(*args, **kwargs):
+    generated.append(dict(kwargs))
+    return _real_generate(*args, **kwargs)
+
+
+keep_preview, keep_run = main.NestingPreviewWindow, ui_dialogs.FalconRunDialog
+main.NestingPreviewWindow, machine_control.generate_gcode_from_placed = FakePreview, _recording_generate
+try:
+    run = FrameCutRun()
+    ok, result = attempt(lambda: Stub()._frame_cut_prepare_pad_job(run))
+finally:
+    main.NestingPreviewWindow, machine_control.generate_gcode_from_placed = keep_preview, _real_generate
+if not ok:
+    print(f"  the pad-job step raised: {result}")
+check("the pad-job step hands the cut generator flip_height_mm = the OUTLINE's height, not the inset's",
+      ok and result is True and not boxes and len(generated) == 1
+      and generated[0].get("flip_height_mm") == ymax_storage
+      and run.on_shape is True and run.flip_height_mm == ymax_storage
+      and run.framing_polygon == custom_polygon_outline and run.cut_polygon == custom_polygon)
+
+# The flip height on its own: the outline's when there is one, the polygon's own
+# for a hand-drawn shape (no separate outline), None for a job off the shape.
+check("the flip height is the outline's height when a camera outline is loaded",
+      Stub()._frame_cut_flip_height(True) == ymax_storage)
+hand_drawn = Stub()
+hand_drawn.custom_polygon_outline = None
+check("... the polygon's own height for a hand-drawn shape, which has no outline",
+      hand_drawn._frame_cut_flip_height(True) == max(p[1] for p in custom_polygon))
+check("... and None for a job that is not on the shape (card on the paper size: the sheet flips it)",
+      Stub()._frame_cut_flip_height(False) is None)
+
+# The cut step keeps what it streams, G92 first, before the dialog streams it.
+kept_when_streaming = []
+
+
+class FakeCut:
+    def __init__(self, parent, sender, lines, **kw):
+        path = os.path.join(os.environ["SAXSHOP_CONFIG_DIR"], "last_frame_cut.gcode")
+        kept_when_streaming.append(open(path).read().splitlines() if os.path.exists(path) else None)
+        self.streamed = list(lines)
+        self._final_reason = "complete"
+
+
+ui_dialogs.FalconRunDialog = FakeCut
+try:
+    run = FrameCutRun(gcode_text="G0 X1 Y1\nG1 X2 Y2", material="felt", sender=object(), g92=(1.5, 2.0),
+                      flip_height_mm=ymax_storage, cut_polygon=custom_polygon, piece_count=1)
+    ok, result = attempt(lambda: Stub()._frame_cut_cut(run))
+finally:
+    ui_dialogs.FalconRunDialog = keep_run
+if not ok:
+    print(f"  the cut step raised: {result}")
+check("the cut step keeps the streamed cut, G92 first, in <config dir>/last_frame_cut.gcode before it streams",
+      ok and run.cut_lines == ["G92 X1.500 Y2.000", "G0 X1 Y1", "G1 X2 Y2"]
+      and kept_when_streaming == [run.cut_lines] and run.cut_dlg.streamed == run.cut_lines)
 
 print(f"\n=== Summary: {passed} passed, {failed} failed ===")
 sys.exit(0 if failed == 0 else 1)

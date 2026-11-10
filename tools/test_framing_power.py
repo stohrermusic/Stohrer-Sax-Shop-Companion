@@ -214,11 +214,35 @@ def test_defaults_display_with_a_decimal():
 # --------------------------------------------------------------------------
 
 def test_frame_and_cut_uses_the_per_material_value():
-    import inspect
-    import main
-    src = inspect.getsource(main.PadSVGGeneratorApp.on_frame_and_cut)
-    assert 'get_framing_power_s(material' in src, \
-        "Frame & Cut no longer looks up framing power per material"
+    """Frame & Cut's framing-lines step (machine_control, one of the steps
+    on_frame_and_cut became on 2026-11-10), driven on its own: the lines it
+    hands on are the generator's at the MATERIAL's framing power, M4, for a
+    polygon and for a bounding box. Until then this check grepped
+    on_frame_and_cut's source for the per-material lookup."""
+    from machine_control import MachineControlMixin, FrameCutRun
+
+    class Stub(MachineControlMixin):
+        settings = {"laser_framing_power_by_material": {"leather": 25, "felt": 12},
+                    "laser_framing_feed": 1500}
+
+    run = FrameCutRun(material="leather", framing_polygon=SQUARE, gcode_text="G1 X0 Y0")
+    Stub()._frame_cut_framing_lines(run)
+    assert run.framing_lines == ge.generate_polygon_framing_gcode(SQUARE, power_s=25, feed=1500), \
+        run.framing_lines
+    assert "M4 S25" in run.framing_lines and not any("M3" in ln for ln in run.framing_lines)
+    run = FrameCutRun(material="felt", framing_polygon=SQUARE, gcode_text="")
+    Stub()._frame_cut_framing_lines(run)
+    assert "M4 S12" in run.framing_lines, "felt frames at felt's power, not leather's"
+    # No polygon: the cut's bounding box, at the same material's power.
+    text = "G0 X10 Y20\nG1 X70 Y60"
+    run = FrameCutRun(material="leather", framing_polygon=None, gcode_text=text)
+    Stub()._frame_cut_framing_lines(run)
+    xmin, xmax, ymin, ymax = ge.extract_gcode_bbox(text)
+    assert run.framing_lines == ge.generate_framing_gcode(xmin, ymin, xmax, ymax, power_s=25, feed=1500)
+    # Nothing to frame: no lines, and the run goes straight to the cut.
+    run = FrameCutRun(material="leather", framing_polygon=None, gcode_text="M5")
+    Stub()._frame_cut_framing_lines(run)
+    assert run.framing_lines == [], run.framing_lines
 
 
 def test_calibration_frames_at_basswood_power():

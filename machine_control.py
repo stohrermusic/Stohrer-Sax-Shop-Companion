@@ -1,7 +1,8 @@
 """The machine half of the app: the Machine menu, Frame & Cut, the laser watch and the camera plumbing.
 
 MachineControlMixin is mixed into main.PadSVGGeneratorApp beside the tab mixins. Every method here moved
-out of main.py on 2026-11-10 byte for byte (structural step 2); the three constants moved with their
+out of main.py on 2026-11-10 byte for byte (structural step 2), and on_frame_and_cut was then split into
+its _frame_cut_* steps (step 3, the same day: FrameCutRun below); the three constants moved with their
 comments and main re-imports them, so `main.MACHINE_MENU_LASER_ITEMS`, `main.MACHINE_MENU_CAMERA_ITEMS`
 and `main.LASER_WATCH_PERIOD_MS` still work. Not a tab, hence not a *_tab module: it adds menu items,
 buttons and background work to tabs that exist.
@@ -17,6 +18,7 @@ import sys
 import time
 import tkinter as tk
 from tkinter import messagebox
+from dataclasses import dataclass
 
 from threads import start_worker
 from svg_engine import nest_with_zones
@@ -58,6 +60,41 @@ MACHINE_MENU_CAMERA_ITEMS = ('inset',)
 # How often the laser watch lists the serial ports (enumeration only; a port
 # is opened only when LaserWatch says so). See _start_laser_watch.
 LASER_WATCH_PERIOD_MS = 2000
+
+
+@dataclass(slots=True)
+class FrameCutRun:
+    """What the steps of on_frame_and_cut hand on to each other: the job, from
+    _frame_cut_prepare_pad_job or _frame_cut_prepare_tooling_job, then what the
+    machine half adds as it goes. A dataclass with slots: a misspelled field is
+    an AttributeError at the assignment, and the field list is the hand-over's
+    documentation."""
+    tooling_job: object = None             # the Tooling tab's function; None for a pad job
+    job: dict | None = None                # what tooling_job() returned
+    # the job
+    gcode_text: str | None = None
+    material: str | None = None
+    job_label: str | None = None           # the tool's name; None for a pad job
+    piece_count: int = 0
+    on_shape: bool = False                 # nested on the loaded shape: frame, anchor, flip, Auto Locate from it
+    framing_polygon: list | None = None
+    flip_height_mm: float | None = None
+    cut_polygon: list | None = None
+    auto_locate_target: tuple | None = None
+    show_live_camera: bool = False
+    # pad job bookkeeping (Job History, Scrap Mode)
+    pads: list | None = None
+    params: dict | None = None
+    placed: list | None = None
+    scrap_mode: bool = False
+    scrap_remaining: object = None
+    # the machine half
+    framing_lines: list | None = None      # without the G92 prefix until _frame_cut_origin
+    sender: object = None                  # the connected FalconSender
+    g92: tuple | None = None               # (x, y) of the work origin
+    cut_lines: list | None = None
+    cut_scrap_num: int | None = None
+    cut_dlg: object = None                 # the cut's run dialog; its _final_reason says how the cut ended
 
 
 class MachineControlMixin:
@@ -1088,32 +1125,34 @@ class MachineControlMixin:
             except tk.TclError:
                 pass
             self._homing_status_win = None
-
     def on_frame_and_cut(self, tooling_job=None):
         """Generate G-code in memory, frame the bbox, then stream to Falcon.
 
-        One routine for both tabs. The Pad Maker's button calls it bare and
-        the pad job is validated, nested, previewed and generated in the
-        first half below. The Tooling tab passes `tooling_job`, a function
-        that does the same for one of its tools and returns what the
-        machine half needs (the _on_frame_cut_* handlers in tooling_tab.py
-        build it), or None when the user backed out or the input was
-        refused.
+        One routine for both tabs, a sequence of _frame_cut_* steps handing
+        on one FrameCutRun. The Pad Maker's button calls it bare and
+        _frame_cut_prepare_pad_job validates, nests, previews and generates
+        the pad job. The Tooling tab passes `tooling_job`, a function that
+        does the same for one of its tools and returns what the machine half
+        needs (the _on_frame_cut_* handlers in tooling_tab.py build it), or
+        None when the user backed out or the input was refused;
+        _frame_cut_prepare_tooling_job takes that over.
 
-        From the framing lines on, both run the same code: connect, jog to
-        the corner (the lid question on Start Frame), G92, the framing
-        loop, the cut, last_frame_cut.gcode. The machine half reads the
-        job's own values only, never the Pad Maker's shape or session, so
-        a scrap outline loaded on the Pad Maker cannot bend a Tooling cut.
+        From the framing lines on both run the same steps: the framing
+        lines, connect, the live camera, unlock, position (the jog dialog,
+        the lid question on Start Frame), the G92 origin, the framing loop,
+        the cut (kept in last_frame_cut.gcode before it streams) and the
+        record (Job History, the scrap advance or the tool's after_cut). The
+        machine half reads the job's own values only, never the Pad Maker's
+        shape or session, so a scrap outline loaded on the Pad Maker cannot
+        bend a Tooling cut. A step that returns a bare None has shown its box
+        or seen the user back out, and the run stops there; every way out
+        after a successful connect disconnects, and every way out releases
+        the sleep lock and abandons a pending scrap (the finally blocks).
         """
-        try:
-            import falcon_sender
-            from gcode_engine import (
-                extract_gcode_bbox,
-                generate_framing_gcode,
-                generate_polygon_framing_gcode,
-            )
-            from ui_dialogs import FalconRunDialog
+        try:   # the dependency probe; the steps import what they use themselves
+            import falcon_sender  # noqa: F401
+            from gcode_engine import extract_gcode_bbox, generate_framing_gcode, generate_polygon_framing_gcode  # noqa: F401
+            from ui_dialogs import FalconRunDialog  # noqa: F401
         except ImportError as e:
             messagebox.showerror(_("Missing Dependency"),
                                   _("Frame & Cut needs pyserial:\n\n{e}").format(e=e))
@@ -1148,192 +1187,17 @@ class MachineControlMixin:
             logging.getLogger("ssc.machine").exception(
                 "Frame & Cut: could not take the sleep lock; the computer may sleep during the cut")
 
+        run = FrameCutRun(tooling_job=tooling_job)
         try:
             if tooling_job is None:
-                # --- Pad Maker job: input validation up through nesting
-                # (mirrors on_generate_gcode) ---
-                params = self._prepare_generation()
-                if not params:
+                if not self._frame_cut_prepare_pad_job(run):
                     return
-                pads, hole_dia = params['pads'], params['hole_dia']
-                width_mm, height_mm = params['width_mm'], params['height_mm']
-                card_paper_dims = params['card_paper_dims']
-
-                supported_materials = [m for m, v in self.material_vars.items()
-                                         if v.get() and m != "exact_size"]
-                if len(supported_materials) != 1:
-                    messagebox.showerror(
-                        _("Pick One Material"),
-                        _("Frame & Cut works with one material at a time. "
-                          "Please select exactly one material (not Exact Size)."))
-                    return
-                material = supported_materials[0]
-                mat_w, mat_h, mat_polygon = self._get_material_dimensions(
-                    material, width_mm, height_mm, card_paper_dims)
-
-                # Scrap mode places a partial batch on this scrap (one scrap
-                # per click, mirroring _generate_gcode_scrap_mode); standard
-                # mode nests the whole batch and requires it all to fit.
-                # scrap_remaining is handed to _frame_cut_scrap_advance once
-                # the cut completes; it stays None in standard mode.
-                scrap_mode = self.scrap_mode_var.get()
-                scrap_remaining = None
-                if scrap_mode:
-                    result = self._scrap_begin_partial(
-                        pads, hole_dia, material, mat_w, mat_h, mat_polygon,
-                        ask_save_dir=False)
-                    if result is None:
-                        return
-                    placed, scrap_remaining = result
-                    hole_dia = self.scrap_session['hole_dia']
-                    # Labeled zones stand down in scrap mode: a zone is sized for
-                    # a whole size's count, but a scrap only takes part of it, so
-                    # the block would have to be re-sized per scrap.
-                    zones = []
-                else:
-                    # One nest; its fixed counts are the fit check.
-                    placed, zones, fixed_placed, fixed_total = nest_with_zones(
-                        pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
-                    if fixed_placed != fixed_total:
-                        messagebox.showerror(
-                            _("Nesting Error"),
-                            _("Could not fit all '{m}' pieces in the available "
-                              "area.").format(m=material.replace('_', ' ')))
-                        return
-
-                # Show the nesting layout before anything runs on the machine —
-                # same as the file-export Generate flow, so the user can see what
-                # will be cut and back out if it's not what they want. In scrap
-                # mode this is the subset that fits on the current scrap; in
-                # standard mode it's the whole batch. Cancelling (Adjust) backs out
-                # cleanly: the scrap is only counted after a completed cut (in
-                # _frame_cut_scrap_advance), so nothing is consumed here.
-                preview = NestingPreviewWindow(
-                    self.root, {material: placed}, mat_w, mat_h,
-                    polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones,
-                    settings=self.settings)
-                if preview.result != "save":
-                    return
-
-                # Generate G-code to a temp file then read it back into memory.
-                import tempfile
-                import os as _os
-                with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
-                                                  mode='w') as tmp:
-                    tmp_path = tmp.name
-                # The cut streams into the SAME work frame as the framing pass,
-                # and framing flips the scrap OUTLINE with the outline's height.
-                # A camera-captured polygon is inset from that outline, so the
-                # generator's default (flip with the polygon it's given, i.e.
-                # the inset) put every disc `inset` mm toward the machine front
-                # of where the frame showed it. Flip with the outline instead.
-                #
-                # A job that was not nested on the loaded shape (card on
-                # the paper size, the one case where mat_polygon is None
-                # with a shape loaded) takes nothing from the shape, here
-                # or in the machine half below: no flip override, no
-                # outline to frame, no anchor for the G92, no Auto Locate
-                # target. It is a plain sheet jogged to by its corner,
-                # which is how the exported file has always treated it.
-                on_shape = mat_polygon is not None
-                _flip_source = ((self.custom_polygon_outline or self.custom_polygon)
-                                if on_shape else None)
-                flip_height_mm = (max(p[1] for p in _flip_source)
-                                  if _flip_source and len(_flip_source) >= 3
-                                  else None)
-                try:
-                    generate_gcode_from_placed(
-                        placed, material, mat_w, mat_h, tmp_path, hole_dia,
-                        self.settings, polygon=mat_polygon, zones=zones,
-                        flip_height_mm=flip_height_mm)
-                    with open(tmp_path, 'r') as f:
-                        gcode_text = f.read()
-                finally:
-                    try:
-                        _os.remove(tmp_path)
-                    except OSError:
-                        pass
-
-                # What the machine half below takes from a pad job.
-                # Frame the OUTLINE polygon (un-insetted) so the trace
-                # matches the actual scrap edge. Cuts still use the inset
-                # polygon for placement — both share a coordinate origin
-                # so the G92 math below works either way. Fall back to
-                # custom_polygon for plain hand-drawn polygons that don't
-                # have a separate outline.
-                framing_polygon = ((self.custom_polygon_outline
-                                    or self.custom_polygon)
-                                   if on_shape else None)
-                # If the polygon has a known machine LB-vertex, offer
-                # "Try Auto Locate" — drives the head directly there so
-                # the user doesn't have to jog manually. Only enabled once
-                # the laser is homed (otherwise MPos drift could put the
-                # auto-drive somewhere wrong).
-                #
-                # Both camera extras need a calibration (the laser itself
-                # does not, since 2026-11-09): without one Frame & Cut
-                # runs with no Auto Locate target and opens no camera,
-                # even if a tick or a position is left over from a time
-                # when a calibration existed.
-                camera_ready = self._camera_capture_ready()
-                auto_locate_target = (self._custom_polygon_lb_machine
-                                      if camera_ready and on_shape else None)
-                show_live_camera = bool(self.live_camera_var.get() and camera_ready)
-                cut_polygon, piece_count, job_label = mat_polygon, len(placed), None
             else:
-                # --- Tooling job: the tool's own validation, preview and
-                # generation, done by the function Tooling handed in. ---
-                job = tooling_job()
-                if not job:
+                if not self._frame_cut_prepare_tooling_job(run):
                     return
-                gcode_text = job['gcode_text']
-                material = job['material']
-                job_label = job['label']
-                piece_count = job['count']
-                # A Tooling sheet is a plain rectangle jogged to by hand:
-                # no outline to trace, no camera position to drive to, no
-                # flip override, whatever the Pad Maker has loaded.
-                on_shape = False
-                framing_polygon = None
-                auto_locate_target = None
-                cut_polygon = None
-                flip_height_mm = None
-                # The "Live camera preview" tick lives on the Pad Maker and
-                # is only on screen with a camera calibration; honour it
-                # here on the same condition, so a stale hidden tick can't
-                # open a camera nobody set up.
-                show_live_camera = bool(self.live_camera_var.get()
-                                        and self._camera_capture_ready())
 
-            # Framing pass. If a custom polygon is loaded (drawn or camera-
-            # captured), trace the polygon outline — on irregular scrap a
-            # bbox rectangle overhangs every concave edge and tells the user
-            # nothing about whether the cuts land on material. Fall back to
-            # the bbox rectangle for rectangular jobs (no polygon loaded).
-            from config import get_framing_power_s
-            power_s = get_framing_power_s(material, self.settings)
-            feed = self.settings.get("laser_framing_feed", 2000)
-            framing_lines = []
-            if framing_polygon and len(framing_polygon) >= 3:
-                framing_lines = generate_polygon_framing_gcode(
-                    framing_polygon, power_s=power_s, feed=feed,
-                )
-            else:
-                bbox = extract_gcode_bbox(gcode_text)
-                if bbox:
-                    xmin, xmax, ymin, ymax = bbox
-                    framing_lines = generate_framing_gcode(
-                        xmin, ymin, xmax, ymax, power_s=power_s, feed=feed,
-                    )
-
-            sender = falcon_sender.FalconSender(port=self.falcon_port)
-            try:
-                sender.connect()
-            except Exception as e:
-                messagebox.showerror(_("Connection Failed"),
-                                      _("Could not connect to the Falcon at "
-                                        "{p}: {e}").format(p=self.falcon_port, e=e))
-                self._detect_falcon_async()     # the port may be stale: look again
+            self._frame_cut_framing_lines(run)
+            if not self._frame_cut_connect(run):
                 return
 
             # From here on the port is open: every way out (jog cancelled,
@@ -1343,175 +1207,30 @@ class MachineControlMixin:
             # sender was garbage-collected, and a quick second Frame & Cut
             # could fail to open it.
             try:
-                # Optional live camera window — opens alongside the run dialog
-                # so the user can watch the laser head while it works, and stays
-                # open after the cut so the user can see the finished result.
-                # Stored on self so the reference persists past this function.
-                # Only ONE window at a time: if a previous Frame & Cut left
-                # a live cam open (it intentionally outlives the cut), focus
-                # that one instead of opening a duplicate.
-                if show_live_camera:
-                    try:
-                        import camera_capture
-                        from ui_dialogs import LiveCameraWindow
-                        existing = getattr(self, '_live_cam_window', None)
-                        if existing is not None and existing.winfo_exists():
-                            try:
-                                existing.lift()
-                                existing.focus_force()
-                            except tk.TclError:
-                                pass
-                        elif camera_capture.HAS_OPENCV:
-                            cam_idx = self._resolve_camera_index()
-                            if cam_idx is not None:
-                                self._live_cam_window = LiveCameraWindow(
-                                    self.root, camera_index=cam_idx,
-                                    settings=self.settings)
-                    except Exception:  # never block the cut on preview failure
-                        logging.getLogger("ssc.machine").exception(
-                            "Frame & Cut: could not open the live camera preview")
+                self._frame_cut_live_camera(run)
 
                 # After our connect+soft-reset, Grbl is in alarm state
                 # (homing required). $X clears that so motion is allowed.
                 # We don't $H here — that would fly the head to the homing
                 # switches and override whatever position the user manually
                 # set as their material origin.
-                sender.unlock()
+                run.sender.unlock()
 
-                # Manual positioning step: jog dialog stays open so the
-                # user can fine-tune with the arrow buttons. They can ALSO
-                # have positioned the head physically (open lid → push head
-                # to material's lower-left → close lid → click Start Frame),
-                # so the Start Frame button is enabled immediately — no
-                # forced jog click. If the head's already where they want,
-                # they just click Start Frame straight through.
-                # auto_locate_target (pad jobs on a camera polygon only) adds
-                # "Try Auto Locate" to this dialog.
-                jog_dlg = FalconRunDialog(
-                    self.root, sender, [],  # nothing to stream
-                    title=_("Position the head at your material's "
-                             "bottom-left corner (jog here OR open the "
-                             "lid and physically move it), then click "
-                             "Start Frame"),
-                    show_pause_resume=False, show_cut_button=False,
-                    stop_needs_confirm=False,
-                    done_button_label=_("Start Frame →"),
-                    remind_lid_on_advance=True,
-                    auto_locate_target=auto_locate_target,
-                    is_homed=self._falcon_homed_this_session)
-                if jog_dlg._final_reason != "complete":
+                if not self._frame_cut_position(run):
                     return
-
-                # Compute the polygon's leftmost-lowest vertex in framing's
-                # Y-UP frame. This is the corner the user intuitively jogs
-                # to ("BL of the scrap"). Computed from the OUTLINE (not
-                # the inset) so the LB-vertex sits on an actual scrap
-                # edge — for axis-aligned scraps this is bbox-(0,0); for
-                # tilted scraps it's the visible bottom-left corner.
-                #
-                # The inset polygon shares the same coordinate origin
-                # (see _set_custom_polygon_from_y_up), so cut placements
-                # remain correctly anchored even though the G92 offset
-                # comes from the outline.
-                #
-                # A job that is not on the loaded shape (every Tooling job, and
-                # a pad job for card on the paper size) has no polygon: its
-                # sheet's bottom-left corner is where the head was jogged to,
-                # so the origin is (0, 0) there, and _frame_cut_anchor (which
-                # reads the Pad Maker's loaded shape) is not asked.
-                if on_shape:
-                    g92_x, g92_y = self._frame_cut_anchor()
-                else:
-                    g92_x, g92_y = 0.0, 0.0
-
-                # Both modes share the same framing-loop recipe:
-                # G92 X{lb_x} Y{lb_y} sets work coords such that the
-                # polygon's bbox-BL ends up at work (0, 0) when the head
-                # is physically at the polygon's LB vertex — what the
-                # user thinks of as "BL of the material."
-                prefix = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}']
-                if framing_lines:
-                    framing_lines = prefix + framing_lines
-
-                if framing_lines:
-                    # Framing always runs when there's something to
-                    # frame — the user's escape hatch is clicking
-                    # "Looks Good — Cut!" immediately in the loop
-                    # dialog to skip to the cut. Loop mode lets them
-                    # take their time verifying alignment and nudge
-                    # the head with the jog buttons between/during
-                    # passes.
-                    fdlg = FalconRunDialog(
-                        self.root, sender, framing_lines,
-                        title=_("Framing — verify cut area, jog if "
-                                 "needed, click Cut when ready"),
-                        loop=True)
-                    if fdlg._final_reason != "complete":
-                        return  # user stopped or error during framing
-                    # No "Frame Looks Good?" prompt — the user already
-                    # confirmed by clicking Cut Now.
-
-                # Cut uses the same G92 offset as framing so the cut
-                # placements align with the LB-vertex jog convention.
-                cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
-                if tooling_job is None:
-                    cut_scrap_num = ((self.scrap_session['scrap_count'] + 1)
-                                     if scrap_mode else None)
-                else:
-                    cut_scrap_num = job.get('scrap_num')
-                self._keep_last_cut_gcode(
-                    cut_lines, material, cut_scrap_num,
-                    (g92_x, g92_y), flip_height_mm, cut_polygon, piece_count,
-                    job_label=job_label)
-                cut_dlg = FalconRunDialog(
-                    self.root, sender, cut_lines,
-                    title=_("Cutting — {m}").format(m=material.replace('_', ' ')))
-
-                if tooling_job is not None:
-                    # Logged like a pad run, stopped and errored cuts too
-                    # (the material went under the laser); the Die Scrap
-                    # sheet number travels with the job. Since 2026-11-09;
-                    # before, Job History took no Tooling runs.
-                    if job.get('tool'):
-                        self._record_tooling_job(job, "laser",
-                                                 status=cut_dlg._final_reason or "stopped")
-                    # Tooling's own bookkeeping (its scrap session, the
-                    # kerf test's measuring steps). It is told how the cut
-                    # ended and decides for itself what "complete" earns.
-                    after_cut = job.get('after_cut')
-                    if after_cut is not None:
-                        after_cut(cut_dlg._final_reason)
+                self._frame_cut_origin(run)
+                if not self._frame_cut_frame(run):
                     return
-
-                # Log it before the scrap bookkeeping below, which can
-                # sit on a modal dialog. Stopped and errored cuts are
-                # logged too, with their status — the material still
-                # went under the laser, and knowing a job was cut short
-                # is exactly what you want when pads come up missing.
-                # scrap_count is bumped by _frame_cut_scrap_advance, so
-                # the number this cut belongs to is one past it.
-                self._record_job(
-                    "laser", [material], pads, params,
-                    placed_count=len(placed),
-                    scrap_num=(self.scrap_session['scrap_count'] + 1
-                               if scrap_mode else None),
-                    status=cut_dlg._final_reason or "stopped")
-
-                # Scrap mode: commit this scrap (decrement remaining,
-                # offer continue/recapture) only once the cut has
-                # streamed to completion. A stopped or errored cut
-                # leaves the session untouched so it can be re-cut.
-                if scrap_mode and cut_dlg._final_reason == "complete":
-                    self._frame_cut_scrap_advance(len(placed), scrap_remaining)
+                self._frame_cut_cut(run)
+                self._frame_cut_record(run)
             finally:
                 # Intentionally don't auto-close live_cam — users want
                 # to see the finished result. They close it manually,
                 # or it dies with the app when SSC exits.
                 try:
-                    sender.disconnect()
+                    run.sender.disconnect()
                 except Exception:
                     pass
-
         except Exception as e:
             messagebox.showerror(_("An Error Occurred"),
                                   _("Something went wrong during Frame & Cut:\n\n"
@@ -1527,3 +1246,454 @@ class MachineControlMixin:
             # with the scrap still pending; a completed cut has already
             # committed it, so this is a no-op then.
             self._scrap_abandon_pending()
+
+    def _frame_cut_prepare_pad_job(self, run):
+        """Step 1 for the Pad Maker's button: validate the form, nest (one nest, or
+        the scrap's partial batch), show the nesting preview, generate the G-code to
+        a temp file and read it back; then what the machine half takes from a pad
+        job: on_shape, the outline-first flip height, the framing polygon, the
+        Auto Locate target and the live-camera tick (both only with a calibration).
+        Returns True with the job on `run`; a bare return means the input was
+        refused (a box has been shown) or the user backed out, and the run stops."""
+        # --- Pad Maker job: input validation up through nesting
+        # (mirrors on_generate_gcode) ---
+        params = self._prepare_generation()
+        if not params:
+            return
+        pads, hole_dia = params['pads'], params['hole_dia']
+        width_mm, height_mm = params['width_mm'], params['height_mm']
+        card_paper_dims = params['card_paper_dims']
+
+        supported_materials = [m for m, v in self.material_vars.items()
+                                 if v.get() and m != "exact_size"]
+        if len(supported_materials) != 1:
+            messagebox.showerror(
+                _("Pick One Material"),
+                _("Frame & Cut works with one material at a time. "
+                  "Please select exactly one material (not Exact Size)."))
+            return
+        material = supported_materials[0]
+        mat_w, mat_h, mat_polygon = self._get_material_dimensions(
+            material, width_mm, height_mm, card_paper_dims)
+
+        # Scrap mode places a partial batch on this scrap (one scrap
+        # per click, mirroring _generate_gcode_scrap_mode); standard
+        # mode nests the whole batch and requires it all to fit.
+        # scrap_remaining is handed to _frame_cut_scrap_advance once
+        # the cut completes; it stays None in standard mode.
+        scrap_mode = self.scrap_mode_var.get()
+        scrap_remaining = None
+        if scrap_mode:
+            result = self._scrap_begin_partial(
+                pads, hole_dia, material, mat_w, mat_h, mat_polygon,
+                ask_save_dir=False)
+            if result is None:
+                return
+            placed, scrap_remaining = result
+            hole_dia = self.scrap_session['hole_dia']
+            # Labeled zones stand down in scrap mode: a zone is sized for
+            # a whole size's count, but a scrap only takes part of it, so
+            # the block would have to be re-sized per scrap.
+            zones = []
+        else:
+            # One nest; its fixed counts are the fit check.
+            placed, zones, fixed_placed, fixed_total = nest_with_zones(
+                pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
+            if fixed_placed != fixed_total:
+                messagebox.showerror(
+                    _("Nesting Error"),
+                    _("Could not fit all '{m}' pieces in the available "
+                      "area.").format(m=material.replace('_', ' ')))
+                return
+
+        # Show the nesting layout before anything runs on the machine —
+        # same as the file-export Generate flow, so the user can see what
+        # will be cut and back out if it's not what they want. In scrap
+        # mode this is the subset that fits on the current scrap; in
+        # standard mode it's the whole batch. Cancelling (Adjust) backs out
+        # cleanly: the scrap is only counted after a completed cut (in
+        # _frame_cut_scrap_advance), so nothing is consumed here.
+        preview = NestingPreviewWindow(
+            self.root, {material: placed}, mat_w, mat_h,
+            polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones,
+            settings=self.settings)
+        if preview.result != "save":
+            return
+
+        # Generate G-code to a temp file then read it back into memory.
+        import tempfile
+        import os as _os
+        with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
+                                          mode='w') as tmp:
+            tmp_path = tmp.name
+        # The cut streams into the SAME work frame as the framing pass,
+        # and framing flips the scrap OUTLINE with the outline's height.
+        # A camera-captured polygon is inset from that outline, so the
+        # generator's default (flip with the polygon it's given, i.e.
+        # the inset) put every disc `inset` mm toward the machine front
+        # of where the frame showed it. Flip with the outline instead.
+        #
+        # A job that was not nested on the loaded shape (card on
+        # the paper size, the one case where mat_polygon is None
+        # with a shape loaded) takes nothing from the shape, here
+        # or in the machine half below: no flip override, no
+        # outline to frame, no anchor for the G92, no Auto Locate
+        # target. It is a plain sheet jogged to by its corner,
+        # which is how the exported file has always treated it.
+        on_shape = mat_polygon is not None
+        flip_height_mm = self._frame_cut_flip_height(on_shape)
+        try:
+            generate_gcode_from_placed(
+                placed, material, mat_w, mat_h, tmp_path, hole_dia,
+                self.settings, polygon=mat_polygon, zones=zones,
+                flip_height_mm=flip_height_mm)
+            with open(tmp_path, 'r') as f:
+                gcode_text = f.read()
+        finally:
+            try:
+                _os.remove(tmp_path)
+            except OSError:
+                pass
+
+        # What the machine half below takes from a pad job.
+        # Frame the OUTLINE polygon (un-insetted) so the trace
+        # matches the actual scrap edge. Cuts still use the inset
+        # polygon for placement — both share a coordinate origin
+        # so the G92 math below works either way. Fall back to
+        # custom_polygon for plain hand-drawn polygons that don't
+        # have a separate outline.
+        framing_polygon = ((self.custom_polygon_outline
+                            or self.custom_polygon)
+                           if on_shape else None)
+        # If the polygon has a known machine LB-vertex, offer
+        # "Try Auto Locate" — drives the head directly there so
+        # the user doesn't have to jog manually. Only enabled once
+        # the laser is homed (otherwise MPos drift could put the
+        # auto-drive somewhere wrong).
+        #
+        # Both camera extras need a calibration (the laser itself
+        # does not, since 2026-11-09): without one Frame & Cut
+        # runs with no Auto Locate target and opens no camera,
+        # even if a tick or a position is left over from a time
+        # when a calibration existed.
+        camera_ready = self._camera_capture_ready()
+        auto_locate_target = (self._custom_polygon_lb_machine
+                              if camera_ready and on_shape else None)
+        show_live_camera = bool(self.live_camera_var.get() and camera_ready)
+        cut_polygon, piece_count, job_label = mat_polygon, len(placed), None
+        # Hand the job to the machine half.
+        run.gcode_text, run.material, run.job_label, run.piece_count = gcode_text, material, job_label, piece_count
+        run.on_shape, run.framing_polygon, run.flip_height_mm = on_shape, framing_polygon, flip_height_mm
+        run.cut_polygon, run.auto_locate_target, run.show_live_camera = cut_polygon, auto_locate_target, show_live_camera
+        run.pads, run.params, run.placed = pads, params, placed
+        run.scrap_mode, run.scrap_remaining = scrap_mode, scrap_remaining
+        return True
+
+    def _frame_cut_flip_height(self, on_shape):
+        """The height the cut is Y-flipped with: the loaded shape's OUTLINE (the
+        inset polygon shares its origin but is shorter, and flipping with it put
+        every disc `inset` mm toward the machine front of where the frame showed
+        it, v2.5 to v2.7), the polygon itself when there is no separate outline,
+        and None for a job that is not on the shape (the generator then flips with
+        the sheet)."""
+        _flip_source = ((self.custom_polygon_outline or self.custom_polygon)
+                        if on_shape else None)
+        flip_height_mm = (max(p[1] for p in _flip_source)
+                          if _flip_source and len(_flip_source) >= 3
+                          else None)
+        return flip_height_mm
+
+    def _frame_cut_prepare_tooling_job(self, run):
+        """Step 1 for a Tooling tool: run the function the tab handed in (its own
+        validation, preview and generation) and take over what it returns. A
+        Tooling sheet is never on the loaded shape. Returns True with the job on
+        `run`; a bare return means the tool refused or the user backed out."""
+        # --- Tooling job: the tool's own validation, preview and
+        # generation, done by the function Tooling handed in. ---
+        job = run.tooling_job()
+        if not job:
+            return
+        gcode_text = job['gcode_text']
+        material = job['material']
+        job_label = job['label']
+        piece_count = job['count']
+        # A Tooling sheet is a plain rectangle jogged to by hand:
+        # no outline to trace, no camera position to drive to, no
+        # flip override, whatever the Pad Maker has loaded.
+        on_shape = False
+        framing_polygon = None
+        auto_locate_target = None
+        cut_polygon = None
+        flip_height_mm = None
+        # The "Live camera preview" tick lives on the Pad Maker and
+        # is only on screen with a camera calibration; honour it
+        # here on the same condition, so a stale hidden tick can't
+        # open a camera nobody set up.
+        show_live_camera = bool(self.live_camera_var.get()
+                                and self._camera_capture_ready())
+        # Hand the job to the machine half.
+        run.job = job
+        run.gcode_text, run.material, run.job_label, run.piece_count = gcode_text, material, job_label, piece_count
+        run.on_shape, run.framing_polygon, run.flip_height_mm = on_shape, framing_polygon, flip_height_mm
+        run.cut_polygon, run.auto_locate_target, run.show_live_camera = cut_polygon, auto_locate_target, show_live_camera
+        return True
+
+    def _frame_cut_framing_lines(self, run):
+        """The framing pass's lines, before the laser is touched: the framing polygon
+        traced, or the cut's bounding box, at the material's framing power
+        (config.get_framing_power_s) and the framing feed. Without the G92 prefix
+        yet: _frame_cut_origin adds it once the head has been positioned."""
+        from gcode_engine import (
+            extract_gcode_bbox,
+            generate_framing_gcode,
+            generate_polygon_framing_gcode,
+        )
+        material, framing_polygon, gcode_text = run.material, run.framing_polygon, run.gcode_text
+
+        # Framing pass. If a custom polygon is loaded (drawn or camera-
+        # captured), trace the polygon outline — on irregular scrap a
+        # bbox rectangle overhangs every concave edge and tells the user
+        # nothing about whether the cuts land on material. Fall back to
+        # the bbox rectangle for rectangular jobs (no polygon loaded).
+        from config import get_framing_power_s
+        power_s = get_framing_power_s(material, self.settings)
+        feed = self.settings.get("laser_framing_feed", 2000)
+        framing_lines = []
+        if framing_polygon and len(framing_polygon) >= 3:
+            framing_lines = generate_polygon_framing_gcode(
+                framing_polygon, power_s=power_s, feed=feed,
+            )
+        else:
+            bbox = extract_gcode_bbox(gcode_text)
+            if bbox:
+                xmin, xmax, ymin, ymax = bbox
+                framing_lines = generate_framing_gcode(
+                    xmin, ymin, xmax, ymax, power_s=power_s, feed=feed,
+                )
+
+        run.framing_lines = framing_lines
+
+    def _frame_cut_connect(self, run):
+        """Open the laser's port. Returns True with the connected sender on `run`; on
+        failure shows the box, asks the laser watch to look again and returns None,
+        with no sender on `run`, so nothing is disconnected."""
+        import falcon_sender
+
+        sender = falcon_sender.FalconSender(port=self.falcon_port)
+        try:
+            sender.connect()
+        except Exception as e:
+            messagebox.showerror(_("Connection Failed"),
+                                  _("Could not connect to the Falcon at "
+                                    "{p}: {e}").format(p=self.falcon_port, e=e))
+            self._detect_falcon_async()     # the port may be stale: look again
+            return
+        run.sender = sender
+        return True
+
+    def _frame_cut_live_camera(self, run):
+        """With the live-camera tick (and a calibration) open the live camera window
+        beside the run dialog, or lift the one a previous run left open; never
+        block the cut on a preview failure."""
+        show_live_camera = run.show_live_camera
+        # Optional live camera window — opens alongside the run dialog
+        # so the user can watch the laser head while it works, and stays
+        # open after the cut so the user can see the finished result.
+        # Stored on self so the reference persists past this function.
+        # Only ONE window at a time: if a previous Frame & Cut left
+        # a live cam open (it intentionally outlives the cut), focus
+        # that one instead of opening a duplicate.
+        if show_live_camera:
+            try:
+                import camera_capture
+                from ui_dialogs import LiveCameraWindow
+                existing = getattr(self, '_live_cam_window', None)
+                if existing is not None and existing.winfo_exists():
+                    try:
+                        existing.lift()
+                        existing.focus_force()
+                    except tk.TclError:
+                        pass
+                elif camera_capture.HAS_OPENCV:
+                    cam_idx = self._resolve_camera_index()
+                    if cam_idx is not None:
+                        self._live_cam_window = LiveCameraWindow(
+                            self.root, camera_index=cam_idx,
+                            settings=self.settings)
+            except Exception:  # never block the cut on preview failure
+                logging.getLogger("ssc.machine").exception(
+                    "Frame & Cut: could not open the live camera preview")
+
+    def _frame_cut_position(self, run):
+        """The jog-only run dialog: the user puts the head on the material's
+        bottom-left corner (jog, or open the lid and move it), Try Auto Locate
+        when the job is on a camera shape and the laser is homed, and Start Frame,
+        which asks the lid question (remind_lid_on_advance=True) because framing
+        is the first time the laser fires. Returns True on Start Frame; a bare
+        return when the user cancelled or closed the dialog."""
+        from ui_dialogs import FalconRunDialog
+        sender, auto_locate_target = run.sender, run.auto_locate_target
+
+        # Manual positioning step: jog dialog stays open so the
+        # user can fine-tune with the arrow buttons. They can ALSO
+        # have positioned the head physically (open lid → push head
+        # to material's lower-left → close lid → click Start Frame),
+        # so the Start Frame button is enabled immediately — no
+        # forced jog click. If the head's already where they want,
+        # they just click Start Frame straight through.
+        # auto_locate_target (pad jobs on a camera polygon only) adds
+        # "Try Auto Locate" to this dialog.
+        jog_dlg = FalconRunDialog(
+            self.root, sender, [],  # nothing to stream
+            title=_("Position the head at your material's "
+                     "bottom-left corner (jog here OR open the "
+                     "lid and physically move it), then click "
+                     "Start Frame"),
+            show_pause_resume=False, show_cut_button=False,
+            stop_needs_confirm=False,
+            done_button_label=_("Start Frame →"),
+            remind_lid_on_advance=True,
+            auto_locate_target=auto_locate_target,
+            is_homed=self._falcon_homed_this_session)
+        if jog_dlg._final_reason != "complete":
+            return
+        return True
+
+    def _frame_cut_origin(self, run):
+        """The work origin both passes share: G92 at the loaded shape's anchor vertex
+        (_frame_cut_anchor) for a job on the shape, X0 Y0 for one that is not
+        (every Tooling job; card on the paper size), prefixed to the framing lines."""
+        on_shape, framing_lines = run.on_shape, run.framing_lines
+
+        # Compute the polygon's leftmost-lowest vertex in framing's
+        # Y-UP frame. This is the corner the user intuitively jogs
+        # to ("BL of the scrap"). Computed from the OUTLINE (not
+        # the inset) so the LB-vertex sits on an actual scrap
+        # edge — for axis-aligned scraps this is bbox-(0,0); for
+        # tilted scraps it's the visible bottom-left corner.
+        #
+        # The inset polygon shares the same coordinate origin
+        # (see _set_custom_polygon_from_y_up), so cut placements
+        # remain correctly anchored even though the G92 offset
+        # comes from the outline.
+        #
+        # A job that is not on the loaded shape (every Tooling job, and
+        # a pad job for card on the paper size) has no polygon: its
+        # sheet's bottom-left corner is where the head was jogged to,
+        # so the origin is (0, 0) there, and _frame_cut_anchor (which
+        # reads the Pad Maker's loaded shape) is not asked.
+        if on_shape:
+            g92_x, g92_y = self._frame_cut_anchor()
+        else:
+            g92_x, g92_y = 0.0, 0.0
+
+        # Both modes share the same framing-loop recipe:
+        # G92 X{lb_x} Y{lb_y} sets work coords such that the
+        # polygon's bbox-BL ends up at work (0, 0) when the head
+        # is physically at the polygon's LB vertex — what the
+        # user thinks of as "BL of the material."
+        prefix = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}']
+        if framing_lines:
+            framing_lines = prefix + framing_lines
+        run.g92 = (g92_x, g92_y)
+        run.framing_lines = framing_lines
+
+    def _frame_cut_frame(self, run):
+        """The framing loop, when there is something to frame: low-power passes the
+        user watches, jogs between and ends with Cut. Returns True to go on to the
+        cut; a bare return when the user stopped or the framing errored."""
+        from ui_dialogs import FalconRunDialog
+        framing_lines, sender = run.framing_lines, run.sender
+
+        if framing_lines:
+            # Framing always runs when there's something to
+            # frame — the user's escape hatch is clicking
+            # "Looks Good — Cut!" immediately in the loop
+            # dialog to skip to the cut. Loop mode lets them
+            # take their time verifying alignment and nudge
+            # the head with the jog buttons between/during
+            # passes.
+            fdlg = FalconRunDialog(
+                self.root, sender, framing_lines,
+                title=_("Framing — verify cut area, jog if "
+                         "needed, click Cut when ready"),
+                loop=True)
+            if fdlg._final_reason != "complete":
+                return  # user stopped or error during framing
+            # No "Frame Looks Good?" prompt — the user already
+            # confirmed by clicking Cut Now.
+        return True
+
+    def _frame_cut_cut(self, run):
+        """The cut: the G92 of the framing pass and the job's G-code, kept in
+        <config dir>/last_frame_cut.gcode with its log line BEFORE it streams, then
+        streamed by the run dialog. How it ended is run.cut_dlg._final_reason."""
+        from ui_dialogs import FalconRunDialog
+        g92_x, g92_y = run.g92
+        gcode_text, material, sender = run.gcode_text, run.material, run.sender
+        flip_height_mm, cut_polygon, piece_count, job_label = (
+            run.flip_height_mm, run.cut_polygon, run.piece_count, run.job_label)
+        tooling_job, job, scrap_mode = run.tooling_job, run.job, run.scrap_mode
+
+        # Cut uses the same G92 offset as framing so the cut
+        # placements align with the LB-vertex jog convention.
+        cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
+        if tooling_job is None:
+            cut_scrap_num = ((self.scrap_session['scrap_count'] + 1)
+                             if scrap_mode else None)
+        else:
+            cut_scrap_num = job.get('scrap_num')
+        self._keep_last_cut_gcode(
+            cut_lines, material, cut_scrap_num,
+            (g92_x, g92_y), flip_height_mm, cut_polygon, piece_count,
+            job_label=job_label)
+        cut_dlg = FalconRunDialog(
+            self.root, sender, cut_lines,
+            title=_("Cutting — {m}").format(m=material.replace('_', ' ')))
+        run.cut_lines, run.cut_scrap_num, run.cut_dlg = cut_lines, cut_scrap_num, cut_dlg
+
+    def _frame_cut_record(self, run):
+        """After the cut, however it ended: a Tooling job goes into Job History (when
+        it carries a tool) and its after_cut is told how the cut ended; a pad job
+        goes into Job History and, in Scrap Mode, commits the scrap only when the
+        cut streamed to completion."""
+        tooling_job, job, cut_dlg = run.tooling_job, run.job, run.cut_dlg
+        material, pads, params, placed = run.material, run.pads, run.params, run.placed
+        scrap_mode, scrap_remaining = run.scrap_mode, run.scrap_remaining
+
+        if tooling_job is not None:
+            # Logged like a pad run, stopped and errored cuts too
+            # (the material went under the laser); the Die Scrap
+            # sheet number travels with the job. Since 2026-11-09;
+            # before, Job History took no Tooling runs.
+            if job.get('tool'):
+                self._record_tooling_job(job, "laser",
+                                         status=cut_dlg._final_reason or "stopped")
+            # Tooling's own bookkeeping (its scrap session, the
+            # kerf test's measuring steps). It is told how the cut
+            # ended and decides for itself what "complete" earns.
+            after_cut = job.get('after_cut')
+            if after_cut is not None:
+                after_cut(cut_dlg._final_reason)
+            return
+
+        # Log it before the scrap bookkeeping below, which can
+        # sit on a modal dialog. Stopped and errored cuts are
+        # logged too, with their status — the material still
+        # went under the laser, and knowing a job was cut short
+        # is exactly what you want when pads come up missing.
+        # scrap_count is bumped by _frame_cut_scrap_advance, so
+        # the number this cut belongs to is one past it.
+        self._record_job(
+            "laser", [material], pads, params,
+            placed_count=len(placed),
+            scrap_num=(self.scrap_session['scrap_count'] + 1
+                       if scrap_mode else None),
+            status=cut_dlg._final_reason or "stopped")
+
+        # Scrap mode: commit this scrap (decrement remaining,
+        # offer continue/recapture) only once the cut has
+        # streamed to completion. A stopped or errored cut
+        # leaves the session untouched so it can be re-cut.
+        if scrap_mode and cut_dlg._final_reason == "complete":
+            self._frame_cut_scrap_advance(len(placed), scrap_remaining)
