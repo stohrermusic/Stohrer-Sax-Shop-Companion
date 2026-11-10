@@ -4057,17 +4057,22 @@ class PolygonDrawWindow(tk.Toplevel):
 
         def _worker():
             try:
+                # calibration_present=True: this overlay warps the picture
+                # through the calibration it just loaded, so only the
+                # Falcon-named camera may stand in for the saved one.
                 cap, used, _frame = camera_capture.open_camera_or_fallback(
-                    cam_idx, (self._settings or {}).get("camera_index_override"))
+                    cam_idx, (self._settings or {}).get("camera_index_override"),
+                    calibration_present=True)
                 self._camera_index = used
-                self.after(0, self._camera_overlay_ready, cap)
+                notice = camera_capture.fallback_notice(cam_idx, used) if used != cam_idx else None
+                self.after(0, self._camera_overlay_ready, cap, notice)
             except Exception as e:
                 self.after(0, self._camera_overlay_failed, e)
 
         threading.Thread(target=_worker, name='polydraw-overlay',
                           daemon=True).start()
 
-    def _camera_overlay_ready(self, cap):
+    def _camera_overlay_ready(self, cap, notice=None):
         # User may have toggled off / cancelled / closed in the meantime.
         # (Cancel and Submit don't clear the toggle, so a closed window
         # has to be checked separately or the handle is never released.)
@@ -4079,7 +4084,9 @@ class PolygonDrawWindow(tk.Toplevel):
                 pass
             return
         self._cap = cap
-        self.status_var.set(_("Live camera underlay on."))
+        # `notice`: the overlay runs on another camera than the saved one
+        # (camera_capture.fallback_notice); never silently.
+        self.status_var.set(notice or _("Live camera underlay on."))
         self._overlay_refresh_loop()
 
     def _camera_overlay_failed(self, err):
@@ -9134,18 +9141,20 @@ class CameraCalibrationDialog(tk.Toplevel):
             _("Opening camera..."))
 
         def _worker():
+            asked = self._camera_index
             try:
                 cap, used, frame = self._cam_mod.open_camera_or_fallback(
-                    self._camera_index, (self._settings or {}).get("camera_index_override"))
+                    asked, (self._settings or {}).get("camera_index_override"))
                 self._camera_index = used
-                self.after(0, self._camera_ready, cap, frame)
+                notice = self._cam_mod.fallback_notice(asked, used) if used != asked else None
+                self.after(0, self._camera_ready, cap, frame, notice)
             except Exception as e:
                 self.after(0, self._camera_failed, e)
 
         threading.Thread(target=_worker, name='camcal-open',
                           daemon=True).start()
 
-    def _camera_ready(self, cap, first_frame):
+    def _camera_ready(self, cap, first_frame, notice=None):
         self._cam_opening = False
         if not self.winfo_exists():
             # Closed while the camera was opening. after() callbacks
@@ -9178,6 +9187,11 @@ class CameraCalibrationDialog(tk.Toplevel):
                 n=self.TARGET_FRAMES)
             self._last_progress_status = msg  # ours: no hold needed
             self._status_var.set(msg)
+        if notice:
+            # Running on another camera than the saved one
+            # (camera_capture.fallback_notice): said in the status line,
+            # which the preview leaves alone for STATUS_HOLD_S.
+            self._status_var.set(notice)
         # One refresh chain only: cancel any pending tick before starting.
         self._stop_refresh()
         self._refresh_loop()
@@ -9817,6 +9831,7 @@ class CameraCaptureDialog(tk.Toplevel):
     LIVE_REFRESH_MS = 100
     PREVIEW_W = 640
     PREVIEW_H = 480
+    NOTICE_HOLD_S = 6.0     # the fallback notice stays this long before the detection line resumes
 
     def __init__(self, parent, camera_index, calibration_path, settings=None):
         super().__init__(parent)
@@ -9832,6 +9847,7 @@ class CameraCaptureDialog(tk.Toplevel):
         self._latest_undistorted = None
         self._latest_polygon_px = None
         self._latest_polygon_mm = None
+        self._notice_until = 0.0
         self._latest_photo = None
         self._refresh_after_id = None
         # Optional settings dict — when present, the detection-bias
@@ -10017,18 +10033,24 @@ class CameraCaptureDialog(tk.Toplevel):
             _("Opening camera..."))
 
         def _worker():
+            asked = self._camera_index
             try:
+                # calibration_present=True: this dialog maps the picture to
+                # the bed through the calibration it loaded, so only the
+                # Falcon-named camera may stand in for the saved one.
                 cap, used, _frame = self._cam_mod.open_camera_or_fallback(
-                    self._camera_index, (self._settings or {}).get("camera_index_override"))
+                    asked, (self._settings or {}).get("camera_index_override"),
+                    calibration_present=True)
                 self._camera_index = used
-                self.after(0, self._camera_ready, cap)
+                notice = self._cam_mod.fallback_notice(asked, used) if used != asked else None
+                self.after(0, self._camera_ready, cap, notice)
             except Exception as e:
                 self.after(0, self._camera_failed, e)
 
         threading.Thread(target=_worker, name='camcap-open',
                           daemon=True).start()
 
-    def _camera_ready(self, cap):
+    def _camera_ready(self, cap, notice=None):
         if not self.winfo_exists():
             # Closed while the camera was opening; release it here or
             # nothing will.
@@ -10038,10 +10060,23 @@ class CameraCaptureDialog(tk.Toplevel):
                 pass
             return
         self._cap = cap
+        if notice:
+            # Running on another camera than the saved one
+            # (camera_capture.fallback_notice). The detection line is
+            # rewritten on every frame, so it waits NOTICE_HOLD_S.
+            self._notice_until = time.monotonic() + self.NOTICE_HOLD_S
+            self._status_var.set(notice)
         self._refresh_loop()
 
     def _camera_failed(self, err):
         self._status_var.set(_("Could not open camera: {e}").format(e=err))
+
+    def _set_live_status(self, text):
+        """The per-frame status line, unless the fallback notice is still
+        being shown."""
+        if time.monotonic() < self._notice_until:
+            return
+        self._status_var.set(text)
 
     def _refresh_loop(self):
         if not self.winfo_exists() or self._cap is None:
@@ -10089,7 +10124,7 @@ class CameraCaptureDialog(tk.Toplevel):
                              fw, fh, cw, ch)
             self._latest_polygon_mm = None
             self._use_btn.config(state="disabled")
-            self._status_var.set(_(
+            self._set_live_status(_(
                 "This camera is sending {fw}×{fh} images, but the "
                 "calibration was made at {cw}×{ch}. Recalibrate, or use "
                 "Switch camera if this is the wrong one.").format(
@@ -10135,12 +10170,12 @@ class CameraCaptureDialog(tk.Toplevel):
             ys_mm = [p[1] for p in self._latest_polygon_mm]
             w_mm = max(xs_mm) - min(xs_mm)
             h_mm = max(ys_mm) - min(ys_mm)
-            self._status_var.set(_(
+            self._set_live_status(_(
                 "Detected: {n}-vertex polygon, {w:.0f} × {h:.0f} mm bbox").format(
                 n=n_pts, w=w_mm, h=h_mm))
         else:
             self._use_btn.config(state="disabled")
-            self._status_var.set(_("No scrap detected — place a piece on the bed."))
+            self._set_live_status(_("No scrap detected — place a piece on the bed."))
 
         # OpenCV BGR → PIL RGB
         rgb = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
@@ -11178,12 +11213,17 @@ class LiveCameraWindow(tk.Toplevel):
             width=self.PREVIEW_W, height=self.PREVIEW_H)
         self._preview_label.pack(padx=8, pady=(8, 4))
 
-        # Switch camera button below the preview — single-line bar.
+        # Switch camera button below the preview — single-line bar. Its
+        # left side is the window's status line: empty, unless the window
+        # runs on another camera than the saved one (fallback_notice).
         ctrl_row = tk.Frame(self, bg=DIALOG_BG)
         ctrl_row.pack(fill='x', padx=8, pady=(0, 8))
         tk.Button(ctrl_row, text=_("Switch camera"),
                    command=self._on_switch_camera,
                    font=("Helvetica", 9)).pack(side='right')
+        self._status_var = tk.StringVar(value="")
+        tk.Label(ctrl_row, textvariable=self._status_var, bg=DIALOG_BG,
+                 font=("Helvetica", 9), anchor='w').pack(side='left', fill='x', expand=True)
 
         self.geometry(f"{self.PREVIEW_W + 30}x{self.PREVIEW_H + 60}")
         # Position to the right of the parent so it doesn't overlap the
@@ -11242,18 +11282,20 @@ class LiveCameraWindow(tk.Toplevel):
         import threading
 
         def _worker():
+            asked = self._camera_index
             try:
                 cap, used, _frame = self._cam_mod.open_camera_or_fallback(
-                    self._camera_index, (self._settings or {}).get("camera_index_override"))
+                    asked, (self._settings or {}).get("camera_index_override"))
                 self._camera_index = used
-                self.after(0, self._camera_ready, cap)
+                notice = self._cam_mod.fallback_notice(asked, used) if used != asked else None
+                self.after(0, self._camera_ready, cap, notice)
             except Exception:
                 pass
 
         threading.Thread(target=_worker, name='livecam-open',
                           daemon=True).start()
 
-    def _camera_ready(self, cap):
+    def _camera_ready(self, cap, notice=None):
         if self._closed:
             try:
                 cap.release()
@@ -11261,6 +11303,10 @@ class LiveCameraWindow(tk.Toplevel):
                 pass
             return
         self._cap = cap
+        try:
+            self._status_var.set(notice or "")
+        except Exception:
+            pass
         self._refresh_loop()
 
     def _refresh_loop(self):

@@ -1063,6 +1063,11 @@ class ToolingTabMixin:
                                     "the laser camera and try again."))
             return
 
+        # The app's own live preview must not hold the camera this
+        # dialog is about to open (main._release_live_camera).
+        release = getattr(self, '_release_live_camera', None)
+        if release is not None:
+            release()
         CameraCalibrationDialog(
             self.root,
             camera_index=cam_idx,

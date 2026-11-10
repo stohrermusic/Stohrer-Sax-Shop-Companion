@@ -81,6 +81,13 @@ BLUETOOTH = {'device': 'COM1', 'description': 'Standard Serial over Bluetooth li
 FALCON_B = dict(FALCON, device='COM12', description='USB Serial Device (COM12)')
 CREALITY = {'device': 'COM3', 'description': 'Creality Falcon (COM3)', 'hwid': 'USB VID:PID=1234:0001',
             'vid': 0x1234, 'pid': 0x0001, 'manufacturer': ''}       # a laser by description, unknown VID
+# Laser-looking by DESCRIPTION alone: no VID:PID at all (a driver that reports none).
+DESC_ONLY = [{'device': 'COM9', 'description': 'USB-SERIAL CH340 (COM9)', 'hwid': 'n/a', 'vid': None, 'pid': None,
+              'manufacturer': None},
+             {'device': 'COM10', 'description': 'Falcon (COM10)', 'hwid': 'n/a', 'vid': None, 'pid': None,
+              'manufacturer': None},
+             {'device': 'COM11', 'description': 'Creality (COM11)', 'hwid': 'n/a', 'vid': None, 'pid': None,
+              'manufacturer': None}]
 
 
 class Clock:
@@ -226,6 +233,55 @@ def a_silent_laser_port_is_asked_again_every_ten_seconds():
 
 check("watch: a laser-looking port that is silent, then answers 25 s later, is found by the 10 s re-probe",
       a_silent_laser_port_is_asked_again_every_ten_seconds)
+
+
+def a_port_that_looks_like_a_laser_by_description_alone_is_retried_too():
+    # No VID:PID at all: the description is the only hint (ch340 / falcon / creality).
+    for p in DESC_ONLY:
+        assert fs.port_priority(p) == 1 and fs.port_looks_like_a_laser(p), p['description']
+        sim, w = Sim(), fs.LaserWatch()
+        sim.ports = [p]
+        t0 = sim.clock.t
+        sim.answers[p['device']] = lambda now, t0=t0: 'banner' if now >= t0 + 25 else None
+        events = sim.run(w, 40)
+        times = [t - t0 for d, t in sim.probes]
+        assert times == [0.0, 10.0, 20.0, 30.0], f"{p['description']}: re-probed every 10 s until it answered: {times}"
+        assert [e[:3] for e in events if e[0] != 'silent'] == [('found', p['device'], 'banner')], events
+    # And an unknown VID:PID with a plain description is not a laser-looking port: once, then left alone.
+    plain = {'device': 'COM13', 'description': 'USB Serial Port (COM13)', 'hwid': 'USB VID:PID=0403:6001',
+             'vid': 0x0403, 'pid': 0x6001, 'manufacturer': 'FTDI'}
+    assert fs.port_priority(plain) == 2
+    sim, w = Sim(), fs.LaserWatch()
+    sim.ports = [plain]
+    sim.run(w, 60)
+    assert len(sim.probes) == 1, sim.probes
+
+
+check("watch: a port recognised as a laser by its description alone (no VID:PID) is asked again every 10 s while "
+      "silent; an unknown ID with a plain description once", a_port_that_looks_like_a_laser_by_description_alone_is_retried_too)
+
+
+def a_rescan_that_finds_the_same_laser_keeps_it():
+    sim, w = Sim(), fs.LaserWatch()
+    sim.ports = [FALCON, ARDUINO]
+    sim.answers['COM7'] = 'status'
+    sim.run(w, 2)
+    assert w.known_port == 'COM7'
+    n = len(sim.probes)
+    # A connect failed for a moment; the laser is still there and answers on the same port.
+    w.request_rescan()
+    events = sim.run(w, 2)
+    assert not [e for e in events if e[0] == 'lost'], f"the laser was lost by a rescan that found it: {events}"
+    assert ('rescan', 1, 'COM7') in events, events
+    assert w.known_port == 'COM7', w.known_port
+    assert [d for d, _t in sim.probes[n:]] == ['COM7'], f"the rescan went on after the laser answered: {sim.probes[n:]}"
+    # And the watch is quiet again afterwards: the laser is known.
+    sim.run(w, 60)
+    assert len(sim.probes) == n + 1, f"probed after the rescan found the laser: {sim.probes[n + 1:]}"
+
+
+check("watch: a rescan that finds the laser on the port it already knew keeps it: no 'lost', the rescan names it, "
+      "nothing probed afterwards", a_rescan_that_finds_the_same_laser_keeps_it)
 
 
 def an_unrelated_port_is_probed_once_then_left_alone():
@@ -378,8 +434,19 @@ def gui():
         new_threads = {t.name for t in threading.enumerate()} - threads_before
         assert not any("laser" in n or "falcon" in n for n in new_threads), new_threads
         assert app.falcon_port is None
-        # The user asking with no watch running probes nothing.
-        app._detect_falcon_async()
+        # The user asking with no watch running is a pure no-op: nothing
+        # probed, nothing scheduled, the port left exactly as it was.
+        afters = []
+        root.after = lambda ms, fn=None, *args: afters.append((ms, fn, args))
+        app.falcon_port = "COM-untouched"
+        try:
+            app._detect_falcon_async()
+        finally:
+            del root.after
+        assert app.falcon_port == "COM-untouched", f"a rescan with no watch touched the port: {app.falcon_port}"
+        app.falcon_port = None
+        assert afters == [], f"a rescan with no watch scheduled something: {afters}"
+        assert not getattr(app, "_laser_watch_busy", False), "a rescan with no watch marked a worker busy"
         assert not any("laser" in t.name for t in threading.enumerate()), "a rescan ran with no watch"
         # The one call site is the launch block, and the probe suites' gates
         # (selftest, the tour) never reach it.
@@ -391,6 +458,84 @@ def gui():
         assert "_start_laser_watch" not in inspect.getsource(main_mod.run_tour)
         assert "_detect_falcon_async" not in launch, "the launch block still starts the old one-shot detection"
     check("app: building the app starts no watch, no thread and no timer; selftest and the tour never do", building_the_app_starts_nothing)
+
+    def the_launch_path_starts_nothing_without_the_toggle_or_pyserial():
+        # The __main__ block checks too, which masked it; this is the method's own rule.
+        afters = []
+        root.after = lambda ms, fn=None, *args: afters.append((ms, fn, args))
+        real_has = fs.HAS_PYSERIAL
+        try:
+            app.settings["experimental_machine_menu"] = False
+            fs.HAS_PYSERIAL = True
+            app._start_laser_watch()
+            assert getattr(app, "_laser_watch", None) is None, "a watch started with machine integration off"
+            app.settings["experimental_machine_menu"] = True
+            fs.HAS_PYSERIAL = False
+            app._start_laser_watch()
+            assert getattr(app, "_laser_watch", None) is None, "a watch started without pyserial"
+            assert afters == [] and not getattr(app, "_laser_watch_busy", False), afters
+        finally:
+            del root.after
+            fs.HAS_PYSERIAL = real_has
+            app.settings["experimental_machine_menu"] = True
+    check("app: _start_laser_watch starts nothing with machine integration off, and nothing without pyserial",
+          the_launch_path_starts_nothing_without_the_toggle_or_pyserial)
+
+    def the_live_loop_ticks_frees_its_worker_and_ticks_again():
+        # The real _start_laser_watch / _laser_watch_tick / _laser_watch_worker
+        # chain, with root.after recording instead of scheduling and the worker
+        # thread run inline, on a fake port list and probe.
+        afters, lists, probes = [], [], []
+        root.after = lambda ms, fn=None, *args: afters.append((ms, fn, args))
+        real_thread, real_has = threading.Thread, fs.HAS_PYSERIAL
+        keep = fs.list_serial_ports, fs.probe_grbl_port
+
+        class Inline:
+            def __init__(self, target=None, name=None, daemon=None, **k):
+                self.target, self.name = target, name
+
+            def start(self):
+                assert self.name == 'laser-watch', self.name
+                self.target()
+        fs.list_serial_ports = lambda: lists.append(1) or [dict(FALCON)]
+        fs.probe_grbl_port = lambda device, *a, **k: probes.append(device) or 'status'
+        threading.Thread, fs.HAS_PYSERIAL = Inline, True
+        del machine_log[:]
+        try:
+            app._start_laser_watch()
+            assert isinstance(app._laser_watch, fs.LaserWatch) and any("laser watch started" in m for m in machine_log)
+            # One pass ran on the worker, and it left the worker slot free.
+            assert lists == [1] and probes == ['COM7'], (lists, probes)
+            assert app._laser_watch_busy is False, "the worker left itself marked busy"
+            applies = [a for a in afters if a[1] == app._laser_watch_apply]
+            ticks = [a for a in afters if a[1] == app._laser_watch_tick]
+            assert len(applies) == 1 and applies[0][0] == 0, f"the pass's events were not handed to the Tk thread: {afters}"
+            assert len(ticks) == 1 and ticks[0][0] == main_mod.LASER_WATCH_PERIOD_MS, \
+                f"the next tick is not scheduled at LASER_WATCH_PERIOD_MS: {afters}"
+            # Delivered: the laser is found.
+            app._laser_watch_apply(*applies[0][2])
+            assert app.falcon_port == 'COM7'
+            # The next tick starts a second pass (the laser is known, so it probes nothing, but it looks).
+            ticks[0][1]()
+            assert lists == [1, 1], f"the second tick did not run a pass: {lists}"
+            assert probes == ['COM7'], f"probed while the laser was known: {probes}"
+            assert app._laser_watch_busy is False
+            assert sum(1 for a in afters if a[1] == app._laser_watch_tick) == 2, "the second tick did not reschedule"
+            # The watch is not started twice.
+            first = app._laser_watch
+            app._start_laser_watch()
+            assert app._laser_watch is first and lists == [1, 1]
+        finally:
+            del root.after
+            threading.Thread, fs.HAS_PYSERIAL = real_thread, real_has
+            fs.list_serial_ports, fs.probe_grbl_port = keep
+            app._laser_watch = None
+            app._laser_watch_busy = False
+            app.falcon_port = None
+            app._refresh_machine_ui_state()
+            del machine_log[:]
+    check("app: the live loop: a tick runs one pass on the worker, hands its events to the Tk thread, frees the "
+          "worker and schedules the next tick, which runs again", the_live_loop_ticks_frees_its_worker_and_ticks_again)
 
     # Wire a watch by hand, the way the launch path does, but drive it with fakes and a fake clock.
     sim = Sim()
@@ -500,8 +645,8 @@ def gui():
             def disconnect(self):
                 pass
         shown_boxes = []
-        for name in ("showerror",):
-            setattr(main_mod.messagebox, name, lambda title, msg, _n=name, **k: shown_boxes.append((str(title), str(msg))))
+        keep_err = main_mod.messagebox.showerror
+        main_mod.messagebox.showerror = lambda title, msg, **k: shown_boxes.append((str(title), str(msg)))
         keep = fs.FalconSender
         fs.FalconSender = DeadSender
         keep_nest = main_mod.NestingPreviewWindow
@@ -513,12 +658,25 @@ def gui():
         app._laser_watch_busy = True        # so no worker thread starts in the test
         try:
             app.on_frame_and_cut()
+            assert [b[0] for b in shown_boxes] == ["Connection Failed"], shown_boxes
+            assert app._laser_watch.rescan_wanted is True, "a failed connect did not ask for a rescan"
+            # The Machine menu's three connecting items do the same: their box, then a rescan.
+            for handler, question in ((app._on_machine_home_falcon, "Home Laser?"),
+                                      (app._on_machine_test_connection, None),
+                                      (app._on_machine_clear_errors, None)):
+                del shown_boxes[:]
+                app._laser_watch.rescan_wanted = False
+                if question:
+                    box_guard.GUARD.expect(question, answer=True)
+                handler()
+                assert [b[0] for b in shown_boxes] == ["Connection Failed"], f"{handler.__name__}: {shown_boxes}"
+                assert "port busy" in shown_boxes[0][1], shown_boxes
+                assert app._laser_watch.rescan_wanted is True, f"{handler.__name__}: a failed connect did not ask for a rescan"
         finally:
             fs.FalconSender = keep
             main_mod.NestingPreviewWindow = keep_nest
+            main_mod.messagebox.showerror = keep_err
             app._laser_watch_busy = False
-        assert [b[0] for b in shown_boxes] == ["Connection Failed"], shown_boxes
-        assert app._laser_watch.rescan_wanted is True, "a failed connect did not ask for a rescan"
         # The rescan probes every port present, the stale one included (it
         # is still listed: another program may hold it, or the laser behind
         # it is off), Bluetooth last, and reports; a stale port that does
@@ -535,8 +693,31 @@ def gui():
         sim.answers['COM7'] = 'status'
         events = one_pass()
         assert app.falcon_port == 'COM7' and [e[:2] for e in events] == [('found', 'COM7')], events
-    check("app: a connect that fails shows its box and asks for a rescan, which probes every port, Bluetooth last",
-          a_connect_that_fails_asks_for_a_rescan)
+    check("app: a connect that fails (Frame & Cut, Home Laser, Test Connection, Clear Errors) shows its box and asks "
+          "for a rescan, which probes every port, Bluetooth last", a_connect_that_fails_asks_for_a_rescan)
+
+    def a_rescan_that_finds_the_same_laser_keeps_everything():
+        # A connect failed for a moment (a busy port, say); the laser is still
+        # there on the port the watch knew. The rescan must not lose it.
+        assert app.falcon_port == 'COM7' and shown() == (True, [True] * len(app._tooling_frame_cut_btns)), "fixture"
+        app._falcon_homed_this_session = True
+        app._laser_watch.request_rescan()
+        sim.ports = [FALCON, ARDUINO, BLUETOOTH]
+        sim.answers['COM7'] = 'status'
+        del machine_log[:]
+        n = len(sim.probes)
+        events = one_pass()
+        assert not [e for e in events if e[0] == 'lost'], f"the laser was lost by a rescan that found it: {events}"
+        assert ('rescan', 1, 'COM7') in events, events
+        assert app.falcon_port == 'COM7' and app._laser_watch.known_port == 'COM7', (app.falcon_port, app._laser_watch.known_port)
+        assert app._falcon_homed_this_session is True, "the homed flag was cleared by a rescan that found the same laser"
+        assert shown() == (True, [True] * len(app._tooling_frame_cut_btns)), f"buttons after the rescan: {shown()}"
+        assert [d for d, _t in sim.probes[n:]] == ['COM7'], f"the rescan went on past the laser: {sim.probes[n:]}"
+        assert any("rescan asked for: 1 port(s) probed, laser on COM7" in m for m in machine_log), machine_log
+        assert not any("gone" in m for m in machine_log), machine_log
+        app._falcon_homed_this_session = False
+    check("app: a rescan that finds the laser on the port it already knew: no 'lost', the homed flag and the buttons "
+          "stay, the log names the port", a_rescan_that_finds_the_same_laser_keeps_everything)
 
     def a_quiet_hour_logs_nothing():
         sim.ports = []

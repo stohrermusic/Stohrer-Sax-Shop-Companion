@@ -130,7 +130,9 @@ def child(lang):
             root.update()
             laid_out = all(b.winfo_ismapped() and b.winfo_width() > 1 for b in app._tooling_buttons.values())
             w = root.winfo_width()
-            need = app.tooling_tab_frame.winfo_reqwidth() + getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0)
+            need = app.tooling_tab_frame.winfo_reqwidth() + (
+                app._notebook_page_chrome_px() if hasattr(app, "_notebook_page_chrome_px")
+                else getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0))
             if laid_out and w > 1 and w == last and w >= need:
                 break
             if time.time() > deadline:
@@ -152,15 +154,30 @@ def child(lang):
                 # and how it was configured, beside what it got.
                 "relief": str(btn.cget("relief")), "reqwidth": btn.winfo_reqwidth(),
                 "row": grid.get("row"), "col": grid.get("column"),
+                # The grid's own terms: the button fills its cell sideways,
+                # and the cell's column is in the one uniform group.
+                "sticky": str(grid.get("sticky", "")),
+                "uniform": (str(btn.master.grid_columnconfigure(grid["column"])["uniform"])
+                            if grid.get("column") is not None else ""),
             })
             plain.destroy()
         probe = tk.Button(root, text="x", width=22)
         chars22 = probe.winfo_reqwidth()
         probe.destroy()
         visible = [t for t in app.notebook.tabs() if app.notebook.tab(t, "state") != "hidden"]
+        page = app.tooling_tab_frame
+        selector = next(iter(app._tooling_buttons.values())).master
+        chrome = getattr(app, "_notebook_page_chrome_px", lambda: None)()
         return {"window": root.winfo_width(), "buttons": buttons, "chars22": chars22, "tabs": len(visible),
                 "section_open": app._active_tooling_section,
-                "content_need": app.tooling_tab_frame.winfo_reqwidth() + getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0)}
+                # The Tooling PAGE's own visible area, in the window's frame,
+                # and what the selector grid asks of it: a button is on
+                # screen when it is inside the page, not merely inside the
+                # window (Apple Silicon, c671b33: the third column ran past
+                # the page's right edge, inside a window 785 px wide).
+                "page_x": page.winfo_rootx() - root.winfo_rootx(), "page_w": page.winfo_width(),
+                "selector_req": selector.winfo_reqwidth(), "chrome": chrome,
+                "content_need": page.winfo_reqwidth() + (chrome if chrome else getattr(main_mod, "TOOLING_CONTENT_MARGIN_PX", 0))}
 
     # With the default tabs, as the app starts; then as it would start with
     # the fewest tabs Feature Set allows while Tooling is shown (the window
@@ -476,6 +493,8 @@ GUARDED_SUITES = (
     "test_toner_live", "test_tooltips", "test_tuner_canvas", "test_zone_labels",
     # the laser watch's app-level checks (2026-11-09, the connection work)
     "test_laser_watch",
+    # the camera fallback's real-window checks (2026-11-09, the follow-up round)
+    "test_camera_fallback",
 )
 
 
@@ -603,12 +622,33 @@ def button_evidence(m):
     """One line per section button for a failure message: what each was
     given, what it asked for, what it got, and where it sits; plus whether
     a section was open when it was measured."""
-    lines = [f"section open: {m.get('section_open')!r}; window {m['window']} px; 22 chars = {m['chars22']} px"]
+    lines = [f"section open: {m.get('section_open')!r}; window {m['window']} px; 22 chars = {m['chars22']} px; "
+             f"Tooling page x {m.get('page_x')} w {m.get('page_w')} px (chrome {m.get('chrome')} px); "
+             f"selector grid asks {m.get('selector_req')} px"]
     for b in m["buttons"]:
         lines.append(f"  {b['text']!r}: relief {b.get('relief')}, {b['chars']} chars, asks {b.get('reqwidth')} px, "
                      f"got {b['width']} px, label alone {b['label_asks']} px, row {b.get('row')} col {b.get('col')}, "
                      f"x {b['x']} y {b['y']}")
     return "\n".join(lines)
+
+
+def buttons_on_the_page(lang, m):
+    """Every section button's right edge inside the Tooling page's own
+    visible area, and the page at least as wide as the selector grid asks.
+    The window being wide enough is not the same thing: the page is
+    narrower than the window by the notebook's chrome, which differs by
+    port (the Apple Silicon picture of c671b33 clipped the third column
+    inside a 785 px window)."""
+    assert m.get("page_w", 0) > 1 and m.get("page_x") is not None, f"{lang}: the Tooling page was not measured\n" + button_evidence(m)
+    page_right = m["page_x"] + m["page_w"]
+    for b in m["buttons"]:
+        assert b["x"] >= m["page_x"] and b["x"] + b["width"] <= page_right, (
+            f"{lang}, {m['tabs']} tabs: {b['text']!r} runs from {b['x']} to {b['x'] + b['width']} px, "
+            f"the Tooling page's visible area is {m['page_x']} to {page_right} px (window {m['window']} px)\n"
+            + button_evidence(m))
+    assert m["page_w"] >= m["selector_req"], (
+        f"{lang}, {m['tabs']} tabs: the Tooling page is {m['page_w']} px wide, the selector grid asks "
+        f"{m['selector_req']} px\n" + button_evidence(m))
 
 
 def section_button_checks():
@@ -652,6 +692,18 @@ def section_button_checks():
                 # more for one button cannot make it stand out.
                 assert min(widths) >= max(b["reqwidth"] for b in m["buttons"]), (
                     f"{lang}, {m['tabs']} tabs: a button got less than the widest request\n" + button_evidence(m))
+                # In the grid's own terms, which is what makes that true on
+                # Aqua and not only here: each button's column is in the one
+                # uniform group, and each button is stretched to its cell
+                # (sticky east and west). On Windows the pixels come out the
+                # same either way; this is the rule, not its measurement.
+                for b in m["buttons"]:
+                    assert b.get("uniform") == "tooling-sections", (
+                        f"{lang}: {b['text']!r} sits in column {b.get('col')}, whose uniform group is "
+                        f"{b.get('uniform')!r}, not 'tooling-sections'\n" + button_evidence(m))
+                    assert "e" in b.get("sticky", "") and "w" in b.get("sticky", ""), (
+                        f"{lang}: {b['text']!r} is not stretched to its cell (sticky {b.get('sticky')!r})\n"
+                        + button_evidence(m))
                 for b in m["buttons"]:
                     assert b["width"] > 1, f"fixture, {lang}: {b['text']!r} was measured before it was laid out"
                     assert b["width"] >= b["label_asks"], (
@@ -660,8 +712,16 @@ def section_button_checks():
                     assert b["x"] >= 0 and b["x"] + b["width"] <= m["window"], (
                         f"{lang}, {m['tabs']} tabs, window {m['window']} px: {b['text']!r} runs from {b['x']} to "
                         f"{b['x'] + b['width']} px, past the window's edge\n" + button_evidence(m))
+                # Inside the Tooling PAGE, not merely inside the window: the
+                # window is wider than a page by the notebook's padding and
+                # inset, which Aqua makes more than Windows' 24 px. Sized to
+                # the content plus a constant, the c671b33 window on Apple
+                # Silicon was 785 px wide and the third column still ran past
+                # the page's right edge at about 773 (CI run 42719069476).
+                buttons_on_the_page(lang, m)
         check(f"section buttons, {lang}: one width, no label cut off, the window never narrower than the Tooling "
-              "content, with the default tabs and with the fewest", no_label_is_cut_off)
+              "content, every button inside the Tooling page, with the default tabs and with the fewest",
+              no_label_is_cut_off)
 
         def one_width_with_a_section_open(lang=lang):
             m = measured(lang)["open"]
@@ -673,6 +733,7 @@ def section_button_checks():
             assert len(widths) == 1, f"{lang}: with a section open the seven buttons are not one width\n" + button_evidence(m)
             for b in m["buttons"]:
                 assert b["width"] >= b["label_asks"], f"{lang}: {b['text']!r} narrower than its label\n" + button_evidence(m)
+            buttons_on_the_page(lang, m)
             # Said in the log on every run: what this port asks for the
             # sunken button against the raised ones (nobody here has a Mac).
             asks = {b["relief"]: sorted({x["reqwidth"] for x in m["buttons"] if x["relief"] == b["relief"]})

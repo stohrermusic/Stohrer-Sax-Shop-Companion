@@ -552,6 +552,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         enough). Only that tab is counted, not the notebook's whole
         request: the library and audio tabs ask for 850 px and more on
         every platform and are built to live in less.
+
+        The room between the window's width and a notebook page's width
+        (the pack padx round the notebook, its own border and inset) is
+        MEASURED on the page that is mapped, not assumed: it is the same
+        for every page, and on Aqua it is more than the 24 px it is on
+        Windows. With the constant, the Apple Silicon picture of c671b33
+        had the window 15 px wider than the released build's and the
+        third column of section buttons still running past the page's
+        right edge, clipped there (CI run 42719069476). The constant is
+        only the fallback for a window that has no size yet.
         """
         try:
             self.root.update_idletasks()
@@ -563,7 +573,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             need += TAB_LABEL_PADDING_PX * len(visible) + 40
             tooling = getattr(self, 'tooling_tab_frame', None)
             if tooling is not None and str(tooling) in visible:
-                need = max(need, tooling.winfo_reqwidth() + TOOLING_CONTENT_MARGIN_PX)
+                need = max(need, tooling.winfo_reqwidth() + self._notebook_page_chrome_px())
             cur_w = self.root.winfo_width()
             if cur_w <= 1:
                 cur_w = 640
@@ -572,6 +582,31 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 self.root.geometry(f"{int(need)}x{h if h > 1 else 720}")
         except tk.TclError:
             pass
+
+    def _notebook_page_chrome_px(self):
+        """How much wider the window is than a notebook page: the window's
+        width less the mapped page's, measured once on whichever page is
+        selected (the inset is the same for every page) and kept, since
+        the notebook's padding and border never change while the app runs.
+        Measured once, not every time: right after a geometry() call the
+        window's width is already the new one while the page is still laid
+        out for the old, and the difference is meaningless (found on
+        Windows with Aqua's chrome planted). TOOLING_CONTENT_MARGIN_PX
+        while there is no consistent pair to measure (the window not
+        mapped: both read 1) and whenever the reading is not credible."""
+        cached = getattr(self, '_page_chrome_px', None)
+        if cached is not None:
+            return cached
+        try:
+            page = self.notebook.nametowidget(self.notebook.select())
+            win_w, page_w = self.root.winfo_width(), page.winfo_width()
+        except (tk.TclError, KeyError):
+            return TOOLING_CONTENT_MARGIN_PX
+        chrome = win_w - page_w
+        if win_w > 1 and page_w > 1 and 0 < chrome <= PAGE_CHROME_MAX_PX:
+            self._page_chrome_px = chrome
+            return chrome
+        return TOOLING_CONTENT_MARGIN_PX
 
     def on_tab_changed(self, event):
         selected = self.notebook.select()
@@ -1068,6 +1103,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if unit == "mm":
             unit = "cm"  # Use cm for the grid when mm is selected
 
+        # The shape dialog's overlay and its "Get from camera" open the
+        # camera; the app's own live preview must not be holding it.
+        self._release_live_camera()
         dialog = PolygonDrawWindow(self.root, unit=unit,
                                      settings=self.settings)
         # Camera-captured / overlay-traced polygons come back in
@@ -1097,6 +1135,25 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.custom_polygon_outline = None
         self._custom_polygon_lb_machine = None
         self._update_shape_status()
+
+    def _release_live_camera(self):
+        """Close the app's own live camera preview (LiveCameraWindow, left
+        open after a Frame & Cut with "Live camera preview" ticked so the
+        user can see the result) before a dialog opens a camera of its
+        own. Two handles on one DirectShow device fail or starve each
+        other, and with the fallback in open_camera_or_fallback the second
+        open would otherwise move to another camera. The next Frame & Cut
+        opens the preview again. Called before the shape dialog (its
+        overlay and "Get from camera") and before Camera Calibration."""
+        existing = getattr(self, '_live_cam_window', None)
+        self._live_cam_window = None
+        if existing is None:
+            return
+        try:
+            if existing.winfo_exists():
+                existing.close()
+        except Exception:
+            pass
 
     def _camera_capture_ready(self):
         """True iff the experimental toggle is on AND OpenCV is installed
@@ -4846,9 +4903,15 @@ TAB_LABEL_PADDING_PX = 30
 # How often the laser watch lists the serial ports (enumeration only; a port
 # is opened only when LaserWatch says so). See _start_laser_watch.
 LASER_WATCH_PERIOD_MS = 2000
-# Room around the Tooling tab's content when the window is sized to it: the
-# notebook's own padding and border (see _fit_window_to_tabs).
+# Room between the window and a notebook page (the notebook's padding and
+# border), used by _fit_window_to_tabs ONLY as the fallback when the window
+# has no size to measure yet. 14 px on Windows, more on Aqua, which is why
+# it is measured (_notebook_page_chrome_px) and not assumed; the 24 keeps a
+# little slack for the moment before the first measurement.
 TOOLING_CONTENT_MARGIN_PX = 24
+# A measured chrome above this is a window and a page read mid-resize, not
+# a notebook's padding: it is not kept.
+PAGE_CHROME_MAX_PX = 200
 
 
 def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=None):

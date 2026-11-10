@@ -75,8 +75,22 @@ def main():
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(tooling_tab.messagebox, name, lambda title, msg, _n=name, **k: boxes.append((_n, str(title), str(msg)[:100])))
 
+    # Every Tooling export is a Job History row (2026-11-09, Matt: "tooling
+    # runs go into job history if easy"): run() requires exactly one new
+    # entry per Generate click, for the tool clicked and the kind of file
+    # written. The label's first word names the tool.
+    from config import load_job_history
+    TOOL_OF = {"die": "die_inserts", "die inserts": "die_inserts", "holder": "die_holders", "die holder": "die_holders",
+               "organizer": "die_organizer", "die organizer": "die_organizer", "kerf": "kerf_test", "kerf test": "kerf_test",
+               "feeds/speeds": "feeds_speeds_tester", "speed & power test": "feeds_speeds_tester",
+               "crescent": "tonehole_crescent", "tonehole crescent": "tonehole_crescent"}
+
+    def tool_of(label):
+        return TOOL_OF[label] if label in TOOL_OF else TOOL_OF[label.split()[0]]
+
     def run(label, fn, expect_ext):
         before = len(saved)
+        history_before = load_job_history()
         boxes.clear()
         fn()
         root.update()
@@ -85,6 +99,15 @@ def main():
         assert len(saved) > before, f"{label}: no file was saved"
         path = saved[-1]
         assert path.endswith(expect_ext) and os.path.isfile(path) and os.path.getsize(path) > 0, path
+        history = load_job_history()
+        assert len(history) == len(history_before) + 1, \
+            f"{label}: {len(history) - len(history_before)} new Job History entries for one export"
+        entry = history[0]
+        tool, output = tool_of(label), expect_ext.lstrip(".")
+        assert entry.get("tool") == tool and entry.get("output") == output and entry.get("status") == "complete", \
+            f"{label}: the Job History row is {entry.get('tool')!r} / {entry.get('output')!r} / {entry.get('status')!r}, " \
+            f"not {tool!r} / {output!r} / 'complete'"
+        assert entry.get("save_dir") == os.path.dirname(path), f"{label}: save_dir {entry.get('save_dir')!r}"
         return path
 
     def svg_ok(path):

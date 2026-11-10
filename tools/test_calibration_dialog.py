@@ -298,6 +298,8 @@ def run_fix_cases(root, ui, cam, frame, seen):
             def look(d):
                 seen[tag] = (d._camera_index, d._cap is not None, d._status_var.get())
             return look
+        app_cal = cam.default_calibration_path()      # the app's own calibration, none so far in this profile
+        assert not os.path.exists(app_cal), app_cal
         try:
             run_dialog(root, ui, [(1200, live('fallback'))], args=(1, os.path.join(_PROFILE, "calib.json")),
                        settings=saved)
@@ -305,6 +307,20 @@ def run_fix_cases(root, ui, cam, frame, seen):
             seen['fallback_enumerated'] = len(enumerated)
             seen['fallback_saved'] = dict(saved)
             seen['fallback_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+            # With the app's calibration on disk and no camera named Falcon,
+            # the webcam may not stand in: the old error, nothing enumerated.
+            del opened[:], enumerated[:], logged[:]
+            with open(app_cal, "w", encoding="utf-8") as f:
+                json.dump({'camera_matrix': [[500, 0, 320], [0, 500, 240], [0, 0, 1]],
+                           'dist_coeffs': [[0, 0, 0, 0, 0]],
+                           'homography_px_to_machine_mm': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                           'image_size': [640, 480], 'calibration_schema_version': 2}, f)
+            run_dialog(root, ui, [(1200, live('refused'))], args=(1, os.path.join(_PROFILE, "calib.json")),
+                       settings=saved)
+            seen['refused_opened'] = list(opened)
+            seen['refused_enumerated'] = len(enumerated)
+            seen['refused_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+            os.remove(app_cal)
             # The saved number opens: one open call, no enumeration, no warning.
             del opened[:], enumerated[:], logged[:]
             cam.open_camera = lambda index, *a, **k: (opened.append(index), good_open(index, *a, **k))[1]
@@ -319,22 +335,33 @@ def run_fix_cases(root, ui, cam, frame, seen):
             cam.find_falcon_camera_index = real_find
             cam._list_camera_names = real_names
             cam.log.removeHandler(grab)
+            if os.path.exists(app_cal):
+                os.remove(app_cal)
 
         def saved_number_falls_back_in_the_real_dialog():
             index, has_cap, status = seen['fallback']
             assert index == 0 and has_cap, f"the dialog did not run on the other camera: {seen['fallback']}"
-            assert status.startswith("Detected ") or "Camera live" in status, status
+            # Said in the status line, not only in the log (a silent switch of camera is the hazard).
+            assert status == "Camera #1 could not be opened; showing camera #0.", status
             assert seen['fallback_opened'] == [1, 0], seen['fallback_opened']
             assert seen['fallback_enumerated'] == 1, seen['fallback_enumerated']
             assert seen['fallback_saved'] == {"camera_index_override": 1}, "the saved number was changed"
             w = seen['fallback_warnings']
             assert len(w) == 1 and "camera #1" in w[0] and "camera #0" in w[0] and "Integrated Camera" in w[0], w
+            index, has_cap, status = seen['refused']
+            assert index == 1 and not has_cap, f"fell back to the webcam under a calibration: {seen['refused']}"
+            assert status == "Could not open camera index 1: camera 1 unplugged (test)", status
+            assert seen['refused_opened'] == [1] and seen['refused_enumerated'] == 0, \
+                (seen['refused_opened'], seen['refused_enumerated'])
+            assert seen['refused_warnings'] == [], seen['refused_warnings']
             index, has_cap, _status = seen['saved_ok']
             assert index == 1 and has_cap and seen['saved_ok_opened'] == [1], (seen['saved_ok'], seen['saved_ok_opened'])
             assert seen['saved_ok_enumerated'] == 0 and seen['saved_ok_warnings'] == [], \
                 (seen['saved_ok_enumerated'], seen['saved_ok_warnings'])
-        check("the saved camera number cannot be opened: the real dialog runs on the other camera, one "
-              "warning names both numbers, the setting is untouched; when it opens, one call and no enumeration",
+        check("the saved camera number cannot be opened: with no calibration the real dialog runs on the other "
+              "camera and says so in its status line, one warning names both numbers, the setting is untouched; "
+              "with the app's calibration on disk and no Falcon-named camera it shows the old error and enumerates "
+              "nothing; when the number opens, one call and no enumeration",
               saved_number_falls_back_in_the_real_dialog)
 
         # ---- #3 status messages are not overwritten by the preview -------
