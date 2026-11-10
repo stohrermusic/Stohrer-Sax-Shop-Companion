@@ -1040,6 +1040,16 @@ DEFAULT_SETTINGS = {
         "crescent_thickness": "2.0",
         "crescent_qty": "1",
         "crescent_list": [],     # [{"tonehole_d", "percent", "curve", "qty"}, ...]
+        # The Die Organizer's material and sheet, and the Tonehole Crescent's
+        # material: written by the Tooling tab since 2026-11-09 but never
+        # declared here, so load_settings dropped them on every start (found
+        # by the settings-key gate, 2026-11-10). "" for the sheet means "not
+        # set": the tab then sizes it from the app's units, as before.
+        "organizer_material": "basswood",
+        "organizer_sheet_width": "",
+        "organizer_sheet_height": "",
+        "organizer_sheet_units": "",
+        "crescent_material": "cork",
         # Feeds & Speeds Tester
         "feeds_speeds_tester": {
             "material": "Felt",
@@ -1158,6 +1168,10 @@ DEFAULT_SETTINGS = {
     # auto-detect on each open (find_falcon_camera_index → fall back
     # to last enumerated).
     "camera_index_override": None,
+    # The Pad Maker's "Live camera preview" tick. Saved by _save_checkbox since
+    # v2.5 but never declared here, so load_settings dropped it on every start
+    # (found by the settings-key gate, 2026-11-10).
+    "show_live_camera": False,
     # Draw / Capture Shape grid size, in the corresponding unit.
     # Defaults match a Falcon2 Pro 40W's 15.75 × 15.75 in / 400 × 415
     # mm bed with a small margin. Override here for larger machines —
@@ -1341,6 +1355,22 @@ def load_settings():
                             except (TypeError, ValueError):
                                 pass
                     settings["dart_shape_v2"] = True
+
+                # Validation at the door (settings_schema.py, 2026-11-10): a value of
+                # the wrong type or outside its declared values goes back to its
+                # default, logged once with the key, the value and the file. After
+                # the merge and the migrations above, which stay as they were. It
+                # must never cost a user their file: a fault in the check itself is
+                # logged and the merged values are used as they are.
+                try:
+                    from settings_schema import validate_settings
+                    for path, bad, field in validate_settings(settings, DEFAULT_SETTINGS):
+                        logging.getLogger("ssc.settings").warning(
+                            "%s: %s was %.80r, not %s; the default is used",
+                            SETTINGS_FILE, path, bad, field.describe())
+                except Exception:
+                    logging.getLogger("ssc.settings").exception(
+                        "settings validation failed; the loaded values are used as they are")
 
                 return settings
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError, ValueError):

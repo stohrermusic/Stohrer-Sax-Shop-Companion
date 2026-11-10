@@ -431,11 +431,11 @@ class ToolingTabMixin:
             "in" if self.settings.get("units", "in") == "in" else "mm")
         tk.Label(organizer_size_row, text=_("Width:"), bg=bg).pack(side='left')
         self.organizer_width_var = tk.StringVar(
-            value=tooling.get("organizer_sheet_width", "12" if org_units == "in" else "305"))
+            value=tooling.get("organizer_sheet_width") or ("12" if org_units == "in" else "305"))
         tk.Entry(organizer_size_row, textvariable=self.organizer_width_var, width=8).pack(side='left', padx=(2, 10))
         tk.Label(organizer_size_row, text=_("Height:"), bg=bg).pack(side='left')
         self.organizer_height_var = tk.StringVar(
-            value=tooling.get("organizer_sheet_height", "18" if org_units == "in" else "457"))
+            value=tooling.get("organizer_sheet_height") or ("18" if org_units == "in" else "457"))
         tk.Entry(organizer_size_row, textvariable=self.organizer_height_var, width=8).pack(side='left', padx=(2, 10))
         self.organizer_units_var = tk.StringVar(value=org_units)
         tk.Radiobutton(organizer_size_row, text=_("in"), variable=self.organizer_units_var,

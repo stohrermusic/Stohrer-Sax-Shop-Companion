@@ -17,6 +17,7 @@ threads.py              → start_worker / GcHeldRLock / gc_held: every worker t
 tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
+settings_schema.py     → the type of every setting (a Field per key: kind, enumeration or range, None or not; the nested blocks' own key schemas) and validate_settings, which load_settings runs at the door
 i18n.py                → gettext catalog init; must run in main.py BEFORE any UI module import
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
@@ -87,11 +88,13 @@ All presets use a nested dictionary structure: `{library_name: {preset_name: dat
 
 ## Settings Persistence Pattern
 
-Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in config.py. The `load_settings()` merge only preserves keys that exist in the defaults — runtime-only keys get silently dropped on next load. When adding a new setting, always add it to `DEFAULT_SETTINGS` first.
+Every setting read or written at runtime MUST exist in `DEFAULT_SETTINGS` in config.py AND in `settings_schema.SCHEMA` (its type, and its enumeration or range where the code enforces one). The `load_settings()` merge only preserves keys that exist in the defaults — runtime-only keys get silently dropped on next load (six were, until the gate found them on 2026-11-10: the live-camera tick and the Die Organizer's and Crescent's choices). `tools/test_settings_schema.py` fails on a key in `DEFAULT_SETTINGS` and not in the schema or the reverse, at every level, and on any string-literal settings key in the app's modules that the schema does not know (`settings["k"]`, `.get("k"`, `"k" in settings`, `self.settings`, `self._settings`, `DEFAULT_SETTINGS` and the local names assigned from them, one level down through the known sub-dicts). What it cannot see: a dict passed under another name (`source`, `preset`, a range rule `r`, `sizing`, `mat_settings`); it reports how many such accesses there are.
 
 ## Settings Loading Hardening
 
 `load_settings()` defends against old/corrupted config files: null values are rejected (defaults used instead), dict-type keys that load as non-dicts are skipped, layer_colors with old LightBurn codes (e.g. "C10") are replaced with hex defaults, and `KeyError`/`AttributeError`/`ValueError` during merge fall back to full defaults. Users upgrading from very old versions (tested back to v1.0) should never crash on settings load.
+
+**Validation at the door** (2026-11-10): after that merge and the migrations, `settings_schema.validate_settings` puts every value of the wrong type or outside its declared values back to its default and logs it once on `ssc.settings` with the key, the value and the file; an int is accepted where a float is declared, a bool never counts as a number, a nested value is replaced alone, a list is checked as a whole. A fault in the check itself is logged and the merged values are used (the file is never archived as corrupt for it). Declare a range or an enumeration only where the code already enforces or assumes it (a dialog's radios, a slider's ends, a clamp, an engine's requirement); a number nothing bounds gets its type and a comment saying so. No limit is invented in the schema. Presets are not validated on load (see the decisions file for why). History and the first scan's findings: `docs/decisions/settings.md`.
 
 ## Data Safety on Write (v2.6+)
 
