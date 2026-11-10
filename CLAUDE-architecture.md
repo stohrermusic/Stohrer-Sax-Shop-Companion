@@ -19,7 +19,17 @@ config.py              → Settings I/O, constants, platform config paths, migra
 i18n.py                → gettext catalog init; must run in main.py BEFORE any UI module import
 svg_engine.py          → Pure math/SVG logic (no tkinter dependency), polygon nesting
 gcode_engine.py        → G-code generation for Grbl lasers, single-stroke font, circle linearization
-ui_dialogs.py          → Dialog window classes (Options, Colors, Import/Export, PolygonDrawWindow, GcodeSettingsWindow, PadNotesWindow, UserGuideWindow, WelcomeWindow, QuickStartWindow, CameraCalibrationDialog, CameraCaptureDialog, FalconRunDialog, LiveCameraWindow)
+ui_dialogs/            → The dialog windows, a package (2026-11-10; moves only, cut by what the dialogs share):
+    __init__.py          re-exports every name; `from ui_dialogs import X` and `ui_dialogs.X` are the API
+    common.py            DIALOG_BG, IS_MACOS, Tooltip and add_tooltip(s), bind_mousewheel, ConfirmationDialog, material_display_name, gcode_file_note, mlog
+    sizing.py            OptionsWindow (Sizing Rules), PadPreviewWindow, SaveSizingPresetDialog, LayerColorWindow
+    gcode_settings.py    GcodeSettingsWindow
+    presets_io.py        Export/Import/WebImport/ImportTarget windows, KeyLayoutWindow, PadNotesWindow
+    previews.py          NestingPreviewWindow, SpeedPowerTestPreview
+    history.py           JobHistoryWindow
+    guide.py             UserGuideWindow, QuickStartWindow, WelcomeWindow, AboutDialog
+    machine.py           PolygonDrawWindow, CameraCalibrationDialog, CameraCaptureDialog, LidClosedDialog, FalconRunDialog, LiveCameraWindow
+    resonance.py         the resonance theme windows
 serials.py             → SERIAL_DATA dictionary (manufacturer → serial ranges)
 camera_capture.py       → OpenCV ChArUco calibration + scrap-polygon detection (optional dep; degrades gracefully if OpenCV missing)
 falcon_sender.py        → Grbl streamer over USB serial (character-counting protocol; pyserial-optional). Includes a hard-wake-up via G4 P0.01 dwell + `$X` safety-unlock at stream start.
@@ -35,15 +45,17 @@ build.py               → Cross-platform PyInstaller build script
 
 **Tab-Specific Menus**: The app swaps menu bars when tabs change (`on_tab_changed` in main.py).
 
-**The User Guide**: `UserGuideWindow` (ui_dialogs.py) is always the whole guide, with a clickable contents list, a search box and drawn figures; `section` is the key it opens at. Every paragraph is its own `_()` string. When adding a tab or feature, add a `_section_*` method (or a `_sub`), call it from `_insert_content` in order, and add the tab's key to `SECTION_KEYS` and `tab_sections`. Figures are canvases drawn from the app's own geometry helpers (`_fig_<name>`, a height in `FIGURE_HEIGHTS`), labels through `_()`, colours explicit, nothing scheduled. Drive the contents list with a click binding, never `<<TreeviewSelect>>` (they would select each other for ever). The window opens maximized and is not transient. Tests: `test_user_guide`. History: `docs/decisions/user-interface.md`.
+**The User Guide**: `UserGuideWindow` (ui_dialogs/guide.py) is always the whole guide, with a clickable contents list, a search box and drawn figures; `section` is the key it opens at. Every paragraph is its own `_()` string. When adding a tab or feature, add a `_section_*` method (or a `_sub`), call it from `_insert_content` in order, and add the tab's key to `SECTION_KEYS` and `tab_sections`. Figures are canvases drawn from the app's own geometry helpers (`_fig_<name>`, a height in `FIGURE_HEIGHTS`), labels through `_()`, colours explicit, nothing scheduled. Drive the contents list with a click binding, never `<<TreeviewSelect>>` (they would select each other for ever). The window opens maximized and is not transient. Tests: `test_user_guide`. History: `docs/decisions/user-interface.md`.
 
-**Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs.py handles platform-specific scroll behavior (Windows/macOS/Linux).
+**Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs/common.py handles platform-specific scroll behavior (Windows/macOS/Linux).
+
+**The ui_dialogs package** (2026-11-10): add a dialog to the module whose dialogs it shares code with, and its name to `ui_dialogs/__init__.py` (both the import and `__all__`); every caller imports from the package, never from a submodule. A dialog that another dialog constructs and that a suite stands in for on the package (`ui_dialogs.FalconRunDialog = Fake`) is looked up through the package at call time (`_pkg.FalconRunDialog(...)`), never bound at import; the five are named in each module's `_pkg` line. Why and how it was cut: `docs/decisions/user-interface.md`, "ui_dialogs becomes a package".
 
 **Worker threads** (2026-11-10): start every thread through `threads.start_worker()`; take the two locks a worker holds while the Tk thread may wait on them (`CameraCalibrationDialog._port_lock`, `FalconSender._lock`) as `threads.GcHeldRLock`; put any bounded `join()` on the Tk thread inside `threads.gc_held()`; otherwise never join or block on a worker from the Tk thread, poll it with `after()`. The cyclic collector is off while the Tk thread is blocked on a worker, so a worker can never finalise a tkinter Variable (a Tcl call from the wrong thread, waited on by the Tk thread) while the Tk thread waits for it. Gated by `tools/test_threads.py` (an AST scan fails on any `threading.Thread(` in a root module outside threads.py). The deadlock this prevents, its stack and the measurements: `docs/decisions/machine-integration.md`, "The Tk-thread / worker deadlock".
 
 **macOS Quit Path**: `WM_DELETE_WINDOW` only covers the window-close button. On macOS, Cmd-Q and the app menu's Quit fire Tk's `::tk::mac::Quit`, whose default exits the process without running the close handler — settings would silently never save. `main.py` registers `root.createcommand("::tk::mac::Quit", self.on_exit)` on darwin (added v2.61). Any future work on the exit path must keep both routes pointing at `on_exit`.
 
-**macOS Theming**: On macOS (`IS_MACOS` flag in main.py and ui_dialogs.py), the app uses native system colors instead of custom cream/beige backgrounds. This allows the app to work correctly in both macOS dark and light mode. The `DIALOG_BG` constant in ui_dialogs.py resolves to `"systemWindowBackgroundColor"` on macOS (a Tk system color that adapts to dark/light mode) and `"#F0EAD6"` on Windows/Linux. The resonance theme system is disabled on macOS. When adding new UI widgets, use `DIALOG_BG` for dialog backgrounds and `self.root.cget('bg')` for main window widgets.
+**macOS Theming**: On macOS (`IS_MACOS` flag in main.py and ui_dialogs/common.py), the app uses native system colors instead of custom cream/beige backgrounds. This allows the app to work correctly in both macOS dark and light mode. The `DIALOG_BG` constant in ui_dialogs/common.py resolves to `"systemWindowBackgroundColor"` on macOS (a Tk system color that adapts to dark/light mode) and `"#F0EAD6"` on Windows/Linux. The resonance theme system is disabled on macOS. When adding new UI widgets, use `DIALOG_BG` for dialog backgrounds and `self.root.cget('bg')` for main window widgets.
 
 ## Settings Backward Compatibility
 

@@ -54,9 +54,16 @@ def check(name, fn):
 # ---------------------------------------------------------------------------
 
 
+def app_modules():
+    """Every root module and every module of the ui_dialogs package (2026-11-10), repo-relative."""
+    roots = sorted(x for x in os.listdir(ROOT) if x.endswith(".py"))
+    pkg = sorted("ui_dialogs/" + x for x in os.listdir(os.path.join(ROOT, "ui_dialogs")) if x.endswith(".py"))
+    return roots + pkg
+
+
 def no_raw_thread_start_in_the_app():
     bad = []
-    for f in sorted(x for x in os.listdir(ROOT) if x.endswith(".py")):
+    for f in app_modules():
         if f == "threads.py":
             continue
         tree = ast.parse(open(os.path.join(ROOT, f), encoding="utf-8").read(), filename=f)
@@ -69,8 +76,8 @@ def no_raw_thread_start_in_the_app():
                 elif isinstance(fn, ast.Name) and fn.id == "Thread":
                     bad.append(f"{f}:{node.lineno} (Thread imported by name)")
     assert not bad, "threads started outside threads.start_worker: " + ", ".join(bad)
-    users = [f for f in os.listdir(ROOT) if f.endswith(".py") and "start_worker(" in open(os.path.join(ROOT, f), encoding="utf-8").read()]
-    assert {"main.py", "ui_dialogs.py", "falcon_sender.py", "toner_engine.py"} <= set(users), users
+    users = [f for f in app_modules() if "start_worker(" in open(os.path.join(ROOT, f), encoding="utf-8").read()]
+    assert {"main.py", "ui_dialogs/machine.py", "falcon_sender.py", "toner_engine.py"} <= set(users), users
 
 
 def no_suite_with_a_tk_root_starts_a_raw_thread():

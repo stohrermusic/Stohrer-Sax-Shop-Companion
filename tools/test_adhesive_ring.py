@@ -961,7 +961,8 @@ def gui_tests(root):
             w.top.destroy()
         # The names that were tried and dropped are gone from what the user reads.
         repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        src = open(os.path.join(repo, "ui_dialogs.py"), encoding="utf-8").read()
+        src = "".join(open(p, encoding="utf-8").read()
+                      for p in sorted(glob.glob(os.path.join(repo, "ui_dialogs", "*.py"))))   # the package since 2026-11-10
         pot = open(os.path.join(repo, "locale", "saxshop.pot"), encoding="utf-8").read()
         for old_name in ("Ring width trim", "Inner edge clearance", "inner diameter adjustment"):
             assert old_name not in src and old_name not in pot, f"{old_name!r} is still user-facing text"

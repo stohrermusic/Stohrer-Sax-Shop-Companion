@@ -151,7 +151,9 @@ test("save does NOT include tuner_mode", "tuner_mode" not in save_source)
 # 11. User guide updated
 # ============================================================
 print("\n--- User Guide ---")
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui_dialogs.py"), encoding="utf-8") as f:
+# The guide lives in ui_dialogs/guide.py since the package split (2026-11-10).
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui_dialogs", "guide.py"),
+          encoding="utf-8") as f:
     guide_source = f.read()
 
 # The guide was rewritten 2026-11-09 (task-led, shorter): the Tuner is its

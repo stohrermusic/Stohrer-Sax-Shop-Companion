@@ -66,7 +66,7 @@ Config lives in `ruff.toml` (py311 target, 120-char lines, default E+F rules wit
 
 ## Job History
 
-File > Job History opens `JobHistoryWindow` (ui_dialogs.py); storage is `job_history.json` via `load_job_history()` / `save_job_history()` / `append_job_history()` (newest first, `JOB_HISTORY_LIMIT` = 300). `_record_job(...)` is called from exactly these places, always after real output exists:
+File > Job History opens `JobHistoryWindow` (ui_dialogs/history.py); storage is `job_history.json` via `load_job_history()` / `save_job_history()` / `append_job_history()` (newest first, `JOB_HISTORY_LIMIT` = 300). `_record_job(...)` is called from exactly these places, always after real output exists:
 
 | Call site | `output` | Notes |
 |---|---|---|
@@ -122,7 +122,7 @@ Tests: `test_sizing_presets_workflow`, `test_gcode_presets_workflow`. Detail: `d
 
 ## Settings-Dialog Tooltips
 
-`ui_dialogs.py` exposes a `Tooltip` helper plus `add_tooltip(widget, text)` and `add_tooltips(text, *widgets)` convenience functions. All settings dialogs (Sizing Rules, G-code Settings, Layer Colors, Key Layout, Tuner Settings, Toner Settings) hover-explain their fields. When adding a new setting widget, attach a tooltip alongside it — short sentence, plain English, focused on *why* the user would change it. Attach to both the label and the input so users can hover either. The helper popup is overrideredirect + topmost so it appears above modal dialogs without stealing focus.
+`ui_dialogs/common.py` exposes a `Tooltip` helper plus `add_tooltip(widget, text)` and `add_tooltips(text, *widgets)` convenience functions. All settings dialogs (Sizing Rules, G-code Settings, Layer Colors, Key Layout, Tuner Settings, Toner Settings) hover-explain their fields. When adding a new setting widget, attach a tooltip alongside it — short sentence, plain English, focused on *why* the user would change it. Attach to both the label and the input so users can hover either. The helper popup is overrideredirect + topmost so it appears above modal dialogs without stealing focus.
 
 ## Dart Shape Spectrum
 
@@ -268,7 +268,7 @@ the start of each session, but it only *reports* — reconciling is still a deli
 
 ## Versioning
 
-`APP_VERSION` in `config.py` is the manual source of truth — bump it when preparing a release. `APP_BUILD_DATE` is auto-derived from `sys.executable`'s mtime in frozen builds (installer/zip copies preserve mtime) and falls back to the manual constant when running from source. The About dialog reads both via `ui_dialogs.py`.
+`APP_VERSION` in `config.py` is the manual source of truth — bump it when preparing a release. `APP_BUILD_DATE` is auto-derived from `sys.executable`'s mtime in frozen builds (installer/zip copies preserve mtime) and falls back to the manual constant when running from source. The About dialog (ui_dialogs/guide.py) reads both.
 
 ## Release Notes Style
 

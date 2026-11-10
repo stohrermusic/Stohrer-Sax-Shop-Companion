@@ -449,7 +449,9 @@ def every_camera_window_goes_through_the_helper():
         assert "self._camera_index" in assigned, f"{cls.__name__}: the worker does not adopt the camera used"
         # A fallback is said: the worker builds the notice from the helper's answer.
         assert "fallback_notice(" in ast.unparse(fn), f"{cls.__name__}: the worker never shows the fallback notice"
-    whole = inspect.getsource(ui_dialogs)
+    # ui_dialogs is a package (2026-11-10): its source is every submodule's, not __init__'s.
+    whole = "".join(inspect.getsource(sys.modules[n]) for n in sorted(sys.modules)
+                    if n.startswith("ui_dialogs.") and sys.modules[n] is not None)
     assert whole.count("open_camera_or_fallback(") == len(windows), \
         f"{whole.count('open_camera_or_fallback(')} call sites for {len(windows)} windows"
     assert ".open_camera(" not in whole.replace("open_camera_or_fallback(", ""), "a camera is opened outside the helper"

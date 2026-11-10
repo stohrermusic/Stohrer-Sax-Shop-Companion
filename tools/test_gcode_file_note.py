@@ -20,7 +20,6 @@ box, on the Pad Maker and on Tooling, and pins:
 Self-skips without a display. Isolated profile (SAXSHOP_CONFIG_DIR).
 """
 import gettext
-import glob
 import inspect
 import os
 import sys
@@ -58,11 +57,18 @@ def check(name, fn):
 def one_sentence_defined_once():
     import ui_dialogs
     assert ui_dialogs.gcode_file_note() == NOTE
+    # The root's modules and every package under it (ui_dialogs since 2026-11-10, and whatever
+    # the next structural step makes), never the tools, the locale or build output.
     hits = []
-    for path in glob.glob(os.path.join(REPO, "*.py")):
-        text = open(path, encoding="utf-8").read()
-        hits += [os.path.basename(path)] * text.count("Send this file to the laser as it is")
-    assert hits == ["ui_dialogs.py"], f"the sentence should be written once, in ui_dialogs.py: {hits}"
+    for dirpath, dirnames, filenames in os.walk(REPO):
+        dirnames[:] = sorted(d for d in dirnames if os.path.isfile(os.path.join(dirpath, d, "__init__.py")))
+        for name in sorted(filenames):
+            if name.endswith(".py"):
+                path = os.path.join(dirpath, name)
+                text = open(path, encoding="utf-8").read()
+                rel = os.path.relpath(path, REPO).replace(os.sep, "/")
+                hits += [rel] * text.count("Send this file to the laser as it is")
+    assert hits == ["ui_dialogs/common.py"], f"the sentence should be written once, in ui_dialogs/common.py: {hits}"
     for lang in ("es", "de", "fr", "it"):
         tr = gettext.translation("saxshop", os.path.join(REPO, "locale"), languages=[lang])
         assert tr.gettext(NOTE) not in (NOTE, ""), f"not translated in {lang}"

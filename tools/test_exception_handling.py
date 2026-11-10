@@ -64,25 +64,25 @@ ALLOWED = {
     ('tuner_engine.py', 'ReferencePlayer.stop'): 1,
     ('tuner_engine.py', 'TunerEngine._restart_stream'): 1,
     ('tuner_engine.py', 'TunerEngine.stop'): 1,
-    # ui_dialogs.py: camera release() and laser disconnect() cleanup, a per-line stream callback, a dead guard
-    ('ui_dialogs.py', 'CameraCalibrationDialog._auto_recycle_camera'): 1,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._camera_ready'): 2,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._on_close'): 1,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._on_engrave_clicked'): 2,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._on_engrave_home'): 2,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._on_frame_clicked'): 2,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._on_switch_camera_clicked'): 1,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._reconnect_camera'): 1,
-    ('ui_dialogs.py', 'CameraCaptureDialog._camera_ready'): 1,
-    ('ui_dialogs.py', 'CameraCaptureDialog._on_close'): 1,
-    ('ui_dialogs.py', 'CameraCaptureDialog._on_switch_camera'): 1,
-    ('ui_dialogs.py', 'FalconRunDialog._on_progress'): 1,
-    ('ui_dialogs.py', 'ImportPresetsWindow.import_selected'): 1,
-    ('ui_dialogs.py', 'LiveCameraWindow._camera_ready'): 1,
-    ('ui_dialogs.py', 'LiveCameraWindow._on_switch_camera'): 1,
-    ('ui_dialogs.py', 'LiveCameraWindow.close'): 1,
-    ('ui_dialogs.py', 'PolygonDrawWindow._camera_overlay_ready'): 1,
-    ('ui_dialogs.py', 'PolygonDrawWindow._stop_camera_overlay'): 1,
+    # ui_dialogs/ (a package since 2026-11-10): camera release() and laser disconnect() cleanup, a per-line stream callback, a dead guard
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._auto_recycle_camera'): 1,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._camera_ready'): 2,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._on_close'): 1,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._on_engrave_clicked'): 2,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._on_engrave_home'): 2,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._on_frame_clicked'): 2,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._on_switch_camera_clicked'): 1,
+    ('ui_dialogs/machine.py', 'CameraCalibrationDialog._reconnect_camera'): 1,
+    ('ui_dialogs/machine.py', 'CameraCaptureDialog._camera_ready'): 1,
+    ('ui_dialogs/machine.py', 'CameraCaptureDialog._on_close'): 1,
+    ('ui_dialogs/machine.py', 'CameraCaptureDialog._on_switch_camera'): 1,
+    ('ui_dialogs/machine.py', 'FalconRunDialog._on_progress'): 1,
+    ('ui_dialogs/presets_io.py', 'ImportPresetsWindow.import_selected'): 1,
+    ('ui_dialogs/machine.py', 'LiveCameraWindow._camera_ready'): 1,
+    ('ui_dialogs/machine.py', 'LiveCameraWindow._on_switch_camera'): 1,
+    ('ui_dialogs/machine.py', 'LiveCameraWindow.close'): 1,
+    ('ui_dialogs/machine.py', 'PolygonDrawWindow._camera_overlay_ready'): 1,
+    ('ui_dialogs/machine.py', 'PolygonDrawWindow._stop_camera_overlay'): 1,
 }
 
 SWALLOWING = {"Exception", "BaseException"}
@@ -103,7 +103,11 @@ def check(name, fn):
 
 
 def _root_modules():
-    return sorted(f for f in os.listdir(ROOT) if f.endswith(".py") and os.path.isfile(os.path.join(ROOT, f)))
+    """Every root module, and every module of the ui_dialogs package (a package since 2026-11-10),
+    as paths relative to the repo with forward slashes: the allow-list's file keys."""
+    roots = sorted(f for f in os.listdir(ROOT) if f.endswith(".py") and os.path.isfile(os.path.join(ROOT, f)))
+    pkg = sorted("ui_dialogs/" + f for f in os.listdir(os.path.join(ROOT, "ui_dialogs")) if f.endswith(".py"))
+    return roots + pkg
 
 
 def _body_is_pass(handler):
