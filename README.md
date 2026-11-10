@@ -81,7 +81,7 @@ Download the latest build from [Releases](https://github.com/stohrermusic/Stohre
 
 **Windows**: run the installer.
 
-**macOS**: should work, but nobody on the project has a Mac, so it is tested by machine only. Two builds. Apple Silicon has everything. Intel has everything except the Tuner, Tone Analyzer and direct machine control.
+**macOS**: should work, but Matt doesn't have a Mac for testing. Two builds. Apple Silicon has everything. Intel has everything except the Tuner, Tone Analyzer and direct machine control.
 
 <details>
 <summary>macOS install steps (complicated because Mac makes it hard if you don't want to pay them $100 a year to be a "developer")</summary>
