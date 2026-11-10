@@ -1,6 +1,6 @@
 # Stohrer Sax Shop Companion
 
-A desktop app for saxophone repair shops, by [Matt Stohrer](https://www.StohrerMusic.com). It makes the laser files for pads built by the [Phil Noy](https://noysaxophonesupplies.com) method and the tooling to assemble them, and it can run the laser itself. Windows, macOS and Linux.
+A desktop app for saxophone repair shops, by [Matt Stohrer](https://www.StohrerMusic.com). It makes the laser files for pads built by the [Phil Noy](https://noysaxophonesupplies.com) method and the tooling to assemble them, and it can run the laser itself. Windows or Linux is preferred; macOS should work.
 
 New to making pads? Start with [How to Make Saxophone Pads](https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/).
 
@@ -81,7 +81,7 @@ Download the latest build from [Releases](https://github.com/stohrermusic/Stohre
 
 **Windows**: run the installer.
 
-**macOS**: two builds. Apple Silicon has everything. Intel has everything except the Tuner, Tone Analyzer and direct machine control.
+**macOS**: should work, but nobody on the project has a Mac, so it is tested by machine only. Two builds. Apple Silicon has everything. Intel has everything except the Tuner, Tone Analyzer and direct machine control.
 
 <details>
 <summary>macOS install steps (complicated because Mac makes it hard if you don't want to pay them $100 a year to be a "developer")</summary>
