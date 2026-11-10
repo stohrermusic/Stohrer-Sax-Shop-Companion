@@ -132,3 +132,14 @@ def hann_peak_freq(mags, k, bin_freq):
         d = -(2.0 * a - 1.0) / (a + 1.0)
     d = max(-0.5, min(0.5, d))
     return (k + d) * bin_freq
+
+
+def pitch_or_default(value, default=440.0):
+    """A reference pitch from settings as a float, or the default when the
+    stored value is not a number (2026-11-10: a hand-edited "abc" went into
+    a DoubleVar, whose get() then raised TclError past the tabs' ValueError
+    guards, and the tab did not build)."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

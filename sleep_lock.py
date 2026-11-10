@@ -52,9 +52,15 @@ def prevent_sleep():
     if system == "Windows":
         try:
             import ctypes
-            ctypes.windll.kernel32.SetThreadExecutionState(
+            previous = ctypes.windll.kernel32.SetThreadExecutionState(
                 _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED
                 | _ES_DISPLAY_REQUIRED)
+            # 0 means the call failed (no exception is raised for it); said
+            # once per process, since every laser job calls this.
+            if not previous and not _state.get('zero_warned'):
+                _state['zero_warned'] = True
+                log.warning("could not stop Windows from sleeping during the "
+                            "laser job: SetThreadExecutionState returned 0")
         except Exception as e:
             log.warning("could not stop Windows from sleeping during the "
                         "laser job: %s", e)

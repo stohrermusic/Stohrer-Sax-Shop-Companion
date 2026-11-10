@@ -778,8 +778,20 @@ def the_falcon_suite_opens_no_real_port():
     import subprocess
     suite = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_falcon_sender.py")
     code = (
-        "import runpy, sys\n"
-        "import serial, serial.tools.list_ports\n"
+        "import runpy, sys, types\n"
+        "try:\n"
+        "    import serial, serial.tools.list_ports\n"
+        "except ImportError:\n"
+        "    # No pyserial here (the Intel Mac build): a fake module stands in,\n"
+        "    # so the suite still runs and still cannot reach a real port.\n"
+        "    serial = types.ModuleType('serial'); tools = types.ModuleType('serial.tools')\n"
+        "    lp = types.ModuleType('serial.tools.list_ports')\n"
+        "    class SerialException(Exception):\n"
+        "        pass\n"
+        "    serial.SerialException = SerialException; serial.SerialTimeoutException = SerialException\n"
+        "    serial.tools = tools; tools.list_ports = lp\n"
+        "    sys.modules['serial'] = serial; sys.modules['serial.tools'] = tools\n"
+        "    sys.modules['serial.tools.list_ports'] = lp\n"
         "class Boom:\n"
         "    def __init__(self, *a, **k):\n"
         "        raise AssertionError('a real serial port was opened: %r' % (a,))\n"

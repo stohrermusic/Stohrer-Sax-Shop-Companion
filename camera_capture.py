@@ -1068,7 +1068,8 @@ def pixels_to_mm(polygon_px, calibration):
                        * float(board_info.get('square_mm', CHARUCO_SQUARE_MM)))
             k = 2 * offset_y + 2 * border + label_h + board_h
             out = [(x, k - y) for (x, y) in out]
-        except (TypeError, ValueError, KeyError) as e:
+        except (TypeError, ValueError, KeyError, IndexError) as e:
+            # (IndexError: a card_engrave_offset_mm with fewer than two values.)
             # Runs per frame in the capture dialog: say it once, count the rest.
             _schema1_fix_failures['count'] += 1
             if _schema1_fix_failures['count'] == 1:

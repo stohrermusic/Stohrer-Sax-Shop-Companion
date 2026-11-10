@@ -615,27 +615,33 @@ class FalconSender:
     # ------------------------------------------------------------------
 
     def send_realtime(self, byte):
-        """Send a single real-time command byte. Doesn't queue."""
+        """Send a single real-time command byte. Doesn't queue.
+        Returns True when the byte was written, False when there is no
+        open port or the write failed (2026-11-10; the run dialog's
+        Pause and Resume buttons follow the answer)."""
         with self._lock:
             if self._serial is None or not self._serial.is_open:
-                return
+                return False
             try:
                 self._serial.write(byte)
+                return True
             except (serial.SerialException, OSError) as e:
                 _log_throttled(logging.WARNING,
                                ('realtime', self.port, byte, str(e)),
                                "could not send real-time command %r to the "
                                "laser on %s: %s", byte, self.port, e)
+                return False
 
     def pause(self):
-        """Feed hold — pauses motion; laser stays in current state."""
+        """Feed hold — pauses motion; laser stays in current state.
+        Returns whether the byte went out."""
         self._pause_flag.set()
-        self.send_realtime(RT_FEED_HOLD)
+        return self.send_realtime(RT_FEED_HOLD)
 
     def resume(self):
-        """Resume from feed hold."""
+        """Resume from feed hold. Returns whether the byte went out."""
         self._pause_flag.clear()
-        self.send_realtime(RT_CYCLE_START)
+        return self.send_realtime(RT_CYCLE_START)
 
     def stop(self):
         """Emergency stop: soft-reset clears planner buffer and stops motion.
@@ -794,18 +800,23 @@ class FalconSender:
             parts.append(f'Z{z}')
         parts.append(f'F{feed}')
         cmd = '$J=' + ''.join(parts) + '\n'
+        # Returns True when the jog was written, False when there is no port
+        # or the write failed (2026-11-10): the run dialog unlocks Start
+        # Frame only on a jog that went out.
         with self._lock:
             if self._serial is None:
-                return
+                return False
             try:
                 self._serial.write(cmd.encode('ascii'))
                 self._jogs_in_flight += 1
                 log.info("jog on %s: %s (state=%s, mpos=%s)", self.port,
                          cmd.strip(), (self.status or {}).get('state'),
                          (self.status or {}).get('mpos'))
+                return True
             except (serial.SerialException, OSError) as e:
                 # do NOT count an unack-able jog
                 log.warning("jog on %s: write failed: %s", self.port, e)
+                return False
 
     # ------------------------------------------------------------------
     # Streaming

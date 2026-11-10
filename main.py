@@ -7,6 +7,7 @@ import subprocess
 import time
 import datetime
 import logging
+import math
 
 # --- Local Imports ---
 from config import (
@@ -3005,17 +3006,26 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         logging.getLogger("ssc.machine").info(
             "Machine > Reset Falcon: soft-reset on %s", self.falcon_port)
         sender = falcon_sender.FalconSender(port=self.falcon_port)
+        # One outcome, one box (2026-11-10): a failed reset used to show
+        # "Reset Failed" and then the success box, and cleared the homed
+        # flag although the machine had not been reset and still knew
+        # its position.
         try:
             sender.connect()
-            sender.send_realtime(falcon_sender.RT_SOFT_RESET)
+            if not sender.send_realtime(falcon_sender.RT_SOFT_RESET):
+                raise RuntimeError(_("the reset byte could not be sent"))
             time.sleep(1.0)  # let firmware reboot
         except Exception as e:
+            logging.getLogger("ssc.machine").warning(
+                "Machine > Reset Falcon failed on %s: %s", self.falcon_port, e)
             messagebox.showerror(_("Reset Failed"),
                                   _("Couldn't reset: {e}").format(e=e))
-        try:
-            sender.disconnect()
-        except Exception:
-            pass
+            return
+        finally:
+            try:
+                sender.disconnect()
+            except Exception:
+                pass
         # Soft-reset loses machine position — clear the homed flag so
         # the next Frame & Cut auto-homes again.
         self._falcon_homed_this_session = False
@@ -3926,17 +3936,23 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 parts = line.split('x', 1)  # Split only on first 'x' (so 'max' doesn't get split)
                 if len(parts) == 2:
                     size = float(parts[0].strip())
-                    if size > 0:
+                    # inf, 1e400 and nan parse as floats but are no size and
+                    # no quantity (2026-11-10): int(inf) raised OverflowError
+                    # past this handler and reached the Unexpected Error box.
+                    if size > 0 and math.isfinite(size):
                         qty_str = parts[1].strip()
                         if qty_str == 'max':
                             pad_list.append({'size': size, 'qty': 'max'})
                             ok = True
                         else:
-                            qty = int(float(qty_str))
+                            qty_f = float(qty_str)
+                            if not math.isfinite(qty_f):
+                                raise ValueError(qty_str)
+                            qty = int(qty_f)
                             if qty > 0:
                                 pad_list.append({'size': size, 'qty': qty})
                                 ok = True
-            except ValueError:
+            except (ValueError, OverflowError):
                 pass
             if not ok and rejected is not None:
                 rejected.append(line)

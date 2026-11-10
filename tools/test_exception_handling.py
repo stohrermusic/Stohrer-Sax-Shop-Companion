@@ -67,7 +67,6 @@ ALLOWED = {
     # ui_dialogs.py: camera release() and laser disconnect() cleanup, a per-line stream callback, a dead guard
     ('ui_dialogs.py', 'CameraCalibrationDialog._auto_recycle_camera'): 1,
     ('ui_dialogs.py', 'CameraCalibrationDialog._camera_ready'): 2,
-    ('ui_dialogs.py', 'CameraCalibrationDialog._engrave_check_position_safe'): 2,
     ('ui_dialogs.py', 'CameraCalibrationDialog._on_close'): 1,
     ('ui_dialogs.py', 'CameraCalibrationDialog._on_engrave_clicked'): 2,
     ('ui_dialogs.py', 'CameraCalibrationDialog._on_engrave_home'): 2,

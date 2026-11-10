@@ -8470,7 +8470,11 @@ class CameraCalibrationDialog(tk.Toplevel):
             return
         try:
             import falcon_sender
-            s = falcon_sender.FalconSender(port=self._falcon_port)
+        except ImportError as e:
+            mlog.warning("calibration: jog failed: %s", e)
+            return
+        s = falcon_sender.FalconSender(port=self._falcon_port)
+        try:
             s.connect()
             try:
                 step = float(self._engrave_jog_step.get())
@@ -8478,9 +8482,10 @@ class CameraCalibrationDialog(tk.Toplevel):
                 step = 10.0
             s.jog(x=dx_sign * step, y=dy_sign * step,
                    feed=3000, relative=True)
-            s.disconnect()
         except Exception as e:
             mlog.warning("calibration: jog failed: %s", e)
+        finally:
+            s.disconnect()   # a jog that raised used to leave the port open (2026-11-10)
 
     def _enter_capture_phase(self):
         """Switch to live-preview + ChArUco capture mode."""
@@ -8577,27 +8582,27 @@ class CameraCalibrationDialog(tk.Toplevel):
         """Read current MPos and verify the engrave area would fit on
         the bed. Returns True if safe, else False (with an error
         already shown). Avoids ALARM:3 from soft-limit trips when
-        the user clicks Frame with the head still at home corner."""
+        the user clicks Frame with the head still at home corner.
+
+        A check that cannot be made does not pass (2026-11-10): until
+        then a connect or status failure returned True and the bed-bounds
+        check was skipped silently, so a head left at the home corner
+        would have engraved off the bed. Now the position must be read,
+        or the engrave/frame is refused with a box that says so."""
         try:
             import falcon_sender
-        except ImportError:
-            return True  # can't check; let it run and fail loudly
+        except ImportError as e:
+            return self._position_unknown(str(e))
         sender = falcon_sender.FalconSender(port=self._falcon_port)
         try:
             sender.connect()
             st = sender.get_status(timeout=0.5)
-        except Exception:
-            try:
-                sender.disconnect()
-            except Exception:
-                pass
-            return True
-        try:
+        except Exception as e:
+            return self._position_unknown(str(e) or type(e).__name__)
+        finally:
             sender.disconnect()
-        except Exception:
-            pass
         if not st or not st.get('mpos'):
-            return True
+            return self._position_unknown(_("no status report"))
         hx, hy = st['mpos'][0], st['mpos'][1]
         cols, rows, sq, board_w, board_h, border, label_h = \
             self._engrave_geometry()
@@ -8633,6 +8638,19 @@ class CameraCalibrationDialog(tk.Toplevel):
                 ), parent=self)
             return False
         return True
+
+    def _position_unknown(self, reason):
+        """The bed-bounds check could not read the head's position: say
+        so, log it, and refuse (returns False for the caller)."""
+        mlog.warning("bed-bounds check: the head position could not be read "
+                     "(%s); engrave/frame refused", reason)
+        messagebox.showerror(
+            _("Head Position Unknown"),
+            _("The laser's position could not be read ({reason}), so "
+              "whether the card fits on the bed cannot be checked.\n\n"
+              "Check the connection (Options > Machine > Test Connection), "
+              "then try again.").format(reason=reason), parent=self)
+        return False
 
     def _engrave_check_ready(self):
         """Common pre-flight for Frame / Engrave: Falcon connected,
@@ -9767,6 +9785,7 @@ class CameraCaptureDialog(tk.Toplevel):
 
         self._camera_index = camera_index
         self._cap = None
+        self._loop_errors = 0            # frames that failed to process (first logged, rest counted)
         self._calibration = None
         self._latest_undistorted = None
         self._latest_polygon_px = None
@@ -10007,9 +10026,23 @@ class CameraCaptureDialog(tk.Toplevel):
     def _refresh_loop(self):
         if not self.winfo_exists() or self._cap is None:
             return
-        ok, frame = self._cap.read()
+        try:
+            ok, frame = self._cap.read()
+        except Exception:
+            ok, frame = False, None
         if ok and frame is not None:
-            self._render_frame_with_overlay(frame)
+            try:
+                self._render_frame_with_overlay(frame)
+            except Exception:
+                # The calibration preview's rule (2026-11-10): never kill
+                # the loop on a bad frame, never hide it. Until then one
+                # exception here ended the loop and froze the preview for
+                # good. The first failure logs its traceback; the rest are
+                # counted and said when the dialog closes.
+                self._loop_errors += 1
+                if self._loop_errors == 1:
+                    mlog.exception("camera capture: processing a frame failed "
+                                   "(further failures are counted)")
         self._refresh_after_id = self.after(self.LIVE_REFRESH_MS,
                                               self._refresh_loop)
 
@@ -10142,6 +10175,9 @@ class CameraCaptureDialog(tk.Toplevel):
             except Exception:
                 pass
             self._cap = None
+        if self._loop_errors:
+            mlog.warning("camera capture: %d frames failed to process", self._loop_errors)
+            self._loop_errors = 0
         self.destroy()
 
 
@@ -10681,20 +10717,27 @@ class FalconRunDialog(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _on_pause_clicked(self):
+        # The buttons follow the command only when it went out (2026-11-10):
+        # the sender says False when the byte was not written; None (a
+        # stand-in or an older sender) is taken as sent.
         try:
-            self._sender.pause()
+            sent = self._sender.pause()
         except Exception as e:
             mlog.warning("laser run: Pause (feed hold) failed: %s", e)
-        self._pause_btn.config(state="disabled")
-        self._resume_btn.config(state="normal")
+            sent = False
+        if sent is not False:
+            self._pause_btn.config(state="disabled")
+            self._resume_btn.config(state="normal")
 
     def _on_resume_clicked(self):
         try:
-            self._sender.resume()
+            sent = self._sender.resume()
         except Exception as e:
             mlog.warning("laser run: Resume failed: %s", e)
-        self._pause_btn.config(state="normal")
-        self._resume_btn.config(state="disabled")
+            sent = False
+        if sent is not False:
+            self._pause_btn.config(state="normal")
+            self._resume_btn.config(state="disabled")
 
     def _wait_idle_then_restart(self):
         """Poll Grbl's state until it's Idle (any pending jog has
@@ -10856,13 +10899,16 @@ class FalconRunDialog(tk.Toplevel):
         except Exception:
             step = 1.0
         try:
-            self._sender.jog(x=dx_sign * step, y=dy_sign * step,
-                              feed=2000, relative=True)
+            sent = self._sender.jog(x=dx_sign * step, y=dy_sign * step,
+                                    feed=2000, relative=True)
         except Exception as e:
             mlog.warning("laser run: jog failed: %s", e)
+            sent = False
         # If this dialog is gating its done-button on a jog click
-        # (MANUAL-mode position confirmation), unlock it now.
-        if not self._has_jogged:
+        # (MANUAL-mode position confirmation), unlock it now, but only
+        # for a jog that went out (2026-11-10): the sender says False when
+        # the command was not written; None (a stand-in) counts as sent.
+        if sent is not False and not self._has_jogged:
             self._has_jogged = True
             if self._finished:
                 try:
@@ -11124,6 +11170,7 @@ class LiveCameraWindow(tk.Toplevel):
         self._latest_photo = None
         self._refresh_after_id = None
         self._closed = False
+        self._loop_errors = 0            # frames that failed to draw (first logged, rest counted)
 
         try:
             import camera_capture
@@ -11253,13 +11300,23 @@ class LiveCameraWindow(tk.Toplevel):
         except Exception:
             ok = False
         if ok and frame is not None:
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = self._PIL_Image.fromarray(rgb)
-            img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
-            self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
-            self._preview_label.config(
-                image=self._latest_photo,
-                width=img.width, height=img.height)
+            try:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = self._PIL_Image.fromarray(rgb)
+                img.thumbnail((self.PREVIEW_W, self.PREVIEW_H))
+                self._latest_photo = self._PIL_ImageTk.PhotoImage(img)
+                self._preview_label.config(
+                    image=self._latest_photo,
+                    width=img.width, height=img.height)
+            except Exception:
+                # The calibration preview's rule (2026-11-10): one bad frame
+                # must not end the loop (it used to freeze this window for
+                # good) and must not go unsaid: the first failure logs its
+                # traceback, the rest are counted and said at close.
+                self._loop_errors += 1
+                if self._loop_errors == 1:
+                    mlog.exception("live camera: drawing a frame failed "
+                                   "(further failures are counted)")
         self._refresh_after_id = self.after(self.REFRESH_MS, self._refresh_loop)
 
     def close(self):
@@ -11277,6 +11334,9 @@ class LiveCameraWindow(tk.Toplevel):
             except Exception:
                 pass
             self._cap = None
+        if self._loop_errors:
+            mlog.warning("live camera: %d frames failed to draw", self._loop_errors)
+            self._loop_errors = 0
         try:
             self.destroy()
         except tk.TclError:

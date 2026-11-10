@@ -14,6 +14,8 @@ import functools
 import logging
 import sys
 
+from audio_utils import pitch_or_default
+
 IS_MACOS = sys.platform == 'darwin'
 
 try:
@@ -575,7 +577,7 @@ class TunerTabMixin:
         pitch_sliders = _make_slider_group(ctrl_frame, 1, _("PITCH"), padx=(0, 14))
 
         self._tuner_pitch_var = tk.DoubleVar(
-            value=tuner_settings.get("reference_pitch", 440.0))
+            value=pitch_or_default(tuner_settings.get("reference_pitch", 440.0)))
         _make_vslider(pitch_sliders, _("A ="), self._tuner_pitch_var, 420, 460, 0,
                       cmd=lambda v: self._tuner_on_pitch_changed(),
                       resolution=1, value_fmt=lambda v: f"{v:.0f} Hz")
@@ -686,7 +688,7 @@ class TunerTabMixin:
         # Apply saved settings
         try:
             self._tuner_engine.set_reference_pitch(float(self._tuner_pitch_var.get()))
-        except ValueError:
+        except (ValueError, tk.TclError):  # a DoubleVar holding a non-number raises TclError on get()
             pass
         self._tuner_engine.set_sensitivity(self._tuner_sens_var.get())
 
@@ -1197,7 +1199,7 @@ class TunerTabMixin:
             if self._tuner_engine:
                 self._tuner_engine.set_reference_pitch(hz)
                 self._tuner_ref_notes = _build_ref_notes(hz)
-        except ValueError:
+        except (ValueError, tk.TclError):
             pass
 
     def _tuner_on_sensitivity_changed(self, value=None):

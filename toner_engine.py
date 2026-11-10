@@ -16,6 +16,7 @@ import math
 import json
 import logging
 import os
+import threading
 from collections import deque, namedtuple
 
 log = logging.getLogger(__name__)
@@ -229,26 +230,49 @@ _BUILTIN_MIC_KEYWORDS = [
 ]
 
 
+MIC_CHECK_BOUND_S = 5.0   # how long the default-device query may take before it is given up
+
+
 def check_mic_quality():
     """Check if the default input device looks like a built-in mic.
 
     Returns:
         (is_builtin, device_name) — is_builtin is True if the default
         input device name matches known built-in mic patterns.
+
+    The device query runs on a daemon thread with a bound (2026-11-10):
+    PortAudio can block without bound on a machine with a strange audio
+    device, and this is the one query the Toner tab makes on its first
+    start before any stream is opened, synthetic tone or not, so the
+    toner suite and the CI tour reach it too. Past the bound the check
+    answers (False, "unknown") and logs once; the stuck thread is left
+    behind.
     """
     if not AUDIO_AVAILABLE:
         return False, "unknown"
-    try:
-        default_input = sd.default.device[0]
-        if default_input is None or default_input < 0:
-            return False, "unknown"
-        info = sd.query_devices(default_input)
-        name = info.get('name', '')
-        name_lower = name.lower()
-        is_builtin = any(kw in name_lower for kw in _BUILTIN_MIC_KEYWORDS)
-        return is_builtin, name
-    except Exception:
+    box = {}
+
+    def query():
+        try:
+            default_input = sd.default.device[0]
+            if default_input is None or default_input < 0:
+                box['result'] = (False, "unknown")
+                return
+            info = sd.query_devices(default_input)
+            name = info.get('name', '')
+            name_lower = name.lower()
+            box['result'] = (any(kw in name_lower for kw in _BUILTIN_MIC_KEYWORDS), name)
+        except Exception:
+            box['result'] = (False, "unknown")
+
+    t = threading.Thread(target=query, name="mic-check", daemon=True)
+    t.start()
+    t.join(MIC_CHECK_BOUND_S)
+    if t.is_alive():
+        log.warning("the audio device did not answer a device query in %.0f s; "
+                    "the microphone check is skipped", MIC_CHECK_BOUND_S)
         return False, "unknown"
+    return box.get('result', (False, "unknown"))
 
 
 class TonerEngine:
@@ -1779,8 +1803,20 @@ def load_tone_presets(filepath):
                 return migrated
 
             return data
-        except (json.JSONDecodeError, TypeError) as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
+            # The library is a user's recordings: keep a copy before the
+            # next save overwrites it, the way config does for its files
+            # (2026-11-10; until then a corrupt library loaded as empty and
+            # the next save was the end of it, and bad bytes crashed here).
             log.warning("could not read the tone library %s; starting with "
+                        "an empty one: %s", filepath, e)
+            try:
+                from config import _preserve_corrupt_file
+                _preserve_corrupt_file(filepath)
+            except Exception as e2:  # the copy is best effort; the load must not fail on it
+                log.warning("could not keep a copy of the unreadable tone library %s: %s", filepath, e2)
+        except OSError as e:
+            log.warning("could not open the tone library %s; starting with "
                         "an empty one: %s", filepath, e)
     return {DEFAULT_LIBRARY: {}}
 

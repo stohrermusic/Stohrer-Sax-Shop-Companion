@@ -499,6 +499,8 @@ GUARDED_SUITES = (
     "test_user_guide",
     # the web imports' TLS context (2026-11-10, housekeeping: drives the three importers)
     "test_tls_context",
+    # the audit's faults (2026-11-10: drives the reset handler and the bed check through the real boxes)
+    "test_audit_fixes",
 )
 
 

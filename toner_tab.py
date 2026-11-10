@@ -23,6 +23,8 @@ import os
 import sys
 import time
 
+from audio_utils import pitch_or_default
+
 IS_MACOS = sys.platform == 'darwin'
 
 try:
@@ -227,7 +229,7 @@ class TonerTabMixin:
 
         self._toner_engine = TonerEngine()
         self._toner_engine.set_reference_pitch(
-            toner_settings.get("reference_pitch", 440.0))
+            pitch_or_default(toner_settings.get("reference_pitch", 440.0)))
         self._toner_engine.set_sensitivity(
             toner_settings.get("sensitivity", 50))
 
@@ -515,7 +517,7 @@ class TonerTabMixin:
 
         # A= and concert pitch moved to Options menu — just store vars
         self._toner_pitch_var = tk.DoubleVar(
-            value=toner_settings.get("reference_pitch", 440.0))
+            value=pitch_or_default(toner_settings.get("reference_pitch", 440.0)))
 
         # ========== RIGHT COLUMN: all controls in a horizontal row ==========
         right_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
@@ -1552,7 +1554,7 @@ class TonerTabMixin:
             hz = float(self._toner_pitch_var.get())
             if self._toner_engine:
                 self._toner_engine.set_reference_pitch(hz)
-        except ValueError:
+        except (ValueError, tk.TclError):  # a DoubleVar holding a non-number raises TclError on get()
             pass
 
     def _toner_on_canvas_resize(self, event):

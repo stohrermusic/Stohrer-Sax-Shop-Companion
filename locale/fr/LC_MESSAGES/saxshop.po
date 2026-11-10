@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-10 00:25-0500\n"
+"POT-Creation-Date: 2026-11-10 00:59-0500\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -128,7 +128,7 @@ msgstr "Erreur lors de l'enregistrement du préréglage"
 msgid "Save as Set"
 msgstr "Enregistrer comme jeu"
 
-#: library_features.py:142 main.py:774 toner_tab.py:1822 toner_tab.py:5432
+#: library_features.py:142 main.py:775 toner_tab.py:1824 toner_tab.py:5434
 msgid "Library:"
 msgstr "Bibliothèque :"
 
@@ -148,8 +148,8 @@ msgstr "Hauteurs de clés"
 msgid "Serial:"
 msgstr "N° de série :"
 
-#: library_features.py:194 library_features.py:681 toner_tab.py:1876
-#: toner_tab.py:5456
+#: library_features.py:194 library_features.py:681 toner_tab.py:1878
+#: toner_tab.py:5458
 msgid "Notes:"
 msgstr "Notes :"
 
@@ -165,7 +165,7 @@ msgstr "Unités :"
 msgid "mm"
 msgstr "mm"
 
-#: library_features.py:209 main.py:1078
+#: library_features.py:209 main.py:1079
 msgid "inches"
 msgstr "pouces"
 
@@ -179,9 +179,9 @@ msgstr "Saisissez un nom pour ce jeu :"
 
 #: library_features.py:291 library_features.py:332 library_features.py:366
 #: library_features.py:384 library_features.py:408 library_features.py:419
-#: library_features.py:430 library_features.py:435 main.py:3950 main.py:3961
-#: main.py:3972 main.py:3978 main.py:3989 main.py:4053 main.py:4078
-#: main.py:4096
+#: library_features.py:430 library_features.py:435 main.py:3966 main.py:3977
+#: main.py:3988 main.py:3994 main.py:4005 main.py:4069 main.py:4094
+#: main.py:4112
 msgid "All Libraries"
 msgstr "Toutes les bibliothèques"
 
@@ -203,16 +203,16 @@ msgstr ""
 "Veuillez renseigner au minimum la marque, le modèle et la taille avant "
 "d'enregistrer."
 
-#: library_features.py:317 main.py:4018
+#: library_features.py:317 main.py:4034
 msgid "Overwrite"
 msgstr "Écraser"
 
-#: library_features.py:317 main.py:4018
+#: library_features.py:317 main.py:4034
 #, python-brace-format
 msgid "A set named '{name}' already exists in this library. Overwrite it?"
 msgstr "Un jeu nommé « {name} » existe déjà dans cette bibliothèque. L'écraser ?"
 
-#: library_features.py:323 main.py:4043
+#: library_features.py:323 main.py:4059
 msgid "Preset Saved"
 msgstr "Préréglage enregistré"
 
@@ -221,7 +221,7 @@ msgstr "Préréglage enregistré"
 msgid "Preset '{name}' saved successfully to '{active_library}'."
 msgstr "Préréglage « {name} » enregistré avec succès dans « {active_library} »."
 
-#: library_features.py:369 library_features.py:422 main.py:3964 main.py:4081
+#: library_features.py:369 library_features.py:422 main.py:3980 main.py:4097
 msgid "Delete Library"
 msgstr "Supprimer la bibliothèque"
 
@@ -230,7 +230,7 @@ msgstr "Supprimer la bibliothèque"
 msgid "Are you sure you want to delete the empty library '{selected_lib}'?"
 msgstr "Voulez-vous vraiment supprimer la bibliothèque vide « {selected_lib} » ?"
 
-#: library_features.py:374 main.py:4086
+#: library_features.py:374 main.py:4102
 msgid "Library Deleted"
 msgstr "Bibliothèque supprimée"
 
@@ -239,16 +239,16 @@ msgstr "Bibliothèque supprimée"
 msgid "Library '{selected_lib}' deleted."
 msgstr "Bibliothèque « {selected_lib} » supprimée."
 
-#: library_features.py:381 library_features.py:389 main.py:4093 main.py:4101
-#: main.py:4116
+#: library_features.py:381 library_features.py:389 main.py:4109 main.py:4117
+#: main.py:4132
 msgid "Delete Error"
 msgstr "Erreur de suppression"
 
-#: library_features.py:381 main.py:4093
+#: library_features.py:381 main.py:4109
 msgid "Please load a set to delete."
 msgstr "Veuillez charger un jeu à supprimer."
 
-#: library_features.py:389 main.py:4101
+#: library_features.py:389 main.py:4117
 msgid ""
 "Cannot delete from 'All Libraries' view. Please select the specific "
 "library first."
@@ -269,7 +269,7 @@ msgstr ""
 "Voulez-vous vraiment supprimer le jeu « {selected_preset} » de la "
 "bibliothèque « {selected_lib} » ?"
 
-#: library_features.py:403 main.py:4114
+#: library_features.py:403 main.py:4130
 msgid "Preset Deleted"
 msgstr "Préréglage supprimé"
 
@@ -282,18 +282,18 @@ msgstr "Préréglage « {selected_preset} » supprimé."
 msgid "Import Key Height Sets"
 msgstr "Importer des jeux de hauteurs de clés"
 
-#: library_features.py:441 library_features.py:881 main.py:4136
+#: library_features.py:441 library_features.py:881 main.py:4152
 #: ui_dialogs.py:2377 ui_dialogs.py:2396 ui_dialogs.py:3440
 msgid "JSON files"
 msgstr "Fichiers JSON"
 
-#: library_features.py:441 library_features.py:881 main.py:4136
+#: library_features.py:441 library_features.py:881 main.py:4152
 #: ui_dialogs.py:2377 ui_dialogs.py:2396 ui_dialogs.py:3440
 msgid "All files"
 msgstr "Tous les fichiers"
 
-#: library_features.py:462 library_features.py:988 main.py:4156 main.py:4239
-#: toner_tab.py:5544 toner_tab.py:5699 ui_dialogs.py:2404 ui_dialogs.py:2407
+#: library_features.py:462 library_features.py:988 main.py:4172 main.py:4255
+#: toner_tab.py:5546 toner_tab.py:5701 ui_dialogs.py:2404 ui_dialogs.py:2407
 #: ui_dialogs.py:3552 ui_dialogs.py:3665
 msgid "Import Error"
 msgstr "Erreur d'importation"
@@ -307,7 +307,7 @@ msgstr ""
 "Impossible d'importer les jeux de hauteurs :\n"
 "{e}"
 
-#: library_features.py:477 library_features.py:822 main.py:4173
+#: library_features.py:477 library_features.py:822 main.py:4189
 msgid "Connection Error"
 msgstr "Erreur de connexion"
 
@@ -322,7 +322,7 @@ msgstr ""
 "\n"
 "{e}"
 
-#: library_features.py:481 library_features.py:826 main.py:4177
+#: library_features.py:481 library_features.py:826 main.py:4193
 msgid "Data Error"
 msgstr "Erreur de données"
 
@@ -338,8 +338,8 @@ msgstr ""
 "{e}"
 
 #: library_features.py:486 library_features.py:499 library_features.py:524
-#: library_features.py:831 library_features.py:873 main.py:4182
-#: toner_tab.py:4821 toner_tab.py:5550
+#: library_features.py:831 library_features.py:873 main.py:4198
+#: toner_tab.py:4823 toner_tab.py:5552
 msgid "No Data"
 msgstr "Aucune donnée"
 
@@ -366,8 +366,8 @@ msgstr ""
 "\n"
 "Écraser avec la dernière version du web ?"
 
-#: library_features.py:521 library_features.py:870 main.py:4235
-#: toner_tab.py:5735 ui_dialogs.py:3554 ui_dialogs.py:3662 ui_dialogs.py:3667
+#: library_features.py:521 library_features.py:870 main.py:4251
+#: toner_tab.py:5737 ui_dialogs.py:3554 ui_dialogs.py:3662 ui_dialogs.py:3667
 msgid "Import Complete"
 msgstr "Importation terminée"
 
@@ -546,11 +546,11 @@ msgstr ""
 "Échec de l'importation :\n"
 "{e}"
 
-#: main.py:293 main.py:2203
+#: main.py:294 main.py:2204
 msgid "Scrap Session Active"
 msgstr "Session de chutes active"
 
-#: main.py:294
+#: main.py:295
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining in your scrap session.\n"
@@ -561,329 +561,329 @@ msgstr ""
 "\n"
 "Quitter quand même ? (La session sera perdue)"
 
-#: main.py:385 main.py:458 main.py:473 main.py:487 main.py:510
+#: main.py:386 main.py:459 main.py:474 main.py:488 main.py:511
 msgid "File"
 msgstr "Fichier"
 
-#: main.py:386
+#: main.py:387
 msgid "Import Pad Presets..."
 msgstr "Importer des préréglages de tampons…"
 
-#: main.py:387
+#: main.py:388
 msgid "Export Pad Presets..."
 msgstr "Exporter des préréglages de tampons…"
 
-#: main.py:389 ui_dialogs.py:3568
+#: main.py:390 ui_dialogs.py:3568
 msgid "Import Matt's Pad Sets"
 msgstr "Importer les jeux de tampons de Matt"
 
-#: main.py:391
+#: main.py:392
 msgid "Job History..."
 msgstr "Historique des travaux..."
 
-#: main.py:393
+#: main.py:394
 msgid "Import Settings from Folder..."
 msgstr "Importer les paramètres d'un dossier…"
 
-#: main.py:395
+#: main.py:396
 msgid "Feature Set..."
 msgstr "Fonctionnalités…"
 
-#: main.py:397 main.py:463 main.py:478 main.py:488
+#: main.py:398 main.py:464 main.py:479 main.py:489
 msgid "Exit"
 msgstr "Quitter"
 
-#: main.py:400 main.py:466 main.py:491 main.py:502 main.py:520
+#: main.py:401 main.py:467 main.py:492 main.py:503 main.py:521
 msgid "Options"
 msgstr "Options"
 
-#: main.py:401
+#: main.py:402
 msgid "Sizing Rules..."
 msgstr "Règles de dimensionnement…"
 
-#: main.py:402
+#: main.py:403
 msgid "Layer Colors..."
 msgstr "Couleurs des calques…"
 
-#: main.py:404
+#: main.py:405
 msgid "G-code Settings..."
 msgstr "Paramètres G-code…"
 
-#: main.py:417
+#: main.py:418
 msgid "Machine"
 msgstr "Machine"
 
-#: main.py:422
+#: main.py:423
 msgid "Camera Calibration..."
 msgstr "Calibration de la caméra..."
 
-#: main.py:427
+#: main.py:428
 msgid "Camera-Polygon Inset Margin..."
 msgstr "Marge de retrait du polygone..."
 
-#: main.py:432
+#: main.py:433
 msgid "Framing Power..."
 msgstr "Puissance de cadrage..."
 
-#: main.py:437
+#: main.py:438
 msgid "Home Laser"
 msgstr "Origine du laser"
 
-#: main.py:441
+#: main.py:442
 msgid "Test Connection"
 msgstr "Tester la connexion"
 
-#: main.py:445
+#: main.py:446
 msgid "Clear Errors ($X)"
 msgstr "Effacer les erreurs ($X)"
 
-#: main.py:449
+#: main.py:450
 msgid "Reset Falcon (soft-reset)"
 msgstr "Réinitialiser Falcon (soft-reset)"
 
-#: main.py:459
+#: main.py:460
 msgid "Import Key Sets..."
 msgstr "Importer des jeux de hauteurs…"
 
-#: main.py:460
+#: main.py:461
 msgid "Import Matt's Key Heights"
 msgstr "Importer les hauteurs de clés de Matt"
 
-#: main.py:461
+#: main.py:462
 msgid "Export Key Sets..."
 msgstr "Exporter des jeux de hauteurs…"
 
-#: main.py:467
+#: main.py:468
 msgid "Layout Options..."
 msgstr "Options de mise en page…"
 
-#: main.py:474
+#: main.py:475
 msgid "Import Screw Specs..."
 msgstr "Importer des spécifications de vis…"
 
-#: main.py:475
+#: main.py:476
 msgid "Import Matt's Specs"
 msgstr "Importer les spécifications de Matt"
 
-#: main.py:476
+#: main.py:477
 msgid "Export Screw Specs..."
 msgstr "Exporter des spécifications de vis…"
 
-#: main.py:492 main.py:503 main.py:521
+#: main.py:493 main.py:504 main.py:522
 msgid "Settings..."
 msgstr "Paramètres…"
 
-#: main.py:504
+#: main.py:505
 msgid "Input Device..."
 msgstr "Périphérique d'entrée…"
 
-#: main.py:511
+#: main.py:512
 msgid "Presets..."
 msgstr "Préréglages…"
 
-#: main.py:512 toner_tab.py:1621
+#: main.py:513 toner_tab.py:1623
 msgid "Analyze..."
 msgstr "Analyser…"
 
-#: main.py:515
+#: main.py:516
 msgid "Transfer Data"
 msgstr "Transfert de données"
 
-#: main.py:516
+#: main.py:517
 msgid "Export Preset Library..."
 msgstr "Exporter la bibliothèque de préréglages…"
 
-#: main.py:517
+#: main.py:518
 msgid "Import Preset Library..."
 msgstr "Importer une bibliothèque de préréglages…"
 
-#: main.py:522
+#: main.py:523
 msgid "Capture Threshold..."
 msgstr "Seuil de capture…"
 
-#: main.py:527
+#: main.py:528
 msgid "Help"
 msgstr "Aide"
 
-#: main.py:528 ui_dialogs.py:6860
+#: main.py:529 ui_dialogs.py:6860
 msgid "Welcome"
 msgstr "Bienvenue"
 
-#: main.py:529 ui_dialogs.py:6797
+#: main.py:530 ui_dialogs.py:6797
 msgid "Quick Start Guide"
 msgstr "Guide de démarrage rapide"
 
-#: main.py:530
+#: main.py:531
 msgid "User Guide..."
 msgstr "Guide utilisateur…"
 
-#: main.py:532
+#: main.py:533
 msgid "Open Log File"
 msgstr "Ouvrir le fichier journal"
 
-#: main.py:534 ui_dialogs.py:6905
+#: main.py:535 ui_dialogs.py:6905
 msgid "About"
 msgstr "À propos"
 
-#: main.py:642 ui_dialogs.py:5642 ui_dialogs.py:6236
+#: main.py:643 ui_dialogs.py:5642 ui_dialogs.py:6236
 msgid "Pad Maker"
 msgstr "Fabrication de tampons"
 
-#: main.py:647 main.py:4510 ui_dialogs.py:5643 ui_dialogs.py:6550
+#: main.py:648 main.py:4526 ui_dialogs.py:5643 ui_dialogs.py:6550
 msgid "Key Height Library"
 msgstr "Bibliothèque de hauteurs"
 
-#: main.py:652 main.py:4511 ui_dialogs.py:5644 ui_dialogs.py:6557
+#: main.py:653 main.py:4527 ui_dialogs.py:5644 ui_dialogs.py:6557
 msgid "Serial Lookup"
 msgstr "Recherche de n° de série"
 
-#: main.py:657 main.py:4512 ui_dialogs.py:5645 ui_dialogs.py:6561
+#: main.py:658 main.py:4528 ui_dialogs.py:5645 ui_dialogs.py:6561
 msgid "Screw Specs"
 msgstr "Spécifications de vis"
 
-#: main.py:661 main.py:4513 ui_dialogs.py:5646 ui_dialogs.py:6440
+#: main.py:662 main.py:4529 ui_dialogs.py:5646 ui_dialogs.py:6440
 msgid "Tooling"
 msgstr "Outillage"
 
-#: main.py:666 main.py:4514 ui_dialogs.py:5647 ui_dialogs.py:6566
+#: main.py:667 main.py:4530 ui_dialogs.py:5647 ui_dialogs.py:6566
 msgid "Tuner"
 msgstr "Accordeur"
 
-#: main.py:671 ui_dialogs.py:6595
+#: main.py:672 ui_dialogs.py:6595
 msgid "Toner (beta)"
 msgstr "Analyseur d'harmoniques (bêta)"
 
-#: main.py:757
+#: main.py:758
 msgid "Enter pad sizes (e.g. 42.0x3):"
 msgstr "Saisissez les tailles de tampons (ex. 42.0x3) :"
 
-#: main.py:783 main.py:3958 main.py:4046
+#: main.py:784 main.py:3974 main.py:4062
 msgid "Load Pad Preset"
 msgstr "Charger un préréglage de tampons"
 
-#: main.py:793
+#: main.py:794
 msgid "Save as Preset"
 msgstr "Enregistrer comme préréglage"
 
-#: main.py:794
+#: main.py:795
 msgid "View Notes"
 msgstr "Voir les notes"
 
-#: main.py:797 main.py:3966 toner_tab.py:2058 ui_dialogs.py:2351
+#: main.py:798 main.py:3982 toner_tab.py:2060 ui_dialogs.py:2351
 #: ui_dialogs.py:2355 ui_dialogs.py:2361 ui_dialogs.py:5322 ui_dialogs.py:5328
 #: ui_dialogs.py:5334
 msgid "Delete Preset"
 msgstr "Supprimer le préréglage"
 
-#: main.py:820
+#: main.py:821
 msgid "Materials"
 msgstr "Matériaux"
 
-#: main.py:833 ui_dialogs.py:6278
+#: main.py:834 ui_dialogs.py:6278
 msgid "Center Hole"
 msgstr "Trou central"
 
-#: main.py:837 toner_tab.py:5636
+#: main.py:838 toner_tab.py:5638
 msgid "None"
 msgstr "Aucun"
 
-#: main.py:840
+#: main.py:841
 msgid "Custom:"
 msgstr "Personnalisé :"
 
-#: main.py:848 tooling_tab.py:238 tooling_tab.py:332 tooling_tab.py:426
+#: main.py:849 tooling_tab.py:238 tooling_tab.py:332 tooling_tab.py:426
 #: tooling_tab.py:631
 msgid "Sheet Size"
 msgstr "Taille de feuille"
 
-#: main.py:852 main.py:4879
+#: main.py:853 main.py:4895
 #, python-brace-format
 msgid "Width ({units}):"
 msgstr "Largeur ({units}) :"
 
-#: main.py:858 main.py:4880
+#: main.py:859 main.py:4896
 #, python-brace-format
 msgid "Height ({units}):"
 msgstr "Hauteur ({units}) :"
 
-#: main.py:875 main.py:1416 tooling_tab.py:263 ui_dialogs.py:6293
+#: main.py:876 main.py:1417 tooling_tab.py:263 ui_dialogs.py:6293
 #: ui_dialogs.py:6523
 msgid "Scrap Mode"
 msgstr "Mode chutes"
 
-#: main.py:886 tooling_tab.py:266 ui_dialogs.py:3900
+#: main.py:887 tooling_tab.py:266 ui_dialogs.py:3900
 msgid "Clear"
 msgstr "Effacer"
 
-#: main.py:893
+#: main.py:894
 msgid "Edge Bias"
 msgstr "Biais de bord"
 
-#: main.py:914 main.py:1392
+#: main.py:915 main.py:1393
 msgid "ctr"
 msgstr "ctr"
 
-#: main.py:931
+#: main.py:932
 msgid "Fit card to paper:"
 msgstr "Ajuster le carton au papier :"
 
-#: main.py:958
+#: main.py:959
 msgid "Draw / Capture Shape..."
 msgstr "Dessiner / capturer une forme..."
 
-#: main.py:960
+#: main.py:961
 msgid "Draw Shape..."
 msgstr "Dessiner une forme..."
 
-#: main.py:968 toner_tab.py:2254
+#: main.py:969 toner_tab.py:2256
 msgid "Unload"
 msgstr "Décharger"
 
-#: main.py:972
+#: main.py:973
 msgid "Output filename base (no extension):"
 msgstr "Nom de fichier de sortie (sans extension) :"
 
-#: main.py:982 tooling_tab.py:285 tooling_tab.py:362 tooling_tab.py:456
+#: main.py:983 tooling_tab.py:285 tooling_tab.py:362 tooling_tab.py:456
 #: tooling_tab.py:516 tooling_tab.py:882 ui_dialogs.py:6187
 msgid "Generate SVG"
 msgstr "Générer le SVG"
 
-#: main.py:983 tooling_tab.py:287 tooling_tab.py:364 tooling_tab.py:458
+#: main.py:984 tooling_tab.py:287 tooling_tab.py:364 tooling_tab.py:458
 #: tooling_tab.py:518 tooling_tab.py:718 tooling_tab.py:886 ui_dialogs.py:6186
 msgid "Generate G-code"
 msgstr "Générer le G-code"
 
-#: main.py:985 tooling_tab.py:75 ui_dialogs.py:6188 ui_dialogs.py:6411
+#: main.py:986 tooling_tab.py:75 ui_dialogs.py:6188 ui_dialogs.py:6411
 #: ui_dialogs.py:6528
 msgid "Frame & Cut"
 msgstr "Encadrer et couper"
 
-#: main.py:1001 tooling_tab.py:724
+#: main.py:1002 tooling_tab.py:724
 msgid "Preview before saving"
 msgstr "Aperçu avant enregistrement"
 
-#: main.py:1014
+#: main.py:1015
 msgid "Live camera preview"
 msgstr "Aperçu caméra en direct"
 
-#: main.py:1021
+#: main.py:1022
 msgid "Eject SD card after G-code export"
 msgstr "Éjecter la carte SD après l'export G-code"
 
-#: main.py:1065
+#: main.py:1066
 #, python-brace-format
 msgid "Shape loaded ({n} pts)"
 msgstr "Forme chargée ({n} pts)"
 
-#: main.py:1069
+#: main.py:1070
 msgid "Using rectangle dimensions"
 msgstr "Utilisation des dimensions rectangulaires"
 
-#: main.py:1078
+#: main.py:1079
 msgid "centimeters"
 msgstr "centimètres"
 
-#: main.py:1081
+#: main.py:1082
 #, python-brace-format
 msgid ""
 "Draw Custom Shape - How to Use\n"
@@ -913,11 +913,11 @@ msgstr ""
 "Remarque : la génération peut prendre 5 à 10× plus longtemps pour des "
 "formes complexes."
 
-#: main.py:1091
+#: main.py:1092
 msgid "Draw Custom Shape"
 msgstr "Dessiner une forme personnalisée"
 
-#: main.py:1284
+#: main.py:1285
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -930,39 +930,39 @@ msgstr ""
 "Il reste {remaining_count} tampons.\n"
 "Ajustez les dimensions et cliquez de nouveau sur Générer."
 
-#: main.py:1293 main.py:1298
+#: main.py:1294 main.py:1299
 msgid "Scrap Generated"
 msgstr "Chute générée"
 
-#: main.py:1307
+#: main.py:1308
 msgid "A custom shape is loaded for the next scrap:"
 msgstr "Une forme personnalisée est chargée pour la prochaine chute :"
 
-#: main.py:1317
+#: main.py:1318
 msgid "Re-capture from camera"
 msgstr "Recapturer depuis la caméra"
 
-#: main.py:1321
+#: main.py:1322
 msgid "Unload Shape"
 msgstr "Décharger la forme"
 
-#: main.py:1324
+#: main.py:1325
 msgid "Keep Shape"
 msgstr "Conserver la forme"
 
-#: main.py:1392
+#: main.py:1393
 msgid "off"
 msgstr "off"
 
-#: main.py:1417
+#: main.py:1418
 msgid "Please select exactly one material to use Scrap Mode."
 msgstr "Veuillez sélectionner un seul matériau pour utiliser le mode chutes."
 
-#: main.py:1425 main.py:1487 tooling_tab.py:1457 tooling_tab.py:1482
+#: main.py:1426 main.py:1488 tooling_tab.py:1457 tooling_tab.py:1482
 msgid "Clear Session?"
 msgstr "Effacer la session ?"
 
-#: main.py:1426
+#: main.py:1427
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining.\n"
@@ -975,21 +975,21 @@ msgstr ""
 "\n"
 "Continuer ?"
 
-#: main.py:1461
+#: main.py:1462
 msgid "Done!"
 msgstr "Terminé !"
 
-#: main.py:1468
+#: main.py:1469
 #, python-brace-format
 msgid "{remaining} left, {pending} on this scrap ({count} scraps)"
 msgstr "{remaining} restants, {pending} sur cette chute ({count} chutes)"
 
-#: main.py:1471
+#: main.py:1472
 #, python-brace-format
 msgid "{remaining} left ({count} scraps)"
 msgstr "{remaining} restants ({count} chutes)"
 
-#: main.py:1488
+#: main.py:1489
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining.\n"
@@ -1000,15 +1000,15 @@ msgstr ""
 "\n"
 "Effacer la session ?"
 
-#: main.py:1629 main.py:1646 main.py:3770 tooling_tab.py:1636
+#: main.py:1630 main.py:1647 main.py:3780 tooling_tab.py:1636
 msgid "Select Folder to Save G-code"
 msgstr "Sélectionner le dossier d'enregistrement du G-code"
 
-#: main.py:1637 main.py:2384
+#: main.py:1638 main.py:2385
 msgid "Material Mismatch"
 msgstr "Matériau incompatible"
 
-#: main.py:1638 main.py:2385
+#: main.py:1639 main.py:2386
 #, python-brace-format
 msgid ""
 "Current session is for {material}.\n"
@@ -1017,19 +1017,19 @@ msgstr ""
 "La session en cours est pour {material}.\n"
 "Effacez la session pour changer de matériau."
 
-#: main.py:1657 main.py:2394 tooling_tab.py:1576
+#: main.py:1658 main.py:2395 tooling_tab.py:1576
 msgid "Session Complete"
 msgstr "Session terminée"
 
-#: main.py:1657 main.py:1694 main.py:2394
+#: main.py:1658 main.py:1695 main.py:2395
 msgid "All pads have been placed!"
 msgstr "Tous les tampons ont été placés !"
 
-#: main.py:1666 main.py:2404
+#: main.py:1667 main.py:2405
 msgid "No Pads Fit"
 msgstr "Aucun tampon ne tient"
 
-#: main.py:1667 main.py:2405
+#: main.py:1668 main.py:2406
 #, python-brace-format
 msgid ""
 "No pads could be placed on this scrap.\n"
@@ -1042,68 +1042,68 @@ msgstr ""
 "Plus petit tampon restant : {min_pad_size} mm\n"
 "Essayez une chute plus grande."
 
-#: main.py:1693 main.py:2443 main.py:3891 tooling_tab.py:1426
+#: main.py:1694 main.py:2444 main.py:3901 tooling_tab.py:1426
 #: tooling_tab.py:1620 tooling_tab.py:1662
 msgid "Session Complete!"
 msgstr "Session terminée !"
 
-#: main.py:1708
+#: main.py:1709
 msgid "Scrap Mode Progress"
 msgstr "Progression du mode chutes"
 
-#: main.py:1735 tooling_tab.py:1712
+#: main.py:1736 tooling_tab.py:1712
 msgid "Remaining"
 msgstr "Restants"
 
-#: main.py:1743
+#: main.py:1744
 msgid "On this scrap"
 msgstr "Sur cette chute"
 
-#: main.py:1751 main.py:2339 main.py:3809 main.py:3812 main.py:3815
-#: toner_tab.py:2794 tooling_tab.py:1205 tooling_tab.py:1265
+#: main.py:1752 main.py:2340 main.py:3819 main.py:3822 main.py:3825
+#: toner_tab.py:2796 tooling_tab.py:1205 tooling_tab.py:1265
 #: tooling_tab.py:1719 tooling_tab.py:2033 tooling_tab.py:2589
 #: tooling_tab.py:2673 tooling_tab.py:2702 tooling_tab.py:2810
 #: tooling_tab.py:2867 tooling_tab.py:3059 tooling_tab.py:3131
-#: ui_dialogs.py:10432
+#: ui_dialogs.py:10468
 msgid "Done"
 msgstr "Terminé"
 
-#: main.py:1762 toner_tab.py:1646 toner_tab.py:4806 toner_tab.py:5114
-#: tooling_tab.py:1728 tuner_tab.py:1366 ui_dialogs.py:5751 ui_dialogs.py:6827
-#: ui_dialogs.py:6879 ui_dialogs.py:7131 ui_dialogs.py:8072 ui_dialogs.py:9808
-#: ui_dialogs.py:10328 ui_dialogs.py:10536
+#: main.py:1763 toner_tab.py:1648 toner_tab.py:4808 toner_tab.py:5116
+#: tooling_tab.py:1728 tuner_tab.py:1368 ui_dialogs.py:5751 ui_dialogs.py:6827
+#: ui_dialogs.py:6879 ui_dialogs.py:7131 ui_dialogs.py:8072 ui_dialogs.py:9827
+#: ui_dialogs.py:10364 ui_dialogs.py:10572
 msgid "Close"
 msgstr "Fermer"
 
-#: main.py:1807 tooling_tab.py:1760
+#: main.py:1808 tooling_tab.py:1760
 msgid "All done!"
 msgstr "Tout est terminé !"
 
-#: main.py:1810
+#: main.py:1811
 #, python-brace-format
 msgid "{placed} on scrap #{num}, {done} / {total} cut"
 msgstr "{placed} sur la chute n°{num}, {done} / {total} découpés"
 
-#: main.py:1815
+#: main.py:1816
 #, python-brace-format
 msgid "{done} / {total} pads complete"
 msgstr "{done} / {total} tampons réalisés"
 
-#: main.py:1825 main.py:1834 main.py:1844
+#: main.py:1826 main.py:1835 main.py:1845
 msgid " (none)"
 msgstr " (aucun)"
 
-#: main.py:1848
+#: main.py:1849
 #, python-brace-format
 msgid "{material} | {scraps} scrap(s) used"
 msgstr "{material} | {scraps} chute(s) utilisée(s)"
 
-#: main.py:1883 main.py:3102 main.py:4263 main.py:5070 ui_dialogs.py:63
+#: main.py:1884 main.py:3112 main.py:4279 main.py:5086 ui_dialogs.py:63
 #: ui_dialogs.py:2465
 msgid "Adhesive rings"
 msgstr "Anneaux adhésifs"
 
-#: main.py:1925 main.py:1928 main.py:2004 main.py:2008 tooling_tab.py:988
+#: main.py:1926 main.py:1929 main.py:2005 main.py:2009 tooling_tab.py:988
 #: tooling_tab.py:992 tooling_tab.py:1135 tooling_tab.py:1139
 #: tooling_tab.py:1978 tooling_tab.py:2240 tooling_tab.py:2246
 #: tooling_tab.py:2250 tooling_tab.py:2257 tooling_tab.py:2261
@@ -1117,15 +1117,15 @@ msgstr "Anneaux adhésifs"
 msgid "Invalid Input"
 msgstr "Saisie invalide"
 
-#: main.py:1925
+#: main.py:1926
 msgid "Custom hole size must be a valid number."
 msgstr "La taille de trou personnalisée doit être un nombre valide."
 
-#: main.py:1928
+#: main.py:1929
 msgid "Custom hole size must be greater than zero."
 msgstr "La taille de trou personnalisée doit être supérieure à zéro."
 
-#: main.py:1942 main.py:1959 main.py:2018 main.py:2023 toner_tab.py:5269
+#: main.py:1943 main.py:1960 main.py:2019 main.py:2024 toner_tab.py:5271
 #: tooling_tab.py:1173 tooling_tab.py:1209 tooling_tab.py:1218
 #: tooling_tab.py:1270 tooling_tab.py:1551 tooling_tab.py:1631
 #: tooling_tab.py:1675 tooling_tab.py:1950 tooling_tab.py:2037
@@ -1136,20 +1136,20 @@ msgstr "La taille de trou personnalisée doit être supérieure à zéro."
 msgid "Error"
 msgstr "Erreur"
 
-#: main.py:1942
+#: main.py:1943
 msgid "No valid pad sizes entered."
 msgstr "Aucune taille de tampon valide n'a été saisie."
 
-#: main.py:1948
+#: main.py:1949
 #, python-brace-format
 msgid "  … and {n} more"
 msgstr "  … et {n} de plus"
 
-#: main.py:1950
+#: main.py:1951
 msgid "Some lines skipped"
 msgstr "Certaines lignes ignorées"
 
-#: main.py:1951
+#: main.py:1952
 #, python-brace-format
 msgid ""
 "These lines couldn't be read as \"size x quantity\" and won't be cut:\n"
@@ -1165,15 +1165,15 @@ msgstr ""
 "\n"
 "Continuer sans elles ?"
 
-#: main.py:1959
+#: main.py:1960
 msgid "Only one pad size can use 'max' quantity at a time."
 msgstr "Une seule taille de tampon peut utiliser la quantité « max » à la fois."
 
-#: main.py:1978
+#: main.py:1979
 msgid "Can't group a 'max' size"
 msgstr "Impossible de grouper une taille « max »"
 
-#: main.py:1979
+#: main.py:1980
 #, python-brace-format
 msgid ""
 "{size} mm is set to 'max', but Labeled Zones is grouping {lo}–{hi} mm. A "
@@ -1189,7 +1189,7 @@ msgstr ""
 "Donnez une quantité à {size}, ou utilisez « max » sur une taille hors de "
 "cette plage pour remplir le reste."
 
-#: main.py:1990
+#: main.py:1991
 msgid ""
 "Warning: The current font size is too large for some pads and the "
 "engraving will be skipped:\n"
@@ -1199,7 +1199,7 @@ msgstr ""
 "certains tampons et la gravure sera ignorée :\n"
 "\n"
 
-#: main.py:1993
+#: main.py:1994
 msgid ""
 "\n"
 "Do you want to proceed?"
@@ -1207,28 +1207,28 @@ msgstr ""
 "\n"
 "Souhaitez-vous continuer ?"
 
-#: main.py:1994
+#: main.py:1995
 msgid "Engraving Size Warning"
 msgstr "Avertissement de taille de gravure"
 
-#: main.py:2004 tooling_tab.py:988 tooling_tab.py:1135 tooling_tab.py:2723
+#: main.py:2005 tooling_tab.py:988 tooling_tab.py:1135 tooling_tab.py:2723
 msgid "Sheet width and height must be valid numbers."
 msgstr "La largeur et la hauteur de la feuille doivent être des nombres valides."
 
-#: main.py:2008
+#: main.py:2009
 msgid "Sheet width and height must be greater than zero."
 msgstr "La largeur et la hauteur de la feuille doivent être supérieures à zéro."
 
-#: main.py:2018
+#: main.py:2019
 #, python-brace-format
 msgid "Unknown unit '{units}' in settings."
 msgstr "Unité inconnue « {units} » dans les paramètres."
 
-#: main.py:2023
+#: main.py:2024
 msgid "Please enter a base filename."
 msgstr "Veuillez saisir un nom de fichier de base."
 
-#: main.py:2204
+#: main.py:2205
 msgid ""
 "Finish or clear the current scrap session before loading a job from "
 "history."
@@ -1236,11 +1236,11 @@ msgstr ""
 "Terminez ou effacez la session de chutes en cours avant de charger un "
 "travail depuis l'historique."
 
-#: main.py:2259
+#: main.py:2260
 msgid "Job Loaded"
 msgstr "Travail chargé"
 
-#: main.py:2260
+#: main.py:2261
 msgid ""
 "Pad list, materials and sheet size are back.\n"
 "\n"
@@ -1253,19 +1253,19 @@ msgstr ""
 "La forme personnalisée de ce travail n'a pas été restaurée — dessinez ou "
 "capturez la pièce que vous coupez maintenant."
 
-#: main.py:2283 main.py:3734
+#: main.py:2284 main.py:3744
 msgid "No Materials Selected"
 msgstr "Aucun matériau sélectionné"
 
-#: main.py:2283
+#: main.py:2284
 msgid "Please select at least one material."
 msgstr "Veuillez sélectionner au moins un matériau."
 
-#: main.py:2290 main.py:3740
+#: main.py:2291 main.py:3750
 msgid "Preview"
 msgstr "Aperçu"
 
-#: main.py:2291 main.py:3741
+#: main.py:2292 main.py:3751
 msgid ""
 "Preview works with one material at a time.\n"
 "Please select a single material to preview its layout."
@@ -1274,39 +1274,39 @@ msgstr ""
 "Veuillez sélectionner un unique matériau pour prévisualiser sa "
 "disposition."
 
-#: main.py:2311 main.py:3756
+#: main.py:2312 main.py:3766
 msgid "paper"
 msgstr "papier"
 
-#: main.py:2311 main.py:3756
+#: main.py:2312 main.py:3766
 msgid "sheet"
 msgstr "feuille"
 
-#: main.py:2312 main.py:3382 main.py:3757 tooling_tab.py:1184
+#: main.py:2313 main.py:3392 main.py:3767 tooling_tab.py:1184
 #: tooling_tab.py:1229
 msgid "Nesting Error"
 msgstr "Erreur d'imbrication"
 
-#: main.py:2312 main.py:3757
+#: main.py:2313 main.py:3767
 #, python-brace-format
 msgid "Could not fit all '{material}' pieces on the specified {size_desc} size."
 msgstr ""
 "Impossible de placer toutes les pièces « {material} » sur le format "
 "{size_desc} spécifié."
 
-#: main.py:2325 main.py:2374 tooling_tab.py:1594
+#: main.py:2326 main.py:2375 tooling_tab.py:1594
 msgid "Select Folder to Save SVGs"
 msgstr "Sélectionner le dossier d'enregistrement des SVG"
 
-#: main.py:2339
+#: main.py:2340
 msgid "SVG files generated successfully."
 msgstr "Fichiers SVG générés avec succès."
 
-#: main.py:2343 main.py:2452 main.py:3699 main.py:3820 main.py:3903
+#: main.py:2344 main.py:2453 main.py:3709 main.py:3830 main.py:3913
 msgid "An Error Occurred"
 msgstr "Une erreur s'est produite"
 
-#: main.py:2343
+#: main.py:2344
 #, python-brace-format
 msgid ""
 "Something went wrong during generation:\n"
@@ -1317,15 +1317,15 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2361 main.py:3838
+#: main.py:2362 main.py:3848
 msgid "Scrap Mode Error"
 msgstr "Erreur du mode chutes"
 
-#: main.py:2362
+#: main.py:2363
 msgid "Please select exactly one material for scrap mode."
 msgstr "Veuillez sélectionner un seul matériau pour le mode chutes."
 
-#: main.py:2444 main.py:3892
+#: main.py:2445 main.py:3902
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1338,7 +1338,7 @@ msgstr ""
 "Tous les tampons sont placés ! Session terminée.\n"
 "Fichiers enregistrés dans : {save_dir}"
 
-#: main.py:2452 main.py:3903
+#: main.py:2453 main.py:3913
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -1349,38 +1349,38 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2751 main.py:3306 ui_dialogs.py:8644
+#: main.py:2752 main.py:3316 ui_dialogs.py:8662
 msgid "Falcon Not Detected"
 msgstr "Falcon non détecté"
 
-#: main.py:2752 main.py:3307
+#: main.py:2753 main.py:3317
 msgid "No Grbl controller detected. Plug in the Falcon over USB and try again."
 msgstr "Aucun contrôleur Grbl détecté. Branche le Falcon en USB et réessaie."
 
-#: main.py:2851
+#: main.py:2852
 msgid "Homing Failed"
 msgstr "Échec de l'origine"
 
-#: main.py:2852
+#: main.py:2853
 #, python-brace-format
 msgid "Falcon returned: {m}"
 msgstr "Réponse du Falcon : {m}"
 
-#: main.py:2863 main.py:2902 main.py:2953 main.py:3002 main.py:3301
-#: ui_dialogs.py:8682 ui_dialogs.py:8826
+#: main.py:2864 main.py:2903 main.py:2954 main.py:3003 main.py:3311
+#: ui_dialogs.py:8700 ui_dialogs.py:8844
 msgid "Missing Dependency"
 msgstr "Dépendance manquante"
 
-#: main.py:2864
+#: main.py:2865
 #, python-brace-format
 msgid "Home needs pyserial: {e}"
 msgstr "L'origine requiert pyserial : {e}"
 
-#: main.py:2867 ui_dialogs.py:8410 ui_dialogs.py:10884
+#: main.py:2868 ui_dialogs.py:8410 ui_dialogs.py:10930
 msgid "Home Laser?"
 msgstr "Origine du laser ?"
 
-#: main.py:2868
+#: main.py:2869
 msgid ""
 "Send the laser home? The head will travel to the home corner at full "
 "speed. Make sure nothing is in its path."
@@ -1388,39 +1388,39 @@ msgstr ""
 "Envoyer le laser à l'origine ? La tête se déplacera vers le coin "
 "d'origine à pleine vitesse. Vérifiez que rien n'est sur son chemin."
 
-#: main.py:2877 main.py:2911 main.py:2961 main.py:3516 ui_dialogs.py:8419
-#: ui_dialogs.py:8694 ui_dialogs.py:8838
+#: main.py:2878 main.py:2912 main.py:2962 main.py:3526 ui_dialogs.py:8419
+#: ui_dialogs.py:8712 ui_dialogs.py:8856
 msgid "Connection Failed"
 msgstr "Échec de la connexion"
 
-#: main.py:2878 main.py:2962
+#: main.py:2879 main.py:2963
 #, python-brace-format
 msgid "Couldn't connect: {e}"
 msgstr "Impossible de se connecter : {e}"
 
-#: main.py:2891
+#: main.py:2892
 msgid "Homed"
 msgstr "Origine effectuée"
 
-#: main.py:2892
+#: main.py:2893
 msgid "Laser homed. Head is parked at the home corner."
 msgstr "Laser à l'origine. La tête est positionnée dans le coin d'origine."
 
-#: main.py:2903
+#: main.py:2904
 #, python-brace-format
 msgid "Test needs pyserial: {e}"
 msgstr "Le test requiert pyserial : {e}"
 
-#: main.py:2912
+#: main.py:2913
 #, python-brace-format
 msgid "Couldn't connect to the Falcon at {p}: {e}"
 msgstr "Connexion au Falcon sur {p} impossible : {e}"
 
-#: main.py:2931
+#: main.py:2932
 msgid "Connected, no response"
 msgstr "Connecté, sans réponse"
 
-#: main.py:2932
+#: main.py:2933
 #, python-brace-format
 msgid ""
 "Port opened at {p}, but Grbl didn't reply to a status query. Try the "
@@ -1429,11 +1429,11 @@ msgstr ""
 "Port ouvert sur {p}, mais Grbl n'a pas répondu à la requête d'état. "
 "Essaie l'option Réinitialiser Falcon du menu, puis re-teste."
 
-#: main.py:2938
+#: main.py:2939
 msgid "Connection OK"
 msgstr "Connexion OK"
 
-#: main.py:2939
+#: main.py:2940
 #, python-brace-format
 msgid ""
 "Falcon connected on {p}.\n"
@@ -1446,16 +1446,16 @@ msgstr ""
 "État : {s}\n"
 "MPos : X={x:.2f}  Y={y:.2f}  Z={z:.2f}"
 
-#: main.py:2954
+#: main.py:2955
 #, python-brace-format
 msgid "Clear needs pyserial: {e}"
 msgstr "Effacer requiert pyserial : {e}"
 
-#: main.py:2976
+#: main.py:2977
 msgid "Errors Cleared"
 msgstr "Erreurs effacées"
 
-#: main.py:2977
+#: main.py:2978
 msgid ""
 "Sent $X unlock. Motion is allowed again. If the Falcon was in an alarm "
 "state, it should now be Idle — check with Test Connection."
@@ -1464,11 +1464,11 @@ msgstr ""
 "était en alarme, il devrait maintenant être en état Idle — vérifie avec "
 "Tester la connexion."
 
-#: main.py:2988
+#: main.py:2989
 msgid "Reset Falcon?"
 msgstr "Réinitialiser Falcon ?"
 
-#: main.py:2989
+#: main.py:2990
 msgid ""
 "Send a soft-reset (Ctrl-X) to the Falcon. This:\n"
 "  • Immediately stops any motion in progress\n"
@@ -1492,25 +1492,29 @@ msgstr ""
 "\n"
 "Continuer ?"
 
-#: main.py:3003
+#: main.py:3004
 #, python-brace-format
 msgid "Reset needs pyserial: {e}"
 msgstr "Réinitialiser requiert pyserial : {e}"
 
-#: main.py:3013
+#: main.py:3016
+msgid "the reset byte could not be sent"
+msgstr "l'octet de réinitialisation n'a pas pu être envoyé"
+
+#: main.py:3021
 msgid "Reset Failed"
 msgstr "Échec de la réinitialisation"
 
-#: main.py:3014
+#: main.py:3022
 #, python-brace-format
 msgid "Couldn't reset: {e}"
 msgstr "Impossible de réinitialiser : {e}"
 
-#: main.py:3023
+#: main.py:3033
 msgid "Falcon Reset"
 msgstr "Falcon réinitialisé"
 
-#: main.py:3024
+#: main.py:3034
 msgid ""
 "Soft-reset sent. The Falcon is now in alarm state — use Home Laser to "
 "recover, then jog as needed."
@@ -1518,11 +1522,11 @@ msgstr ""
 "Soft-reset envoyé. Le Falcon est en état d'alarme — utilise Origine du "
 "laser pour récupérer, puis déplace la tête au besoin."
 
-#: main.py:3034 tooling_tab.py:1036
+#: main.py:3044 tooling_tab.py:1036
 msgid "OpenCV Required"
 msgstr "OpenCV requis"
 
-#: main.py:3035
+#: main.py:3045
 msgid ""
 "Camera calibration needs OpenCV:\n"
 "\n"
@@ -1532,11 +1536,11 @@ msgstr ""
 "\n"
 "    pip install opencv-python Pillow"
 
-#: main.py:3042
+#: main.py:3052
 msgid "Recalibrate Camera?"
 msgstr "Recalibrer la caméra ?"
 
-#: main.py:3043
+#: main.py:3053
 msgid ""
 "⚠ This will REPLACE your existing calibration. ⚠\n"
 "\n"
@@ -1562,11 +1566,11 @@ msgstr ""
 "\n"
 "Continuer ?"
 
-#: main.py:3072
+#: main.py:3082
 msgid "Framing Power"
 msgstr "Puissance de cadrage"
 
-#: main.py:3083
+#: main.py:3093
 msgid ""
 "Laser power used for the framing pass, per material. Framing shows you "
 "where the cut will land — it should be bright enough to follow by eye "
@@ -1584,7 +1588,7 @@ msgstr ""
 "Augmentez par petits pas : la puissance qui devient visible est souvent "
 "proche de celle qui commence à laisser une marque."
 
-#: main.py:3124
+#: main.py:3134
 #, python-brace-format
 msgid ""
 "Range: 0 to {max}%. Cutting power is typically 35-100%, so framing stays "
@@ -1593,39 +1597,39 @@ msgstr ""
 "Plage : 0 à {max}%. La puissance de découpe est généralement de 35-100%, "
 "le cadrage reste donc bien en dessous."
 
-#: main.py:3138 main.py:3210
+#: main.py:3148 main.py:3220
 msgid "Invalid"
 msgstr "Invalide"
 
-#: main.py:3139
+#: main.py:3149
 #, python-brace-format
 msgid "{mat}: framing power must be a number from 0 to {max}%."
 msgstr "{mat} : la puissance de cadrage doit être un nombre de 0 à {max}%."
 
-#: main.py:3159 main.py:3219
+#: main.py:3169 main.py:3229
 msgid "Save Failed"
 msgstr "Échec de l'enregistrement"
 
-#: main.py:3165 toner_tab.py:1487 toner_tab.py:3132 tooling_tab.py:1926
+#: main.py:3175 toner_tab.py:1489 toner_tab.py:3134 tooling_tab.py:1926
 #: ui_dialogs.py:6984
 msgid "OK"
 msgstr "OK"
 
-#: main.py:3167 main.py:3229 main.py:4354 main.py:4449 main.py:4682
-#: main.py:4740 toner_tab.py:1489 toner_tab.py:1766 toner_tab.py:1981
-#: toner_tab.py:2047 toner_tab.py:2212 toner_tab.py:2315 toner_tab.py:3552
-#: toner_tab.py:5388 toner_tab.py:5519 toner_tab.py:5680 ui_dialogs.py:363
+#: main.py:3177 main.py:3239 main.py:4370 main.py:4465 main.py:4698
+#: main.py:4756 toner_tab.py:1491 toner_tab.py:1768 toner_tab.py:1983
+#: toner_tab.py:2049 toner_tab.py:2214 toner_tab.py:2317 toner_tab.py:3554
+#: toner_tab.py:5390 toner_tab.py:5521 toner_tab.py:5682 ui_dialogs.py:363
 #: ui_dialogs.py:2984 ui_dialogs.py:3112 ui_dialogs.py:3151 ui_dialogs.py:3706
 #: ui_dialogs.py:3909 ui_dialogs.py:4657 ui_dialogs.py:7015 ui_dialogs.py:8215
-#: ui_dialogs.py:9900 ui_dialogs.py:10452
+#: ui_dialogs.py:9919 ui_dialogs.py:10488
 msgid "Cancel"
 msgstr "Annuler"
 
-#: main.py:3173
+#: main.py:3183
 msgid "Camera-Polygon Inset Margin"
 msgstr "Marge de retrait du polygone"
 
-#: main.py:3183
+#: main.py:3193
 msgid ""
 "Camera-captured polygons are shrunk by this many millimeters on every "
 "edge before nesting. This safety margin compensates for camera "
@@ -1641,24 +1645,24 @@ msgstr ""
 "\n"
 "Typique : 2 à 5 mm. Mettre 0 pour désactiver."
 
-#: main.py:3195
+#: main.py:3205
 msgid "Inset margin (mm):"
 msgstr "Marge de retrait (mm) :"
 
-#: main.py:3211
+#: main.py:3221
 msgid "Inset must be a number 0-50."
 msgstr "La marge doit être un nombre entre 0 et 50."
 
-#: main.py:3226 toner_tab.py:1764 ui_dialogs.py:2982 ui_dialogs.py:3110
+#: main.py:3236 toner_tab.py:1766 ui_dialogs.py:2982 ui_dialogs.py:3110
 #: ui_dialogs.py:3149 ui_dialogs.py:5064 ui_dialogs.py:7014
 msgid "Save"
 msgstr "Enregistrer"
 
-#: main.py:3240 ui_dialogs.py:10555
+#: main.py:3250 ui_dialogs.py:10591
 msgid "Homing"
 msgstr "Homing"
 
-#: main.py:3247
+#: main.py:3257
 msgid ""
 "Homing the laser...\n"
 "\n"
@@ -1668,7 +1672,7 @@ msgstr ""
 "\n"
 "La tête se déplace vers le coin d'origine."
 
-#: main.py:3302
+#: main.py:3312
 #, python-brace-format
 msgid ""
 "Frame & Cut needs pyserial:\n"
@@ -1679,11 +1683,11 @@ msgstr ""
 "\n"
 "{e}"
 
-#: main.py:3349
+#: main.py:3359
 msgid "Pick One Material"
 msgstr "Choisis un matériau"
 
-#: main.py:3350
+#: main.py:3360
 msgid ""
 "Frame & Cut works with one material at a time. Please select exactly one "
 "material (not Exact Size)."
@@ -1691,21 +1695,21 @@ msgstr ""
 "Encadrer et couper fonctionne avec un seul matériau à la fois. "
 "Sélectionne exactement un matériau (pas Taille exacte)."
 
-#: main.py:3383
+#: main.py:3393
 #, python-brace-format
 msgid "Could not fit all '{m}' pieces in the available area."
 msgstr "Impossible de placer toutes les pièces '{m}' dans la zone disponible."
 
-#: main.py:3396 tooling_tab.py:2449
+#: main.py:3406 tooling_tab.py:2449
 msgid "Continue →"
 msgstr "Continuer →"
 
-#: main.py:3517
+#: main.py:3527
 #, python-brace-format
 msgid "Could not connect to the Falcon at {p}: {e}"
 msgstr "Impossible de se connecter au Falcon sur {p} : {e}"
 
-#: main.py:3575
+#: main.py:3585
 msgid ""
 "Position the head at your material's bottom-left corner (jog here OR open"
 " the lid and physically move it), then click Start Frame"
@@ -1714,22 +1718,22 @@ msgstr ""
 "en ouvrant le capot et en la déplaçant à la main), puis cliquez sur "
 "Démarrer l'encadrement"
 
-#: main.py:3581
+#: main.py:3591
 msgid "Start Frame →"
 msgstr "Démarrer l'encadrement →"
 
-#: main.py:3629
+#: main.py:3639
 msgid "Framing — verify cut area, jog if needed, click Cut when ready"
 msgstr ""
 "Encadrement — vérifiez la zone de coupe, jog si besoin, cliquez sur "
 "Couper quand prêt"
 
-#: main.py:3651
+#: main.py:3661
 #, python-brace-format
 msgid "Cutting — {m}"
 msgstr "Coupe — {m}"
 
-#: main.py:3700
+#: main.py:3710
 #, python-brace-format
 msgid ""
 "Something went wrong during Frame & Cut:\n"
@@ -1740,21 +1744,21 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:3734
+#: main.py:3744
 msgid "Please select at least one material (G-code not supported for Exact Size)."
 msgstr ""
 "Veuillez sélectionner au moins un matériau (le G-code n'est pas pris en "
 "charge pour Taille exacte)."
 
-#: main.py:3777
+#: main.py:3787
 msgid "Working"
 msgstr "Traitement"
 
-#: main.py:3787
+#: main.py:3797
 msgid "Generating G-code..."
 msgstr "Génération du G-code…"
 
-#: main.py:3809
+#: main.py:3819
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
@@ -1764,7 +1768,7 @@ msgstr ""
 "\n"
 "Carte SD éjectée en toute sécurité — vous pouvez la retirer !"
 
-#: main.py:3812
+#: main.py:3822
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
@@ -1774,11 +1778,11 @@ msgstr ""
 "\n"
 "Veuillez éjecter la carte SD en toute sécurité avant de la retirer."
 
-#: main.py:3815
+#: main.py:3825
 msgid "G-code files generated successfully."
 msgstr "Fichiers G-code générés avec succès."
 
-#: main.py:3820
+#: main.py:3830
 #, python-brace-format
 msgid ""
 "Something went wrong during G-code generation:\n"
@@ -1789,7 +1793,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:3839
+#: main.py:3849
 msgid ""
 "Please select exactly one material for scrap mode.\n"
 "(G-code not supported for Exact Size)"
@@ -1797,31 +1801,31 @@ msgstr ""
 "Veuillez sélectionner un seul matériau pour le mode chutes.\n"
 "(G-code non pris en charge pour Taille exacte)"
 
-#: main.py:3991
+#: main.py:4007
 msgid "Library Name"
 msgstr "Nom de la bibliothèque"
 
-#: main.py:3992
+#: main.py:4008
 msgid "Enter a library name to save to:"
 msgstr "Saisissez le nom de la bibliothèque dans laquelle enregistrer :"
 
-#: main.py:4005 main.py:4009
+#: main.py:4021 main.py:4025
 msgid "Save Pad Preset"
 msgstr "Enregistrer le préréglage de tampons"
 
-#: main.py:4005
+#: main.py:4021
 msgid "Enter a name for this preset:"
 msgstr "Saisissez un nom pour ce préréglage :"
 
-#: main.py:4009
+#: main.py:4025
 msgid "Cannot save an empty list."
 msgstr "Impossible d'enregistrer une liste vide."
 
-#: main.py:4031
+#: main.py:4047
 msgid "Duplicate Detected"
 msgstr "Doublon détecté"
 
-#: main.py:4032
+#: main.py:4048
 #, python-brace-format
 msgid ""
 "This pad list is identical to '{pname}' in '{lib}'.\n"
@@ -1832,26 +1836,26 @@ msgstr ""
 "\n"
 "Enregistrer quand même ?"
 
-#: main.py:4043
+#: main.py:4059
 #, python-brace-format
 msgid "Preset '{name}' saved successfully."
 msgstr "Préréglage « {name} » enregistré avec succès."
 
-#: main.py:4082
+#: main.py:4098
 #, python-brace-format
 msgid "Are you sure you want to delete the empty library '{lib}'?"
 msgstr "Voulez-vous vraiment supprimer la bibliothèque vide « {lib} » ?"
 
-#: main.py:4086
+#: main.py:4102
 #, python-brace-format
 msgid "Library '{lib}' deleted."
 msgstr "Bibliothèque « {lib} » supprimée."
 
-#: main.py:4104
+#: main.py:4120
 msgid "Delete Pad Preset"
 msgstr "Supprimer le préréglage de tampons"
 
-#: main.py:4104
+#: main.py:4120
 #, python-brace-format
 msgid ""
 "Are you sure you want to delete the preset '{preset}' from the '{lib}' "
@@ -1860,28 +1864,28 @@ msgstr ""
 "Voulez-vous vraiment supprimer le préréglage « {preset} » de la "
 "bibliothèque « {lib} » ?"
 
-#: main.py:4114
+#: main.py:4130
 #, python-brace-format
 msgid "Preset '{preset}' deleted."
 msgstr "Préréglage « {preset} » supprimé."
 
-#: main.py:4116
+#: main.py:4132
 msgid "Could not find the preset to delete."
 msgstr "Impossible de trouver le préréglage à supprimer."
 
-#: main.py:4122 toner_tab.py:1244
+#: main.py:4138 toner_tab.py:1246
 msgid "Notes"
 msgstr "Notes"
 
-#: main.py:4122
+#: main.py:4138
 msgid "No preset loaded."
 msgstr "Aucun préréglage chargé."
 
-#: main.py:4135
+#: main.py:4151
 msgid "Import Pad Presets"
 msgstr "Importer des préréglages de tampons"
 
-#: main.py:4156
+#: main.py:4172
 #, python-brace-format
 msgid ""
 "Could not import pad presets:\n"
@@ -1890,7 +1894,7 @@ msgstr ""
 "Impossible d'importer les préréglages de tampons :\n"
 "{error}"
 
-#: main.py:4174
+#: main.py:4190
 #, python-brace-format
 msgid ""
 "Could not fetch pad sets from stohrermusic.com:\n"
@@ -1901,7 +1905,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:4178
+#: main.py:4194
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -1912,19 +1916,19 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:4182
+#: main.py:4198
 msgid "No pad set data found on the server."
 msgstr "Aucun jeu de tampons trouvé sur le serveur."
 
-#: main.py:4190
+#: main.py:4206
 msgid "Select Folder with Settings"
 msgstr "Sélectionner le dossier contenant les paramètres"
 
-#: main.py:4198
+#: main.py:4214
 msgid "No Settings Found"
 msgstr "Aucun paramètre trouvé"
 
-#: main.py:4199
+#: main.py:4215
 msgid ""
 "No config files found in the selected folder.\n"
 "\n"
@@ -1936,7 +1940,7 @@ msgstr ""
 "Recherche de : app_settings.json, pad_presets.json, sizing_presets.json, "
 "key_height_library.json, screw_specs.json, toner_data.json"
 
-#: main.py:4205
+#: main.py:4221
 #, python-brace-format
 msgid ""
 "The following files will be imported and will REPLACE your current "
@@ -1953,11 +1957,11 @@ msgstr ""
 "\n"
 "Voulez-vous vraiment continuer ?"
 
-#: main.py:4209
+#: main.py:4225
 msgid "Confirm Import"
 msgstr "Confirmer l'importation"
 
-#: main.py:4236
+#: main.py:4252
 #, python-brace-format
 msgid ""
 "Successfully imported {count} file(s).\n"
@@ -1968,7 +1972,7 @@ msgstr ""
 "\n"
 "Importé(s) : {files}"
 
-#: main.py:4239
+#: main.py:4255
 #, python-brace-format
 msgid ""
 "Could not import settings:\n"
@@ -1977,26 +1981,26 @@ msgstr ""
 "Impossible d'importer les paramètres :\n"
 "{error}"
 
-#: main.py:4260 main.py:5068 tooling_tab.py:482 tooling_tab.py:550
+#: main.py:4276 main.py:5084 tooling_tab.py:482 tooling_tab.py:550
 #: ui_dialogs.py:1059 ui_dialogs.py:2462
 msgid "Felt"
 msgstr "Feutre"
 
-#: main.py:4260 main.py:5068 tooling_tab.py:482 tooling_tab.py:550
+#: main.py:4276 main.py:5084 tooling_tab.py:482 tooling_tab.py:550
 #: ui_dialogs.py:1060 ui_dialogs.py:2463
 msgid "Card"
 msgstr "Carton"
 
-#: main.py:4260 main.py:5068 tooling_tab.py:482 tooling_tab.py:550
+#: main.py:4276 main.py:5084 tooling_tab.py:482 tooling_tab.py:550
 #: ui_dialogs.py:1057 ui_dialogs.py:2461 ui_dialogs.py:6326
 msgid "Leather"
 msgstr "Cuir"
 
-#: main.py:4275 main.py:4287 main.py:4347 toner_tab.py:1069
+#: main.py:4291 main.py:4303 main.py:4363 toner_tab.py:1071
 msgid "Input Device"
 msgstr "Périphérique d'entrée"
 
-#: main.py:4276
+#: main.py:4292
 msgid ""
 "On Linux, audio input is locked to the system default.\n"
 "\n"
@@ -2010,19 +2014,19 @@ msgstr ""
 "système\n"
 "(PulseAudio ou PipeWire)."
 
-#: main.py:4283
+#: main.py:4299
 msgid "No Devices"
 msgstr "Aucun périphérique"
 
-#: main.py:4283 toner_tab.py:1111
+#: main.py:4299 toner_tab.py:1113
 msgid "No audio input devices found."
 msgstr "Aucun périphérique d'entrée audio trouvé."
 
-#: main.py:4296
+#: main.py:4312
 msgid "Select audio input device:"
 msgstr "Sélectionnez le périphérique d'entrée audio :"
 
-#: main.py:4298
+#: main.py:4314
 msgid ""
 "Showing devices with 44.1 kHz+ sample rate.\n"
 "Bluetooth headsets are excluded (sample rate too low)."
@@ -2030,24 +2034,24 @@ msgstr ""
 "Affichage des périphériques à 44,1 kHz et plus.\n"
 "Les casques Bluetooth sont exclus (taux d'échantillonnage trop faible)."
 
-#: main.py:4303 main.py:4306 tuner_tab.py:1245 tuner_tab.py:1248
+#: main.py:4319 main.py:4322 tuner_tab.py:1247 tuner_tab.py:1250
 msgid "System Default"
 msgstr "Par défaut système"
 
-#: main.py:4348
+#: main.py:4364
 #, python-brace-format
 msgid "Audio input set to: {dev_name}"
 msgstr "Entrée audio définie sur : {dev_name}"
 
-#: main.py:4352 main.py:4447 main.py:4738 ui_dialogs.py:361 ui_dialogs.py:4655
+#: main.py:4368 main.py:4463 main.py:4754 ui_dialogs.py:361 ui_dialogs.py:4655
 msgid "Apply"
 msgstr "Appliquer"
 
-#: main.py:4360
+#: main.py:4376
 msgid "Capture Threshold"
 msgstr "Seuil de capture"
 
-#: main.py:4369
+#: main.py:4385
 msgid ""
 "Set the minimum signal level to trigger capture.\n"
 "Raise the threshold if chair noises or breathing\n"
@@ -2057,19 +2061,19 @@ msgstr ""
 "Augmentez le seuil si les bruits de chaise ou la respiration\n"
 "déclenchent de fausses captures."
 
-#: main.py:4378
+#: main.py:4394
 msgid "Current level:"
 msgstr "Niveau actuel :"
 
-#: main.py:4393
+#: main.py:4409
 msgid "Threshold:"
 msgstr "Seuil :"
 
-#: main.py:4457 main.py:4466 main.py:4730 main.py:4733
+#: main.py:4473 main.py:4482 main.py:4746 main.py:4749
 msgid "Feature Set"
 msgstr "Fonctionnalités"
 
-#: main.py:4468
+#: main.py:4484
 msgid ""
 "Choose which tabs to show.\n"
 "The Pad Maker is always on."
@@ -2077,23 +2081,23 @@ msgstr ""
 "Choisissez les onglets à afficher.\n"
 "La Fabrication de tampons est toujours active."
 
-#: main.py:4473
+#: main.py:4489
 msgid "Language"
 msgstr "Langue"
 
-#: main.py:4490
+#: main.py:4506
 msgid " (restart to apply)"
 msgstr " (redémarrer pour appliquer)"
 
-#: main.py:4494
+#: main.py:4510
 msgid "Tool Tips"
 msgstr "Infobulles"
 
-#: main.py:4498
+#: main.py:4514
 msgid "Show tool tips when hovering over settings"
 msgstr "Afficher les infobulles au survol des paramètres"
 
-#: main.py:4501
+#: main.py:4517
 msgid ""
 "\n"
 "Tabs"
@@ -2101,11 +2105,11 @@ msgstr ""
 "\n"
 "Onglets"
 
-#: main.py:4517 ui_dialogs.py:5648
+#: main.py:4533 ui_dialogs.py:5648
 msgid "Toner"
 msgstr "Analyseur d'harmoniques"
 
-#: main.py:4531
+#: main.py:4547
 msgid ""
 "\n"
 "Experimental / In Progress"
@@ -2113,19 +2117,19 @@ msgstr ""
 "\n"
 "Expérimental / En cours"
 
-#: main.py:4551
+#: main.py:4567
 msgid "Machine menu (direct Falcon serial control)"
 msgstr "Menu Machine (contrôle série direct du Falcon)"
 
-#: main.py:4558
+#: main.py:4574
 msgid "Toner — Beta Notice"
 msgstr "Analyseur d'harmoniques — Avis bêta"
 
-#: main.py:4568
+#: main.py:4584
 msgid "Harmonic Tone Analyzer"
 msgstr "Analyseur d'harmoniques"
 
-#: main.py:4587
+#: main.py:4603
 msgid ""
 "This feature is in beta. Run it in full screen.\n"
 "\n"
@@ -2251,7 +2255,7 @@ msgstr ""
 "WAV que vous souhaitez partager) dans le dossier partagé ci-dessous :\n"
 "\n"
 
-#: main.py:4665
+#: main.py:4681
 msgid ""
 "\n"
 "This feature is in active development. Please contact me with "
@@ -2263,23 +2267,23 @@ msgstr ""
 "contacter pour toute suggestion, question ou problème. En cas de bug, les"
 " captures d'écran sont extrêmement utiles.\n"
 
-#: main.py:4680
+#: main.py:4696
 msgid "I Understand — Enable Toner"
 msgstr "J'ai compris — Activer l'Analyseur"
 
-#: main.py:4731
+#: main.py:4747
 msgid "Restart the app for the language change to take effect."
 msgstr "Redémarrez l'application pour appliquer le changement de langue."
 
-#: main.py:4734
+#: main.py:4750
 msgid "Changes will take effect next time you open the app."
 msgstr "Les modifications prendront effet au prochain démarrage de l'app."
 
-#: main.py:4828
+#: main.py:4844
 msgid "Log File"
 msgstr "Fichier journal"
 
-#: main.py:4828
+#: main.py:4844
 #, python-brace-format
 msgid ""
 "No log file found.\n"
@@ -2288,11 +2292,11 @@ msgstr ""
 "Aucun fichier journal trouvé.\n"
 "Emplacement attendu : {log_path}"
 
-#: main.py:5217
+#: main.py:5233
 msgid "Unexpected Error"
 msgstr "Erreur inattendue"
 
-#: main.py:5218
+#: main.py:5234
 #, python-brace-format
 msgid ""
 "{exc_type}: {exc_value}\n"
@@ -2304,68 +2308,68 @@ msgstr ""
 "Détails enregistrés dans le fichier journal (Aide > Ouvrir le fichier "
 "journal)."
 
-#: toner_tab.py:339 tuner_tab.py:1147
+#: toner_tab.py:341 tuner_tab.py:1149
 msgid "IN TUNE"
 msgstr "JUSTE"
 
-#: toner_tab.py:366 toner_tab.py:2504 toner_tab.py:2808 ui_dialogs.py:10418
+#: toner_tab.py:368 toner_tab.py:2506 toner_tab.py:2810 ui_dialogs.py:10454
 msgid "Pause"
 msgstr "Pause"
 
-#: toner_tab.py:445
+#: toner_tab.py:447
 msgid "SAX SELECTOR"
 msgstr "SÉLECTEUR DE SAX"
 
-#: toner_tab.py:500
+#: toner_tab.py:502
 msgid "sandbox (concert pitch)"
 msgstr "bac à sable (ton réel)"
 
-#: toner_tab.py:535
+#: toner_tab.py:537
 msgid "SESSION"
 msgstr "SESSION"
 
-#: toner_tab.py:540 toner_tab.py:547 toner_tab.py:2354 toner_tab.py:2370
+#: toner_tab.py:542 toner_tab.py:549 toner_tab.py:2356 toner_tab.py:2372
 msgid "no preset"
 msgstr "aucun préréglage"
 
-#: toner_tab.py:552 toner_tab.py:2256
+#: toner_tab.py:554 toner_tab.py:2258
 msgid "Load..."
 msgstr "Charger…"
 
-#: toner_tab.py:562
+#: toner_tab.py:564
 msgid "MODE"
 msgstr "MODE"
 
-#: toner_tab.py:564
+#: toner_tab.py:566
 msgid "free"
 msgstr "libre"
 
-#: toner_tab.py:575
+#: toner_tab.py:577
 msgid "cal"
 msgstr "cal"
 
-#: toner_tab.py:585 toner_tab.py:2502
+#: toner_tab.py:587 toner_tab.py:2504
 msgid "Capture"
 msgstr "Capturer"
 
-#: toner_tab.py:776
+#: toner_tab.py:778
 #, python-brace-format
 msgid "Overlay: {name} ({detail})"
 msgstr "Superposition : {name} ({detail})"
 
-#: toner_tab.py:1052
+#: toner_tab.py:1054
 msgid "Tone Analyzer Settings"
 msgstr "Paramètres de l'analyseur d'harmoniques"
 
-#: toner_tab.py:1066
+#: toner_tab.py:1068
 msgid "General"
 msgstr "Général"
 
-#: toner_tab.py:1079 tuner_tab.py:1241
+#: toner_tab.py:1081 tuner_tab.py:1243
 msgid "System Default (set in system audio settings)"
 msgstr "Par défaut système (à définir dans les paramètres audio du système)"
 
-#: toner_tab.py:1106
+#: toner_tab.py:1108
 msgid ""
 "Microphone the toner uses for capture and live analysis. The mic type and"
 " model that get saved with each capture are configured per preset (File →"
@@ -2375,7 +2379,7 @@ msgstr ""
 "direct. Le type et le modèle de micro enregistrés avec chaque capture "
 "sont configurés par préréglage (Fichier → Préréglages), pas ici."
 
-#: toner_tab.py:1114
+#: toner_tab.py:1116
 msgid ""
 "Mic type and model are set per preset\n"
 "in File → Presets."
@@ -2383,11 +2387,11 @@ msgstr ""
 "Le type et le modèle de micro sont définis par préréglage\n"
 "dans Fichier → Préréglages."
 
-#: toner_tab.py:1119 toner_tab.py:2543 toner_tab.py:2556
+#: toner_tab.py:1121 toner_tab.py:2545 toner_tab.py:2558
 msgid "Recording"
 msgstr "Enregistrement"
 
-#: toner_tab.py:1125
+#: toner_tab.py:1127
 msgid ""
 "⚠ Without WAV recording, post-capture analysis will be roughly half as "
 "accurate."
@@ -2395,11 +2399,11 @@ msgstr ""
 "⚠ Sans enregistrement WAV, l'analyse post-capture sera environ deux fois "
 "moins précise."
 
-#: toner_tab.py:1136
+#: toner_tab.py:1138
 msgid "Record WAV during capture"
 msgstr "Enregistrer un WAV pendant la capture"
 
-#: toner_tab.py:1142
+#: toner_tab.py:1144
 msgid ""
 "Save the raw audio for each capture as a WAV file. WAV recording lets the"
 " post-capture re-analysis average over the full take (much more accurate "
@@ -2410,11 +2414,11 @@ msgstr ""
 "la totalité de la prise (bien plus précis que les relevés en direct). "
 "Fortement recommandé."
 
-#: toner_tab.py:1150
+#: toner_tab.py:1152
 msgid "Delete WAV after analysis"
 msgstr "Supprimer le WAV après analyse"
 
-#: toner_tab.py:1155
+#: toner_tab.py:1157
 msgid ""
 "Automatically delete each WAV after the post-capture analysis runs. Saves"
 " disk space, but you lose the ability to re-analyze a session if "
@@ -2425,35 +2429,35 @@ msgstr ""
 "réanalyser une session si les descripteurs ou les algorithmes évoluent "
 "par la suite."
 
-#: toner_tab.py:1167 toner_tab.py:2439 toner_tab.py:2444
+#: toner_tab.py:1169 toner_tab.py:2441 toner_tab.py:2446
 msgid "Choose Recording Folder"
 msgstr "Choisir le dossier d'enregistrement"
 
-#: toner_tab.py:1172
+#: toner_tab.py:1174
 msgid "Folder..."
 msgstr "Dossier…"
 
-#: toner_tab.py:1183
+#: toner_tab.py:1185
 msgid "Pitch"
 msgstr "Hauteur"
 
-#: toner_tab.py:1189
+#: toner_tab.py:1191
 msgid "Reference pitch  A ="
 msgstr "Hauteur de référence  La ="
 
-#: toner_tab.py:1196
+#: toner_tab.py:1198
 msgid "Hz"
 msgstr "Hz"
 
-#: toner_tab.py:1207
+#: toner_tab.py:1209
 msgid "Written pitch (what the player fingers)"
 msgstr "Hauteur écrite (ce que le musicien doigte)"
 
-#: toner_tab.py:1211
+#: toner_tab.py:1213
 msgid "Concert pitch (actual sounding frequency)"
 msgstr "Ton réel (fréquence sonore réelle)"
 
-#: toner_tab.py:1216
+#: toner_tab.py:1218
 msgid ""
 "Show note names as the player reads them on the page. An alto sax "
 "fingering A sounds C — written pitch still shows it as A."
@@ -2462,7 +2466,7 @@ msgstr ""
 "Un La doigté sur saxophone alto sonne en Do — en hauteur écrite il reste "
 "affiché La."
 
-#: toner_tab.py:1220
+#: toner_tab.py:1222
 msgid ""
 "Show note names at actual sounding frequency. An alto fingering A is "
 "shown as C in concert pitch."
@@ -2470,99 +2474,99 @@ msgstr ""
 "Affiche les noms de notes à la fréquence sonore réelle. Un La doigté sur "
 "alto s'affiche en Do en ton réel."
 
-#: toner_tab.py:1227 toner_tab.py:4335
+#: toner_tab.py:1229 toner_tab.py:4337
 msgid "Analysis"
 msgstr "Analyse"
 
-#: toner_tab.py:1230
+#: toner_tab.py:1232
 msgid "Preset Fields"
 msgstr "Champs de préréglage"
 
-#: toner_tab.py:1234
+#: toner_tab.py:1236
 msgid "Show these optional fields when creating presets."
 msgstr "Affiche ces champs optionnels lors de la création de préréglages."
 
-#: toner_tab.py:1238 toner_tab.py:1836 toner_tab.py:1847 toner_tab.py:5443
-#: toner_tab.py:5448
+#: toner_tab.py:1240 toner_tab.py:1838 toner_tab.py:1849 toner_tab.py:5445
+#: toner_tab.py:5450
 msgid "Serial #"
 msgstr "N° de série"
 
-#: toner_tab.py:1239 toner_tab.py:1836 toner_tab.py:1848 toner_tab.py:5443
-#: toner_tab.py:5451
+#: toner_tab.py:1241 toner_tab.py:1838 toner_tab.py:1850 toner_tab.py:5445
+#: toner_tab.py:5453
 msgid "Reed"
 msgstr "Anche"
 
-#: toner_tab.py:1240 toner_tab.py:1836 toner_tab.py:1849 toner_tab.py:5443
+#: toner_tab.py:1242 toner_tab.py:1838 toner_tab.py:1851 toner_tab.py:5445
 msgid "Ligature"
 msgstr "Ligature"
 
-#: toner_tab.py:1241 toner_tab.py:1836 toner_tab.py:1850 toner_tab.py:5443
+#: toner_tab.py:1243 toner_tab.py:1838 toner_tab.py:1852 toner_tab.py:5445
 #: ui_dialogs.py:6627
 msgid "Mic Position"
 msgstr "Position du micro"
 
-#: toner_tab.py:1242
+#: toner_tab.py:1244
 msgid "Room / Environment"
 msgstr "Pièce / Environnement"
 
-#: toner_tab.py:1243
+#: toner_tab.py:1245
 msgid "Preamp / Interface"
 msgstr "Préampli / Interface"
 
-#: toner_tab.py:1275
+#: toner_tab.py:1277
 msgid "Heavy Mass Neck Screw"
 msgstr "Vis de bocal lestée"
 
-#: toner_tab.py:1285
+#: toner_tab.py:1287
 msgid "Processing..."
 msgstr "Traitement…"
 
-#: toner_tab.py:1291
+#: toner_tab.py:1293
 msgid "Removing option..."
 msgstr "Suppression de l'option…"
 
-#: toner_tab.py:1323
+#: toner_tab.py:1325
 msgid "Analysis Descriptors"
 msgstr "Descripteurs d'analyse"
 
-#: toner_tab.py:1327
+#: toner_tab.py:1329
 msgid "Choose which descriptors appear in the Analyze tool."
 msgstr "Choisissez quels descripteurs apparaissent dans l'outil Analyser."
 
-#: toner_tab.py:1334
+#: toner_tab.py:1336
 msgid "Harmonic Complexity"
 msgstr "Complexité harmonique"
 
-#: toner_tab.py:1343 toner_tab.py:4308 toner_tab.py:4897
+#: toner_tab.py:1345 toner_tab.py:4310 toner_tab.py:4899
 msgid "Warmth"
 msgstr "Chaleur"
 
-#: toner_tab.py:1348
+#: toner_tab.py:1350
 msgid "Even/Odd Harmonic Balance"
 msgstr "Rapport pair/impair"
 
-#: toner_tab.py:1356 toner_tab.py:4310
+#: toner_tab.py:1358 toner_tab.py:4312
 msgid "Rolloff Shape"
 msgstr "Forme de décroissance"
 
-#: toner_tab.py:1363 toner_tab.py:4311
+#: toner_tab.py:1365 toner_tab.py:4313
 msgid "Evenness"
 msgstr "Homogénéité"
 
-#: toner_tab.py:1400
+#: toner_tab.py:1402
 #, python-brace-format
 msgid "Detailed description of {label}."
 msgstr "Description détaillée de {label}."
 
-#: toner_tab.py:1403
+#: toner_tab.py:1405
 msgid "Sandbox Mode"
 msgstr "Mode bac à sable"
 
-#: toner_tab.py:1408
+#: toner_tab.py:1410
 msgid "Allow sandbox mode"
 msgstr "Autoriser le mode bac à sable"
 
-#: toner_tab.py:1413
+#: toner_tab.py:1415
 msgid ""
 "Sandbox presets can capture any pitched sound\n"
 "without requiring mic type or instrument fields.\n"
@@ -2574,169 +2578,169 @@ msgstr ""
 "Utile pour des expériences, des instruments autres que le saxophone,\n"
 "ou des configurations atypiques comme les micros de contact."
 
-#: toner_tab.py:1491
+#: toner_tab.py:1493
 msgid "Apply all changes and close."
 msgstr "Applique toutes les modifications et ferme."
 
-#: toner_tab.py:1492 ui_dialogs.py:4662
+#: toner_tab.py:1494 ui_dialogs.py:4662
 msgid "Close without applying any changes."
 msgstr "Ferme sans appliquer aucune modification."
 
-#: toner_tab.py:1524
+#: toner_tab.py:1526
 msgid "Concert"
 msgstr "Réel"
 
-#: toner_tab.py:1528
+#: toner_tab.py:1530
 #, python-brace-format
 msgid "Written ({sax})"
 msgstr "Écrit ({sax})"
 
-#: toner_tab.py:1571 toner_tab.py:1581
+#: toner_tab.py:1573 toner_tab.py:1583
 msgid "Tone Presets"
 msgstr "Préréglages d'harmoniques"
 
-#: toner_tab.py:1618
+#: toner_tab.py:1620
 msgid "Load for Capture"
 msgstr "Charger pour la capture"
 
-#: toner_tab.py:1625
+#: toner_tab.py:1627
 msgid "Edit Notes..."
 msgstr "Modifier les notes…"
 
-#: toner_tab.py:1633
+#: toner_tab.py:1635
 msgid "New Preset..."
 msgstr "Nouveau préréglage…"
 
-#: toner_tab.py:1636
+#: toner_tab.py:1638
 msgid "Mutate..."
 msgstr "Dériver…"
 
-#: toner_tab.py:1639
+#: toner_tab.py:1641
 msgid "Import Audio File..."
 msgstr "Importer un fichier audio…"
 
-#: toner_tab.py:1643 ui_dialogs.py:703 ui_dialogs.py:906 ui_dialogs.py:1009
+#: toner_tab.py:1645 ui_dialogs.py:703 ui_dialogs.py:906 ui_dialogs.py:1009
 #: ui_dialogs.py:1176 ui_dialogs.py:1471 ui_dialogs.py:5070
 msgid "Delete"
 msgstr "Supprimer"
 
-#: toner_tab.py:1717
+#: toner_tab.py:1719
 #, python-brace-format
 msgid "Notes — {name}"
 msgstr "Notes — {name}"
 
-#: toner_tab.py:1731 ui_dialogs.py:7005
+#: toner_tab.py:1733 ui_dialogs.py:7005
 #, python-brace-format
 msgid "Notes for \"{name}\":"
 msgstr "Notes pour « {name} » :"
 
-#: toner_tab.py:1836 toner_tab.py:1837 toner_tab.py:1893 toner_tab.py:1896
-#: toner_tab.py:5443 toner_tab.py:5444
+#: toner_tab.py:1838 toner_tab.py:1839 toner_tab.py:1895 toner_tab.py:1898
+#: toner_tab.py:5445 toner_tab.py:5446
 msgid "Preset Name"
 msgstr "Nom du préréglage"
 
-#: toner_tab.py:1836 toner_tab.py:1838 toner_tab.py:5443 toner_tab.py:5445
+#: toner_tab.py:1838 toner_tab.py:1840 toner_tab.py:5445 toner_tab.py:5447
 msgid "Horn Type"
 msgstr "Type de saxophone"
 
-#: toner_tab.py:1836 toner_tab.py:1839 toner_tab.py:1897 toner_tab.py:5443
-#: toner_tab.py:5446 ui_dialogs.py:6613
+#: toner_tab.py:1838 toner_tab.py:1841 toner_tab.py:1899 toner_tab.py:5445
+#: toner_tab.py:5448 ui_dialogs.py:6613
 msgid "Make"
 msgstr "Marque"
 
-#: toner_tab.py:1836 toner_tab.py:1840 toner_tab.py:1898 toner_tab.py:5443
-#: toner_tab.py:5447 ui_dialogs.py:6613
+#: toner_tab.py:1838 toner_tab.py:1842 toner_tab.py:1900 toner_tab.py:5445
+#: toner_tab.py:5449 ui_dialogs.py:6613
 msgid "Model"
 msgstr "Modèle"
 
-#: toner_tab.py:1836 toner_tab.py:1841 toner_tab.py:1899 toner_tab.py:5443
-#: toner_tab.py:5449 ui_dialogs.py:6613
+#: toner_tab.py:1838 toner_tab.py:1843 toner_tab.py:1901 toner_tab.py:5445
+#: toner_tab.py:5451 ui_dialogs.py:6613
 msgid "Player"
 msgstr "Musicien"
 
-#: toner_tab.py:1836 toner_tab.py:1842 toner_tab.py:1900 toner_tab.py:5443
-#: toner_tab.py:5450 ui_dialogs.py:6613
+#: toner_tab.py:1838 toner_tab.py:1844 toner_tab.py:1902 toner_tab.py:5445
+#: toner_tab.py:5452 ui_dialogs.py:6613
 msgid "Mouthpiece"
 msgstr "Bec"
 
-#: toner_tab.py:1836 toner_tab.py:1843 toner_tab.py:1901 toner_tab.py:4462
-#: toner_tab.py:5443 ui_dialogs.py:6613
+#: toner_tab.py:1838 toner_tab.py:1845 toner_tab.py:1903 toner_tab.py:4464
+#: toner_tab.py:5445 ui_dialogs.py:6613
 msgid "Mic Type"
 msgstr "Type de micro"
 
-#: toner_tab.py:1836 toner_tab.py:1844 toner_tab.py:1902 toner_tab.py:5443
+#: toner_tab.py:1838 toner_tab.py:1846 toner_tab.py:1904 toner_tab.py:5445
 #: ui_dialogs.py:6613
 msgid "Mic Model"
 msgstr "Modèle de micro"
 
-#: toner_tab.py:1836 toner_tab.py:1851 toner_tab.py:5443
+#: toner_tab.py:1838 toner_tab.py:1853 toner_tab.py:5445
 msgid "Room"
 msgstr "Pièce"
 
-#: toner_tab.py:1836 toner_tab.py:1852 toner_tab.py:5443
+#: toner_tab.py:1838 toner_tab.py:1854 toner_tab.py:5445
 msgid "Preamp"
 msgstr "Préampli"
 
-#: toner_tab.py:1860
+#: toner_tab.py:1862
 msgid "Sandbox"
 msgstr "Sandbox"
 
-#: toner_tab.py:1864
+#: toner_tab.py:1866
 msgid "(any sound, no required fields)"
 msgstr "(tout son, aucun champ obligatoire)"
 
-#: toner_tab.py:1906
+#: toner_tab.py:1908
 msgid "Required Field"
 msgstr "Champ obligatoire"
 
-#: toner_tab.py:1907
+#: toner_tab.py:1909
 #, python-brace-format
 msgid "Please enter {label}."
 msgstr "Veuillez saisir {label}."
 
-#: toner_tab.py:1936 toner_tab.py:2164 toner_tab.py:5395
+#: toner_tab.py:1938 toner_tab.py:2166 toner_tab.py:5397
 msgid "New Tone Preset"
 msgstr "Nouveau préréglage d'harmoniques"
 
-#: toner_tab.py:1946 toner_tab.py:2174
+#: toner_tab.py:1948 toner_tab.py:2176
 msgid "Create Tone Preset"
 msgstr "Créer un préréglage d'harmoniques"
 
-#: toner_tab.py:1962 toner_tab.py:2028 toner_tab.py:2194
+#: toner_tab.py:1964 toner_tab.py:2030 toner_tab.py:2196
 msgid "Duplicate Name"
 msgstr "Nom en doublon"
 
-#: toner_tab.py:1963 toner_tab.py:2029 toner_tab.py:2195 toner_tab.py:5473
+#: toner_tab.py:1965 toner_tab.py:2031 toner_tab.py:2197 toner_tab.py:5475
 #, python-brace-format
 msgid "'{name}' already exists in '{lib}'."
 msgstr "« {name} » existe déjà dans « {lib} »."
 
-#: toner_tab.py:1980
+#: toner_tab.py:1982
 msgid "Create"
 msgstr "Créer"
 
-#: toner_tab.py:1996 toner_tab.py:2006
+#: toner_tab.py:1998 toner_tab.py:2008
 msgid "Mutate Preset"
 msgstr "Dériver le préréglage"
 
-#: toner_tab.py:2008
+#: toner_tab.py:2010
 msgid "Change what you need, save as a new preset."
 msgstr "Modifiez ce qu'il faut, puis enregistrez comme nouveau préréglage."
 
-#: toner_tab.py:2046
+#: toner_tab.py:2048
 msgid "Save as New"
 msgstr "Enregistrer comme nouveau"
 
-#: toner_tab.py:2059
+#: toner_tab.py:2061
 #, python-brace-format
 msgid "Delete preset '{name}' from '{lib}'?"
 msgstr "Supprimer le préréglage « {name} » de « {lib} » ?"
 
-#: toner_tab.py:2088
+#: toner_tab.py:2090
 msgid "No Preset Loaded"
 msgstr "Aucun préréglage chargé"
 
-#: toner_tab.py:2089
+#: toner_tab.py:2091
 msgid ""
 "Load a preset first to capture data.\n"
 "\n"
@@ -2748,11 +2752,11 @@ msgstr ""
 "Utilisez Charger… sur la barre de contrôle,\n"
 "ou Fichier > Préréglages pour créer et gérer des préréglages."
 
-#: toner_tab.py:2110
+#: toner_tab.py:2112
 msgid "Calibration Capture"
 msgstr "Capture de calibration"
 
-#: toner_tab.py:2111
+#: toner_tab.py:2113
 msgid ""
 "Calibration walks through every note in the saxophone's range, one at a "
 "time.\n"
@@ -2789,11 +2793,11 @@ msgstr ""
 "  • Si l'application se déclenche sur un bruit de chaise, augmentez\n"
 "    le seuil de capture dans Options > Seuil de capture"
 
-#: toner_tab.py:2134
+#: toner_tab.py:2136
 msgid "Note Range"
 msgstr "Tessiture"
 
-#: toner_tab.py:2135
+#: toner_tab.py:2137
 #, python-brace-format
 msgid ""
 "{skipped} low notes skipped — below detection range for {sax}.\n"
@@ -2802,11 +2806,11 @@ msgstr ""
 "{skipped} notes graves ignorées — sous la plage de détection pour {sax}.\n"
 "La calibration couvrira {total} notes."
 
-#: toner_tab.py:2153 ui_dialogs.py:10433
+#: toner_tab.py:2155 ui_dialogs.py:10469
 msgid "Stop"
 msgstr "Arrêter"
 
-#: toner_tab.py:2176
+#: toner_tab.py:2178
 msgid ""
 "A preset saves your setup details: horn + player + mouthpiece.\n"
 "It pre-fills session metadata for quick capture start."
@@ -2816,48 +2820,48 @@ msgstr ""
 "Il pré-remplit les métadonnées de session pour démarrer la capture "
 "rapidement."
 
-#: toner_tab.py:2210
+#: toner_tab.py:2212
 msgid "Create && Start Capturing"
 msgstr "Créer et lancer la capture"
 
-#: toner_tab.py:2219 toner_tab.py:5350
+#: toner_tab.py:2221 toner_tab.py:5352
 msgid "Select Preset"
 msgstr "Sélectionner un préréglage"
 
-#: toner_tab.py:2219
+#: toner_tab.py:2221
 msgid "Select a preset first."
 msgstr "Sélectionnez d'abord un préréglage."
 
-#: toner_tab.py:2268 toner_tab.py:3208
+#: toner_tab.py:2270 toner_tab.py:3210
 msgid "No Presets"
 msgstr "Aucun préréglage"
 
-#: toner_tab.py:2269
+#: toner_tab.py:2271
 msgid "No presets yet. Create one in File > Presets."
 msgstr "Aucun préréglage pour l'instant. Créez-en un dans Fichier > Préréglages."
 
-#: toner_tab.py:2273 ui_dialogs.py:2270 ui_dialogs.py:2273 ui_dialogs.py:5231
+#: toner_tab.py:2275 ui_dialogs.py:2270 ui_dialogs.py:2273 ui_dialogs.py:5231
 #: ui_dialogs.py:5236
 msgid "Load Preset"
 msgstr "Charger un préréglage"
 
-#: toner_tab.py:2314 ui_dialogs.py:1453 ui_dialogs.py:5061
+#: toner_tab.py:2316 ui_dialogs.py:1453 ui_dialogs.py:5061
 msgid "Load"
 msgstr "Charger"
 
-#: toner_tab.py:2366
+#: toner_tab.py:2368
 msgid "sandbox"
 msgstr "bac à sable"
 
-#: toner_tab.py:2368
+#: toner_tab.py:2370
 msgid "mic not set"
 msgstr "micro non défini"
 
-#: toner_tab.py:2388
+#: toner_tab.py:2390
 msgid "Mic Type Required"
 msgstr "Type de micro requis"
 
-#: toner_tab.py:2389
+#: toner_tab.py:2391
 msgid ""
 "This preset has no mic type set.\n"
 "\n"
@@ -2870,7 +2874,7 @@ msgstr ""
 "\n"
 "ou créez un nouveau préréglage en précisant le type de micro."
 
-#: toner_tab.py:2440
+#: toner_tab.py:2442
 msgid ""
 "WAV recording is enabled but no folder has been chosen.\n"
 "\n"
@@ -2880,15 +2884,15 @@ msgstr ""
 "\n"
 "Veuillez sélectionner un dossier où enregistrer les fichiers."
 
-#: toner_tab.py:2544
+#: toner_tab.py:2546
 msgid "WAV recording failed — file was not created."
 msgstr "L'enregistrement WAV a échoué — le fichier n'a pas été créé."
 
-#: toner_tab.py:2552
+#: toner_tab.py:2554
 msgid "Recording Saved"
 msgstr "Enregistrement sauvegardé"
 
-#: toner_tab.py:2553
+#: toner_tab.py:2555
 #, python-brace-format
 msgid ""
 "WAV saved to:\n"
@@ -2897,7 +2901,7 @@ msgstr ""
 "WAV enregistré dans :\n"
 "{path}"
 
-#: toner_tab.py:2557
+#: toner_tab.py:2559
 #, python-brace-format
 msgid ""
 "Could not save WAV recording:\n"
@@ -2906,15 +2910,15 @@ msgstr ""
 "Impossible d'enregistrer le WAV :\n"
 "{e}"
 
-#: toner_tab.py:2567
+#: toner_tab.py:2569
 msgid "Performing WAV analysis..."
 msgstr "Analyse WAV en cours…"
 
-#: toner_tab.py:2580 toner_tab.py:2585
+#: toner_tab.py:2582 toner_tab.py:2587
 msgid "WAV Analysis"
 msgstr "Analyse WAV"
 
-#: toner_tab.py:2581
+#: toner_tab.py:2583
 #, python-brace-format
 msgid ""
 "WAV analysis failed, keeping live captures:\n"
@@ -2923,7 +2927,7 @@ msgstr ""
 "L'analyse WAV a échoué, conservation des captures en direct :\n"
 "{e}"
 
-#: toner_tab.py:2586
+#: toner_tab.py:2588
 msgid ""
 "WAV analysis found no stable segments.\n"
 "Keeping live captures."
@@ -2931,33 +2935,33 @@ msgstr ""
 "L'analyse WAV n'a trouvé aucun segment stable.\n"
 "Conservation des captures en direct."
 
-#: toner_tab.py:2613
+#: toner_tab.py:2615
 msgid "WAV Analysis Complete"
 msgstr "Analyse WAV terminée"
 
-#: toner_tab.py:2632
+#: toner_tab.py:2634
 msgid "Capture Summary"
 msgstr "Résumé de capture"
 
-#: toner_tab.py:2642
+#: toner_tab.py:2644
 #, python-brace-format
 msgid "Session: {name}"
 msgstr "Session : {name}"
 
-#: toner_tab.py:2651
+#: toner_tab.py:2653
 #, python-brace-format
 msgid "{total} captures across {unique} unique notes"
 msgstr "{total} captures réparties sur {unique} notes uniques"
 
-#: toner_tab.py:2745
+#: toner_tab.py:2747
 msgid "Good coverage across registers!"
 msgstr "Bonne couverture sur tous les registres !"
 
-#: toner_tab.py:2775 toner_tab.py:2798
+#: toner_tab.py:2777 toner_tab.py:2800
 msgid "Discard Session"
 msgstr "Abandonner la session"
 
-#: toner_tab.py:2776
+#: toner_tab.py:2778
 msgid ""
 "Discard all captures from this session?\n"
 "\n"
@@ -2967,55 +2971,55 @@ msgstr ""
 "\n"
 "Cette action est irréversible."
 
-#: toner_tab.py:2792
+#: toner_tab.py:2794
 msgid "Resume Capturing"
 msgstr "Reprendre la capture"
 
-#: toner_tab.py:2809
+#: toner_tab.py:2811
 msgid "Resumed..."
 msgstr "Reprise…"
 
-#: toner_tab.py:2815 ui_dialogs.py:10421
+#: toner_tab.py:2817 ui_dialogs.py:10457
 msgid "Resume"
 msgstr "Reprendre"
 
-#: toner_tab.py:2816
+#: toner_tab.py:2818
 msgid "Paused"
 msgstr "En pause"
 
-#: toner_tab.py:2864
+#: toner_tab.py:2866
 #, python-brace-format
 msgid "Free: {note} ({count} frames)"
 msgstr "Libre : {note} ({count} trames)"
 
-#: toner_tab.py:2867
+#: toner_tab.py:2869
 msgid "Free mode — play anything..."
 msgstr "Mode libre — jouez ce que vous voulez…"
 
-#: toner_tab.py:2869
+#: toner_tab.py:2871
 #, python-brace-format
 msgid "({count} notes captured)"
 msgstr "({count} notes capturées)"
 
-#: toner_tab.py:2878
+#: toner_tab.py:2880
 #, python-brace-format
 msgid "Calibration starting in {seconds:.0f}s... get ready"
 msgstr "Calibration dans {seconds:.0f} s… préparez-vous"
 
-#: toner_tab.py:2886
+#: toner_tab.py:2888
 #, python-brace-format
 msgid "Play {note} (1/{total})"
 msgstr "Jouez {note} (1/{total})"
 
-#: toner_tab.py:2887 toner_tab.py:2919 toner_tab.py:3013
+#: toner_tab.py:2889 toner_tab.py:2921 toner_tab.py:3015
 msgid "waiting..."
 msgstr "en attente…"
 
-#: toner_tab.py:2897
+#: toner_tab.py:2899
 msgid "Calibration Complete"
 msgstr "Calibration terminée"
 
-#: toner_tab.py:2898
+#: toner_tab.py:2900
 #, python-brace-format
 msgid ""
 "Calibration capture finished!\n"
@@ -3024,40 +3028,40 @@ msgstr ""
 "Capture de calibration terminée !\n"
 "{count} notes enregistrées."
 
-#: toner_tab.py:2914
+#: toner_tab.py:2916
 #, python-brace-format
 msgid "Recording {note}... ({i}/{total})"
 msgstr "Enregistrement de {note}… ({i}/{total})"
 
-#: toner_tab.py:2918 toner_tab.py:3012
+#: toner_tab.py:2920 toner_tab.py:3014
 #, python-brace-format
 msgid "Play {note} ({i}/{total})"
 msgstr "Jouez {note} ({i}/{total})"
 
-#: toner_tab.py:2944
+#: toner_tab.py:2946
 #, python-brace-format
 msgid "Recording {note}... {seconds:.1f}s ({i}/{total})"
 msgstr "Enregistrement de {note}… {seconds:.1f} s ({i}/{total})"
 
-#: toner_tab.py:2946
+#: toner_tab.py:2948
 #, python-brace-format
 msgid "({count} frames)"
 msgstr "({count} trames)"
 
-#: toner_tab.py:2993
+#: toner_tab.py:2995
 #, python-brace-format
 msgid "Captured {note} ✓  stop playing..."
 msgstr "{note} capturée ✓  arrêtez de jouer…"
 
-#: toner_tab.py:3098
+#: toner_tab.py:3100
 msgid "Recording Quality"
 msgstr "Qualité d'enregistrement"
 
-#: toner_tab.py:3108
+#: toner_tab.py:3110
 msgid "⚠ Recording Quality"
 msgstr "⚠ Qualité d'enregistrement"
 
-#: toner_tab.py:3112
+#: toner_tab.py:3114
 #, python-brace-format
 msgid ""
 "Upper harmonics are dropping off steeply ({rate:.1f} dB/harmonic).\n"
@@ -3081,54 +3085,54 @@ msgstr ""
 "Pour de meilleurs résultats, utilisez un micro à condensateur externe\n"
 "à 60–90 cm du pavillon."
 
-#: toner_tab.py:3118
+#: toner_tab.py:3120
 msgid "Don't show this again for this preset"
 msgstr "Ne plus afficher pour ce préréglage"
 
-#: toner_tab.py:3209
+#: toner_tab.py:3211
 msgid "No presets with captures to analyze."
 msgstr "Aucun préréglage avec captures à analyser."
 
-#: toner_tab.py:3213
+#: toner_tab.py:3215
 msgid "Analyze Tone Data"
 msgstr "Analyser les données d'harmoniques"
 
-#: toner_tab.py:3225
+#: toner_tab.py:3227
 msgid "Select one or more presets or sessions to analyze, compare, or overlay."
 msgstr ""
 "Sélectionnez un ou plusieurs préréglages ou sessions à analyser, comparer"
 " ou superposer."
 
-#: toner_tab.py:3287 ui_dialogs.py:5676
+#: toner_tab.py:3289 ui_dialogs.py:5676
 msgid "Search:"
 msgstr "Recherche :"
 
-#: toner_tab.py:3437
+#: toner_tab.py:3439
 #, python-brace-format
 msgid "{date}  ({caps} caps, {notes} notes)"
 msgstr "{date}  ({caps} caps, {notes} notes)"
 
-#: toner_tab.py:3453 ui_dialogs.py:3346 ui_dialogs.py:3478 ui_dialogs.py:3582
+#: toner_tab.py:3455 ui_dialogs.py:3346 ui_dialogs.py:3478 ui_dialogs.py:3582
 msgid "Select All"
 msgstr "Tout sélectionner"
 
-#: toner_tab.py:3455
+#: toner_tab.py:3457
 msgid "Deselect All"
 msgstr "Tout désélectionner"
 
-#: toner_tab.py:3488
+#: toner_tab.py:3490
 msgid "Select"
 msgstr "Sélectionner"
 
-#: toner_tab.py:3489
+#: toner_tab.py:3491
 msgid "Select at least one preset or session."
 msgstr "Sélectionnez au moins un préréglage ou une session."
 
-#: toner_tab.py:3502 toner_tab.py:3538
+#: toner_tab.py:3504 toner_tab.py:3540
 msgid "Mixed Sax Types"
 msgstr "Types de saxophone mélangés"
 
-#: toner_tab.py:3503
+#: toner_tab.py:3505
 #, python-brace-format
 msgid ""
 "You're comparing presets across different sax types ({types}).\n"
@@ -3156,11 +3160,11 @@ msgstr ""
 "\n"
 "Continuer quand même ?"
 
-#: toner_tab.py:3526
+#: toner_tab.py:3528
 msgid "Select More"
 msgstr "Sélectionner davantage"
 
-#: toner_tab.py:3527
+#: toner_tab.py:3529
 msgid ""
 "Select at least 2 presets to average.\n"
 "(Individual sessions are not included in group averages.)"
@@ -3169,7 +3173,7 @@ msgstr ""
 "(Les sessions individuelles ne sont pas incluses dans les moyennes de "
 "groupe.)"
 
-#: toner_tab.py:3539
+#: toner_tab.py:3541
 #, python-brace-format
 msgid ""
 "You're averaging presets across different sax types ({types}).\n"
@@ -3194,217 +3198,217 @@ msgstr ""
 "\n"
 "Continuer quand même ?"
 
-#: toner_tab.py:3546
+#: toner_tab.py:3548
 msgid "Analyze Selected"
 msgstr "Analyser la sélection"
 
-#: toner_tab.py:3548
+#: toner_tab.py:3550
 msgid "Average Selected"
 msgstr "Moyenner la sélection"
 
-#: toner_tab.py:3550
+#: toner_tab.py:3552
 msgid "Clear Overlay"
 msgstr "Effacer la superposition"
 
-#: toner_tab.py:3565
+#: toner_tab.py:3567
 #, python-brace-format
 msgid "Analyze — {name}"
 msgstr "Analyse — {name}"
 
-#: toner_tab.py:3567
+#: toner_tab.py:3569
 msgid "Analyze — Comparison"
 msgstr "Analyse — Comparaison"
 
-#: toner_tab.py:3645
+#: toner_tab.py:3647
 msgid "⚠ Sandbox preset — non-standard setup, compare with caution"
 msgstr ""
 "⚠ Préréglage bac à sable — configuration non standard, comparez avec "
 "prudence"
 
-#: toner_tab.py:3656
+#: toner_tab.py:3658
 msgid "Horn Average"
 msgstr "Moyenne du saxophone"
 
-#: toner_tab.py:3660
+#: toner_tab.py:3662
 msgid "Per-Note"
 msgstr "Par note"
 
-#: toner_tab.py:3677
+#: toner_tab.py:3679
 msgid "Chart:"
 msgstr "Graphique :"
 
-#: toner_tab.py:3679
+#: toner_tab.py:3681
 msgid "Overlay"
 msgstr "Superposition"
 
-#: toner_tab.py:3683
+#: toner_tab.py:3685
 msgid "Bars"
 msgstr "Barres"
 
-#: toner_tab.py:3688
+#: toner_tab.py:3690
 msgid "Difference"
 msgstr "Différence"
 
-#: toner_tab.py:3697
+#: toner_tab.py:3699
 msgid "Scale:"
 msgstr "Échelle :"
 
-#: toner_tab.py:3699
+#: toner_tab.py:3701
 msgid "dB"
 msgstr "dB"
 
-#: toner_tab.py:3703
+#: toner_tab.py:3705
 msgid "Linear"
 msgstr "Linéaire"
 
-#: toner_tab.py:3711
+#: toner_tab.py:3713
 msgid "Note:"
 msgstr "Note :"
 
-#: toner_tab.py:3733 toner_tab.py:4911
+#: toner_tab.py:3735 toner_tab.py:4913
 msgid "Harmonic Data"
 msgstr "Données harmoniques"
 
-#: toner_tab.py:3909
+#: toner_tab.py:3911
 msgid "Δ dB"
 msgstr "Δ dB"
 
-#: toner_tab.py:3924
+#: toner_tab.py:3926
 msgid "amp"
 msgstr "amp"
 
-#: toner_tab.py:3941
+#: toner_tab.py:3943
 msgid "Harmonic #"
 msgstr "N° d'harmonique"
 
-#: toner_tab.py:3952
+#: toner_tab.py:3954
 #, python-brace-format
 msgid "No data for {note}: {missing}"
 msgstr "Aucune donnée pour {note} : {missing}"
 
-#: toner_tab.py:3986
+#: toner_tab.py:3988
 #, python-brace-format
 msgid "↑ {n1} stronger   ↓ {n2} stronger"
 msgstr "↑ {n1} plus fort   ↓ {n2} plus fort"
 
-#: toner_tab.py:4068
+#: toner_tab.py:4070
 msgid "Character Map (Warmth × Brightness)"
 msgstr "Carte de caractère (Chaleur × Brillance)"
 
-#: toner_tab.py:4076
+#: toner_tab.py:4078
 msgid "Y axis (brightness):"
 msgstr "Axe Y (brillance) :"
 
-#: toner_tab.py:4086 toner_tab.py:4089 toner_tab.py:4104 toner_tab.py:4146
-#: toner_tab.py:4217
+#: toner_tab.py:4088 toner_tab.py:4091 toner_tab.py:4106 toner_tab.py:4148
+#: toner_tab.py:4219
 msgid "Complexity"
 msgstr "Complexité"
 
-#: toner_tab.py:4089 toner_tab.py:4208 toner_tab.py:4215
+#: toner_tab.py:4091 toner_tab.py:4210 toner_tab.py:4217
 msgid "H4-H5 mean"
 msgstr "Moyenne H4-H5"
 
-#: toner_tab.py:4089 toner_tab.py:4106 toner_tab.py:4146
+#: toner_tab.py:4091 toner_tab.py:4108 toner_tab.py:4148
 msgid "Rolloff (inverted)"
 msgstr "Décroissance (inversée)"
 
-#: toner_tab.py:4140
+#: toner_tab.py:4142
 msgid "No brightness data for selected measure"
 msgstr "Aucune donnée de brillance pour la mesure sélectionnée"
 
-#: toner_tab.py:4178
+#: toner_tab.py:4180
 msgid "warm + bright"
 msgstr "chaleureux + brillant"
 
-#: toner_tab.py:4182
+#: toner_tab.py:4184
 msgid "thin + bright"
 msgstr "mince + brillant"
 
-#: toner_tab.py:4186
+#: toner_tab.py:4188
 msgid "warm + dark"
 msgstr "chaleureux + sombre"
 
-#: toner_tab.py:4190
+#: toner_tab.py:4192
 msgid "thin + dark"
 msgstr "mince + sombre"
 
-#: toner_tab.py:4201
+#: toner_tab.py:4203
 msgid "← thin    Warmth    warm →"
 msgstr "← mince    Chaleur    chaleureux →"
 
-#: toner_tab.py:4307 toner_tab.py:4896
+#: toner_tab.py:4309 toner_tab.py:4898
 msgid "H. Complexity"
 msgstr "Complexité h."
 
-#: toner_tab.py:4309
+#: toner_tab.py:4311
 msgid "Even H. Bal."
 msgstr "Pair/impair"
 
-#: toner_tab.py:4429
+#: toner_tab.py:4431
 #, python-brace-format
 msgid "P = percentile among {count} {sax} presets"
 msgstr "P = centile parmi {count} préréglages {sax}"
 
-#: toner_tab.py:4437
+#: toner_tab.py:4439
 msgid "Rec. Quality"
 msgstr "Qual. enr."
 
-#: toner_tab.py:4775
+#: toner_tab.py:4777
 msgid "Overlay on Spectrum"
 msgstr "Superposer sur le spectre"
 
-#: toner_tab.py:4781 toner_tab.py:5089
+#: toner_tab.py:4783 toner_tab.py:5091
 msgid "← Back"
 msgstr "← Retour"
 
-#: toner_tab.py:4803 toner_tab.py:5111
+#: toner_tab.py:4805 toner_tab.py:5113
 msgid "Maximize"
 msgstr "Agrandir"
 
-#: toner_tab.py:4822
+#: toner_tab.py:4824
 msgid "Selected presets have no captures."
 msgstr "Les préréglages sélectionnés n'ont aucune capture."
 
-#: toner_tab.py:4826
+#: toner_tab.py:4828
 msgid "Group Average"
 msgstr "Moyenne de groupe"
 
-#: toner_tab.py:4875
+#: toner_tab.py:4877
 #, python-brace-format
 msgid "Group Average: {count} presets"
 msgstr "Moyenne de groupe : {count} préréglages"
 
-#: toner_tab.py:4882
+#: toner_tab.py:4884
 #, python-brace-format
 msgid "{count} total captures"
 msgstr "{count} captures au total"
 
-#: toner_tab.py:4886
+#: toner_tab.py:4888
 msgid "Group Descriptors"
 msgstr "Descripteurs de groupe"
 
-#: toner_tab.py:4988
+#: toner_tab.py:4990
 msgid "Average"
 msgstr "Moyenne"
 
-#: toner_tab.py:5005
+#: toner_tab.py:5007
 msgid "Per-Preset Breakdown"
 msgstr "Détail par préréglage"
 
-#: toner_tab.py:5069
+#: toner_tab.py:5071
 #, python-brace-format
 msgid "Group Average ({count} presets)"
 msgstr "Moyenne de groupe ({count} préréglages)"
 
-#: toner_tab.py:5084
+#: toner_tab.py:5086
 msgid "Overlay on Spectrum..."
 msgstr "Superposer sur le spectre…"
 
-#: toner_tab.py:5134
+#: toner_tab.py:5136
 msgid "Microphone Notice"
 msgstr "Avis micro"
 
-#: toner_tab.py:5135
+#: toner_tab.py:5137
 #, python-brace-format
 msgid ""
 "Your input device appears to be a built-in microphone (\"{device}\").\n"
@@ -3423,16 +3427,16 @@ msgstr ""
 "Pour de meilleurs résultats, utilisez un micro à condensateur comme l"
 "'Audio-Technica AT2020 USB."
 
-#: toner_tab.py:5158 tuner_tab.py:1392 tuner_tab.py:1413
+#: toner_tab.py:5160 tuner_tab.py:1394 tuner_tab.py:1415
 #, python-brace-format
 msgid "Audio error: {err}"
 msgstr "Erreur audio : {err}"
 
-#: toner_tab.py:5197
+#: toner_tab.py:5199
 msgid "Microphone Quality"
 msgstr "Qualité du micro"
 
-#: toner_tab.py:5198
+#: toner_tab.py:5200
 msgid ""
 "Your microphone appears to have poor low-frequency response. Low register"
 " readings may be inaccurate.\n"
@@ -3446,33 +3450,33 @@ msgstr ""
 "Pour de meilleurs résultats, utilisez un micro à condensateur comme l"
 "'Audio-Technica AT2020 USB."
 
-#: toner_tab.py:5215
+#: toner_tab.py:5217
 #, python-brace-format
 msgid "{freq:.1f} Hz"
 msgstr "{freq:.1f} Hz"
 
-#: toner_tab.py:5244 tuner_tab.py:1731
+#: toner_tab.py:5246 tuner_tab.py:1733
 msgid "Click here to retry"
 msgstr "Cliquez ici pour réessayer"
 
-#: toner_tab.py:5269
+#: toner_tab.py:5271
 msgid "Toner engine not available."
 msgstr "Moteur de l'analyseur indisponible."
 
-#: toner_tab.py:5274
+#: toner_tab.py:5276
 msgid "Select Audio File to Analyze"
 msgstr "Sélectionner un fichier audio à analyser"
 
-#: toner_tab.py:5284
+#: toner_tab.py:5286
 msgid "Import Audio File"
 msgstr "Importer un fichier audio"
 
-#: toner_tab.py:5294
+#: toner_tab.py:5296
 #, python-brace-format
 msgid "Import: {filename}"
 msgstr "Importation : {filename}"
 
-#: toner_tab.py:5296
+#: toner_tab.py:5298
 msgid ""
 "Select a preset for this recording, or create one.\n"
 "Add notes about the source (who, when, where recorded)."
@@ -3481,56 +3485,56 @@ msgstr ""
 "Ajoutez des notes sur la source (qui, quand, où l'enregistrement a été "
 "fait)."
 
-#: toner_tab.py:5315
+#: toner_tab.py:5317
 msgid "Existing preset:"
 msgstr "Préréglage existant :"
 
-#: toner_tab.py:5327
+#: toner_tab.py:5329
 msgid "Create new preset..."
 msgstr "Créer un nouveau préréglage…"
 
-#: toner_tab.py:5332
+#: toner_tab.py:5334
 msgid "Source notes:"
 msgstr "Notes sur la source :"
 
-#: toner_tab.py:5351
+#: toner_tab.py:5353
 msgid "Select a preset from the list."
 msgstr "Sélectionnez un préréglage dans la liste."
 
-#: toner_tab.py:5386
+#: toner_tab.py:5388
 msgid "Import && Analyze"
 msgstr "Importer et analyser"
 
-#: toner_tab.py:5405
+#: toner_tab.py:5407
 msgid "Create Tone Preset for Audio Import"
 msgstr "Créer un préréglage d'harmoniques pour l'import audio"
 
-#: toner_tab.py:5407
+#: toner_tab.py:5409
 msgid "Describe the horn and setup heard in the recording."
 msgstr "Décrivez le saxophone et la configuration entendus dans l'enregistrement."
 
-#: toner_tab.py:5465
+#: toner_tab.py:5467
 msgid "Name Required"
 msgstr "Nom requis"
 
-#: toner_tab.py:5466
+#: toner_tab.py:5468
 msgid "Please enter a preset name."
 msgstr "Veuillez saisir un nom de préréglage."
 
-#: toner_tab.py:5472
+#: toner_tab.py:5474
 msgid "Duplicate"
 msgstr "Doublon"
 
-#: toner_tab.py:5517
+#: toner_tab.py:5519
 msgid "Create && Import"
 msgstr "Créer et importer"
 
-#: toner_tab.py:5530
+#: toner_tab.py:5532
 #, python-brace-format
 msgid "Analyzing {filename}..."
 msgstr "Analyse de {filename}…"
 
-#: toner_tab.py:5544
+#: toner_tab.py:5546
 #, python-brace-format
 msgid ""
 "Could not analyze file:\n"
@@ -3539,7 +3543,7 @@ msgstr ""
 "Impossible d'analyser le fichier :\n"
 "{e}"
 
-#: toner_tab.py:5551
+#: toner_tab.py:5553
 msgid ""
 "No stable note segments found in the file.\n"
 "The file may be too short, too quiet, or contain no sustained tones."
@@ -3548,11 +3552,11 @@ msgstr ""
 "Le fichier est peut-être trop court, trop faible, ou ne contient aucun "
 "son tenu."
 
-#: toner_tab.py:5581
+#: toner_tab.py:5583
 msgid "File Imported"
 msgstr "Fichier importé"
 
-#: toner_tab.py:5582
+#: toner_tab.py:5584
 #, python-brace-format
 msgid ""
 "Extracted {count} note segments from '{filename}'.\n"
@@ -3565,44 +3569,44 @@ msgstr ""
 "\n"
 "Le préréglage contient désormais {total} notes uniques au total."
 
-#: toner_tab.py:5597
+#: toner_tab.py:5599
 msgid "Nothing to Export"
 msgstr "Rien à exporter"
 
-#: toner_tab.py:5597
+#: toner_tab.py:5599
 msgid "No tone presets to export."
 msgstr "Aucun préréglage d'harmoniques à exporter."
 
-#: toner_tab.py:5602 toner_tab.py:5659
+#: toner_tab.py:5604 toner_tab.py:5661
 msgid "Export Tone Presets"
 msgstr "Exporter les préréglages d'harmoniques"
 
-#: toner_tab.py:5612
+#: toner_tab.py:5614
 msgid "Select presets to export:"
 msgstr "Sélectionnez les préréglages à exporter :"
 
-#: toner_tab.py:5625
+#: toner_tab.py:5627
 #, python-brace-format
 msgid "[{lib}] {name} ({caps} captures)"
 msgstr "[{lib}] {name} ({caps} captures)"
 
-#: toner_tab.py:5633
+#: toner_tab.py:5635
 msgid "All"
 msgstr "Tous"
 
-#: toner_tab.py:5652
+#: toner_tab.py:5654
 msgid "Nothing Selected"
 msgstr "Aucune sélection"
 
-#: toner_tab.py:5653
+#: toner_tab.py:5655
 msgid "Select at least one preset to export."
 msgstr "Sélectionnez au moins un préréglage à exporter."
 
-#: toner_tab.py:5671 ui_dialogs.py:2386 ui_dialogs.py:3450
+#: toner_tab.py:5673 ui_dialogs.py:2386 ui_dialogs.py:3450
 msgid "Export Successful"
 msgstr "Exportation réussie"
 
-#: toner_tab.py:5672
+#: toner_tab.py:5674
 #, python-brace-format
 msgid ""
 "Exported {count} presets to:\n"
@@ -3611,11 +3615,11 @@ msgstr ""
 "{count} préréglages exportés vers :\n"
 "{path}"
 
-#: toner_tab.py:5674 ui_dialogs.py:2390 ui_dialogs.py:3453
+#: toner_tab.py:5676 ui_dialogs.py:2390 ui_dialogs.py:3453
 msgid "Export Error"
 msgstr "Erreur d'exportation"
 
-#: toner_tab.py:5674
+#: toner_tab.py:5676
 #, python-brace-format
 msgid ""
 "Could not export:\n"
@@ -3624,15 +3628,15 @@ msgstr ""
 "Impossible d'exporter :\n"
 "{e}"
 
-#: toner_tab.py:5678
+#: toner_tab.py:5680
 msgid "Export"
 msgstr "Exporter"
 
-#: toner_tab.py:5689
+#: toner_tab.py:5691
 msgid "Import Tone Presets"
 msgstr "Importer des préréglages d'harmoniques"
 
-#: toner_tab.py:5699 ui_dialogs.py:2404
+#: toner_tab.py:5701 ui_dialogs.py:2404
 #, python-brace-format
 msgid ""
 "Could not read file:\n"
@@ -3641,15 +3645,15 @@ msgstr ""
 "Impossible de lire le fichier :\n"
 "{e}"
 
-#: toner_tab.py:5703
+#: toner_tab.py:5705
 msgid "Invalid Format"
 msgstr "Format invalide"
 
-#: toner_tab.py:5703
+#: toner_tab.py:5705
 msgid "File is not a valid tone presets export."
 msgstr "Ce fichier n'est pas un export valide de préréglages d'harmoniques."
 
-#: toner_tab.py:5736
+#: toner_tab.py:5738
 #, python-brace-format
 msgid "Imported {count} new presets/sessions."
 msgstr "{count} nouveaux préréglages/sessions importés."
@@ -4798,63 +4802,63 @@ msgstr "Enregistrer le croissant de trou"
 msgid "Print thickness must be more than 0 and at most {max} mm."
 msgstr "L'épaisseur d'impression doit être supérieure à 0 et au plus {max} mm."
 
-#: tuner_tab.py:475
+#: tuner_tab.py:477
 msgid "CPU mode (low FPS) — install tuner_render for GPU acceleration"
 msgstr "Mode CPU (FPS faible) — installez tuner_render pour l'accélération GPU"
 
-#: tuner_tab.py:536
+#: tuner_tab.py:538
 msgid "DISP"
 msgstr "AFFI"
 
-#: tuner_tab.py:540
+#: tuner_tab.py:542
 msgid "SENS"
 msgstr "SENS"
 
-#: tuner_tab.py:544
+#: tuner_tab.py:546
 msgid "BRIGHT"
 msgstr "LUMI"
 
-#: tuner_tab.py:555
+#: tuner_tab.py:557
 msgid "FPS"
 msgstr "FPS"
 
-#: tuner_tab.py:575
+#: tuner_tab.py:577
 msgid "PITCH"
 msgstr "HAUT"
 
-#: tuner_tab.py:579
+#: tuner_tab.py:581
 msgid "A ="
 msgstr "La ="
 
-#: tuner_tab.py:596
+#: tuner_tab.py:598
 msgid "KEY"
 msgstr "TON"
 
-#: tuner_tab.py:601
+#: tuner_tab.py:603
 msgid "BIAS"
 msgstr "BIAIS"
 
-#: tuner_tab.py:604
+#: tuner_tab.py:606
 msgid "NOTE"
 msgstr "NOTE"
 
-#: tuner_tab.py:608
+#: tuner_tab.py:610
 msgid "OCT."
 msgstr "OCT."
 
-#: tuner_tab.py:632
+#: tuner_tab.py:634
 msgid " ← flat"
 msgstr " ← bas"
 
-#: tuner_tab.py:648
+#: tuner_tab.py:650
 msgid "sharp →"
 msgstr "haut →"
 
-#: tuner_tab.py:651
+#: tuner_tab.py:653
 msgid "MOTOR PILOT"
 msgstr "PILOTAGE MOTEUR"
 
-#: tuner_tab.py:712
+#: tuner_tab.py:714
 msgid ""
 "The Strobe Tuner requires PortAudio.\n"
 "\n"
@@ -4870,7 +4874,7 @@ msgstr ""
 "\n"
 "Puis redémarrez l'application."
 
-#: tuner_tab.py:717
+#: tuner_tab.py:719
 msgid ""
 "The Strobe Tuner is not available on this Mac.\n"
 "\n"
@@ -4884,7 +4888,7 @@ msgstr ""
 "\n"
 "Toutes les autres fonctionnalités fonctionnent normalement."
 
-#: tuner_tab.py:721
+#: tuner_tab.py:723
 msgid ""
 "The Strobe Tuner is not available on this system.\n"
 "\n"
@@ -4899,21 +4903,21 @@ msgstr ""
 "\n"
 "Toutes les autres fonctionnalités fonctionnent normalement."
 
-#: tuner_tab.py:922
+#: tuner_tab.py:924
 msgid "CPU mode (low FPS) — GPU renderer unavailable; see Help > Open Log File"
 msgstr ""
 "Mode CPU (FPS faibles) — rendu GPU indisponible ; voir Aide > Ouvrir le "
 "fichier journal"
 
-#: tuner_tab.py:1213
+#: tuner_tab.py:1215
 msgid "Tuner Settings"
 msgstr "Paramètres de l'accordeur"
 
-#: tuner_tab.py:1229
+#: tuner_tab.py:1231
 msgid "Input Device:"
 msgstr "Périphérique d'entrée :"
 
-#: tuner_tab.py:1233
+#: tuner_tab.py:1235
 msgid ""
 "Microphone the tuner listens to. A condenser mic with a flat low-"
 "frequency response works best, especially for baritone fundamentals "
@@ -4923,7 +4927,7 @@ msgstr ""
 "plate dans les basses donne les meilleurs résultats, surtout pour les "
 "fondamentales du baryton autour de 100 Hz."
 
-#: tuner_tab.py:1259
+#: tuner_tab.py:1261
 msgid ""
 "Pick a specific input device, or System Default to use whatever your OS "
 "has selected. Changing this restarts the tuner audio stream immediately."
@@ -4932,11 +4936,11 @@ msgstr ""
 "utiliser celui sélectionné par votre OS. Toute modification redémarre "
 "immédiatement le flux audio de l'accordeur."
 
-#: tuner_tab.py:1283
+#: tuner_tab.py:1285
 msgid "Backlight Color:"
 msgstr "Couleur du rétroéclairage :"
 
-#: tuner_tab.py:1291
+#: tuner_tab.py:1293
 msgid ""
 "Color of the strobe-disc segments — the lit stripes you see rotating on "
 "each wheel. Click the swatch to pick."
@@ -4945,29 +4949,29 @@ msgstr ""
 " vous voyez défiler sur chaque roue. Cliquez sur la pastille pour "
 "choisir."
 
-#: tuner_tab.py:1299
+#: tuner_tab.py:1301
 msgid "Choose Backlight Color"
 msgstr "Choisir la couleur du rétroéclairage"
 
-#: tuner_tab.py:1315
+#: tuner_tab.py:1317
 msgid "Faceplate Color:"
 msgstr "Couleur de la façade :"
 
-#: tuner_tab.py:1323
+#: tuner_tab.py:1325
 msgid "Background color behind the strobe wheels. Click the swatch to pick."
 msgstr ""
 "Couleur de fond derrière les roues stroboscopiques. Cliquez sur la "
 "pastille pour choisir."
 
-#: tuner_tab.py:1331
+#: tuner_tab.py:1333
 msgid "Choose Faceplate Color"
 msgstr "Choisir la couleur de la façade"
 
-#: tuner_tab.py:1354
+#: tuner_tab.py:1356
 msgid "Show frame rate on screen"
 msgstr "Afficher la fréquence d'image à l'écran"
 
-#: tuner_tab.py:1361
+#: tuner_tab.py:1363
 msgid ""
 "Overlay a small live FPS counter on the tuner — useful for diagnosing "
 "stutters or confirming the GPU renderer is active."
@@ -4975,13 +4979,13 @@ msgstr ""
 "Superpose un petit compteur de FPS sur l'accordeur — utile pour "
 "diagnostiquer des saccades ou vérifier que le rendu GPU est actif."
 
-#: tuner_tab.py:1368
+#: tuner_tab.py:1370
 msgid "Close this dialog. Color and FPS choices apply immediately."
 msgstr ""
 "Ferme cette boîte de dialogue. Les choix de couleur et de FPS "
 "s'appliquent immédiatement."
 
-#: tuner_tab.py:1717
+#: tuner_tab.py:1719
 #, python-brace-format
 msgid ""
 "{error_msg}\n"
@@ -5006,7 +5010,7 @@ msgstr "Ne plus afficher ce message"
 msgid "Yes, Proceed"
 msgstr "Oui, continuer"
 
-#: ui_dialogs.py:313 ui_dialogs.py:10828
+#: ui_dialogs.py:313 ui_dialogs.py:10871
 msgid "No, Cancel"
 msgstr "Non, annuler"
 
@@ -6598,11 +6602,11 @@ msgstr "Air assist activé pendant la gravure pleine sur ce matériau."
 msgid "Fill density:"
 msgstr "Densité de remplissage :"
 
-#: ui_dialogs.py:4836 ui_dialogs.py:9863
+#: ui_dialogs.py:4836 ui_dialogs.py:9882
 msgid "less"
 msgstr "moins"
 
-#: ui_dialogs.py:4842 ui_dialogs.py:9851
+#: ui_dialogs.py:4842 ui_dialogs.py:9870
 msgid "more"
 msgstr "plus"
 
@@ -9295,8 +9299,8 @@ msgstr "Suivant →"
 msgid "Engrave new card"
 msgstr "Graver une nouvelle carte"
 
-#: ui_dialogs.py:8159 ui_dialogs.py:9020 ui_dialogs.py:9275 ui_dialogs.py:9545
-#: ui_dialogs.py:9579
+#: ui_dialogs.py:8159 ui_dialogs.py:9038 ui_dialogs.py:9293 ui_dialogs.py:9563
+#: ui_dialogs.py:9597
 msgid "Capture reference"
 msgstr "Capturer la référence"
 
@@ -9320,7 +9324,7 @@ msgstr "Calibrer et enregistrer"
 msgid "Reconnect camera"
 msgstr "Reconnecter la caméra"
 
-#: ui_dialogs.py:8199 ui_dialogs.py:9897 ui_dialogs.py:11154
+#: ui_dialogs.py:8199 ui_dialogs.py:9916 ui_dialogs.py:11201
 msgid "Switch camera"
 msgstr "Changer de caméra"
 
@@ -9383,7 +9387,7 @@ msgstr "Ouverture de la caméra..."
 msgid "Position the head"
 msgstr "Positionner la tête"
 
-#: ui_dialogs.py:8315 ui_dialogs.py:10509 ui_dialogs.py:10918
+#: ui_dialogs.py:8315 ui_dialogs.py:10545 ui_dialogs.py:10964
 msgid "Home Laser ($H)"
 msgstr "Origine du laser ($H)"
 
@@ -9391,7 +9395,7 @@ msgstr "Origine du laser ($H)"
 msgid "MPos: --"
 msgstr "MPos : --"
 
-#: ui_dialogs.py:8323 ui_dialogs.py:10481
+#: ui_dialogs.py:8323 ui_dialogs.py:10517
 msgid "Step (mm):"
 msgstr "Pas (mm) :"
 
@@ -9408,7 +9412,7 @@ msgstr ""
 "Faire l'origine du laser ? La tête se déplacera vers le coin d'origine à "
 "pleine vitesse."
 
-#: ui_dialogs.py:8426 ui_dialogs.py:10891 ui_dialogs.py:10894
+#: ui_dialogs.py:8426 ui_dialogs.py:10937 ui_dialogs.py:10940
 msgid "Homing..."
 msgstr "Origine en cours..."
 
@@ -9421,7 +9425,7 @@ msgstr "Origine effectuée. Maintenant jog dans le champ de la caméra."
 msgid "Home failed: {m}"
 msgstr "Échec de l'origine : {m}"
 
-#: ui_dialogs.py:8489
+#: ui_dialogs.py:8494
 #, python-brace-format
 msgid ""
 "Step 2 of 2 — calibration captures.\n"
@@ -9453,15 +9457,19 @@ msgstr ""
 "\n"
 "Objectif : {n} captures correctes au total."
 
-#: ui_dialogs.py:8511 ui_dialogs.py:9835
+#: ui_dialogs.py:8516 ui_dialogs.py:9854
 msgid "Opening camera ..."
 msgstr "Ouverture de la caméra ..."
 
-#: ui_dialogs.py:8618
+#: ui_dialogs.py:8605
+msgid "no status report"
+msgstr "aucun rapport d'état"
+
+#: ui_dialogs.py:8623
 msgid "Card Would Run Off Bed"
 msgstr "La carte sortirait du plateau"
 
-#: ui_dialogs.py:8619
+#: ui_dialogs.py:8624
 #, python-brace-format
 msgid ""
 "With head at machine (X={x:.1f}, Y={y:.1f}), the card would engrave at "
@@ -9483,15 +9491,34 @@ msgstr ""
 "Tête nécessaire à environ X={midx:.0f}-{maxx:.0f}, "
 "Y={midy:.0f}-{maxy:.0f}."
 
-#: ui_dialogs.py:8645
+#: ui_dialogs.py:8648
+msgid "Head Position Unknown"
+msgstr "Position de la tête inconnue"
+
+#: ui_dialogs.py:8649
+#, python-brace-format
+msgid ""
+"The laser's position could not be read ({reason}), so whether the card "
+"fits on the bed cannot be checked.\n"
+"\n"
+"Check the connection (Options > Machine > Test Connection), then try "
+"again."
+msgstr ""
+"La position du laser n'a pas pu être lue ({reason}) : impossible de "
+"vérifier si la carte tient sur le plateau.\n"
+"\n"
+"Vérifiez la connexion (Options > Machine > Tester la connexion), puis "
+"réessayez."
+
+#: ui_dialogs.py:8663
 msgid "Can't operate — no Falcon connection."
 msgstr "Impossible d'opérer — pas de connexion Falcon."
 
-#: ui_dialogs.py:8649
+#: ui_dialogs.py:8667
 msgid "Home Laser First?"
 msgstr "Faire l'origine du laser d'abord ?"
 
-#: ui_dialogs.py:8650
+#: ui_dialogs.py:8668
 msgid ""
 "The laser needs to be homed so machine coordinates have a known "
 "reference. Without homing, the engrave's position is bogus.\n"
@@ -9510,16 +9537,16 @@ msgstr ""
 " / avant d'ouvrir SSC).\n"
 "Annuler — revenir."
 
-#: ui_dialogs.py:8683
+#: ui_dialogs.py:8701
 #, python-brace-format
 msgid "Frame needs pyserial: {e}"
 msgstr "Encadrer requiert pyserial : {e}"
 
-#: ui_dialogs.py:8749
+#: ui_dialogs.py:8767
 msgid "Framing — jog to position, click Done when alignment looks right"
 msgstr "Encadrement — jog en position, cliquez Terminé quand l'alignement est bon"
 
-#: ui_dialogs.py:8782
+#: ui_dialogs.py:8800
 msgid ""
 "Framing was stopped mid-trace, so the laser lost its position. Home the "
 "laser, then Frame again."
@@ -9527,15 +9554,15 @@ msgstr ""
 "L'encadrement a été arrêté en plein tracé : le laser a perdu sa position."
 " Lancez l'origine du laser, puis cliquez à nouveau sur « Encadrer »."
 
-#: ui_dialogs.py:8794
+#: ui_dialogs.py:8812
 msgid "Framing done. Click Engrave when ready."
 msgstr "Encadrement terminé. Cliquez sur Graver quand vous êtes prêt."
 
-#: ui_dialogs.py:8803
+#: ui_dialogs.py:8821
 msgid "Engrave first"
 msgstr "Graver d'abord"
 
-#: ui_dialogs.py:8804
+#: ui_dialogs.py:8822
 msgid ""
 "No engrave offset on file yet. Click Engrave (and wait for it to finish) "
 "before moving to captures."
@@ -9543,7 +9570,7 @@ msgstr ""
 "Pas encore de décalage de gravure enregistré. Cliquez sur Graver (et "
 "attendez la fin) avant de passer aux captures."
 
-#: ui_dialogs.py:8827
+#: ui_dialogs.py:8845
 #, python-brace-format
 msgid ""
 "Engrave needs pyserial:\n"
@@ -9554,19 +9581,19 @@ msgstr ""
 "\n"
 "{e}"
 
-#: ui_dialogs.py:8847
+#: ui_dialogs.py:8865
 msgid "No machine position"
 msgstr "Pas de position machine"
 
-#: ui_dialogs.py:8848
+#: ui_dialogs.py:8866
 msgid "Couldn't read MPos. Home the laser first."
 msgstr "Impossible de lire MPos. Faites d'abord l'origine du laser."
 
-#: ui_dialogs.py:8870
+#: ui_dialogs.py:8888
 msgid "Start Engrave?"
 msgstr "Démarrer la gravure ?"
 
-#: ui_dialogs.py:8871
+#: ui_dialogs.py:8889
 #, python-brace-format
 msgid ""
 "Are you sure? Card will engrave centered on machine (X={x:.0f}, "
@@ -9585,25 +9612,25 @@ msgstr ""
 "Si vous n'avez pas encore encadré pour vérifier la position, cliquez Non "
 "et lancez Encadrer d'abord."
 
-#: ui_dialogs.py:8926
+#: ui_dialogs.py:8944
 msgid "Engraving Calibration Card"
 msgstr "Gravure de la carte de calibrage"
 
-#: ui_dialogs.py:8944
+#: ui_dialogs.py:8962
 msgid "Engrave stopped. Put fresh basswood, re-Frame, then Engrave."
 msgstr "Gravure arrêtée. Mettez du tilleul neuf, refaites Encadrer, puis Graver."
 
-#: ui_dialogs.py:8981
+#: ui_dialogs.py:8999
 msgid "Engrave complete. Click Next when ready for calibration captures."
 msgstr ""
 "Gravure terminée. Cliquez sur Suivant quand vous êtes prêt pour les "
 "captures de calibrage."
 
-#: ui_dialogs.py:8986
+#: ui_dialogs.py:9004
 msgid "Card Engraved — DO NOT TOUCH"
 msgstr "Carte gravée — NE PAS TOUCHER"
 
-#: ui_dialogs.py:8987
+#: ui_dialogs.py:9005
 msgid ""
 "Card engraved successfully.\n"
 "\n"
@@ -9621,11 +9648,11 @@ msgstr ""
 "capture devient la référence de position qui lie la caméra aux "
 "coordonnées machine — si la carte bouge avant, le calibrage sera décalé."
 
-#: ui_dialogs.py:9005
+#: ui_dialogs.py:9023
 msgid "Engrave a New Card?"
 msgstr "Graver une nouvelle carte ?"
 
-#: ui_dialogs.py:9006
+#: ui_dialogs.py:9024
 #, python-brace-format
 msgid ""
 "Discard the existing calibration session and start over with a fresh "
@@ -9644,25 +9671,25 @@ msgstr ""
 "\n"
 "Les captures actuelles ({n}) seront perdues."
 
-#: ui_dialogs.py:9061 ui_dialogs.py:9959
+#: ui_dialogs.py:9079 ui_dialogs.py:9978
 msgid "Opening camera..."
 msgstr "Ouverture de la caméra..."
 
-#: ui_dialogs.py:9106
+#: ui_dialogs.py:9124
 #, python-brace-format
 msgid "Camera live. Captured 0 / {n} good frames."
 msgstr "Caméra en direct. 0 / {n} bonnes images capturées."
 
-#: ui_dialogs.py:9124
+#: ui_dialogs.py:9142
 #, python-brace-format
 msgid "Could not open camera index {i}: {e}"
 msgstr "Impossible d'ouvrir la caméra index {i} : {e}"
 
-#: ui_dialogs.py:9164
+#: ui_dialogs.py:9182
 msgid "Camera lost — click Reconnect Camera to recover."
 msgstr "Caméra perdue — cliquez sur Reconnecter la caméra pour récupérer."
 
-#: ui_dialogs.py:9188
+#: ui_dialogs.py:9206
 msgid ""
 "Enter the engraved card's bottom-left machine-mm coords.\n"
 "\n"
@@ -9681,15 +9708,15 @@ msgstr ""
 "gravure réussie. Utilisez-le si la valeur enregistrée a été perdue mais "
 "que la carte est toujours sur le plateau à des coordonnées connues."
 
-#: ui_dialogs.py:9194
+#: ui_dialogs.py:9212
 msgid "Manual Engrave Offset"
 msgstr "Décalage de gravure manuel"
 
-#: ui_dialogs.py:9204
+#: ui_dialogs.py:9222
 msgid "Bad Offset"
 msgstr "Décalage incorrect"
 
-#: ui_dialogs.py:9205
+#: ui_dialogs.py:9223
 #, python-brace-format
 msgid ""
 "Couldn't parse '{v}' as X,Y mm:\n"
@@ -9698,48 +9725,48 @@ msgstr ""
 "Impossible d'interpréter « {v} » comme X,Y mm :\n"
 "{e}"
 
-#: ui_dialogs.py:9225
+#: ui_dialogs.py:9243
 #, python-brace-format
 msgid "Offset set to ({x:.3f}, {y:.3f}). Click Next to capture."
 msgstr "Décalage défini à ({x:.3f}, {y:.3f}). Cliquez Suivant pour capturer."
 
-#: ui_dialogs.py:9245
+#: ui_dialogs.py:9263
 msgid "Reopening camera..."
 msgstr "Réouverture de la caméra..."
 
-#: ui_dialogs.py:9260 ui_dialogs.py:9919 ui_dialogs.py:11183
+#: ui_dialogs.py:9278 ui_dialogs.py:9938 ui_dialogs.py:11230
 msgid "Only One Camera"
 msgstr "Une seule caméra"
 
-#: ui_dialogs.py:9261 ui_dialogs.py:9920 ui_dialogs.py:11184
+#: ui_dialogs.py:9279 ui_dialogs.py:9939 ui_dialogs.py:11231
 msgid "Only one camera is detected."
 msgstr "Une seule caméra détectée."
 
-#: ui_dialogs.py:9265
+#: ui_dialogs.py:9283
 msgid "Switch Camera?"
 msgstr "Changer de caméra ?"
 
-#: ui_dialogs.py:9266
+#: ui_dialogs.py:9284
 #, python-brace-format
 msgid "Switching cameras discards the {n} captures taken so far. Continue?"
 msgstr "Changer de caméra supprime les {n} captures prises jusqu'ici. Continuer ?"
 
-#: ui_dialogs.py:9293 ui_dialogs.py:9937
+#: ui_dialogs.py:9311 ui_dialogs.py:9956
 #, python-brace-format
 msgid "Switched to camera index {i}. Reopening..."
 msgstr "Basculé sur la caméra index {i}. Réouverture..."
 
-#: ui_dialogs.py:9359
+#: ui_dialogs.py:9377
 #, python-brace-format
 msgid "Detected {d} corners — captured {n} / {target} good frames."
 msgstr "{d} coins détectés — {n} / {target} bonnes images capturées."
 
-#: ui_dialogs.py:9362
+#: ui_dialogs.py:9380
 #, python-brace-format
 msgid "Move the card into view — captured {n} / {target} good frames."
 msgstr "Place la carte dans le champ — {n} / {target} bonnes images capturées."
 
-#: ui_dialogs.py:9496
+#: ui_dialogs.py:9514
 #, python-brace-format
 msgid ""
 "REFERENCE captured ({nref} of card untouched). Take more references for "
@@ -9751,24 +9778,24 @@ msgstr ""
 "était mauvaise, ou cliquez « Références terminées » quand vous êtes prêt "
 "à DÉPLACER la carte."
 
-#: ui_dialogs.py:9502
+#: ui_dialogs.py:9520
 msgid "Click Calibrate & Save when ready."
 msgstr "Clique sur Calibrer et enregistrer quand tu es prêt."
 
-#: ui_dialogs.py:9504
+#: ui_dialogs.py:9522
 msgid "MOVE the card to a new position and capture again."
 msgstr "DÉPLACEZ la carte à une nouvelle position et capturez à nouveau."
 
-#: ui_dialogs.py:9506
+#: ui_dialogs.py:9524
 #, python-brace-format
 msgid "Captured {n} / {t} good frames. {hint}"
 msgstr "{n} / {t} bonnes images capturées. {hint}"
 
-#: ui_dialogs.py:9518
+#: ui_dialogs.py:9536
 msgid "Capture (card moved)"
 msgstr "Capturer (carte déplacée)"
 
-#: ui_dialogs.py:9521
+#: ui_dialogs.py:9539
 #, python-brace-format
 msgid ""
 "References done ({n} pooled). Now MOVE the card to different positions / "
@@ -9778,16 +9805,16 @@ msgstr ""
 "différentes positions / inclinaisons et capturez {m} images de plus pour "
 "le calibrage de la distorsion de l'objectif."
 
-#: ui_dialogs.py:9561
+#: ui_dialogs.py:9579
 #, python-brace-format
 msgid "Removed last capture. {n} / {t} remaining."
 msgstr "Dernière capture supprimée. Reste {n} / {t}."
 
-#: ui_dialogs.py:9568
+#: ui_dialogs.py:9586
 msgid "Reset all captures?"
 msgstr "Réinitialiser toutes les captures ?"
 
-#: ui_dialogs.py:9569
+#: ui_dialogs.py:9587
 #, python-brace-format
 msgid ""
 "Discard all {n} captures and start over.\n"
@@ -9804,7 +9831,7 @@ msgstr ""
 "\n"
 "Continuer ?"
 
-#: ui_dialogs.py:9585
+#: ui_dialogs.py:9603
 msgid ""
 "Captures cleared. Place the card in its engraved position and click "
 "Capture reference."
@@ -9812,11 +9839,11 @@ msgstr ""
 "Captures effacées. Placez la carte à sa position gravée et cliquez "
 "Capturer la référence."
 
-#: ui_dialogs.py:9605
+#: ui_dialogs.py:9623
 msgid "No Reference Capture"
 msgstr "Aucune capture de référence"
 
-#: ui_dialogs.py:9606
+#: ui_dialogs.py:9624
 msgid ""
 "Calibration needs at least one reference capture: the card exactly where "
 "it was engraved, taken before clicking 'Done with references'.\n"
@@ -9832,11 +9859,11 @@ msgstr ""
 "gravure si vous l'avez déplacée, puis commencez par « Capturer la "
 "référence »."
 
-#: ui_dialogs.py:9616
+#: ui_dialogs.py:9634
 msgid "Move the Card"
 msgstr "Déplacez la carte"
 
-#: ui_dialogs.py:9617
+#: ui_dialogs.py:9635
 #, python-brace-format
 msgid ""
 "Calibration needs at least {m} captures with the card moved to different "
@@ -9851,11 +9878,11 @@ msgstr ""
 "Cliquez sur « Références terminées » si ce n'est pas déjà fait, puis "
 "déplacez la carte entre les captures."
 
-#: ui_dialogs.py:9627
+#: ui_dialogs.py:9645
 msgid "No Engrave Position"
 msgstr "Aucune position de gravure"
 
-#: ui_dialogs.py:9628
+#: ui_dialogs.py:9646
 msgid ""
 "The app doesn't know where on the bed this card was engraved, so it can't"
 " tie the camera to machine coordinates.\n"
@@ -9868,15 +9895,15 @@ msgstr ""
 "Saisir maintenant la position machine du coin inférieur gauche de la "
 "carte ?"
 
-#: ui_dialogs.py:9646
+#: ui_dialogs.py:9664
 msgid "Computing calibration ..."
 msgstr "Calcul de la calibration ..."
 
-#: ui_dialogs.py:9695
+#: ui_dialogs.py:9713
 msgid "Calibration Saved"
 msgstr "Calibration enregistrée"
 
-#: ui_dialogs.py:9696
+#: ui_dialogs.py:9714
 #, python-brace-format
 msgid ""
 "Camera calibration complete.\n"
@@ -9897,11 +9924,11 @@ msgstr ""
 "Enregistré dans :\n"
 "{p}"
 
-#: ui_dialogs.py:9707
+#: ui_dialogs.py:9725
 msgid "Calibration Failed"
 msgstr "Échec de la calibration"
 
-#: ui_dialogs.py:9708
+#: ui_dialogs.py:9726
 #, python-brace-format
 msgid ""
 "Calibration did not converge:\n"
@@ -9916,17 +9943,17 @@ msgstr ""
 "\n"
 "Essaie de capturer plus d'images à différentes positions et inclinaisons."
 
-#: ui_dialogs.py:9762 ui_dialogs.py:9813
+#: ui_dialogs.py:9780 ui_dialogs.py:9832
 msgid "Capture Scrap Outline"
 msgstr "Capturer le contour de la chute"
 
-#: ui_dialogs.py:9803
+#: ui_dialogs.py:9822
 msgid "No camera calibration found. Run Options > Camera Calibration first."
 msgstr ""
 "Aucune calibration de caméra trouvée. Lance d'abord Options > Calibration"
 " de la caméra."
 
-#: ui_dialogs.py:9817
+#: ui_dialogs.py:9836
 msgid ""
 "Place the scrap on the laser bed (close the cover). The green outline "
 "shows what will be captured. Click Use when it looks right, or Retry to "
@@ -9936,26 +9963,26 @@ msgstr ""
 "montre ce qui sera capturé. Clique sur Utiliser quand c'est bon, ou sur "
 "Réessayer pour redétecter."
 
-#: ui_dialogs.py:9848
+#: ui_dialogs.py:9867
 msgid "Detection sensitivity:"
 msgstr "Sensibilité de détection :"
 
-#: ui_dialogs.py:9884
+#: ui_dialogs.py:9903
 msgid "Invert colors (use when scrap is DARKER than the bed)"
 msgstr ""
 "Inverser les couleurs (à utiliser quand la chute est PLUS SOMBRE que le "
 "plateau)"
 
-#: ui_dialogs.py:9891
+#: ui_dialogs.py:9910
 msgid "Use"
 msgstr "Utiliser"
 
-#: ui_dialogs.py:9998
+#: ui_dialogs.py:10017
 #, python-brace-format
 msgid "Could not open camera: {e}"
 msgstr "Impossible d'ouvrir la caméra : {e}"
 
-#: ui_dialogs.py:10061
+#: ui_dialogs.py:10094
 #, python-brace-format
 msgid ""
 "This camera is sending {fw}×{fh} images, but the calibration was made at "
@@ -9965,129 +9992,129 @@ msgstr ""
 "faite en {cw}×{ch}. Recalibrez, ou utilisez « Changer de caméra » si ce "
 "n'est pas la bonne."
 
-#: ui_dialogs.py:10107
+#: ui_dialogs.py:10140
 #, python-brace-format
 msgid "Detected: {n}-vertex polygon, {w:.0f} × {h:.0f} mm bbox"
 msgstr "Détecté : polygone à {n} sommets, {w:.0f} × {h:.0f} mm bbox"
 
-#: ui_dialogs.py:10111
+#: ui_dialogs.py:10144
 msgid "No scrap detected — place a piece on the bed."
 msgstr "Aucune chute détectée — pose une pièce sur le plateau."
 
-#: ui_dialogs.py:10274 ui_dialogs.py:10370
+#: ui_dialogs.py:10310 ui_dialogs.py:10406
 msgid "Sending to Falcon"
 msgstr "Envoi au Falcon"
 
-#: ui_dialogs.py:10380
+#: ui_dialogs.py:10416
 #, python-brace-format
 msgid "Position the head, then click {label}."
 msgstr "Positionnez la tête, puis cliquez sur {label}."
 
-#: ui_dialogs.py:10383
+#: ui_dialogs.py:10419
 msgid "Connecting ..."
 msgstr "Connexion ..."
 
-#: ui_dialogs.py:10402
+#: ui_dialogs.py:10438
 #, python-brace-format
 msgid "Line 0 / {n}"
 msgstr "Ligne 0 / {n}"
 
-#: ui_dialogs.py:10406
+#: ui_dialogs.py:10442
 msgid "Elapsed 0:00"
 msgstr "Écoulé 0:00"
 
-#: ui_dialogs.py:10461
+#: ui_dialogs.py:10497
 msgid "Looks Good — Cut!"
 msgstr "Ça va — couper !"
 
-#: ui_dialogs.py:10472
+#: ui_dialogs.py:10508
 msgid "Nudge head"
 msgstr "Déplacer la tête"
 
-#: ui_dialogs.py:10519
+#: ui_dialogs.py:10555
 msgid "Try Auto Locate"
 msgstr "Essayer la localisation auto"
 
-#: ui_dialogs.py:10533
+#: ui_dialogs.py:10569
 msgid "Running ..."
 msgstr "En cours ..."
 
-#: ui_dialogs.py:10535
+#: ui_dialogs.py:10571
 #, python-brace-format
 msgid "Failed to start: {e}"
 msgstr "Échec du démarrage : {e}"
 
-#: ui_dialogs.py:10549
+#: ui_dialogs.py:10585
 msgid "Idle"
 msgstr "Inactif"
 
-#: ui_dialogs.py:10550
+#: ui_dialogs.py:10586
 msgid "Running"
 msgstr "En cours"
 
-#: ui_dialogs.py:10551
+#: ui_dialogs.py:10587
 msgid "Paused (feed hold)"
 msgstr "En pause (feed hold)"
 
-#: ui_dialogs.py:10552
+#: ui_dialogs.py:10588
 msgid "ALARM"
 msgstr "ALARME"
 
-#: ui_dialogs.py:10553
+#: ui_dialogs.py:10589
 msgid "Safety door open"
 msgstr "Porte de sécurité ouverte"
 
-#: ui_dialogs.py:10554
+#: ui_dialogs.py:10590
 msgid "Jogging"
 msgstr "Jog en cours"
 
-#: ui_dialogs.py:10556
+#: ui_dialogs.py:10592
 msgid "Sleeping"
 msgstr "En veille"
 
-#: ui_dialogs.py:10575
+#: ui_dialogs.py:10611
 #, python-brace-format
 msgid "Line {s} / {t}  ({pct:.0f}%)"
 msgstr "Ligne {s} / {t}  ({pct:.0f} %)"
 
-#: ui_dialogs.py:10579
+#: ui_dialogs.py:10615
 #, python-brace-format
 msgid "Error: {m}"
 msgstr "Erreur : {m}"
 
-#: ui_dialogs.py:10583
+#: ui_dialogs.py:10619
 #, python-brace-format
 msgid "ALARM: {m}"
 msgstr "ALARME : {m}"
 
-#: ui_dialogs.py:10597
+#: ui_dialogs.py:10633
 #, python-brace-format
 msgid "Pass {n} complete — waiting for Idle..."
 msgstr "Passe {n} terminée — attente d'Idle..."
 
-#: ui_dialogs.py:10620
+#: ui_dialogs.py:10656
 msgid "Complete ✓"
 msgstr "Terminé ✓"
 
-#: ui_dialogs.py:10622
+#: ui_dialogs.py:10658
 msgid "Stopped"
 msgstr "Arrêté"
 
-#: ui_dialogs.py:10627
+#: ui_dialogs.py:10663
 msgid "unknown error"
 msgstr "erreur inconnue"
 
-#: ui_dialogs.py:10632
+#: ui_dialogs.py:10668
 #, python-brace-format
 msgid "Stopped on error: {e}"
 msgstr "Arrêté sur erreur : {e}"
 
-#: ui_dialogs.py:10634
+#: ui_dialogs.py:10670
 #, python-brace-format
 msgid "  — {d}"
 msgstr "  — {d}"
 
-#: ui_dialogs.py:10636
+#: ui_dialogs.py:10672
 #, python-brace-format
 msgid ""
 "\n"
@@ -10096,83 +10123,83 @@ msgstr ""
 "\n"
 "Ligne en échec {n} : {l}"
 
-#: ui_dialogs.py:10668
+#: ui_dialogs.py:10704
 #, python-brace-format
 msgid "Jog the head to your material's bottom-left corner, then click {label}."
 msgstr "Déplacez la tête au coin bas-gauche du matériau, puis cliquez sur {label}."
 
-#: ui_dialogs.py:10744
+#: ui_dialogs.py:10787
 #, python-brace-format
 msgid "Timed out waiting for Idle (state={s})"
 msgstr "Délai d'attente d'Idle dépassé (état={s})"
 
-#: ui_dialogs.py:10773
+#: ui_dialogs.py:10816
 #, python-brace-format
 msgid "Regenerate failed: {e}"
 msgstr "Échec de la régénération : {e}"
 
-#: ui_dialogs.py:10780
+#: ui_dialogs.py:10823
 #, python-brace-format
 msgid "Restart failed: {e}"
 msgstr "Échec du redémarrage : {e}"
 
-#: ui_dialogs.py:10827
+#: ui_dialogs.py:10870
 msgid "Lid Closed?"
 msgstr "Capot fermé ?"
 
-#: ui_dialogs.py:10827
+#: ui_dialogs.py:10870
 msgid "Is the lid closed?"
 msgstr "Le capot est-il fermé ?"
 
-#: ui_dialogs.py:10828
+#: ui_dialogs.py:10871
 msgid "Yes, Start Frame"
 msgstr "Oui, démarrer l'encadrement"
 
-#: ui_dialogs.py:10842 ui_dialogs.py:11017
+#: ui_dialogs.py:10885 ui_dialogs.py:11063
 msgid "Finishing pass..."
 msgstr "Fin de la passe..."
 
-#: ui_dialogs.py:10846
+#: ui_dialogs.py:10889
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Coupe demandée — fin de la passe d'encadrement en cours..."
 
-#: ui_dialogs.py:10871
+#: ui_dialogs.py:10917
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Tête positionnée. Cliquez {label} quand vous êtes prêt."
 
-#: ui_dialogs.py:10885
+#: ui_dialogs.py:10931
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "L'origine va interrompre le job en cours. Continuer ?"
 
-#: ui_dialogs.py:10928
+#: ui_dialogs.py:10974
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Origine terminée. MPos est maintenant (0, 0)."
 
-#: ui_dialogs.py:10930
+#: ui_dialogs.py:10976
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Échec de l'origine : {m}"
 
-#: ui_dialogs.py:10957
+#: ui_dialogs.py:11003
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Échec de la localisation auto : {e}"
 
-#: ui_dialogs.py:10959
+#: ui_dialogs.py:11005
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Déplacement vers le BL du polygone à MPos ({x:.1f}, {y:.1f}) …"
 
-#: ui_dialogs.py:11021
+#: ui_dialogs.py:11067
 msgid "Finishing current pass + centering head..."
 msgstr "Fin de la passe en cours et centrage de la tête..."
 
-#: ui_dialogs.py:11026
+#: ui_dialogs.py:11072
 msgid "Stop?"
 msgstr "Arrêter ?"
 
-#: ui_dialogs.py:11027
+#: ui_dialogs.py:11073
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -10180,29 +10207,29 @@ msgstr ""
 "Arrêter le travail ? Cela fera un soft-reset du laser et videra "
 "immédiatement le buffer du planner. Le matériau en cours peut être abîmé."
 
-#: ui_dialogs.py:11053
+#: ui_dialogs.py:11099
 msgid "Stop and close?"
 msgstr "Arrêter et fermer ?"
 
-#: ui_dialogs.py:11054
+#: ui_dialogs.py:11100
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Un travail est toujours en cours. L'arrêter et fermer la fenêtre ?"
 
-#: ui_dialogs.py:11084 ui_dialogs.py:11094
+#: ui_dialogs.py:11130 ui_dialogs.py:11140
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Écoulé {em}:{es:02d}"
 
-#: ui_dialogs.py:11091
+#: ui_dialogs.py:11137
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Écoulé {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs.py:11117
+#: ui_dialogs.py:11163
 msgid "Live camera"
 msgstr "Caméra en direct"
 
-#: ui_dialogs.py:11137
+#: ui_dialogs.py:11184
 msgid "Camera preview unavailable"
 msgstr "Aperçu caméra indisponible"
 

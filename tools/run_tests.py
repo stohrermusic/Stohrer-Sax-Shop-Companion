@@ -31,7 +31,117 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.path.join(ROOT, "tools")
 WAV_CORPUS = r"C:\sax shop companion\recordings"
-TIMEOUT_S = 900
+# Per suite. The slowest suite takes about 135 s locally and 150 s on CI's
+# Intel Mac; a suite past this is hung, not slow. SSC_SUITE_TIMEOUT_S
+# overrides it (a slow machine, a profiling run). Until 2026-11-10 this was
+# 900 s, and a hung suite cost a CI job fifteen minutes before it was named.
+TIMEOUT_S = int(os.environ.get("SSC_SUITE_TIMEOUT_S", "300"))
+
+
+def _popen_kwargs():
+    """Start each suite in its own process group, so a hung one can be
+    killed with every child it started (a --selftest child, a tour)."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _kill_tree(proc):
+    """Kill the suite and everything it started. subprocess.run(timeout=)
+    kills only the direct child and then waits for its pipes to close,
+    which a grandchild holding stdout keeps open for ever: the Linux CI
+    job of 2026-11-10 sat 33 minutes past a hung suite that way."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=30)
+        else:
+            import signal
+            os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:  # noqa: BLE001  (the process may be gone already)
+        pass
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+SITECUSTOMIZE = '''\
+# Written by tools/run_tests.py for each suite's interpreter (run_suite): arms
+# faulthandler so a suite that hangs writes every thread's stack into its own
+# output shortly before the runner kills it. Three intermittent CI hangs on
+# 2026-11-10 left no trace of where they were; this is what makes the next
+# one diagnosable.
+import faulthandler
+import os
+import sys
+try:
+    faulthandler.enable()
+    _s = float(os.environ.get("SSC_FAULTHANDLER_S", "0") or 0)
+    if _s > 0:
+        faulthandler.dump_traceback_later(_s, repeat=False, exit=False)
+except Exception:
+    pass
+# Python imports only the first sitecustomize on sys.path: hand over to any
+# other one further along (a developer's backstop on PYTHONPATH).
+try:
+    import importlib.util
+    _here = os.path.dirname(os.path.abspath(__file__))
+    for _p in sys.path:
+        _cand = os.path.join(_p or os.getcwd(), "sitecustomize.py")
+        if os.path.isfile(_cand) and os.path.dirname(os.path.abspath(_cand)) != _here:
+            _spec = importlib.util.spec_from_file_location("sitecustomize_next", _cand)
+            _spec.loader.exec_module(importlib.util.module_from_spec(_spec))
+            break
+except Exception:
+    pass
+'''
+_FAULTHANDLER_SITE = None
+
+
+def _faulthandler_site():
+    """The folder holding the sitecustomize above, made once per run."""
+    global _FAULTHANDLER_SITE
+    if _FAULTHANDLER_SITE is None:
+        d = tempfile.mkdtemp(prefix="ssc-faulthandler-")
+        with open(os.path.join(d, "sitecustomize.py"), "w", encoding="utf-8") as f:
+            f.write(SITECUSTOMIZE)
+        _FAULTHANDLER_SITE = d
+    return _FAULTHANDLER_SITE
+
+
+def dump_at(timeout_s):
+    """When the suite's own faulthandler dump fires: 15 s before the kill,
+    or at 60 % of a short timeout."""
+    return timeout_s - 15 if timeout_s > 30 else timeout_s * 0.6
+
+
+def run_suite(cmd, cwd, env, timeout_s=None):
+    """Run one suite to completion or the timeout. Returns (exit code, its
+    output). The output goes to a file, not a pipe, so a timed-out suite's
+    output so far is read back after it is killed, and no pipe can hold
+    the runner once the process tree is gone. The suite's interpreter
+    arms faulthandler (SITECUSTOMIZE on PYTHONPATH, SSC_FAULTHANDLER_S), so
+    a hung suite's output ends with every thread's stack."""
+    timeout_s = TIMEOUT_S if timeout_s is None else timeout_s
+    env = dict(env)
+    env["SSC_FAULTHANDLER_S"] = f"{dump_at(timeout_s):.1f}"
+    site = _faulthandler_site()
+    env["PYTHONPATH"] = site + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    with tempfile.TemporaryFile() as log:
+        proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
+                                **_popen_kwargs())
+        try:
+            code = proc.wait(timeout=timeout_s)
+            timed_out = False
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            code, timed_out = 124, True
+        log.seek(0)
+        out = log.read().decode("utf-8", "replace")
+    if timed_out:
+        out = f"TIMEOUT after {timeout_s}s; killed. The suite's output so far:\n" + out
+    return code, out
 
 
 def summary_line(output):
@@ -90,16 +200,19 @@ def main(argv):
             continue
         t0 = time.time()
         run_env, config_folder = suite_env(env, name)
+        # Named before it starts, so a hung job's log says where it is.
+        print(f"..   {name}", flush=True)
         try:
-            r = subprocess.run([sys.executable, os.path.join(TOOLS, fname)], cwd=ROOT, env=run_env,
-                               capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               timeout=TIMEOUT_S)
-            code, out = r.returncode, (r.stdout or "") + (r.stderr or "")
-        except subprocess.TimeoutExpired as e:
-            code, out = 124, f"TIMEOUT after {TIMEOUT_S}s\n" + str(e.stdout or "")
+            code, out = run_suite([sys.executable, os.path.join(TOOLS, fname)], ROOT, run_env)
         finally:
             if config_folder:
                 shutil.rmtree(config_folder, ignore_errors=True)
+        if code == 124:
+            # Say it now, with the tail of what the suite printed (its own
+            # faulthandler dump of every thread is the end of it): the
+            # summary at the end may never be reached if the job is killed.
+            print(f"TIMEOUT {name}: killed after {TIMEOUT_S}s; its last lines:", flush=True)
+            print("\n".join("    " + ln for ln in out.splitlines()[-80:]), flush=True)
         ran += 1
         missing = next((m for m in allow_missing if f"No module named '{m}'" in out), None)
         if code != 0 and missing:
