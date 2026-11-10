@@ -768,6 +768,38 @@ def gui():
     main_mod.machine_supported = real_supported
 
 
+def the_falcon_suite_opens_no_real_port():
+    """tools/test_falcon_sender.py, run in a child with pyserial's Serial replaced by
+    a class that raises and its port enumeration by one that raises, must still pass:
+    the suite touches no real port. Until 2026-11-10 its smoke section called the real
+    list_serial_ports() and auto_detect_falcon(), which opened every serial port on the
+    test machine and soft-reset a device that did not answer "?" (Matt's Falcon is on
+    this machine). A real open or a real enumeration anywhere in that suite fails here."""
+    import subprocess
+    suite = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_falcon_sender.py")
+    code = (
+        "import runpy, sys\n"
+        "import serial, serial.tools.list_ports\n"
+        "class Boom:\n"
+        "    def __init__(self, *a, **k):\n"
+        "        raise AssertionError('a real serial port was opened: %r' % (a,))\n"
+        "def no_ports(*a, **k):\n"
+        "    raise AssertionError('real serial ports were enumerated')\n"
+        "serial.Serial = Boom\n"
+        "serial.tools.list_ports.comports = no_ports\n"
+        f"runpy.run_path({suite!r}, run_name='__main__')\n"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=300,
+                       env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    tail = (r.stdout + r.stderr)[-1500:]
+    assert r.returncode == 0, f"test_falcon_sender touched a real port or failed under the stand-ins:\n{tail}"
+    assert "a real serial port was opened" not in tail and "real serial ports were enumerated" not in tail, tail
+    assert "ALL" in tail.upper() or "passed" in tail, tail
+
+
+check("tools/test_falcon_sender.py passes with serial.Serial and the port list replaced by raising stand-ins: "
+      "it opens no real port", the_falcon_suite_opens_no_real_port)
+
 gui()
 print("=" * 60)
 print(f"{sum(results)}/{len(results)} passed")

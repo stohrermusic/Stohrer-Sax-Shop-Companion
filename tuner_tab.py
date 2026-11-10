@@ -1420,7 +1420,7 @@ class TunerTabMixin:
         if self._tuner_anim_id is not None:
             try:
                 self.root.after_cancel(self._tuner_anim_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._tuner_anim_id = None
 

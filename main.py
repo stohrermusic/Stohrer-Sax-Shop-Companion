@@ -1224,10 +1224,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 try:
                     inset_polygon = camera_capture.inset_polygon_mm(
                         outline, inset_mm)
-                except Exception:
-                    pass  # fall back to uninsetted on failure
-        except ImportError:
-            pass
+                except Exception as e:  # fall back to uninsetted on failure
+                    logging.getLogger("ssc.machine").warning(
+                        "camera shape: the %s mm safety inset failed, so pads will nest on the uninset outline: %s",
+                        inset_mm, e)
+        except ImportError as e:
+            logging.getLogger("ssc.machine").warning(
+                "camera shape: could not load camera_capture, so the %s mm safety inset was not applied: %s",
+                self.settings.get("camera_polygon_inset_mm", 3.0), e)
         # Pass BOTH to the shared adopter so the inset polygon (for
         # nesting) and the outline (for framing) share an origin.
         self._set_custom_polygon_from_y_up(
@@ -2795,8 +2799,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             self.settings["camera_index_override"] = int(index)
             from config import save_settings
             save_settings(self.settings)
-        except Exception:
-            pass  # never block on settings save
+        except Exception as e:  # never block on settings save
+            logging.getLogger("ssc.machine").warning(
+                "could not save the camera number %s to the settings: %s", index, e)
 
     def _run_blocking_home(self, sender):
         """Send $H on a worker thread, show the homing-status modal,
@@ -3237,7 +3242,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         win.resizable(False, False)
         try:
             win.grab_set()
-        except Exception:
+        except tk.TclError:
             pass
         tk.Label(win, text=_("Homing the laser...\n\n"
                               "Head is moving to the home corner."),
@@ -3253,7 +3258,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                  + (self.root.winfo_height() // 2)
                  - (win.winfo_height() // 2))
             win.geometry(f"+{x}+{y}")
-        except Exception:
+        except tk.TclError:
             pass
         self._homing_status_win = win
         win.update()
@@ -3263,7 +3268,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if win is not None:
             try:
                 win.destroy()
-            except Exception:
+            except tk.TclError:
                 pass
             self._homing_status_win = None
 
@@ -3323,7 +3328,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             import sleep_lock
             sleep_lock.prevent_sleep()
         except Exception:
-            pass
+            logging.getLogger("ssc.machine").exception(
+                "Frame & Cut: could not take the sleep lock; the computer may sleep during the cut")
 
         try:
             if tooling_job is None:
@@ -3428,7 +3434,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 finally:
                     try:
                         _os.remove(tmp_path)
-                    except Exception:
+                    except OSError:
                         pass
 
                 # What the machine half below takes from a pad job.
@@ -3536,7 +3542,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                             try:
                                 existing.lift()
                                 existing.focus_force()
-                            except Exception:
+                            except tk.TclError:
                                 pass
                         elif camera_capture.HAS_OPENCV:
                             cam_idx = self._resolve_camera_index()
@@ -3544,8 +3550,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                                 self._live_cam_window = LiveCameraWindow(
                                     self.root, camera_index=cam_idx,
                                     settings=self.settings)
-                    except Exception:
-                        pass  # never block the cut on preview failure
+                    except Exception:  # never block the cut on preview failure
+                        logging.getLogger("ssc.machine").exception(
+                            "Frame & Cut: could not open the live camera preview")
 
                 # After our connect+soft-reset, Grbl is in alarm state
                 # (homing required). $X clears that so motion is allowed.
@@ -5177,9 +5184,14 @@ def _selftest(root):
                 raise RuntimeError(f"selftest: tab missing: {attr}")
         root.update_idletasks()
         root.update()
+        # The shipped bundle can verify stohrermusic.com: certifi's CA bundle
+        # was packed and is found (no network; the Intel Mac's only check).
+        from config import assert_tls_ready
+        n_ca = assert_tls_ready()
         from config import APP_VERSION as _ver
         _say(f"selftest ok: {_ver} on {sys.platform}, "
-             f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}")
+             f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}, "
+             f"{n_ca} CA certificates")
     except BaseException:
         _say("selftest FAILED:\n" + traceback.format_exc())
         try:
@@ -5255,7 +5267,8 @@ if __name__ == '__main__':
     try:
         app._refresh_machine_ui_state()
     except Exception:
-        pass
+        logging.getLogger(__name__).exception(
+            "could not set up the Machine menu and Frame & Cut buttons at launch")
     # Detect the Falcon (Grbl) controller in the background only if
     # the user has opted into the experimental Machine menu — there's
     # no point probing USB serial ports for a user who never plans to

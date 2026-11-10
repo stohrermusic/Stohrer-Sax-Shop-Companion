@@ -1,6 +1,9 @@
-# Runtime and build dependencies. Lower bounds prevent ancient-version
-# surprises (e.g. pre-numpy-2 APIs). For fully reproducible CI builds,
-# generate a lockfile:  pip freeze > requirements-lock.txt
+# Runtime and build dependencies: the floors anyone running from source
+# installs (lower bounds keep out ancient-version surprises, e.g. pre-numpy-2
+# APIs). CI installs the exact versions in locks/ with hashes; after editing
+# this file or locks/*.in, run `python tools/update_locks.py` (needs
+# `pip install uv`). The lint job re-resolves the locks and fails on any
+# difference, so they cannot drift from these floors.
 svgwrite>=1.4
 pyinstaller>=6.0
 numpy>=1.26

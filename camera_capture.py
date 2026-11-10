@@ -1018,6 +1018,11 @@ def inset_polygon_mm(polygon_mm, inset_mm, resolution_per_mm=10):
     return result
 
 
+# pixels_to_mm's schema-1 Y correction failures: the first is logged, the
+# rest only counted (it runs per frame while the capture dialog is open).
+_schema1_fix_failures = {'count': 0}
+
+
 def pixels_to_mm(polygon_px, calibration):
     """Apply the pixel→machine-mm homography to convert a pixel-coord
     polygon into MACHINE-MM coordinates.
@@ -1063,8 +1068,13 @@ def pixels_to_mm(polygon_px, calibration):
                        * float(board_info.get('square_mm', CHARUCO_SQUARE_MM)))
             k = 2 * offset_y + 2 * border + label_h + board_h
             out = [(x, k - y) for (x, y) in out]
-        except (TypeError, ValueError, KeyError):
-            pass
+        except (TypeError, ValueError, KeyError) as e:
+            # Runs per frame in the capture dialog: say it once, count the rest.
+            _schema1_fix_failures['count'] += 1
+            if _schema1_fix_failures['count'] == 1:
+                log.warning("old (schema 1) camera calibration: could not "
+                            "correct its Y axis, so captured outlines may be "
+                            "mirrored; recalibrating fixes it: %s", e)
     return out
 
 

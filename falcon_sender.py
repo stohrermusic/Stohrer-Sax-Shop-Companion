@@ -547,8 +547,10 @@ class FalconSender:
             try:
                 self._serial.reset_input_buffer()
                 self._serial.write(RT_STATUS)
-            except (serial.SerialException, OSError):
-                pass
+            except (serial.SerialException, OSError) as e:
+                _log_throttled(logging.WARNING, ('query', self.port, str(e)),
+                               "connect %s: could not send the status query: %s",
+                               self.port, e)
             time.sleep(0.2)
             try:
                 buf = self._serial.read(self._serial.in_waiting or 256)
@@ -619,8 +621,11 @@ class FalconSender:
                 return
             try:
                 self._serial.write(byte)
-            except (serial.SerialException, OSError):
-                pass
+            except (serial.SerialException, OSError) as e:
+                _log_throttled(logging.WARNING,
+                               ('realtime', self.port, byte, str(e)),
+                               "could not send real-time command %r to the "
+                               "laser on %s: %s", byte, self.port, e)
 
     def pause(self):
         """Feed hold — pauses motion; laser stays in current state."""
@@ -841,8 +846,9 @@ class FalconSender:
             try:
                 if self._serial is not None:
                     self._serial.reset_input_buffer()
-            except (serial.SerialException, OSError):
-                pass
+            except (serial.SerialException, OSError) as e:
+                log.warning("stream start: could not clear the serial input "
+                            "buffer on %s: %s", self.port, e)
         # Log the first few lines of every stream so we have a trail
         # if Grbl errors out mid-stream and the user closes the dialog
         # before reading the failing-line label.
@@ -1145,7 +1151,8 @@ class FalconSender:
                             try:
                                 self.on_alarm(text)
                             except Exception:
-                                pass
+                                log.exception("the laser dialog's alarm "
+                                              "handler failed (%s)", text)
                         reason = "error"
                         finished_sending = True
                         ack_count = line_idx
@@ -1172,8 +1179,12 @@ class FalconSender:
                             if self.on_status:
                                 try:
                                     self.on_status(parsed)
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    _log_throttled(
+                                        logging.WARNING,
+                                        ('cb', 'on_status', repr(e)),
+                                        "the laser dialog's status handler "
+                                        "failed: %r", e)
 
             # 3) Poll status periodically
             now = time.monotonic()
@@ -1269,8 +1280,12 @@ class FalconSender:
                             if self.on_status:
                                 try:
                                     self.on_status(parsed)
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    _log_throttled(
+                                        logging.WARNING,
+                                        ('cb', 'on_status', repr(e)),
+                                        "the laser dialog's status handler "
+                                        "failed: %r", e)
                             if parsed.get('state') in ('Idle', 'Alarm'):
                                 return
 
@@ -1282,19 +1297,24 @@ class FalconSender:
         if self.on_progress:
             try:
                 self.on_progress(sent, total)
-            except Exception:
-                pass
+            except Exception as e:
+                _log_throttled(logging.WARNING,
+                               ('cb', 'on_progress', repr(e)),
+                               "the laser dialog's progress handler "
+                               "failed: %r", e)
 
     def _notify_error(self, msg):
         if self.on_error:
             try:
                 self.on_error(msg)
             except Exception:
-                pass
+                log.exception("the laser dialog's error handler failed (%s)",
+                              msg)
 
     def _notify_done(self, reason):
         if self.on_done:
             try:
                 self.on_done(reason)
             except Exception:
-                pass
+                log.exception("the laser dialog's end-of-run handler failed "
+                              "(reason %s)", reason)

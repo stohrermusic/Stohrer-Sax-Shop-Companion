@@ -17,6 +17,7 @@ Requires: numpy, sounddevice (graceful fallback if unavailable)
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import logging
 import math
 import os
 import sys
@@ -1234,13 +1235,13 @@ class TonerTabMixin:
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 4))
 
         field_labels = [
-            ("serial", "Serial #"),
-            ("reed", "Reed"),
-            ("ligature", "Ligature"),
-            ("mic_position", "Mic Position"),
-            ("room", "Room / Environment"),
-            ("preamp", "Preamp / Interface"),
-            ("notes", "Notes"),
+            ("serial", _("Serial #")),
+            ("reed", _("Reed")),
+            ("ligature", _("Ligature")),
+            ("mic_position", _("Mic Position")),
+            ("room", _("Room / Environment")),
+            ("preamp", _("Preamp / Interface")),
+            ("notes", _("Notes")),
         ]
         field_help = {
             "serial": "Adds a Serial number field to the preset form so "
@@ -1330,7 +1331,7 @@ class TonerTabMixin:
         analysis_desc = toner_settings.get("analysis_descriptors", {})
 
         descriptor_info = [
-            ("richness", "Harmonic Complexity", None,
+            ("richness", _("Harmonic Complexity"), None,
              "Spectral flatness \u2014 how evenly energy is spread "
              "across the harmonic series.\n\n"
              "Higher values = many harmonics at similar strength "
@@ -1339,12 +1340,12 @@ class TonerTabMixin:
              "(purer, simpler tone).\n\n"
              "Note: Ribbon mics roll off upper harmonics and cannot "
              "accurately measure this descriptor."),
-            ("warmth", "Warmth", None,
+            ("warmth", _("Warmth"), None,
              "Strength of the second harmonic (H2, one octave above "
              "the fundamental) relative to the fundamental.\n\n"
              "Higher values = strong octave harmonic (warm, full tone).\n"
              "Lower values = weak octave harmonic (thinner tone)."),
-            ("even_odd", "Even/Odd Harmonic Balance", "beta",
+            ("even_odd", _("Even/Odd Harmonic Balance"), "beta",
              "Measures the ratio of even harmonic energy (H2, H4, H6...) "
              "to odd harmonic energy (H3, H5, H7...).\n\n"
              "Higher values = more even-dominant (rounder quality).\n"
@@ -1352,14 +1353,14 @@ class TonerTabMixin:
              "This descriptor shows good differentiation across horns but "
              "is not an established measurement in saxophone acoustics. "
              "Treat it as experimental."),
-            ("rolloff_shape", "Rolloff Shape", "beta",
+            ("rolloff_shape", _("Rolloff Shape"), "beta",
              "Measures how smoothly harmonics decrease in strength "
              "vs having bumps or peaks in the harmonic series.\n\n"
              "Higher values = more spectral peaks that stick out.\n"
              "Lower values = smooth, even rolloff.\n\n"
              "This is a signal processing metric, not an established "
              "measurement in saxophone acoustics. Treat it as experimental."),
-            ("evenness", "Evenness", "beta",
+            ("evenness", _("Evenness"), "beta",
              "How uniform the harmonic complexity stays across the "
              "horn's register, note to note.\n\n"
              "Higher values = the horn's character stays consistent "
@@ -1794,7 +1795,7 @@ class TonerTabMixin:
             val = d.get(data_key or key, default)
             row = tk.Frame(frame, bg=bg)
             row.pack(fill="x", pady=2)
-            tk.Label(row, text=label, bg=bg, fg=fg, width=14,
+            tk.Label(row, text=label, bg=bg, fg=fg, width=label_w,
                      anchor="e", font=("Helvetica", 10)).pack(
                 side="left", padx=(0, 8))
             if widget_type == "combo":
@@ -1832,22 +1833,23 @@ class TonerTabMixin:
             side="left", fill="x", expand=True)
 
         # Required fields
-        add_field("Preset Name:", "name")
-        add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
-        add_field("Make:", "horn_make")
-        add_field("Model:", "horn_model")
-        add_field("Player:", "player")
-        add_field("Mouthpiece:", "mouthpiece")
-        add_field("Mic Type:", "mic_type", "", widget_type="mic_combo")
-        add_field("Mic Model:", "mic_model", "")
+        label_w = max(14, max(len(t) for t in (_("Preset Name"), _("Horn Type"), _("Make"), _("Model"), _("Player"), _("Mouthpiece"), _("Mic Type"), _("Mic Model"), _("Serial #"), _("Reed"), _("Ligature"), _("Mic Position"), _("Room"), _("Preamp"))) + 1)
+        add_field(_("Preset Name") + ":", "name")
+        add_field(_("Horn Type") + ":", "horn_type", "Alto", widget_type="combo")
+        add_field(_("Make") + ":", "horn_make")
+        add_field(_("Model") + ":", "horn_model")
+        add_field(_("Player") + ":", "player")
+        add_field(_("Mouthpiece") + ":", "mouthpiece")
+        add_field(_("Mic Type") + ":", "mic_type", "", widget_type="mic_combo")
+        add_field(_("Mic Model") + ":", "mic_model", "")
 
         # Optional fields (shown based on visible_preset_fields settings)
-        add_field("Serial #:", "serial", optional_key="serial")
-        add_field("Reed:", "reed", optional_key="reed")
-        add_field("Ligature:", "ligature", optional_key="ligature")
-        add_field("Mic Position:", "mic_position", optional_key="mic_position")
-        add_field("Room:", "room", optional_key="room")
-        add_field("Preamp:", "preamp", optional_key="preamp")
+        add_field(_("Serial #") + ":", "serial", optional_key="serial")
+        add_field(_("Reed") + ":", "reed", optional_key="reed")
+        add_field(_("Ligature") + ":", "ligature", optional_key="ligature")
+        add_field(_("Mic Position") + ":", "mic_position", optional_key="mic_position")
+        add_field(_("Room") + ":", "room", optional_key="room")
+        add_field(_("Preamp") + ":", "preamp", optional_key="preamp")
 
         # Sandbox checkbox (only when enabled in settings)
         sandbox_var = None
@@ -1888,16 +1890,16 @@ class TonerTabMixin:
         In sandbox mode, only the preset name is required.
         """
         if sandbox:
-            required = [("name", "Preset Name")]
+            required = [("name", _("Preset Name"))]
         else:
             required = [
-                ("name", "Preset Name"),
-                ("horn_make", "Make"),
-                ("horn_model", "Model"),
-                ("player", "Player"),
-                ("mouthpiece", "Mouthpiece"),
-                ("mic_type", "Mic Type"),
-                ("mic_model", "Mic Model"),
+                ("name", _("Preset Name")),
+                ("horn_make", _("Make")),
+                ("horn_model", _("Model")),
+                ("player", _("Player")),
+                ("mouthpiece", _("Mouthpiece")),
+                ("mic_type", _("Mic Type")),
+                ("mic_model", _("Mic Model")),
             ]
         for key, label in required:
             if key in fields and not fields[key].get().strip():
@@ -4081,10 +4083,10 @@ class TonerTabMixin:
             # independent of Warmth (r ~ 0.16 within altos), so it makes
             # the chart actually function as a 2D character space rather
             # than a diagonal trend.
-            quad_brightness_var = tk.StringVar(value="Complexity")
+            quad_brightness_var = tk.StringVar(value=_("Complexity"))
             quad_brightness_combo = ttk.Combobox(
                 quad_top, textvariable=quad_brightness_var,
-                values=["Complexity", "H4-H5 mean", "Rolloff (inverted)"],
+                values=[_("Complexity"), _("H4-H5 mean"), _("Rolloff (inverted)")],
                 state="readonly", width=18, font=("Helvetica", 8))
             quad_brightness_combo.pack(side="left", padx=(4, 0))
             quad_brightness_combo.bind(
@@ -4099,9 +4101,9 @@ class TonerTabMixin:
             def get_brightness(fp):
                 """Y-axis value for a fingerprint based on selected measure."""
                 measure = quad_brightness_var.get()
-                if measure == "Complexity":
+                if measure == _("Complexity"):
                     return fp.get('descriptors', {}).get('richness', 0.0)
-                if measure == "Rolloff (inverted)":
+                if measure == _("Rolloff (inverted)"):
                     r = fp.get('rolloff_rate')
                     if r is None:
                         return None
@@ -4141,7 +4143,7 @@ class TonerTabMixin:
 
                 # Y-axis range
                 measure = quad_brightness_var.get()
-                if measure in ("Complexity", "Rolloff (inverted)"):
+                if measure in (_("Complexity"), _("Rolloff (inverted)")):
                     y_min, y_max = 0.0, 1.0
                 else:
                     # H4-H5 mean: auto-scale with padding
@@ -4203,16 +4205,16 @@ class TonerTabMixin:
                 for frac in (0.0, 0.5, 1.0):
                     val = y_min + (y_max - y_min) * frac
                     y = chart_top + ch * (1.0 - frac)
-                    if measure == "H4-H5 mean":
+                    if measure == _("H4-H5 mean"):
                         tick_text = f"{val:+.1f}"
                     else:
                         tick_text = f"{val:.2f}"
                     quad_cv.create_text(
                         chart_left - 4, y, text=tick_text,
                         fill="#888888", font=("Helvetica", 7), anchor="e")
-                if measure == "H4-H5 mean":
+                if measure == _("H4-H5 mean"):
                     y_title = "\u2190 dark   H4\u2013H5 dB   bright \u2192"
-                elif measure == "Complexity":
+                elif measure == _("Complexity"):
                     y_title = "\u2190 pure   Complexity   complex \u2192"
                 else:
                     y_title = "\u2190 dark   Rolloff (inv)   bright \u2192"
@@ -4302,11 +4304,11 @@ class TonerTabMixin:
         table_inner.pack(fill="x", padx=5, pady=5)
 
         all_desc_labels = [
-            ("H. Complexity", "richness"),
-            ("Warmth", "warmth"),
-            ("Even H. Bal.", "even_odd"),
-            ("Rolloff Shape", "rolloff_shape"),
-            ("Evenness", "evenness"),
+            (_("H. Complexity"), "richness"),
+            (_("Warmth"), "warmth"),
+            (_("Even H. Bal."), "even_odd"),
+            (_("Rolloff Shape"), "rolloff_shape"),
+            (_("Evenness"), "evenness"),
         ]
         analysis_desc = self.settings.get("toner_settings", {}).get(
             "analysis_descriptors", {"richness": True, "warmth": True})
@@ -4891,8 +4893,8 @@ class TonerTabMixin:
 
         gd = grp['descriptors']
         gs = grp['descriptor_stats']
-        for label, key in [("H. Complexity", "richness"),
-                           ("Warmth", "warmth")]:
+        for label, key in [(_("H. Complexity"), "richness"),
+                           (_("Warmth"), "warmth")]:
             val = gd.get(key, 0)
             col = tk.Frame(desc_row, bg=bg)
             col.pack(side="left", expand=True)
@@ -5162,7 +5164,7 @@ class TonerTabMixin:
         if self._toner_anim_id is not None:
             try:
                 self.root.after_cancel(self._toner_anim_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._toner_anim_id = None
 
@@ -5410,7 +5412,7 @@ class TonerTabMixin:
         def add_field(label, key, default="", widget_type="entry"):
             row = tk.Frame(frame, bg=bg)
             row.pack(fill="x", pady=2)
-            tk.Label(row, text=label, bg=bg, fg=fg, width=14,
+            tk.Label(row, text=label, bg=bg, fg=fg, width=label_w,
                      anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
             if widget_type == "combo":
                 var = tk.StringVar(value=default)
@@ -5438,14 +5440,15 @@ class TonerTabMixin:
                       values=existing_libs, width=20).pack(
             side="left", fill="x", expand=True)
 
-        add_field("Preset Name:", "name")
-        add_field("Horn Type:", "horn_type", "Alto", widget_type="combo")
-        add_field("Make:", "horn_make")
-        add_field("Model:", "horn_model")
-        add_field("Serial #:", "serial")
-        add_field("Player:", "player")
-        add_field("Mouthpiece:", "mouthpiece")
-        add_field("Reed:", "reed")
+        label_w = max(14, max(len(t) for t in (_("Preset Name"), _("Horn Type"), _("Make"), _("Model"), _("Player"), _("Mouthpiece"), _("Mic Type"), _("Mic Model"), _("Serial #"), _("Reed"), _("Ligature"), _("Mic Position"), _("Room"), _("Preamp"))) + 1)
+        add_field(_("Preset Name") + ":", "name")
+        add_field(_("Horn Type") + ":", "horn_type", "Alto", widget_type="combo")
+        add_field(_("Make") + ":", "horn_make")
+        add_field(_("Model") + ":", "horn_model")
+        add_field(_("Serial #") + ":", "serial")
+        add_field(_("Player") + ":", "player")
+        add_field(_("Mouthpiece") + ":", "mouthpiece")
+        add_field(_("Reed") + ":", "reed")
 
         # Notes — multi-line
         notes_row = tk.Frame(frame, bg=bg)
@@ -5755,8 +5758,9 @@ class TonerTabMixin:
                 and getattr(self, '_toner_free_accumulator', None)):
             try:
                 self._toner_free_save_micro_capture()
-            except Exception:
-                pass  # exiting — never block shutdown on a capture flush
+            except Exception:  # exiting — never block shutdown on a capture flush
+                logging.getLogger(__name__).exception(
+                    "could not save the last tone captures on exit")
         if self._toner_active_session and self._toner_active_preset:
             self._toner_save_active_session()
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)

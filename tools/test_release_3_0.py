@@ -497,6 +497,8 @@ GUARDED_SUITES = (
     "test_camera_fallback",
     # the User Guide (2026-11-09, the guide upgrade)
     "test_user_guide",
+    # the web imports' TLS context (2026-11-10, housekeeping: drives the three importers)
+    "test_tls_context",
 )
 
 

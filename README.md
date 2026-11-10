@@ -14,6 +14,7 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - G-code for Grbl-based lasers with per-material speed, power, and passes
 - SVG for LightBurn or other laser software (color layers map to operations)
 - Generate felt, card, leather, and exact size patterns
+- **Adhesive rings (beta)** — a ring of double-sided tape per pad, for sticking a thin silicone wrap to the back of the card. Opt in under Sizing Rules > Lesser-used settings.
 
 #### Nesting & Layout
 - Smart circle-packing algorithm to maximize material usage
@@ -45,18 +46,18 @@ Generate laser-cutting files for felt, card, leather, and exact-size pad materia
 - Notes field for annotating presets
 - Import Matt's Pad Sets from [stohrermusic.com](https://www.stohrermusic.com/articles/pad-sets-library/)
 - Import/export for sharing with colleagues
-- **Job History** (File > Job History) — a log of every batch that reached an output stage, with its pad list, materials, and sheet size. Load a past job back into the form to re-cut it.
+- **Job History** (File > Job History) — a log of every batch that reached an output stage, with its pad list, materials, and sheet size. Load a past job back into the form to re-cut it. Tooling runs are logged too.
 
 #### Machine Integration (experimental, opt-in)
 
 ![Draw / Capture Shape with live camera overlay, scrap traced with 16 free vertices](img/polygon_camera_overlay.png)
 
-Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W tested; other Grbl machines should work — opt in via **File > Feature Set > "Experimental: machine integration"**).
+Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W tested; other Grbl machines should work — opt in via **File > Feature Set > "Machine menu (direct Falcon serial control)"**). The laser can be plugged in after the app has started; the Frame & Cut buttons appear when it is detected.
 
-- **Camera Calibration** — one-time ChArUco-card workflow. Engrave the card on basswood, capture 12 frames; the app then knows where the camera sees vs. where the laser cuts.
+- **Frame & Cut** — a third button next to Generate SVG / Generate G-code, on the Pad Maker and on every Tooling tool that makes G-code. Generates the G-code in memory, positions the head (Home Laser, jog buttons, optional "Try Auto Locate"), low-power framing pass for verification, then streams the cut. Pause / Resume / Stop in real time. Needs no camera calibration.
+- **Camera Calibration** — one-time ChArUco-card workflow. Engrave the card on basswood, capture 12 frames; the app then knows where the camera sees vs. where the laser cuts. Everything that uses the camera needs it.
 - **Get from Camera** in the polygon-draw dialog — auto-detect a scrap outline and use it as your custom shape.
 - **Live camera overlay** in the polygon-draw dialog — trace your scrap by eye on top of the live camera image at 1:1 scale.
-- **Frame & Cut** — a third button next to Generate SVG / Generate G-code. Generates the G-code in memory, positions the head (Home Laser, jog buttons, optional "Try Auto Locate"), low-power framing pass for verification, then streams the cut. Pause / Resume / Stop in real time.
 - **Inset Margin** — adds a safety margin to placement on scraps so you don't accidentally clip an edge. Frame still traces the actual scrap outline; cuts respect the safety boundary.
 - **Machine menu** (Options > Machine): Home Laser, Test Connection, Clear Errors, Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin, Framing Power.
 
@@ -77,12 +78,13 @@ Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W t
 ### Tooling
 - **Die Inserts** — laser-cut acrylic dies (small: 50mm OD, large: 70mm OD). Enter individual sizes, ranges, or generate full sets. Scrap mode for spreading dies across multiple sheets.
 - **Die Holders** — 85mm OD stack. Pick 5-layer (solid + magnet + 2× pin + ring) or 6-layer (solid + magnet + 3× pin + ring), and variant Large / Small / Both (Both nests two complete independent holders onto a single sheet). User-defined sheet size with a clear minimum-size error if pieces don't fit.
-- **Die Organizer** — SVG templates for a stackable die organizer (230 × 330 mm). Cut three Uppers and one Lower, align the four 1/8″ corner holes, glue the stack together.
+- **Die Organizer** — a stackable die organizer (230 × 330 mm) as SVG templates or as G-code for your material. Cut three Uppers and one Lower, align the four 1/8″ corner holes, glue the stack together.
 - **Pad Press Spacers** — bundled 3D-printable STL files for setting pad press depth. Half-step set (3.0 / 3.5 / 4.0 / 4.5 mm), quarter-step set (3.25 / 3.75 / 4.25 mm), and an organizer rack.
 - **Kerf Test** — quick three-circle pattern for measuring kerf on any material.
-- **Tonehole Crescent** — crescents that cover part of a tonehole's open area to flatten that note. Set the tonehole ID, the percentage to cover, and the inner edge's curve; laser-cut as SVG or 3D print as STL, one or a whole list at a time.
+- **Tonehole Crescent** — crescents that cover part of a tonehole's open area to flatten that note. Set the tonehole ID, the percentage to cover, and the inner edge's curve; laser-cut as SVG or as kerf-compensated G-code (cork by default), or 3D print as STL, one or a whole list at a time.
 - **Speed & Power Test (beta)** — generate a sheet of small test discs at different speed / power / passes combinations to dial in laser settings on a new material. Each disc engraved with a 2-digit ID; a `legend.txt` saved alongside the G-code maps each ID to its parameters. Sweep 0–3 variables; "Also test with air off" doubles the matrix for side-by-side air-quality comparison.
-- **G-code presets** — Options > Settings on the Tooling tab exposes per-material G-code for Acrylic and Basswood. Acrylic for die holders and inserts, basswood preset feeds the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
+- **G-code presets** — Options > Settings on the Tooling tab exposes per-material G-code for Acrylic, Basswood and Cork. Acrylic for die holders and inserts, basswood feeds the camera-calibration card engrave, cork is the crescents' default. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
+- **Frame & Cut** on every tool that makes G-code (with machine integration on): the same jog, frame and cut sequence as the Pad Maker, so none of the tooling needs LightBurn.
 
 ### Chromatic Strobe Tuner
 
@@ -135,7 +137,7 @@ Descriptors are still being calibrated as we gather more data from different hor
 
 ### General
 - Feature Set (File > Feature Set) — choose which tabs to show
-- Tab-aware User Guide (Help > User Guide)
+- User Guide (Help > User Guide) with a clickable contents list, search and drawn figures; opens at the tab you are on. A one-page Quick Start Guide, and a Welcome window once per version that points to both.
 - Runs on Windows, macOS, and Linux
 - macOS dark mode support
 - Platform-appropriate config storage with automatic migration

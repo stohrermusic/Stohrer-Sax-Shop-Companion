@@ -95,34 +95,52 @@ def get_engraving_placement_for_size(pad_size, settings):
 
 
 def get_ssl_context():
-    """Get an SSL context that works on macOS (and everywhere else).
+    """An SSL context that verifies the server, for the three "Import Matt's..."
+    downloads from stohrermusic.com.
 
-    macOS Python often can't find system certificates. This tries:
-    1. certifi package (if installed)
-    2. Default system context
-    3. Unverified fallback (last resort)
+    certifi's bundle first: every build ships it (the Intel Mac build since
+    2026-11-10; a frozen interpreter's OpenSSL looks for its bundle at the
+    build machine's path, which a user's Mac does not have, and Python on
+    macOS never reads the Keychain), then the system's default certificates.
+    If neither yields a certificate authority to verify against, raise: the
+    callers show their download-failed message with the reason. Until
+    2026-11-10 a third step turned verification off (check_hostname False,
+    CERT_NONE) when the default certificates could not be loaded, which
+    silently defeated HTTPS for those downloads. No code path may return an
+    unverified context: tools/test_tls_context.py gates it, and the frozen-
+    build probe (--selftest) checks the shipped bundle through
+    assert_tls_ready().
     """
-    # Try certifi first (most reliable on macOS)
+    log = logging.getLogger(__name__)
     try:
         import certifi
-        return ssl.create_default_context(cafile=certifi.where())
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        if ctx.get_ca_certs():
+            return ctx
+        log.warning("certifi's certificate bundle at %s holds no certificates; trying the system's",
+                    certifi.where())
     except ImportError:
         pass
-
-    # Try default context
-    ctx = ssl.create_default_context()
-    try:
-        # Test if it can actually verify
-        ctx.load_default_certs()
-        return ctx
-    except Exception:
-        pass
-
-    # Fallback: unverified (still encrypted, just no cert check)
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    except OSError as e:  # ssl.SSLError is an OSError: a bundle that is missing or unreadable
+        log.warning("certifi's certificate bundle could not be used: %s", e)
+    ctx = ssl.create_default_context()  # loads the system's default certificates
+    if not ctx.get_ca_certs():
+        raise OSError("no certificate authorities are available to verify the server's certificate")
     return ctx
+
+
+def assert_tls_ready():
+    """The frozen-build probe's TLS check, with no network: the context the
+    web data imports use verifies the server and has certificate authorities
+    loaded. Returns how many. On the Intel Mac build this is the only check
+    that certifi's bundle was packed and is found (nobody here has one)."""
+    ctx = get_ssl_context()
+    if ctx.verify_mode != ssl.CERT_REQUIRED or not ctx.check_hostname:
+        raise AssertionError("the web-import SSL context does not verify the server")
+    n_ca = len(ctx.get_ca_certs())
+    if n_ca == 0:
+        raise AssertionError("the web-import SSL context has no certificate authorities")
+    return n_ca
 
 # ==========================================
 # PLATFORM-SPECIFIC CONFIG DIRECTORY
@@ -613,8 +631,12 @@ if os.path.exists(_old_toner_file) and not os.path.exists(TONER_DATA_FILE):
         # losing the library to a silently-failed migration is not.
         try:
             shutil.copy2(_old_toner_file, TONER_DATA_FILE)
-        except OSError:
-            pass
+        except OSError as e:
+            # Runs at import, before setup_logging(): this reaches stderr,
+            # not app.log, but it is no longer silent.
+            logging.getLogger(__name__).warning(
+                "could not move the tone library from %s to %s; the old file is left in place: %s",
+                _old_toner_file, TONER_DATA_FILE, e)
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"
@@ -1351,8 +1373,9 @@ def _preserve_corrupt_file(path):
             shutil.copy2(path, backup)
             logging.getLogger(__name__).warning(
                 "Could not parse %s — copy preserved at %s", path, backup)
-    except OSError:
-        pass
+    except OSError as e:
+        logging.getLogger(__name__).warning(
+            "could not keep a copy of the unreadable %s before defaults replace it: %s", path, e)
 
 def save_settings(settings):
     try:

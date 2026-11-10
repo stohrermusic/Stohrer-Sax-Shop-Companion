@@ -42,6 +42,7 @@ LATEST_RELEASE_URL = (
 # lets this logger write INFO to app.log (the rest of the app logs WARNING
 # and up), so what happened on a user's machine can be read afterwards.
 mlog = logging.getLogger("ssc.machine")
+log = logging.getLogger(__name__)
 
 
 def _holds_port(method):
@@ -942,15 +943,15 @@ class OptionsWindow:
         fs_frame.pack(fill='x', pady=5)
         materials = ['felt', 'card', 'leather', 'exact_size']
         for i, mat in enumerate(materials):
-            mat_label = mat.replace('_', ' ').capitalize()
-            mat_lbl = tk.Label(fs_frame, text=_(mat_label) + ":", bg=DIALOG_BG)
+            mat_lbl = tk.Label(fs_frame, text=material_display_name(mat) + ":", bg=DIALOG_BG)
             mat_lbl.grid(row=i, column=0, sticky='w', padx=5, pady=2)
             fvar = tk.DoubleVar(value=self.settings["engraving_font_size"].get(mat, 2.0))
             self.engraving_font_size_vars[mat] = fvar
             mat_ent = tk.Entry(fs_frame, textvariable=fvar, width=8)
             mat_ent.grid(row=i, column=1, sticky='w', padx=5, pady=2)
             add_tooltips(
-                _("Engraving font size in millimeters for {material} discs.").format(material=mat_label.lower()),
+                _("Engraving font size in millimeters for {material} discs.").format(
+                    material=material_display_name(mat).lower()),
                 mat_lbl, mat_ent,
             )
 
@@ -987,15 +988,15 @@ class OptionsWindow:
         esr_fs = tk.LabelFrame(self.eng_settings_range_frame, text=_("Font Sizes (mm)"), bg=DIALOG_BG, padx=5, pady=5)
         esr_fs.grid(row=4, column=0, columnspan=2, sticky='ew', pady=2)
         for i, mat in enumerate(materials):
-            mat_label = mat.replace('_', ' ').capitalize()
-            mat_lbl = tk.Label(esr_fs, text=f"{mat_label}:", bg=DIALOG_BG)
+            mat_lbl = tk.Label(esr_fs, text=material_display_name(mat) + ":", bg=DIALOG_BG)
             mat_lbl.grid(row=i, column=0, sticky='w', padx=5, pady=2)
             fvar = tk.DoubleVar(value=2.0)
             self.eng_settings_range_font_vars[mat] = fvar
             mat_ent = tk.Entry(esr_fs, textvariable=fvar, width=8)
             mat_ent.grid(row=i, column=1, sticky='w', padx=5, pady=2)
             add_tooltips(
-                _("Engraving font size for {material} pads in this range.").format(material=mat_label.lower()),
+                _("Engraving font size for {material} pads in this range.").format(
+                    material=material_display_name(mat).lower()),
                 mat_lbl, mat_ent,
             )
 
@@ -3071,12 +3072,21 @@ class LayerColorWindow:
         if self.settings.get("adhesive_ring_enabled", False):
             layer_map_keys.append('adhesive_ring_cut')
 
-        op_word = {"outline": "outer cut",
-                   "center_hole": "center hole",
-                   "engraving": "engraving",
-                   "locator": "felt locator mark"}
+        # Row labels in the user's language: the material as the Materials
+        # checkboxes name it, the step as a translated phrase (until
+        # 2026-11-10 the label was the key with its underscores swapped for
+        # spaces, "Leather locator", in every language).
+        step_label = {"outline": _("{material} outline"),
+                      "center_hole": _("{material} center hole"),
+                      "engraving": _("{material} engraving"),
+                      "locator": _("{material} locator marks"),
+                      "cut": _("{material} cut")}
         for i, key in enumerate(layer_map_keys):
-            label_text = key.replace('_', ' ').capitalize() + ":"
+            mat = next((m for m in ('exact_size', 'adhesive_ring', 'felt', 'card', 'leather')
+                        if key.startswith(m + '_')), key.split('_', 1)[0])
+            step = key[len(mat) + 1:]
+            phrase = step_label.get(step, "{material} " + step.replace('_', ' '))
+            label_text = phrase.format(material=material_display_name(mat)) + ":"
             row_lbl = tk.Label(main_frame, text=label_text, bg=DIALOG_BG)
             row_lbl.grid(row=i, column=0, sticky='w', pady=3)
 
@@ -3089,15 +3099,10 @@ class LayerColorWindow:
             combo.grid(row=i, column=1, sticky='ew', padx=5)
             self.color_vars[key] = var
 
-            # Build a useful description: e.g. "felt outer cut" -> LightBurn layer color
-            mat = key.split('_', 1)[0]
-            op_key = key.split('_', 1)[1] if '_' in key else key
-            op_name = op_word.get(op_key, op_key.replace('_', ' '))
-            tip = (f"LightBurn layer color used for the {mat} {op_name} "
-                   "lines in the SVG output.")
+            tip = _("LightBurn layer color for this step's lines in the SVG output.")
             if key == 'adhesive_ring_cut':
-                tip = ("LightBurn layer color used for the adhesive rings in the "
-                       "SVG output: the cuts and the size number share it.")
+                tip = _("LightBurn layer color used for the adhesive rings in the SVG output: "
+                        "the cuts and the size number share it.")
             add_tooltips(tip, row_lbl, combo)
 
         button_frame = tk.Frame(main_frame, bg=DIALOG_BG)
@@ -3818,6 +3823,7 @@ class PolygonDrawWindow(tk.Toplevel):
         self._PIL_Image = None
         self._PIL_ImageTk = None
         self._overlay_after_id = None
+        self._overlay_errors = 0          # frames that failed to draw
         self._overlay_photo = None        # PhotoImage ref (prevent GC)
 
         # Title mirrors what the dialog can actually do: shows
@@ -4108,7 +4114,15 @@ class PolygonDrawWindow(tk.Toplevel):
             try:
                 self._render_overlay(frame)
             except Exception:
-                pass  # don't kill the loop on a bad frame
+                # Don't kill the loop on a bad frame, and don't hide it:
+                # the first failure logs its traceback, the rest are
+                # counted and reported when the overlay stops.
+                self._overlay_errors += 1
+                if self._overlay_errors == 1:
+                    mlog.exception(
+                        "camera overlay: drawing a frame failed (further "
+                        "failures are counted and reported when the "
+                        "overlay stops)")
         self._overlay_after_id = self.after(
             self.OVERLAY_REFRESH_MS, self._overlay_refresh_loop)
 
@@ -4196,7 +4210,7 @@ class PolygonDrawWindow(tk.Toplevel):
         if self._overlay_after_id is not None:
             try:
                 self.after_cancel(self._overlay_after_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._overlay_after_id = None
         if self._cap is not None:
@@ -4209,6 +4223,10 @@ class PolygonDrawWindow(tk.Toplevel):
             self.canvas.delete('camera_overlay')
         except tk.TclError:
             pass
+        if self._overlay_errors:
+            mlog.warning("camera overlay: %d frames failed to draw",
+                         self._overlay_errors)
+            self._overlay_errors = 0
         self._overlay_photo = None
 
     def _draw_grid(self):
@@ -6302,9 +6320,10 @@ class UserGuideWindow(tk.Toplevel):
                   "Lesser-used settings; set the size range."))
         self._bullet(_("The marks belong on the side the felt touches: cut the leather flesh "
                     "(fuzzy) side up when you use them."))
-        self._bullet(_("SVG puts them on their own layer (Leather locator in Layer Colors) for "
+        self._bullet(_("SVG puts them on their own layer ({layer} in Layer Colors) for "
                     "their own power in LightBurn. G-code engraves them at the leather "
-                    "engraving settings."))
+                    "engraving settings.").format(
+                        layer=_("{material} locator marks").format(material=_("Leather"))))
 
         self._sub(_("Adhesive Rings (beta)"))
         self._body(_("A fifth material: a ring of double-sided tape per pad, for sticking a "
@@ -6590,9 +6609,10 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Be skeptical of strong conclusions from small samples."))
 
         self._sub(_("Before you capture"))
-        self._bullet(_("You need a preset: File > Presets.... Make, Model, Player, Mouthpiece, "
-                    "Mic Type and Mic Model are required. More fields can be switched on in "
-                    "Options > Settings... > Analysis."))
+        # The required fields as the preset form names them, in the user's language.
+        required = ", ".join([_("Make"), _("Model"), _("Player"), _("Mouthpiece"), _("Mic Type"), _("Mic Model")])
+        self._bullet(_("You need a preset: File > Presets.... {fields} are required. More fields "
+                    "can be switched on in Options > Settings... > Analysis.").format(fields=required))
         self._bullet(_("The SAX selector sets the transposition and is saved with the preset."))
         self._bullet(_("A condenser mic (such as an AT2020 USB) gives the fullest picture. Ribbon "
                     "and dynamic mics dull the upper harmonics; the Analyze tool warns when mic "
@@ -6604,7 +6624,7 @@ class UserGuideWindow(tk.Toplevel):
                     "Closer than a foot exaggerates the low harmonics."))
         self._bullet(_("Mic position matters more than almost anything: a few inches between "
                     "takes can shift complexity 10 to 20 percent. Use a stand at a fixed "
-                    "spot, and note it in the Mic Position field."))
+                    "spot, and note it in the {field} field.").format(field=_("Mic Position")))
 
         self._sub(_("Capturing"))
         self._steps([
@@ -7482,8 +7502,9 @@ class NestingPreviewWindow(tk.Toplevel):
                 show_tutorial = True
                 parent.settings["seen_preview_tutorial"] = True
                 save_settings(parent.settings)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("could not save that the nesting preview tutorial "
+                        "was seen: %s", e)
 
         if show_tutorial:
             messagebox.showinfo(_("Nesting Preview"),
@@ -8028,8 +8049,9 @@ class CameraCalibrationDialog(tk.Toplevel):
         try:
             import sleep_lock
             sleep_lock.prevent_sleep()
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("calibration: could not keep the computer awake "
+                         "during the calibration: %s", e)
 
         # Try to import deps. If they're missing we'll show an error and close.
         try:
@@ -8457,8 +8479,8 @@ class CameraCalibrationDialog(tk.Toplevel):
             s.jog(x=dx_sign * step, y=dy_sign * step,
                    feed=3000, relative=True)
             s.disconnect()
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("calibration: jog failed: %s", e)
 
     def _enter_capture_phase(self):
         """Switch to live-preview + ChArUco capture mode."""
@@ -8881,7 +8903,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         finally:
             try:
                 _os.remove(tmp_path)
-            except Exception:
+            except OSError:
                 pass
 
         # Stop polling MPos while the stream owns the port.
@@ -8944,7 +8966,7 @@ class CameraCalibrationDialog(tk.Toplevel):
             from config import save_settings
             save_settings(self._settings)
         except Exception:
-            pass  # never block on settings save
+            mlog.exception("could not save the engrave offset")  # never block on settings save
         # Activate Next — but DON'T auto-transition. User clicks Next
         # explicitly. Prevents losing the offset to a dialog-close
         # accident, and lets the user verify the engrave looks right
@@ -9011,8 +9033,9 @@ class CameraCalibrationDialog(tk.Toplevel):
                 'camera_calibration_engrave_offset_mm', None)
             from config import save_settings
             save_settings(self._settings)
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("calibration: could not clear the saved engrave "
+                         "offset from settings: %s", e)
         self._enter_engrave_phase()
 
     # ------------------------------------------------------------------
@@ -9263,8 +9286,9 @@ class CameraCalibrationDialog(tk.Toplevel):
             self._settings['camera_index_override'] = int(self._camera_index)
             from config import save_settings
             save_settings(self._settings)
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("calibration: could not save the chosen camera to "
+                         "settings: %s", e)
         self._status_var.set(
             _("Switched to camera index {i}. Reopening...").format(
                 i=self._camera_index))
@@ -9663,7 +9687,9 @@ class CameraCalibrationDialog(tk.Toplevel):
                 from config import save_settings
                 save_settings(self._settings)
             except Exception:
-                pass
+                mlog.exception(
+                    "calibration saved, but the camera number and the "
+                    "cleared engrave offset could not be written to settings")
             self.result = "saved"
             messagebox.showinfo(
                 _("Calibration Saved"),
@@ -9690,7 +9716,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         if self._refresh_after_id is not None:
             try:
                 self.after_cancel(self._refresh_after_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._refresh_after_id = None
 
@@ -9708,8 +9734,9 @@ class CameraCalibrationDialog(tk.Toplevel):
         try:
             import sleep_lock
             sleep_lock.allow_sleep()
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("calibration: could not release the keep-awake "
+                         "lock: %s", e)
         self.destroy()
 
 
@@ -9745,6 +9772,7 @@ class CameraCaptureDialog(tk.Toplevel):
         self._latest_polygon_px = None
         self._latest_polygon_mm = None
         self._notice_until = 0.0
+        self._bias_save_errors = 0  # failed slider saves (first one logged)
         self._latest_photo = None
         self._refresh_after_id = None
         # Optional settings dict — when present, the detection-bias
@@ -9902,8 +9930,9 @@ class CameraCaptureDialog(tk.Toplevel):
             try:
                 from config import save_settings
                 save_settings(self._settings)
-            except Exception:
-                pass
+            except Exception as e:
+                mlog.warning("camera capture: could not save the chosen "
+                             "camera to settings: %s", e)
         self._status_var.set(
             _("Switched to camera index {i}. Reopening...").format(
                 i=self._camera_index))
@@ -9911,7 +9940,7 @@ class CameraCaptureDialog(tk.Toplevel):
         if self._refresh_after_id is not None:
             try:
                 self.after_cancel(self._refresh_after_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._refresh_after_id = None
         if self._cap is not None:
@@ -9994,8 +10023,14 @@ class CameraCaptureDialog(tk.Toplevel):
                     self._bias_var.get())
                 from config import save_settings
                 save_settings(self._settings)
-            except Exception:
-                pass  # never block the live preview on save failure
+            except Exception as e:
+                # Never block the live preview on save failure. The slider
+                # fires on every step of a drag: log the first, count the rest.
+                self._bias_save_errors += 1
+                if self._bias_save_errors == 1:
+                    mlog.warning("camera capture: could not save the detection "
+                                 "sensitivity to settings: %s (further "
+                                 "failures are counted)", e)
 
     def _on_invert_changed(self):
         """Persist the invert flag — same pattern as the bias slider."""
@@ -10005,8 +10040,9 @@ class CameraCaptureDialog(tk.Toplevel):
                     self._invert_var.get())
                 from config import save_settings
                 save_settings(self._settings)
-            except Exception:
-                pass
+            except Exception as e:
+                mlog.warning("camera capture: could not save the invert "
+                             "setting: %s", e)
 
     def _render_frame_with_overlay(self, frame):
         import cv2
@@ -10097,7 +10133,7 @@ class CameraCaptureDialog(tk.Toplevel):
         if self._refresh_after_id is not None:
             try:
                 self.after_cancel(self._refresh_after_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._refresh_after_id = None
         if self._cap is not None:
@@ -10577,7 +10613,7 @@ class FalconRunDialog(tk.Toplevel):
                 try:
                     self._on_finished(reason)
                 except Exception:
-                    pass
+                    mlog.exception("laser run: the on_finished callback failed")
             self.destroy()
             return
         if reason == "complete":
@@ -10638,7 +10674,7 @@ class FalconRunDialog(tk.Toplevel):
             try:
                 self._on_finished(reason)
             except Exception:
-                pass
+                mlog.exception("laser run: the on_finished callback failed")
 
     # ------------------------------------------------------------------
     # Button handlers
@@ -10647,16 +10683,16 @@ class FalconRunDialog(tk.Toplevel):
     def _on_pause_clicked(self):
         try:
             self._sender.pause()
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("laser run: Pause (feed hold) failed: %s", e)
         self._pause_btn.config(state="disabled")
         self._resume_btn.config(state="normal")
 
     def _on_resume_clicked(self):
         try:
             self._sender.resume()
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("laser run: Resume failed: %s", e)
         self._pause_btn.config(state="normal")
         self._resume_btn.config(state="disabled")
 
@@ -10804,7 +10840,7 @@ class FalconRunDialog(tk.Toplevel):
         try:
             self._cut_btn.config(state='disabled',
                                   text=_("Finishing pass..."))
-        except Exception:
+        except tk.TclError:
             pass
         self._state_var.set(
             _("Cut requested — finishing current framing pass..."))
@@ -10822,8 +10858,8 @@ class FalconRunDialog(tk.Toplevel):
         try:
             self._sender.jog(x=dx_sign * step, y=dy_sign * step,
                               feed=2000, relative=True)
-        except Exception:
-            pass
+        except Exception as e:
+            mlog.warning("laser run: jog failed: %s", e)
         # If this dialog is gating its done-button on a jog click
         # (MANUAL-mode position confirmation), unlock it now.
         if not self._has_jogged:
@@ -11007,7 +11043,7 @@ class FalconRunDialog(tk.Toplevel):
         try:
             self._sender.stop()
         except Exception:
-            pass
+            mlog.exception("laser run: Stop (soft-reset) failed")
         if not streaming and not self._finished:
             self._on_done("stopped")
 
@@ -11021,7 +11057,7 @@ class FalconRunDialog(tk.Toplevel):
             try:
                 self._sender.stop()
             except Exception:
-                pass
+                mlog.exception("laser run: stopping the job on window close failed")
         # In jog-only mode, the stream completed instantly (empty
         # gcode list), which set _final_reason = "complete" via
         # _on_done. If the user X's out NOW (or clicks Cancel), we
@@ -11129,7 +11165,7 @@ class LiveCameraWindow(tk.Toplevel):
             px = parent.winfo_x() + parent.winfo_width() + 20
             py = parent.winfo_y()
             self.geometry(f"+{px}+{py}")
-        except Exception:
+        except tk.TclError:
             pass
 
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -11158,13 +11194,14 @@ class LiveCameraWindow(tk.Toplevel):
             try:
                 from config import save_settings
                 save_settings(self._settings)
-            except Exception:
-                pass
+            except Exception as e:
+                mlog.warning("live camera: could not save the chosen "
+                             "camera to settings: %s", e)
         # Cancel pending refresh, release current cap, reopen.
         if self._refresh_after_id is not None:
             try:
                 self.after_cancel(self._refresh_after_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._refresh_after_id = None
         if self._cap is not None:
@@ -11186,8 +11223,9 @@ class LiveCameraWindow(tk.Toplevel):
                 self._camera_index = used
                 notice = self._cam_mod.fallback_notice(asked, used) if used != asked else None
                 self.after(0, self._camera_ready, cap, notice)
-            except Exception:
-                pass
+            except Exception as e:
+                mlog.warning("live camera preview: could not open camera "
+                             "#%s: %s", asked, e)
 
         threading.Thread(target=_worker, name='livecam-open',
                           daemon=True).start()
@@ -11202,7 +11240,7 @@ class LiveCameraWindow(tk.Toplevel):
         self._cap = cap
         try:
             self._status_var.set(notice or "")
-        except Exception:
+        except tk.TclError:
             pass
         self._refresh_loop()
 
@@ -11230,7 +11268,7 @@ class LiveCameraWindow(tk.Toplevel):
         if self._refresh_after_id is not None:
             try:
                 self.after_cancel(self._refresh_after_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._refresh_after_id = None
         if self._cap is not None:
@@ -11241,5 +11279,5 @@ class LiveCameraWindow(tk.Toplevel):
             self._cap = None
         try:
             self.destroy()
-        except Exception:
+        except tk.TclError:
             pass

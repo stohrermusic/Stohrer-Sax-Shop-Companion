@@ -14,8 +14,11 @@ Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 
 import math
 import json
+import logging
 import os
 from collections import deque, namedtuple
+
+log = logging.getLogger(__name__)
 
 # numpy and sounddevice are imported separately: the analysis math needs only
 # numpy, and a build with numpy but no sounddevice (the Intel Mac) must keep
@@ -1776,8 +1779,9 @@ def load_tone_presets(filepath):
                 return migrated
 
             return data
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as e:
+            log.warning("could not read the tone library %s; starting with "
+                        "an empty one: %s", filepath, e)
     return {DEFAULT_LIBRARY: {}}
 
 

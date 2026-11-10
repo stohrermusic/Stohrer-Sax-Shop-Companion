@@ -31,8 +31,11 @@ Platforms:
       their DE settings during long jobs.
 """
 
+import logging
 import platform
 import subprocess
+
+log = logging.getLogger(__name__)
 
 _state = {'pid': None}  # macOS caffeinate PID
 
@@ -52,8 +55,9 @@ def prevent_sleep():
             ctypes.windll.kernel32.SetThreadExecutionState(
                 _ES_CONTINUOUS | _ES_SYSTEM_REQUIRED
                 | _ES_DISPLAY_REQUIRED)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("could not stop Windows from sleeping during the "
+                        "laser job: %s", e)
     elif system == "Darwin":
         if _state['pid'] is None:
             try:
@@ -63,8 +67,9 @@ def prevent_sleep():
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL)
                 _state['pid'] = proc
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning("could not start caffeinate to keep the Mac awake "
+                            "during the laser job: %s", e)
     # Linux: no-op; user must disable sleep in their DE.
 
 
@@ -75,8 +80,9 @@ def allow_sleep():
         try:
             import ctypes
             ctypes.windll.kernel32.SetThreadExecutionState(_ES_CONTINUOUS)
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("could not let Windows sleep again after the laser "
+                        "job: %s", e)
     elif system == "Darwin":
         proc = _state['pid']
         if proc is not None:
@@ -86,6 +92,7 @@ def allow_sleep():
             except Exception:
                 try:
                     proc.kill()
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warning("could not stop caffeinate after the laser "
+                                "job: %s", e)
             _state['pid'] = None

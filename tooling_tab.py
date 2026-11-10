@@ -6,6 +6,7 @@ Provides die insert and die holder generation for laser-cutting acrylic tooling.
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import logging
 import os
 import sys
 import tempfile
@@ -1080,8 +1081,9 @@ class ToolingTabMixin:
         # and Frame & Cut becomes packable. No restart required.
         try:
             self._refresh_machine_ui_state()
-        except (AttributeError, Exception):
-            pass
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "could not refresh the Machine menu after camera calibration")
 
     def _update_tooling_settings(self):
         """Sync tooling UI state back to settings dict."""
@@ -1884,7 +1886,7 @@ class ToolingTabMixin:
         elif mat_key in TOOLING_GCODE_MATERIALS:
             settings_path = _("Tooling > Options > Settings > {material_name} > Kerf Width").format(material_name=material_name)
         else:
-            settings_path = _("Pad Generator > Options > G-code Settings > {material_name} > Kerf Width").format(material_name=material_name)
+            settings_path = _("Pad Maker > Options > G-code Settings > {material_name} > Kerf Width").format(material_name=material_name)
 
         dlg = tk.Toplevel(self.root)
         dlg.title(_("Kerf Test \u2014 {material_name}").format(material_name=material_name))
