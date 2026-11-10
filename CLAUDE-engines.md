@@ -135,7 +135,7 @@ When engraved text (pad size number) would impinge on the disc edge, both engine
 
 Two mechanisms:
 - "Eject SD card after G-code export" checkbox (Windows only, below Generate buttons): auto-ejects removable drives after G-code generation. Uses `GetDriveTypeW` to detect removable drives; silently skips non-removable destinations.
-- File → Send G-code to SD Card: guided workflow that copies a .gcode file, optionally clears old files, and ejects (Windows only via PowerShell COM object).
+- (There is no "Send G-code to SD Card" menu item: this line used to describe one, and no such command exists in `main.py` — found while rewriting the User Guide, 2026-11-09. The guide describes only the eject tick.)
 
 ## Strobe Tuner
 

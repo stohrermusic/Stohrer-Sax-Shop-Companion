@@ -4758,8 +4758,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         return guide
 
     def open_quick_start(self):
-        """Help > Quick Start Guide, and the Welcome window's link."""
-        return QuickStartWindow(self.root, show_frame_cut=machine_supported())
+        """Help > Quick Start Guide, and the Welcome window's link. Its last
+        line opens the whole User Guide."""
+        return QuickStartWindow(self.root, show_frame_cut=machine_supported(),
+                                on_user_guide=lambda: UserGuideWindow(self.root))
 
     def open_welcome(self):
         """Help > Welcome, and the once-per-version showing below. One at

@@ -495,6 +495,8 @@ GUARDED_SUITES = (
     "test_laser_watch",
     # the camera fallback's real-window checks (2026-11-09, the follow-up round)
     "test_camera_fallback",
+    # the User Guide (2026-11-09, the guide upgrade)
+    "test_user_guide",
 )
 
 

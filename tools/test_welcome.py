@@ -249,7 +249,7 @@ def gui():
         finally:
             ui_dialogs.UserGuideWindow.focus_search = real
         try:
-            assert isinstance(guide, ui_dialogs.UserGuideWindow) and guide._section is None, "the whole guide"
+            assert isinstance(guide, ui_dialogs.UserGuideWindow) and guide.opened_at is None, "the whole guide"
             assert focused == [guide], "the cursor goes to the search box"
         finally:
             guide.destroy()
@@ -326,14 +326,16 @@ def gui():
     check("Help on every tab: Welcome and Quick Start Guide, above User Guide", help_menu_on_every_tab)
 
     def searching_the_user_guide():
+        # Opened at the Tuner's section: the whole guide is there all the
+        # same (2026-11-09, the guide upgrade: no one-tab guide any more,
+        # no "Show Full Guide" button), so a search finds the Tooling text.
         guide = ui_dialogs.UserGuideWindow(root, section="tuner")
         try:
             text = lambda: guide.text.get("1.0", "end")      # noqa: E731
-            assert "crescent" not in text().lower(), "fixture: the tuner section should not mention crescents"
-            assert guide._show_all_btn is not None
+            assert guide.opened_at == "tuner" and not hasattr(guide, "_show_all_btn")
+            assert guide.text.index("@0,0").split(".")[0] == guide.text.index("sec_tuner").split(".")[0], \
+                "opened at the Tuner section: its heading at the top"
             guide._search_var.set("crescent")
-            assert guide._section is None and guide._show_all_btn is None, \
-                "searching a one-tab guide switches to the whole guide"
             total = text().lower().count("crescent")
             assert total >= 3, f"fixture: the full guide should mention crescents several times ({total})"
             assert len(guide._search_hits) == total
@@ -379,11 +381,11 @@ def gui():
         guide = ui_dialogs.UserGuideWindow(root)
         try:
             guide._search_var.set("Welcome")
-            assert guide._section is None and guide._search_status_var.get() in ("No matches",) or guide._search_hits
+            assert guide.opened_at is None and guide._search_status_var.get() in ("No matches",) or guide._search_hits
         finally:
             guide.destroy()
-    check("User Guide search: finds a word, counts and highlights every match, wraps, ignores case, expands a one-tab guide",
-          searching_the_user_guide)
+    check("User Guide search: finds a word, counts and highlights every match, wraps, ignores case, covers the "
+          "whole guide whatever section it opened at", searching_the_user_guide)
 
     def selftest_shows_and_records_nothing():
         folder = tempfile.mkdtemp(prefix="ssc-welcome-selftest-")

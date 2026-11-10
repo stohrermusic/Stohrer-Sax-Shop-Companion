@@ -5572,10 +5572,53 @@ class GcodeSettingsWindow:
 # HELP / ABOUT DIALOGS
 # ==========================================
 
-class UserGuideWindow(tk.Toplevel):
-    """Scrollable window showing the user guide, optionally filtered by section."""
+class _FigureCanvasHost:
+    """Lends PadPreviewWindow's disc drawing to a User Guide figure: those
+    methods need only `self.canvas` (and LOCATOR_COLOR), so the guide's
+    pictures are the preview's own geometry, not a second renderer."""
+    LOCATOR_COLOR = PadPreviewWindow.LOCATOR_COLOR
+    _draw_leather = PadPreviewWindow._draw_leather
+    _draw_locator = PadPreviewWindow._draw_locator
+    _draw_adhesive_ring = PadPreviewWindow._draw_adhesive_ring
 
-    # Map section names to display titles
+    def __init__(self, canvas):
+        self.canvas = canvas
+
+
+class UserGuideWindow(tk.Toplevel):
+    """The User Guide (Help > User Guide; Help > Welcome and the Quick
+    Start Guide link here too).
+
+    Matt, 2026-11-09: "let's give the user guide a bit of an upgrade- keep
+    it concise, but have it be a little more of a guide, vs just blocks of
+    description. have a TOC that is clickable on the right, and have it
+    open to full screen. put example graphics where appropriate."
+
+    So: the WHOLE guide, always, with a clickable contents list down the
+    right side (sections and sub-sections; a click scrolls to the place;
+    the entry for the part being read is highlighted as the user scrolls),
+    a search box (Ctrl+F / Cmd+F), and drawn figures. `section` is the
+    tab's key to open AT: Help > User Guide scrolls to the section for the
+    tab the user is on. The old one-tab filtering and its "Show Full Guide"
+    button are gone, so search always covers everything.
+
+    Opens maximized: a normal window filling the screen with its title bar
+    (state 'zoomed'; macOS Aqua gets a screen-filling geometry instead), not
+    kiosk full screen. NOT transient: a transient window loses its maximize
+    button on Windows (the toner's Analyze window learned that first). On a
+    wide screen the text does not run edge to edge: the reading column stays
+    TEXT_MAX_PX wide (a right margin on every line, refitted on resize).
+
+    Figures are small canvases drawn from the app's own geometry helpers
+    (the sizing rules, the dart wave, the nester, the ring and crescent
+    geometry, the die engraving's arc text), so they are always right, need
+    no image files and carry no baked-in English; every label in them goes
+    through _(), and every colour is explicit (macOS dark mode).
+    """
+
+    SECTION_KEYS = ("pad_generator", "laser", "tooling", "key_heights", "serial_lookup",
+                    "screw_specs", "tuner", "toner", "sharing", "learn")
+    # Kept for callers and tests that map a tab to its section.
     SECTION_TITLES = {
         "pad_generator": _("Pad Maker"),
         "key_heights": _("Key Height Library"),
@@ -5585,23 +5628,30 @@ class UserGuideWindow(tk.Toplevel):
         "tuner": _("Tuner"),
         "toner": _("Toner"),
     }
+    TEXT_MAX_PX = 760       # the reading column
+    TEXT_PADX = 15
+    FIGURE_W = 520          # px, every figure canvas
+    TOC_WIDTH_PX = 250
+    FIGURE_BG = "#FFFFFF"
+    FIGURE_INK = "#222222"
+    FIGURE_FAINT = "#9A9A9A"
+    FIGURE_SHEET = "#F8F8F0"
+    FIGURE_ZONE = "#2E7D32"
+    FIGURE_CORK = "#C9A26B"
+    FIGURE_NAMES = ("pad_discs", "nest_zone", "adhesive_rings", "die_ring", "kerf", "crescent", "three_ways")
 
     def __init__(self, parent, section=None):
         super().__init__(parent)
-        self._section = section
-        if section and section in self.SECTION_TITLES:
-            self.title(_("User Guide — {section}").format(section=self.SECTION_TITLES[section]))
-        else:
-            self.title(_("User Guide"))
-        self.geometry("620x700")
+        self.opened_at = section            # the tab's section this guide opened at (None: the top)
+        self.title(_("User Guide"))
         self.configure(bg=DIALOG_BG)
-        self.transient(parent)
+        self._maximize()
 
         # Search (2026-11-09): the Welcome window tells people to search
         # the guide, so the guide can be searched. Typing highlights every
         # match and jumps to the first; Enter or Next goes to the next and
-        # wraps round. It always searches the whole guide: opened on one
-        # tab's section, the first search switches to the full guide.
+        # wraps round. The whole guide is always loaded, so it always
+        # searches the whole guide.
         search_row = tk.Frame(self, bg=DIALOG_BG)
         search_row.pack(fill="x", padx=10, pady=(10, 0))
         tk.Label(search_row, text=_("Search:"), bg=DIALOG_BG).pack(side="left")
@@ -5620,55 +5670,169 @@ class UserGuideWindow(tk.Toplevel):
         self.search_entry.bind("<KP_Enter>", lambda e: self.search_next())
         self.bind("<Command-f>" if IS_MACOS else "<Control-f>", lambda e: self.focus_search())
 
-        # Scrollable text widget
-        text_frame = tk.Frame(self, bg=DIALOG_BG)
-        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        body = tk.Frame(self, bg=DIALOG_BG)
+        body.pack(fill="both", expand=True, padx=10, pady=(6, 0))
 
-        scrollbar = tk.Scrollbar(text_frame)
-        scrollbar.pack(side="right", fill="y")
+        # The contents list, down the right side.
+        toc_frame = tk.Frame(body, bg=DIALOG_BG, width=self.TOC_WIDTH_PX)
+        toc_frame.pack(side="right", fill="y", padx=(10, 0), pady=(4, 0))
+        toc_frame.pack_propagate(False)
+        tk.Label(toc_frame, text=_("Contents"), bg=DIALOG_BG, anchor="w",
+                 font=("Helvetica", 11, "bold")).pack(fill="x", pady=(4, 4))
+        toc_box = tk.Frame(toc_frame, bg=DIALOG_BG)
+        toc_box.pack(fill="both", expand=True)
+        toc_scroll = tk.Scrollbar(toc_box)
+        toc_scroll.pack(side="right", fill="y")
+        self.toc = ttk.Treeview(toc_box, show="tree", selectmode="browse",
+                                yscrollcommand=toc_scroll.set)
+        self.toc.pack(side="left", fill="both", expand=True)
+        toc_scroll.config(command=self.toc.yview)
+        # A click, not <<TreeviewSelect>>: selection_set fires that event too,
+        # after any guard flag has been reset, so the scroll sync and the
+        # click handler would select each other for ever (found 2026-11-09).
+        self.toc.bind("<ButtonRelease-1>", self._on_toc_click)
+        self.toc.bind("<Return>", self._on_toc_click)
 
-        self.text = tk.Text(text_frame, wrap="word", yscrollcommand=scrollbar.set,
-                            font=("Helvetica", 11), padx=15, pady=10)
+        # The text, with its own scrollbar, on the left.
+        text_frame = tk.Frame(body, bg=DIALOG_BG)
+        text_frame.pack(side="left", fill="both", expand=True)
+        self._scrollbar = tk.Scrollbar(text_frame)
+        self._scrollbar.pack(side="right", fill="y")
+        self.text = tk.Text(text_frame, wrap="word", yscrollcommand=self._on_text_scroll,
+                            font=("Helvetica", 11), padx=self.TEXT_PADX, pady=10,
+                            highlightthickness=0)
         self.text.pack(fill="both", expand=True)
-        scrollbar.config(command=self.text.yview)
+        self._scrollbar.config(command=self.text.yview)
 
-        # Configure tags
-        self.text.tag_configure("h1", font=("Helvetica", 16, "bold"), spacing3=6)
+        self.text.tag_configure("h1", font=("Helvetica", 17, "bold"), spacing1=18, spacing3=6)
         self.text.tag_configure("h2", font=("Helvetica", 13, "bold"), spacing1=12, spacing3=4)
         self.text.tag_configure("body", font=("Helvetica", 11), spacing1=2)
         self.text.tag_configure("bullet", font=("Helvetica", 11), lmargin1=20, lmargin2=35)
+        self.text.tag_configure("step", font=("Helvetica", 11), lmargin1=20, lmargin2=38)
+        # The reading column: a right margin on every line, set in _fit_column.
+        self.text.tag_configure("col", rmargin=0)
+        self.text.tag_lower("col")
         # Explicit colours, so a match shows the same in macOS dark mode.
         self.text.tag_configure("search_hit", background="#FFE98A", foreground="#000000")
         self.text.tag_configure("search_current", background="#FF9F1C", foreground="#000000")
         self.text.tag_raise("search_current")
 
+        self._marks = []            # (mark name, contents item) in reading order
+        self._toc_items = {}        # section key -> contents item
+        self._figures = []          # (name, canvas), in reading order
+        self._cur_section_item = None
+        self._current_item = None
         self._insert_content()
+        self.text.tag_add("col", "1.0", "end")
         self.text.config(state="disabled")
+        self.text.bind("<Configure>", self._fit_column)
 
-        # Bottom buttons
         btn_frame = tk.Frame(self, bg=DIALOG_BG)
-        btn_frame.pack(pady=10)
-        self._show_all_btn = None
-        if section:
-            self._show_all_btn = tk.Button(btn_frame, text=_("Show Full Guide"),
-                                           command=self._show_all)
-            self._show_all_btn.pack(side="left", padx=(0, 10))
-        tk.Button(btn_frame, text=_("Close"), command=self.destroy).pack(side="left")
+        btn_frame.pack(pady=8)
+        tk.Button(btn_frame, text=_("Close"), command=self.destroy).pack()
 
-    def _show_all(self):
-        """Reload with all sections visible."""
-        self._section = None
-        self.title(_("User Guide"))
-        self.text.config(state="normal")
-        self.text.delete("1.0", "end")
-        self._insert_content()
-        self.text.config(state="disabled")
-        if self._show_all_btn is not None:
-            self._show_all_btn.pack_forget()
-            self._show_all_btn = None
-        # The old matches pointed into the text that was just replaced.
-        if self._search_var.get().strip():
-            self._search_update()
+        # Open at the tab's section: after the first layout, so the heading
+        # really lands at the top (no timer; an idle task, run now).
+        self.update_idletasks()
+        if section in self._toc_items:
+            self.scroll_to(section)
+        else:
+            self._sync_toc()
+
+    # ---- window -----------------------------------------------------------
+
+    def _maximize(self):
+        """A normal maximized window. macOS Aqua has no 'zoomed' state: a
+        geometry that fills the screen instead (the toner's Analyze window
+        does the same)."""
+        try:
+            self.state("zoomed")
+            if self.state() == "zoomed":
+                return
+        except tk.TclError:
+            pass
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{sw - 40}x{sh - 80}+20+20")
+
+    def _fit_column(self, event=None):
+        """Keep the text to TEXT_MAX_PX: the rest of the widget's width is
+        right margin."""
+        width = self.text.winfo_width()
+        rmargin = max(0, width - 2 * self.TEXT_PADX - self.TEXT_MAX_PX)
+        self.text.tag_configure("col", rmargin=rmargin)
+
+    # ---- contents list ------------------------------------------------------
+
+    def scroll_to(self, key):
+        """Put a section's heading at the top of the view (Help > User
+        Guide opens here for the tab the user is on)."""
+        item = self._toc_items.get(key)
+        if item is None:
+            return False
+        self._go_to_item(item)
+        return True
+
+    def _go_to_item(self, item):
+        mark = next((m for m, it in self._marks if it == item), None)
+        if mark is None:
+            return
+        self._current_item = item
+        self._select_toc(item)
+        self.text.yview(mark)
+        self._sync_toc()
+
+    def _on_toc_click(self, event=None):
+        """The user clicked (or pressed Return on) a contents entry."""
+        item = None
+        if event is not None and getattr(event, "type", None) == tk.EventType.ButtonRelease:
+            item = self.toc.identify_row(event.y) or None
+        if item is None:
+            sel = self.toc.selection()
+            item = sel[0] if sel else None
+        if item:
+            self._go_to_item(item)
+
+    def _select_toc(self, item):
+        self.toc.selection_set(item)
+        self.toc.see(item)
+
+    def _on_text_scroll(self, first, last):
+        self._scrollbar.set(first, last)
+        self._sync_toc()
+
+    def _heading_at_top(self):
+        """The contents item for what is being read: the last heading at or
+        above the top of the view (a heading a line below the top still
+        belongs to the part before it). At the very bottom, where a short
+        last section can never reach the top, the selected item stays while
+        its heading is on screen."""
+        if not self._marks:
+            return None
+        top = self.text.index("@0,0")
+        current = None
+        for mark, item in self._marks:
+            if self.text.compare(mark, "<=", top):
+                current = item
+            else:
+                break
+        if current is None:
+            current = self._marks[0][1]         # the title and introduction: the first section's entry
+        try:
+            at_bottom = self.text.yview()[1] >= 0.999
+        except tk.TclError:
+            at_bottom = False
+        if at_bottom and self._current_item is not None:
+            cur_mark = next((m for m, it in self._marks if it == self._current_item), None)
+            if cur_mark is not None and self.text.bbox(cur_mark) is not None:
+                return self._current_item
+        return current
+
+    def _sync_toc(self):
+        item = self._heading_at_top()
+        if item is None or item == self._current_item:
+            return
+        self._current_item = item
+        self._select_toc(item)
 
     # ---- search ----------------------------------------------------------
 
@@ -5683,11 +5847,6 @@ class UserGuideWindow(tk.Toplevel):
         """The search text changed: find every match afresh, highlight
         them all and go to the first. Case-insensitive, plain text."""
         query = self._search_var.get().strip()
-        if query and self._section is not None:
-            # Search the whole guide, not just the tab the guide opened on.
-            # _show_all calls back in here once the full text is in place.
-            self._show_all()
-            return
         self.text.tag_remove("search_hit", "1.0", "end")
         self.text.tag_remove("search_current", "1.0", "end")
         self._search_hits, self._search_at = [], -1
@@ -5727,1128 +5886,831 @@ class UserGuideWindow(tk.Toplevel):
         self._search_status_var.set(_("{n} of {total}").format(
             n=index + 1, total=len(self._search_hits)))
 
-    def _h1(self, text):
-        self.text.insert("end", text + "\n", "h1")
+    # ---- the text's building blocks ------------------------------------------
 
-    def _h2(self, text):
-        self.text.insert("end", text + "\n", "h2")
+    def _section(self, key, title):
+        """A section heading: a top entry in the contents list."""
+        mark = f"sec_{key}"
+        self.text.mark_set(mark, "end-1c")
+        self.text.mark_gravity(mark, "left")
+        self.text.insert("end", title + "\n", ("h1", "col"))
+        item = self.toc.insert("", "end", text=title, open=True)
+        self._marks.append((mark, item))
+        self._toc_items[key] = item
+        self._cur_section_item = item
+
+    def _sub(self, title):
+        """A sub-section heading: a contents entry under the current section."""
+        mark = f"sub_{len(self._marks)}"
+        self.text.mark_set(mark, "end-1c")
+        self.text.mark_gravity(mark, "left")
+        self.text.insert("end", title + "\n", ("h2", "col"))
+        parent = self._cur_section_item if self._cur_section_item is not None else ""
+        item = self.toc.insert(parent, "end", text=title)
+        self._marks.append((mark, item))
+
+    def _title(self, text):
+        """The guide's own title: a heading with no contents entry."""
+        self.text.insert("end", text + "\n", ("h1", "col"))
 
     def _body(self, text):
-        self.text.insert("end", text + "\n", "body")
+        self.text.insert("end", text + "\n", ("body", "col"))
 
     def _bullet(self, text):
-        self.text.insert("end", "  \u2022 " + text + "\n", "bullet")
+        self.text.insert("end", "  • " + text + "\n", ("bullet", "col"))
+
+    def _steps(self, items):
+        """Numbered steps; the numbers are added here, so each step is one
+        plain translatable string."""
+        for n, text in enumerate(items, 1):
+            self.text.insert("end", f"  {n}. {text}\n", ("step", "col"))
 
     def _blank(self):
-        self.text.insert("end", "\n")
+        self.text.insert("end", "\n", ("col",))
 
     def _link(self, display_text, url):
         import webbrowser
         tag = f"link_{id(url)}"
         self.text.tag_configure(tag, font=("Helvetica", 11, "underline"),
                                 foreground="#0066CC", lmargin1=20)
-        self.text.insert("end", "  " + display_text + "\n", tag)
+        self.text.insert("end", "  " + display_text + "\n", (tag, "col"))
         self.text.tag_bind(tag, "<Button-1>", lambda e: webbrowser.open(url))
         self.text.tag_bind(tag, "<Enter>",
                            lambda e: self.text.config(cursor="hand2"))
         self.text.tag_bind(tag, "<Leave>",
                            lambda e: self.text.config(cursor=""))
 
+    # ---- figures ---------------------------------------------------------------
+
+    FIGURE_HEIGHTS = {"pad_discs": 230, "nest_zone": 250, "adhesive_rings": 210, "die_ring": 260,
+                      "kerf": 190, "crescent": 230, "three_ways": 170}
+
+    def _figure(self, name):
+        """A drawn figure, from the app's own geometry, in a canvas of its
+        own inside the text. Fixed size, so it is drawn at once with no
+        layout to wait for."""
+        height = self.FIGURE_HEIGHTS[name]
+        canvas = tk.Canvas(self.text, width=self.FIGURE_W, height=height, bg=self.FIGURE_BG,
+                           highlightthickness=1, highlightbackground="#BBBBBB")
+        self.text.window_create("end", window=canvas, padx=20, pady=8)
+        self.text.insert("end", "\n", ("col",))
+        getattr(self, f"_fig_{name}")(canvas, self.FIGURE_W, height)
+        self._figures.append((name, canvas))
+        return canvas
+
+    @staticmethod
+    def _figure_settings(**overrides):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings.update(overrides)
+        return settings
+
+    def _fig_pad_discs(self, cv, W, H):
+        """One pad's felt, card and leather at true relative size: the
+        leather with its darts, locator marks and number."""
+        settings = self._figure_settings(locator_marks_enabled=True)
+        pad = 14.0
+        host = _FigureCanvasHost(cv)
+        diams = [(m, get_disc_diameter(pad, m, settings)) for m in ("felt", "card", "leather")]
+        gap_mm = 6.0
+        total_w = sum(d for _m, d in diams) + gap_mm * 2
+        scale = min((W - 60) / total_w, (H - 70) / max(d for _m, d in diams))
+        cy = (H - 30) / 2
+        x_mm = -total_w / 2
+        for mat, d in diams:
+            r_mm = d / 2
+            cx = W / 2 + (x_mm + r_mm) * scale
+            color = PadPreviewWindow.COLORS[mat]
+            if mat == "leather":
+                host._draw_leather(cx, cy, pad, settings, r_mm * scale, color, scale)
+                cv.create_text(cx, cy - r_mm * scale * 0.45, text=f"{pad:g}", fill=color,
+                               font=("Helvetica", max(8, int(r_mm * scale * 0.28)), "bold"))
+            else:
+                cv.create_oval(cx - r_mm * scale, cy - r_mm * scale, cx + r_mm * scale, cy + r_mm * scale,
+                               outline=color, width=2, fill="")
+            cv.create_text(cx, cy + r_mm * scale + 16,
+                           text=_("{label}\n{mm:.1f} mm").format(label=PadPreviewWindow.LABELS[mat], mm=d),
+                           fill=color, justify="center", font=("Helvetica", 9))
+            x_mm += d + gap_mm
+        cv.create_text(W / 2, 6, anchor="n", width=W - 16, justify="center",
+                       text=_("One {size} mm pad: felt, card and leather at true relative size").format(size=f"{pad:g}"),
+                       fill=self.FIGURE_INK, font=("Helvetica", 9))
+
+    def _fig_nest_zone(self, cv, W, H):
+        """A small nest on a traced scrap, with one labeled-zone block."""
+        from svg_engine import nest_pads_with_zones
+        settings = self._figure_settings(zone_labels_enabled=True)
+        polygon = [(0.0, 0.0), (140.0, 0.0), (140.0, 60.0), (95.0, 100.0), (0.0, 95.0)]
+        pads = [{'size': 9.0, 'qty': 6}, {'size': 24.0, 'qty': 3}, {'size': 30.0, 'qty': 2}]
+        placed, zones = nest_pads_with_zones(pads, 'felt', 140.0, 100.0, settings, polygon=polygon)
+        margin = 24
+        scale = min((W - 2 * margin) / 140.0, (H - 2 * margin) / 100.0)
+        ox = (W - 140.0 * scale) / 2
+        oy = (H - 100.0 * scale) / 2
+        pts = [c for x, y in polygon for c in (ox + x * scale, oy + y * scale)]
+        cv.create_polygon(pts, fill=self.FIGURE_SHEET, outline="#888888", width=2)
+        color = _PREVIEW_COLORS['felt']
+        for zone in zones:
+            x0, y0 = ox + zone['x'] * scale, oy + zone['y'] * scale
+            cv.create_rectangle(x0, y0, x0 + zone['w'] * scale, y0 + zone['h'] * scale,
+                                outline=self.FIGURE_ZONE, width=1, dash=(4, 2))
+            # The label where the engraving puts it: centred in the strip
+            # inside the top border, above the discs (_render_svg_zones).
+            cv.create_text(x0 + zone['w'] * scale / 2, y0 + (zone['border'] + zone['font'] / 2) * scale,
+                           text=str(zone.get('label', '')), fill=self.FIGURE_ZONE,
+                           font=("Helvetica", max(7, int(zone['font'] * scale)), "bold"))
+        for size, cx, cy, r in placed:
+            x, y, rp = ox + cx * scale, oy + cy * scale, r * scale
+            cv.create_oval(x - rp, y - rp, x + rp, y + rp, outline=color, width=1, fill="#DCE8F5")
+            if rp > 11:
+                cv.create_text(x, y, text=f"{size:g}", fill=color, font=("Helvetica", 8))
+        cv.create_text(W / 2, H - 6, anchor="s", width=W - 16, justify="center",
+                       fill=self.FIGURE_INK, font=("Helvetica", 9),
+                       text=_("A traced scrap: the 9 mm pads in their labeled block, the rest nested round it"))
+
+    def _fig_adhesive_rings(self, cv, W, H):
+        """Two adhesive rings: the number in the hole, and under a small ring."""
+        settings = self._figure_settings(adhesive_ring_enabled=True)
+        host = _FigureCanvasHost(cv)
+        color = PadPreviewWindow.COLORS['adhesive_ring']
+        sizes = (20.0, 11.0)
+        geoms = [adhesive_ring_geometry(s, settings) for s in sizes]
+        widest = max(g["outer_r"] for g in geoms) * 2
+        tallest = max(g["box"][3] for g in geoms) * 2
+        scale = min((W - 80) / (widest * 2 + 20), (H - 60) / tallest)
+        for i, (size, geom) in enumerate(zip(sizes, geoms)):
+            cx = W * (0.3 + 0.4 * i)
+            cy = (H - 26) / 2 - 6
+            host._draw_adhesive_ring(cx, cy, size, settings, scale, color)
+            caption = _("{size} mm pad: number in the hole") if geom["placement"] == "inside" \
+                else _("{size} mm pad: number under the ring")
+            cv.create_text(cx, H - 6, anchor="s", width=W * 0.42, justify="center",
+                           text=caption.format(size=f"{size:g}"), fill=color, font=("Helvetica", 9))
+
+    def _fig_die_ring(self, cv, W, H):
+        """A die insert for a 30 mm pad beside a large holder ring, with the
+        engravings the app puts on them: the size and NOY, and DESIGNED BY
+        PHIL NOY (the credit; see the Tooling tab)."""
+        from gcode_engine import get_text_strokes, get_text_strokes_arc
+        from svg_engine import HOLDER_OUTER_R, HOLDER_LARGE_INNER_R
+        pad = 30.0
+        die_r = get_disc_diameter(pad, 'die_ring', self._figure_settings()) / 2
+        die_inner = pad / 2
+        scale = min((H - 60) / (2 * HOLDER_OUTER_R), (W - 60) / (2 * die_r + 2 * HOLDER_OUTER_R + 14))
+        cy = (H - 24) / 2
+        cx_die = 30 + die_r * scale
+        cx_holder = W - 30 - HOLDER_OUTER_R * scale
+        ink = self.FIGURE_INK
+        engraving = "#00A000"
+
+        def ring(cx, r_out, r_in):
+            cv.create_oval(cx - r_out * scale, cy - r_out * scale, cx + r_out * scale, cy + r_out * scale,
+                           outline="#CC0000", width=2, fill="#EFEFEF")
+            cv.create_oval(cx - r_in * scale, cy - r_in * scale, cx + r_in * scale, cy + r_in * scale,
+                           outline="#0000CC", width=2, fill=self.FIGURE_BG)
+
+        def strokes(cx, stroke_list):
+            # Y-up mm (the engraving helpers' frame) to the canvas's Y-down pixels.
+            for stroke in stroke_list:
+                pts = [c for x, y in stroke for c in (cx + x * scale, cy - y * scale)]
+                if len(pts) >= 4:
+                    cv.create_line(*pts, fill=engraving, width=1)
+
+        # The die: its size at the top of the ring, NOY arced at the bottom.
+        ring(cx_die, die_r, die_inner)
+        ring_w = die_r - die_inner
+        font = min(3.5, ring_w * 0.9)
+        mid_r = (die_r + die_inner) / 2
+        strokes(cx_die, get_text_strokes(f"{pad:g}", font, 0.0, mid_r))
+        strokes(cx_die, get_text_strokes_arc("NOY", font, 0.0, 0.0, mid_r, -math.pi / 2.0, side='bottom'))
+        cv.create_text(cx_die, H - 6, anchor="s", width=2 * die_r * scale + 50, justify="center",
+                       text=_("Die insert, {size} mm pad").format(size=f"{pad:g}"),
+                       fill=ink, font=("Helvetica", 9))
+        # The holder's retaining ring (large): the credit arced along the top.
+        ring(cx_holder, HOLDER_OUTER_R, HOLDER_LARGE_INNER_R)
+        hw = HOLDER_OUTER_R - HOLDER_LARGE_INNER_R
+        hfont = min(3.5, hw * 0.9)
+        strokes(cx_holder, get_text_strokes_arc("DESIGNED BY PHIL NOY", hfont, 0.0, 0.0,
+                                                (HOLDER_OUTER_R + HOLDER_LARGE_INNER_R) / 2,
+                                                math.pi / 2.0, side='top'))
+        cv.create_text(cx_holder, H - 6, anchor="s", width=2 * HOLDER_OUTER_R * scale + 50, justify="center",
+                       text=_("Holder retaining ring"), fill=ink, font=("Helvetica", 9))
+
+    def _fig_kerf(self, cv, W, H):
+        """A kerf test disc in the hole it came out of, the gap drawn wide so
+        it can be seen: kerf = hole minus disc."""
+        from svg_engine import KERF_TEST_DIAMETERS
+        hole_d = KERF_TEST_DIAMETERS[1]
+        shown_gap = 1.0                     # mm, exaggerated for the picture
+        scale = (H - 70) / hole_d
+        cx, cy = W * 0.26, (H - 20) / 2
+        rh = hole_d / 2 * scale
+        rd = (hole_d / 2 - shown_gap) * scale
+        cv.create_rectangle(cx - rh - 30, cy - rh - 14, cx + rh + 30, cy + rh + 14,
+                            fill=self.FIGURE_SHEET, outline="#888888")
+        cv.create_oval(cx - rh, cy - rh, cx + rh, cy + rh, fill="#FFFFFF", outline="#CC0000", width=1)
+        cv.create_oval(cx - rd, cy - rd, cx + rd, cy + rd, fill="#EFEFEF", outline="#CC0000", width=1)
+        # The gap, marked on the right of the disc; the notes wrap to the room left.
+        tx, tw = W * 0.52, W * 0.46
+        cv.create_line(cx + rd, cy, cx + rh, cy, fill=self.FIGURE_INK, width=2)
+        cv.create_line(cx + rh + 4, cy, tx - 6, cy, fill=self.FIGURE_INK, width=1)
+        ink = self.FIGURE_INK
+        cv.create_text(tx, cy - 28, anchor="w", fill=ink, font=("Helvetica", 9), width=tw,
+                       text=_("hole: measure its diameter"))
+        cv.create_text(tx, cy - 10, anchor="w", fill=ink, font=("Helvetica", 9), width=tw,
+                       text=_("disc: measure its diameter"))
+        cv.create_text(tx, cy + 10, anchor="w", fill=ink, font=("Helvetica", 9, "bold"), width=tw,
+                       text=_("kerf = hole − disc"))
+        cv.create_text(tx, cy + 30, anchor="w", fill=self.FIGURE_FAINT, font=("Helvetica", 8), width=tw,
+                       text=_("(the gap is drawn wider than it really is)"))
+        cv.create_text(cx, H - 6, anchor="s", width=2 * (rh + 40), justify="center",
+                       text=_("{d} mm circle of the Kerf Test").format(d=f"{hole_d:g}"),
+                       fill=ink, font=("Helvetica", 9))
+
+    def _fig_crescent(self, cv, W, H):
+        """A tonehole crescent in its tonehole, mouthpiece side up."""
+        from svg_engine import tonehole_crescent_geometry, tonehole_crescent_outline
+        tonehole, percent = 43.0, 20.0
+        geom = tonehole_crescent_geometry(tonehole, percent)
+        outer, inner = tonehole_crescent_outline(geom)
+        R = geom['radius']
+        scale = (H - 70) / (2 * R)
+        cx, cy = W / 2, 28 + R * scale
+        cv.create_oval(cx - R * scale, cy - R * scale, cx + R * scale, cy + R * scale,
+                       outline="#888888", width=2, fill="#FFFFFF")
+        outline = outer + list(reversed(inner))[1:-1]
+        pts = [c for x, y in outline for c in (cx + x * scale, cy + y * scale)]
+        cv.create_polygon(pts, fill=self.FIGURE_CORK, outline="#6B4A1E", width=2)
+        cv.create_text(cx, 12, text=_("mouthpiece side"), fill=self.FIGURE_INK, font=("Helvetica", 9))
+        cv.create_text(cx, H - 6, anchor="s", width=W - 16, justify="center", fill=self.FIGURE_INK,
+                       font=("Helvetica", 9),
+                       text=_("{d} mm tonehole, {p}% of its area covered").format(d=f"{tonehole:g}", p=f"{percent:g}"))
+
+    def _fig_three_ways(self, cv, W, H):
+        """The three ways a job gets to the laser, one lane each."""
+        rows = [
+            (_("Generate G-code"), _("SD card"), _("Laser")),
+            (_("Generate SVG"), _("LightBurn"), _("Laser")),
+            (_("Frame & Cut"), _("USB cable"), _("Laser")),
+        ]
+        fills = ("#E3EEF9", "#FDF1DC", "#E6F4E6")
+        box_w, box_h, gap = 150, 34, 26
+        xs = (12, 12 + box_w + gap, 12 + 2 * (box_w + gap))
+        for i, (row, fill) in enumerate(zip(rows, fills)):
+            y = 12 + i * (box_h + 14)
+            for j, label in enumerate(row):
+                x = xs[j]
+                cv.create_rectangle(x, y, x + box_w, y + box_h, fill=fill, outline="#555555")
+                # Wrapped inside the box: a translated label can be long.
+                cv.create_text(x + box_w / 2, y + box_h / 2, text=label, fill=self.FIGURE_INK,
+                               font=("Helvetica", 9), width=box_w - 6, justify="center")
+                if j < 2:
+                    cv.create_line(x + box_w + 4, y + box_h / 2, x + box_w + gap - 4, y + box_h / 2,
+                                   fill=self.FIGURE_INK, width=2, arrow="last")
+        cv.create_text(W / 2, H - 6, anchor="s", width=W - 16, justify="center",
+                       text=_("Three ways to the laser. Do not mix them."),
+                       fill=self.FIGURE_INK, font=("Helvetica", 9))
+
+    # ---- the content -----------------------------------------------------------
+
     def _insert_content(self):
-        section = self._section
-
-        if section is None:
-            # Full guide
-            self._h1(_("Stohrer Sax Shop Companion"))
-            self._body(_("A tool for saxophone technicians: generate laser-cutting templates, "
-                        "record key heights, look up serial numbers, reference screw specs, "
-                        "tune, and analyze tone."))
-            self._blank()
-            self._section_pad_generator()
-            self._section_key_heights()
-            self._section_serial_lookup()
-            self._section_screw_specs()
-            self._section_tooling()
-            self._section_tuner()
-            self._section_toner()
-            self._section_import_export()
-            self._section_padmaking_guide()
-        else:
-            dispatch = {
-                "pad_generator": self._section_pad_generator,
-                "key_heights": self._section_key_heights,
-                "serial_lookup": self._section_serial_lookup,
-                "screw_specs": self._section_screw_specs,
-                "tooling": self._section_tooling,
-                "tuner": self._section_tuner,
-                "toner": self._section_toner,
-            }
-            fn = dispatch.get(section)
-            if fn:
-                fn()
-            # Always show the padmaking link and import/export
-            self._section_import_export()
-            self._section_padmaking_guide()
-
-    def _section_pad_generator(self):
-        self._h2(_("Pad Maker (SVG / G-code)"))
-        self._body(_("Enter pad sizes in the text area, one per line, in the format "
-                    "\"size x quantity\" (e.g. \"42.0 x 3\"). Select one or more materials "
-                    "and click Generate to create laser-cutting files."))
-        self._bullet(_("Felt: disc diameter = pad size minus felt offset"))
-        self._bullet(_("Card: further reduced by card-to-felt offset"))
-        self._bullet(_("Leather: enlarged to wrap around felt, with star/dart pattern for small pads"))
-        self._bullet(_("Exact Size: no offset applied (SVG only, not available for G-code)"))
-        self._bullet(_("\"max\" quantity (e.g. \"18.0 x max\"): fills remaining sheet space with that size. "
-                      "Only one \"max\" entry is allowed per sheet."))
+        self._title(_("Stohrer Sax Shop Companion"))
+        self._body(_("A tool for saxophone technicians: generate laser-cutting templates, "
+                    "record key heights, look up serial numbers, reference screw specs, "
+                    "tune, and analyze tone."))
+        self._intro()
         self._blank()
+        self._section_pad_maker()
+        self._section_laser()
+        self._section_tooling()
+        self._section_key_heights()
+        self._section_serial_lookup()
+        self._section_screw_specs()
+        self._section_tuner()
+        self._section_toner()
+        self._section_sharing()
+        self._section_learn()
 
-        self._h2(_("SVG vs G-code Output"))
-        self._bullet(_("SVG: each operation (engraving, holes, cuts) on its own color layer for "
-                      "LightBurn or similar. Use this if your software imports SVG."))
-        self._bullet(_("G-code: standalone Grbl with speeds and power baked in. Use this if your "
-                      "laser reads G-code directly (e.g. Creality Falcon)."))
-        self._body(_("Files are named with your base name plus the material "
-                    "(\"my_pad_job_felt.svg\"). One file per selected material."))
-        self._blank()
+    def _intro(self):
+        # Optional: one line for the top of the full guide (in _insert_content),
+        # not one of the ten sections. Drop it if the window says this itself.
+        self._body(_("Type in the search box (Ctrl+F, or Cmd+F on a Mac) to find a word, "
+                  "or click a heading in the contents list on the right. "
+                  "Help > Quick Start Guide has the basics on one page."))
 
-        self._h2(_("Units"))
-        self._body(_("Pad sizes and sheet dimensions use the unit set in Options > Sizing Rules "
-                    "(inches, mm, or cm). Output files are always in mm."))
-        self._blank()
+    def _section_pad_maker(self):
+        self._section("pad_generator", _("Pad Maker"))
+        self._body(_("Makes the laser files for the felt, card and leather of each pad "
+                  "from a list of pad sizes."))
 
-        self._h2(_("Center Hole"))
-        self._body(_("Select a center hole size for rivet or screw mounting. Choose None, "
-                    "3.0mm, 3.5mm, or enter a custom diameter."))
-        self._bullet(_("Pads below the minimum hole size threshold (set in Sizing Rules) "
-                      "skip the center hole automatically \u2014 they're too small for it to be useful."))
-        self._blank()
+        self._sub(_("Start here"))
+        self._steps([
+            _("Type the pad sizes, one per line, as size x quantity: 42.0 x 3."),
+            _("Tick the materials to cut."),
+            _("Enter the sheet size and a base filename."),
+            _("Click Generate G-code, Generate SVG or Frame & Cut (see Getting a job to the laser)."),
+        ])
+        self._figure("pad_discs")
+        self._bullet(_("You get one file per material, named with the base name and the "
+                    "material: my_job_felt.gcode."))
+        self._bullet(_("\"max\" as the quantity (18.0 x max) fills the rest of the sheet with "
+                    "that size. Only one \"max\" line per sheet."))
+        self._bullet(_("Exact size cuts the disc at the size typed, with no offset. SVG only."))
+        self._bullet(_("Sizes and sheet are in the unit set in Sizing Rules (in, mm or cm). "
+                    "Files are always in mm."))
 
-        self._h2(_("Sheet Size & Fit to Paper"))
-        self._body(_("Enter the width and height of your material sheet. For card stock, "
-                    "check \"Fit card to paper\" to use a standard paper size (letter or A4) "
-                    "instead of the sheet dimensions."))
-        self._blank()
+        self._sub(_("Sizing Rules"))
+        self._body(_("Options > Sizing Rules... decides how big each disc is for the pad "
+                  "size you type."))
+        self._bullet(_("Felt Diameter Reduction: the felt disc is this much smaller than the pad."))
+        self._bullet(_("Card Additional Reduction: the card is smaller again, by this much."))
+        self._bullet(_("Leather Wrap Multiplier and Felt Thickness: how far the leather wraps "
+                    "over the back. 1.00 is the standard wrap."))
+        self._bullet(_("Min. Pad Size for Hole: smaller pads get no center hole."))
+        self._bullet(_("Universal uses one set of values for every size. Per Size Range sets "
+                    "values for size ranges; a size outside every range uses the universal values."))
+        self._bullet(_("Darts: leather pads under a size get darts so the leather folds flat "
+                    "over the back. Shape, frequency, overwrap and sizes are adjustable. "
+                    "A size outside every dart range gets no darts."))
+        self._bullet(_("\"Show live pad preview\" draws one pad's felt, card and leather with "
+                    "the values in the dialog as you change them."))
 
-        self._h2(_("Engraving"))
-        self._body(_("Each disc is engraved with its pad size number for identification. "
-                    "Engraving settings and placement are configured in Options > Sizing Rules."))
-        self._bullet(_("Position modes: distance from outside edge, distance from inside "
-                      "(center hole), or centered between the two"))
-        self._bullet(_("Font size is set per material"))
-        self._bullet(_("Both engraving settings (on/off, font sizes) and placement (position modes) "
-                      "support Universal or Per Size Range mode, just like sizing rules"))
-        self._bullet(_("On small pads, text shifts toward the center to fit; only scales down as "
-                      "a last resort."))
-        self._bullet(_("If the font exceeds 80 percent of the disc radius, engraving is skipped for that "
-                      "pad (warning shown before generating)."))
-        self._blank()
+        self._sub(_("Sizing presets"))
+        self._bullet(_("The top of Sizing Rules saves the whole dialog as a named preset: "
+                    "Save Preset, Load, Rename, Delete. The dropdown names the preset in use."))
+        self._bullet(_("Apply asks you to save your changes as a preset first, so what is "
+                    "applied is always a saved preset."))
 
-        self._h2(_("Pad Presets"))
-        self._body(_("Save frequently-used pad lists as presets for quick recall. "
-                    "Presets are organized into libraries (e.g. \"My Presets\", \"Customer Jobs\")."))
-        self._bullet(_("Save as Preset: saves the current pad list to the selected library"))
-        self._bullet(_("Select a preset from the dropdown to load it into the text area"))
-        self._bullet(_("Delete Preset: removes the selected preset"))
-        self._bullet(_("File > Import/Export Pad Presets: share preset files with colleagues"))
-        self._bullet(_("File > Import Matt's Pad Sets: downloads reference pad sets from stohrermusic.com"))
-        self._blank()
+        self._sub(_("Center Hole"))
+        self._body(_("Pick None, 3.0 mm, 3.5 mm or a custom diameter for rivet or screw "
+                  "mounting. Pads under Min. Pad Size for Hole are cut without one."))
 
-        self._h2(_("Materials & Sizing Rules"))
-        self._body(_("Options > Sizing Rules configures how disc sizes are calculated from "
-                    "the pad size you enter:"))
-        self._bullet(_("Felt Offset: how much smaller the felt disc is than the pad cup "
-                      "(e.g. 0.75mm means the felt disc is 0.75mm smaller in diameter)"))
-        self._bullet(_("Card-to-Felt Offset: additional reduction for cardboard backing "
-                      "(added on top of the felt offset)"))
-        self._bullet(_("Leather Wrap Multiplier: controls how much extra leather is added "
-                      "for wrapping around the felt (1.0 = standard wrap)"))
-        self._bullet(_("Felt Thickness: the thickness of felt being used, affects leather "
-                      "wrap calculation"))
-        self._bullet(_("Min. Pad Size for Hole: pads below this size skip the center hole"))
-        self._body(_("Sizing rules, engraving settings, engraving placement, and star/dart "
-                    "settings each have a Universal/Range toggle. In Universal mode (default), "
-                    "one set of values applies to all pad sizes. In Range mode, define multiple "
-                    "size ranges with different values for each. Pads not covered by any range "
-                    "fall back to the universal values. Star/dart ranges work slightly differently: "
-                    "pads not in a range simply get no star pattern."))
-        self._blank()
-        self._body(_("Darts: for leather pads below a size threshold, a dart "
-                    "pattern is added so the leather can fold around the "
-                    "felt. Overwrap, wrap bonus, frequency multiplier, and "
-                    "shape (triangle / sine / square) are all adjustable."))
-        self._blank()
-        self._body(_("Sizing-rules presets: at the top of the Sizing Rules dialog you can "
-                    "save the entire configuration as a named preset, load presets from the "
-                    "dropdown, and export/import preset files to share with other techs."))
-        self._bullet(_("Save Preset: snapshots every value in the dialog (sizing, darts, engraving, placement) "
-                      "\u2014 overwrite an existing preset or save as a new one"))
-        self._bullet(_("Load: fills the dialog from the selected preset \u2014 click Apply to commit"))
-        self._bullet(_("Import/Export: JSON files containing one or more presets"))
-        self._blank()
+        self._sub(_("Sheets and shapes"))
+        self._bullet(_("Enter the sheet width and height. For card, \"Fit card to paper\" "
+                    "uses letter or A4 instead."))
+        self._bullet(_("\"Draw / Capture Shape...\" outlines a skin or scrap: click its corners "
+                    "on the grid (points are not snapped). Pads nest inside the shape. "
+                    "Unload goes back to the rectangle."))
+        self._bullet(_("Edge Bias: click an arrow to pack the pads toward that edge or corner, "
+                    "say where a skin has a clean edge. The center dot clears it."))
+        self._bullet(_("\"Preview before saving\" shows the nest and the material used before "
+                    "anything is written. Save Files writes; Adjust goes back. One material at a time."))
 
-        self._h2(_("G-code Settings"))
-        self._body(_("Options > G-code Settings configures the laser parameters for each material."))
-        self._bullet(_("Speed & Power: set per operation (engraving, center hole, outer cut)"))
-        self._bullet(_("Engraving Mode: \"Line\" (single-stroke outline) or \"Filled\" (scan-line raster fill)"))
-        self._bullet(_("Fill Density: controls scan line spacing for filled engraving"))
-        self._bullet(_("Overscan: extends filled scan lines so the laser is at full speed at character edges"))
-        self._bullet(_("Kerf Width: full beam width. The app compensates each cut (expands outer "
-                      "cuts, shrinks holes). Note: LightBurn asks for half-kerf; here, enter the "
-                      "full measured width."))
-        self._bullet(_("Air Assist: per-layer toggle for air assist (M8 on / M9 off)"))
-        self._bullet(_("Return Speed: how fast the head returns home after the job (slower avoids endstop issues)"))
-        self._bullet(_("Cut Grouping: \"By layer\" does all engravings, then all holes, then all cuts; "
-                      "\"By pad\" completes each pad before moving to the next"))
-        self._blank()
+        self._sub(_("Scrap Mode"))
+        self._body(_("Spreads one pad list over several scraps."))
+        self._steps([
+            _("Tick Scrap Mode and one material."),
+            _("Enter this scrap's size, or draw or capture its shape."),
+            _("Generate or Frame & Cut. What fits is cut; the rest waits for the next scrap."),
+            _("Between scraps keep the shape, unload it, or Re-capture from camera."),
+        ])
+        self._bullet(_("The progress window shows what is left, what is on this scrap and what "
+                    "is done. A scrap counts once its file is written or its cut has finished."))
+        self._bullet(_("You can edit the pad list during a session; it counts from the next scrap."))
+        self._bullet(_("Files are named _scrap1, _scrap2 and so on."))
 
-        self._h2(_("Layer Colors"))
-        self._body(_("Options > Layer Colors maps each operation to a LightBurn color layer "
-                    "(numbered 00 through 29). This only affects SVG output for use in LightBurn."))
-        self._blank()
+        self._sub(_("Labeled Zones"))
+        self._body(_("Small discs look alike once cut. Labeled Zones cuts each size in its own "
+                  "block with the size engraved on the border, on the waste. Sizing Rules > "
+                  "Lesser-used settings; off by default; set the size range."))
+        self._figure("nest_zone")
+        self._bullet(_("Zones use more material than a free nest."))
+        self._bullet(_("A size that cannot get its block is left uncut and reported, never cut unlabeled."))
+        self._bullet(_("A \"max\" size inside the zone range is refused. A \"max\" size outside "
+                    "it fills in around the blocks."))
+        self._bullet(_("Zones are off in Scrap Mode."))
 
-        self._h2(_("Lesser-used settings"))
-        self._body(_("Sizing Rules > Lesser-used settings holds four things most people never touch: Labeled Zones, Leather Locator Marks, Adhesive Rings, and Export Settings. Click the header to open it; it opens itself when any of them is switched on."))
-        self._blank()
+        self._sub(_("Leather Locator Marks"))
+        self._body(_("Engraves where the felt sits on a leather pad (four lines, a circle, or "
+                  "both), so a pad with no center hole can be centered by eye. Sizing Rules > "
+                  "Lesser-used settings; set the size range."))
+        self._bullet(_("The marks belong on the side the felt touches: cut the leather flesh "
+                    "(fuzzy) side up when you use them."))
+        self._bullet(_("SVG puts them on their own layer (Leather locator in Layer Colors) for "
+                    "their own power in LightBurn. G-code engraves them at the leather "
+                    "engraving settings."))
 
-        self._h2(_("Labeled Zones"))
-        self._body(_("Cut each pad size in its own bordered block with the size engraved beside it, so small discs can be told apart after they come off the laser. Off by default; set the size range it applies to. Zones use a grid, so they cost some material, and they stand down in Scrap Mode."))
-        self._blank()
+        self._sub(_("Adhesive Rings (beta)"))
+        self._body(_("A fifth material: a ring of double-sided tape per pad, for sticking a "
+                  "silicone wrap to the back of the card. Switch it on in Sizing Rules > "
+                  "Lesser-used settings, then tick Adhesive rings."))
+        self._figure("adhesive_rings")
+        self._bullet(_("The outer edge is the card disc; the ring is as wide as the leather wrap "
+                    "for that size. Wrap clearance (mm, plus or minus) makes it wider or narrower."))
+        self._bullet(_("The pad size is cut as single-line digits in the hole, on the piece that "
+                    "drops out, or just under the ring when the hole is too small."))
+        self._bullet(_("Pads of 9.5 mm and under are solid discs, with the number under them."))
+        self._bullet(_("SVG: one layer for ring and number. G-code cuts the number, the inside, "
+                    "then the outside, at the ring's cut settings."))
+        self._bullet(_("The laser defaults are a starting point, not tested values. Dial them in "
+                    "on your tape with Tooling > Speed & Power Test."))
 
-        self._h2(_("Leather Locator Marks"))
-        self._body(_("Sizing Rules > Lesser-used settings > Leather Locator Marks engraves guides "
-                    "on leather pads showing where the felt sits — four lines ending at the felt "
-                    "edge, a circle the size of the felt, or both — so a pad with no center hole "
-                    "can be centered by eye before pressing. The marks must be on the side the "
-                    "felt touches, so cut the leather flesh-side (fuzzy side) up when using them. "
-                    "Applies to a pad-size range; off by default."))
-        self._bullet(_("SVG output puts the marks on their own layer (Options > Layer Colors > "
-                      "Leather locator), so you can give them their own power in LightBurn."))
-        self._bullet(_("G-code output engraves them at the leather engraving settings — there is "
-                      "no separate power for them yet. Use the SVG output if the marks need "
-                      "their own power."))
-        self._blank()
+        self._sub(_("Engraving"))
+        self._body(_("Each disc is engraved with its pad size. Font sizes and placement are in "
+                  "Sizing Rules, Universal or Per Size Range."))
+        self._bullet(_("out: from the cut edge. mid: halfway between hole and edge. int: from "
+                    "the center hole."))
+        self._bullet(_("Darted leather: measure \"out\" from the dart valley puts the number just "
+                    "inside the darts. A dart tip always sits over the number."))
+        self._bullet(_("A number too big for its disc moves toward the center, then shrinks. If "
+                    "the font is over 80 percent of the disc radius it is left off, with a "
+                    "warning first."))
 
-        self._h2(_("Adhesive Rings (beta)"))
-        self._body(_("Beta. Sizing Rules > Lesser-used settings > Adhesive Rings adds a fifth "
-                    "material to the Pad Maker: a ring of double-sided tape for each pad, for "
-                    "sticking a silicone wrap to the back of the card. The outer edge matches "
-                    "the card disc, and the ring is as wide as the leather wrap for that pad "
-                    "size. Wrap clearance makes it wider or narrower."))
-        self._bullet(_("Each ring's pad size is cut as single-line digits in its hole, on the "
-                      "piece that drops out. Where the hole is too small to read it, the "
-                      "number goes just under the ring instead."))
-        self._bullet(_("Pads of 9.5 mm and under get a solid disc with no hole, and the number "
-                      "under it."))
-        self._bullet(_("SVG output puts the ring and its number on one layer (Options > Layer "
-                      "Colors). G-code cuts the number, then the inside, then the outside, all "
-                      "at the ring's cut settings (Options > G-code Settings)."))
-        self._bullet(_("The default G-code settings are a starting point, not tested values. "
-                      "Dial them in on your own material with Tooling > Speed & Power Test."))
-        self._bullet(_("Scrap Mode and Frame & Cut work as they do for the other materials."))
-        self._blank()
+        self._sub(_("G-code Settings"))
+        self._body(_("Options > G-code Settings... holds speed, power and passes for each "
+                  "material and each step: engraving, center hole, outer cut."))
+        self._bullet(_("Engraving mode: Line (single stroke) or Filled. Fill density and overscan "
+                    "apply to Filled."))
+        self._bullet(_("Kerf width: enter the full measured kerf (LightBurn asks for half). The "
+                    "app compensates every cut. Measure it with Tooling > Kerf Test."))
+        self._bullet(_("Air assist per step, return-to-home speed, and Cut grouping: by layer "
+                    "(all engravings, all holes, all cuts) or by pad."))
+        self._bullet(_("Each material has its own presets: Load, Save, Rename, Delete."))
+        self._bullet(_("Test speeds and powers on the material you will really cut."))
 
-        self._h2(_("Custom Shapes"))
-        self._body(_("\"Draw / Capture Shape\" defines an irregular polygon for leather skins "
-                    "or scrap pieces. The nesting algorithm fits circles inside the polygon "
-                    "instead of the rectangular sheet."))
-        self._bullet(_("Click points on the grid to define the outline. Vertex placement is "
-                      "free \u2014 not snapped to grid intersections."))
-        self._bullet(_("Grid sized to cover the laser bed (default 17 in / 43 cm; auto-grown "
-                      "if your bed is larger)."))
-        self._bullet(_("\"Show live camera underneath\" overlays the camera feed at 1:1 scale "
-                      "so you can trace your scrap by eye. Requires a saved camera calibration."))
-        self._bullet(_("\"Get from camera\" auto-detects the scrap outline. A safety inset "
-                      "(default 3 mm, Options > Machine) shrinks the polygon to absorb minor "
-                      "camera measurement error at the edges."))
-        self._bullet(_("Unload clears the shape and returns to rectangle mode."))
-        self._blank()
+        self._sub(_("Layer Colors"))
+        self._body(_("Options > Layer Colors... sets the LightBurn color layer for each step. "
+                  "SVG only. Lesser-used settings > Export Settings has a compatibility mode "
+                  "(unitless SVG) for older software."))
 
-        self._h2(_("Scrap Mode"))
-        self._body(_("Place pads across multiple irregular pieces instead of one sheet."))
-        self._bullet(_("One material at a time."))
-        self._bullet(_("Set dimensions or draw / capture a shape for each scrap. Generate "
-                      "fits what it can and tracks the remainder."))
-        self._bullet(_("Between scraps: keep the loaded shape, unload it, or re-capture "
-                      "from camera (when calibrated)."))
-        self._bullet(_("Files named _scrap1, _scrap2, etc."))
-        self._blank()
+        self._sub(_("Job History"))
+        self._body(_("File > Job History... lists the last 300 jobs that were written or sent "
+                  "to the laser, newest first."))
+        self._bullet(_("\"Load into Pad Maker\" puts a job's pad list, materials, sheet, center "
+                    "hole and filename back in the form. Sizing rules, G-code settings and "
+                    "shapes are left as they are."))
+        self._bullet(_("A stopped or errored laser run is marked *. Scrap Mode logs each scrap."))
+        self._bullet(_("Tooling jobs are listed by tool and cannot be loaded."))
 
-        self._h2(_("Edge Bias"))
-        self._body(_("The Edge Bias d-pad control lets you tell the nesting algorithm which "
-                    "direction to pack circles toward. This is useful for leather skins or "
-                    "scrap pieces where some edges are cleaner than others."))
-        self._bullet(_("Click an arrow to bias packing toward that edge or corner"))
-        self._bullet(_("Click the center dot to return to default behavior (no bias)"))
-        self._bullet(_("Cardinal directions (N, S, E, W) scan from that edge inward, "
-                      "filling row by row or column by column"))
-        self._bullet(_("Corner directions (NW, NE, SW, SE) radiate outward from the corner "
-                      "\u2014 small pads nestle into the corner first, larger ones fan out "
-                      "behind them in a wedge pattern"))
-        self._bullet(_("For custom polygon shapes, positions closer to the biased edge or "
-                      "corner are scored more favorably"))
-        self._bullet(_("Example: a triangular scrap with two clean edges forming a right angle "
-                      "and a rough hypotenuse \u2014 bias toward the corner where the good "
-                      "edges meet so pads pack there first"))
-        self._bullet(_("The setting is saved and persists between sessions"))
-        self._blank()
+        self._sub(_("Pad presets"))
+        self._bullet(_("Save as Preset keeps the pad list in a library; pick it from the dropdown "
+                    "to load it. Delete Preset removes it."))
+        self._bullet(_("File > Import Matt's Pad Sets downloads Matt's sets from stohrermusic.com."))
 
-        self._h2(_("Nesting Preview"))
-        self._body(_("Check \"Preview before saving\" to see how your pads will be "
-                    "arranged on the sheet before any files are written."))
-        self._bullet(_("Preview works with one material at a time \u2014 select a single "
-                      "material to use it"))
-        self._bullet(_("The preview shows the sheet boundary (or custom polygon) with "
-                      "circles at their nested positions, labeled with pad sizes, and "
-                      "a material usage percentage"))
-        self._bullet(_("Click Save Files to proceed to file generation"))
-        self._bullet(_("Click Adjust to go back and change edge bias, sheet dimensions, "
-                      "custom polygon shape, or pad sizes/quantities, then generate again"))
-        self._bullet(_("Works in scrap mode too \u2014 preview each scrap piece before "
-                      "committing. Combine with edge bias and custom polygon shapes "
-                      "to optimize irregular scrap pieces."))
-        self._blank()
+    def _section_laser(self):
+        self._section("laser", _("Getting a job to the laser"))
 
-        self._h2(_("Job History"))
-        self._body(_("File > Job History lists every batch that made it to an output "
-                    "stage — SVG written, G-code written, or streamed to the "
-                    "laser. Newest first, with what you'd need to identify a job: "
-                    "date, output type, material, pad count, and sheet size."))
-        self._bullet(_("Select a row to see the full pad list, center hole, base "
-                      "filename, output folder, and which preset it came from"))
-        self._bullet(_("\"Load into Pad Maker\" puts the pad list, materials, sheet "
-                      "size, center hole and filename back into the form — handy "
-                      "for re-cutting a set you've done before"))
-        self._bullet(_("Loading a job leaves your sizing rules and G-code settings "
-                      "alone, and does not restore a custom polygon shape (a "
-                      "camera-captured scrap no longer exists to cut)"))
-        self._bullet(_("Laser runs that were stopped or errored are logged too, "
-                      "marked with a * — so missing pads have an explanation"))
-        self._bullet(_("In scrap mode each scrap is logged separately, numbered to "
-                      "match the session"))
-        self._bullet(_("Tooling outputs are listed too (dies, holders, the organizer, kerf and "
-                      "speed tests, crescents), named by tool; those rows can't be loaded into "
-                      "the Pad Maker's form"))
-        self._bullet(_("Delete single entries or clear the whole log; it holds the "
-                      "last 300 jobs"))
-        self._blank()
+        self._sub(_("Three ways"))
+        self._figure("three_ways")
+        self._bullet(_("SD card: save the G-code to the card and run it on the laser."))
+        self._bullet(_("LightBurn: Generate SVG and set speed and power there."))
+        self._bullet(_("Frame & Cut: the app sends it over USB."))
 
-        self._h2(_("Machine Integration (experimental, opt-in)"))
-        self._body(_("File > Feature Set > \"Experimental: machine integration\" enables "
-                    "direct USB serial control of a Grbl-compatible laser (Creality "
-                    "Falcon2 Pro 40W and similar). Off by default; toggle on to use any "
-                    "of the machine features below."))
-        self._bullet(_("Options > Machine: Home Laser, Test Connection, Clear Errors, "
-                      "Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin."))
-        self._bullet(_("Camera features (overlay, Get from camera, Frame & Cut auto-locate) "
-                      "stay greyed until you've run the one-time camera calibration."))
-        self._blank()
-
-        self._h2(_("Camera Calibration (one-time)"))
-        self._body(_("Establishes the camera-to-bed mapping so the app can convert what the "
-                    "camera sees into machine coords. Two steps:"))
-        self._bullet(_("Engrave a ChArUco card on basswood. Place + secure the basswood; "
-                      "home the laser; jog to roughly bed center; click Frame to verify "
-                      "placement; click Engrave."))
-        self._bullet(_("Capture 12 frames with the camera. The first capture(s) MUST be "
-                      "with the card still at its engraved position — that anchors camera "
-                      "to machine coords. Then move the card around for the remaining "
-                      "captures so the math solves lens distortion."))
-        self._body(_("Saved to a JSON file in the config directory; reused across sessions. "
-                    "Engrave reads your basswood preset (Tooling > Options)."))
-        self._blank()
-
-        self._h2(_("Frame & Cut"))
-        self._body(_("When a Falcon is connected, a Frame & Cut button appears next to "
-                    "Generate SVG / Generate G-code. It generates the G-code in memory, "
-                    "lets you position the head, traces the cut outline at low power for "
-                    "verification, then streams the cut to the laser."))
-        self._bullet(_("The laser can be plugged in or switched on after the app has started: "
-                      "the button appears within a few seconds, and goes away again while the "
-                      "laser is unplugged."))
-        self._bullet(_("Position dialog: Home Laser button (re-home if MPos has drifted); "
-                      "jog arrows; Try Auto Locate (drives head to the polygon's bottom-"
-                      "left vertex when available and the laser is homed)."))
-        self._bullet(_("Framing loops at low power until you click \"Looks Good — Cut!\" — "
-                      "lets you jog between passes to fine-tune alignment."))
-        self._bullet(_("For tilted scraps: jog to the visible bottom-left corner of the "
-                      "material. The G92 work-origin offset bridges the gap between that "
-                      "corner and the polygon's bbox origin so both framing and cutting "
-                      "land where you expect."))
-        self._bullet(_("Pause / Resume / Stop act in real time. Stop is a soft-reset."))
-        self._bullet(_("Frame & Cut itself needs no camera calibration: type the sheet size or "
-                      "draw the shape, jog to the corner, frame, cut."))
-        self._blank()
-
-        self._h2(_("G-code or SVG?"))
+        self._sub(_("G-code or SVG?"))
         self._body(_("A G-code file carries its own speeds and powers, the ones set in this app. "
-                    "Send it to the laser as it is, on an SD card or with Frame & Cut. LightBurn "
-                    "ignores those values when it imports G-code, so for LightBurn use Generate "
-                    "SVG and set speed and power there."))
-        self._blank()
+                  "Send it to the laser as it is, on an SD card or with Frame & Cut."))
+        self._body(_("LightBurn ignores those values when it imports G-code, so for LightBurn use "
+                  "Generate SVG and set speed and power there."))
 
-        self._h2(_("SD Card & Eject"))
-        self._body(_("Check \"Eject SD card after G-code export\" below the Generate buttons. "
-                    "When generating G-code to a removable drive (USB/SD card), the app "
-                    "will automatically eject it when done so you can safely remove it. "
-                    "If the destination isn't a removable drive, nothing extra happens. "
-                    "(Windows only)"))
-        self._blank()
+        self._sub(_("Machine integration"))
+        self._steps([
+            _("File > Feature Set..., under Experimental / In Progress: tick \"Machine menu "
+              "(direct Falcon serial control)\". Restart."),
+            _("Connect the laser by USB, before or after starting the app. Frame & Cut "
+              "appears within seconds."),
+        ])
+        self._bullet(_("Options > Machine (Pad Maker): Home Laser, Test Connection, Clear Errors, "
+                    "Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin, Framing "
+                    "Power (dim, per material)."))
 
-    def _section_key_heights(self):
-        self._h2(_("Key Height Library"))
-        self._body(_("Record and compare key height measurements for different saxophones. "
-                    "Organize sets into libraries, import/export, and share with colleagues."))
-        self._bullet(_("Options > Layout Options controls which key fields are visible"))
-        self._bullet(_("File > Import Matt's Key Heights downloads reference data from stohrermusic.com"))
-        self._blank()
+        self._sub(_("Frame & Cut"))
+        self._steps([
+            _("Click Frame & Cut, check the preview, Continue →."),
+            _("Jog to the material's visible bottom-left corner, even on a tilted scrap."),
+            _("Click Start Frame →. It asks \"Is the lid closed?\": framing turns the laser "
+              "on, low power is still power, and an open lid alarms the machine."),
+            _("It traces the outline at low power; jog between passes if needed."),
+            _("Click \"Looks Good — Cut!\"."),
+        ])
+        self._bullet(_("Framing is a live laser: keep your hands out of the bed."))
+        self._bullet(_("Stop is a soft reset. No calibration needed."))
 
-    def _section_serial_lookup(self):
-        self._h2(_("Serial Lookup"))
-        self._body(_("Look up saxophone serial number ranges by manufacturer to estimate year of production."))
-        self._blank()
+        self._sub(_("Camera"))
+        self._body(_("Optional. Options > Machine > Camera Calibration..., done once:"))
+        self._steps([
+            _("Secure basswood, home, jog to mid-bed, Frame, then Engrave."),
+            _("Capture the card untouched first, click Done with references, then move it for the rest of the 12."),
+        ])
+        self._bullet(_("This unlocks \"Get from camera\", the shape dialog's live overlay, Try "
+                    "Auto Locate, Re-capture from camera and \"Live camera preview\"."))
+        self._bullet(_("Live camera preview closes while another window needs the camera "
+                    "and returns with the next Frame & Cut."))
+        self._bullet(_("\"Camera #1 could not be opened; showing camera #2.\": the saved camera is "
+                    "gone. Switch camera saves the other one."))
 
-    def _section_screw_specs(self):
-        self._h2(_("Screw Specs"))
-        self._body(_("Reference database of screw thread specifications for different saxophone models."))
-        self._bullet(_("File > Import Matt's Specs downloads the latest data from stohrermusic.com"))
-        self._bullet(_("Import/export to share specs with colleagues"))
-        self._blank()
+        self._sub(_("SD card"))
+        self._body(_("Windows: \"Eject SD card after G-code export\" ejects it after writing."))
 
     def _section_tooling(self):
-        self._h2(_("Tooling \u2014 Die Inserts"))
-        self._body(_("Generate laser-cutting files (SVG or G-code) for acrylic pad die inserts. "
-                    "Dies are rings with a fixed outer diameter and an inner hole matching the "
-                    "pad size."))
-        self._bullet(_("Small dies (pad sizes 7.0\u201339.5mm): 50mm outer diameter"))
-        self._bullet(_("Large dies (pad sizes 40.0\u201360.0mm): 70mm outer diameter"))
-        self._bullet(_("Enter sizes as individual values (\"7, 8.5, 25\"), ranges (\"15-30\"), "
-                      "or use the Full Set buttons. Step size controls the increment for ranges "
-                      "(default 0.5mm)."))
-        self._bullet(_("\"Engrave size on ring\" labels the die ring with the pad size number"))
-        self._bullet(_("\"Engrave size on cutout\" labels the inner disc with its actual physical "
-                      "size after kerf deduction"))
-        self._blank()
+        self._section("tooling", _("Tooling"))
+        self._body(_("Laser files for the die holders and die inserts you assemble pads in, "
+                  "plus a few shop tools. Pick a tool with its button, fill it in, then "
+                  "Generate SVG, Generate G-code or Frame & Cut."))
+        self._body(_("The die inserts and die holders follow Phil Noy's pad-making method, which "
+                  "he shares freely: every die insert is engraved \"NOY\" and every holder "
+                  "ring \"DESIGNED BY PHIL NOY\"."))
+        self._link(_("noysaxophonesupplies.com"), "https://www.noysaxophonesupplies.com")
+        self._figure("die_ring")
 
-        self._h2(_("Tooling \u2014 Cutout Discs as Pad Cup Tools"))
-        self._body(_("When a die ring is laser-cut, the inner cutout falls out as a solid disc "
-                    "(pad cup diameter minus kerf). These work as pad cup stiffeners, rim "
-                    "rounders, leveling helpers, bending braces. For precise diameter control, "
-                    "use the Pad Maker tab's \"Exact Size\" material instead \u2014 note that "
-                    "Exact Size outputs SVG only, so import the SVG into your laser software "
-                    "and set acrylic speeds and powers there."))
-        self._blank()
+        self._sub(_("Die Inserts"))
+        self._body(_("An acrylic ring for each pad size; the pad is assembled in its hole."))
+        self._bullet(_("Pads 7.0 to 39.5 mm get a 50 mm ring, 40.0 to 60.0 mm a 70 mm ring."))
+        self._bullet(_("Enter sizes (7, 8.5, 25) or ranges (15-30, by Step), or click Full Set "
+                    "(S), Full Set (L) or Full Set (All)."))
+        self._bullet(_("\"Engrave size on ring\" numbers the ring. \"Engrave size on cutout\" "
+                    "numbers the disc that drops out with its real size."))
+        self._bullet(_("Dies nest in rows from the sheet's bottom-left corner, largest first."))
+        self._bullet(_("The cutout discs make handy pad cup tools. For an exact diameter, use the "
+                    "Pad Maker's Exact size (SVG only)."))
 
-        self._h2(_("Tooling \u2014 Die Holders"))
-        self._body(_("Generate laser-cutting files for the acrylic die holder assembly. "
-                    "Each holder is a stack of 85mm discs cemented together permanently:"))
-        self._bullet(_("Solid bottom disc"))
-        self._bullet(_("Magnet disc (6.5mm hole)"))
-        self._bullet(_("Pin discs (3.5mm alignment holes) \u2014 2 for 5-layer, 3 for 6-layer"))
-        self._bullet(_("Retaining ring (inner diameter matches the die size class)"))
-        self._body(_("Pick the layer count, then the variant: Large (70mm inner), Small "
-                    "(50mm inner), or Both \u2014 two complete independent holders, one of "
-                    "each size, nested onto the same sheet. Set your sheet width and "
-                    "height (in or mm); if the pieces don't fit, generation stops with "
-                    "a clear minimum size message."))
-        self._blank()
+        self._sub(_("Die Holders"))
+        self._body(_("A stack of 85 mm acrylic discs cemented together for good: a solid bottom, "
+                  "a magnet disc (6.5 mm hole), two or three pin discs (3.5 mm holes) and a "
+                  "retaining ring."))
+        self._bullet(_("Pick 5 or 6 layers, and Small (50 mm dies), Large (70 mm) or Both, two "
+                    "complete holders on one sheet."))
+        self._bullet(_("If the pieces don't fit the sheet, it says the smallest sheet that works."))
 
-        self._h2(_("Tooling \u2014 Scrap Mode"))
-        self._body(_("A full set of dies (107 sizes from 7\u201360mm) takes many sheets of acrylic. "
-                    "Check Scrap Mode to spread die generation across multiple sheets:"))
-        self._bullet(_("Enter your die sizes and sheet dimensions"))
-        self._bullet(_("Generate \u2014 what fits is saved, the rest is tracked"))
-        self._bullet(_("Adjust the sheet size if needed and generate again"))
-        self._bullet(_("A progress window shows remaining and completed dies"))
-        self._bullet(_("Files are named with _scrap1, _scrap2, etc. suffixes"))
-        self._blank()
+        self._sub(_("Die Organizer"))
+        self._body(_("A stacking rack for dies, 230 x 330 mm. Cut three upper plates and one "
+                  "lower, line up the four 1/8 in corner holes on pins and glue the stack; a "
+                  "book press clamps it nicely."))
+        self._bullet(_("Pick basswood, acrylic or cork and the sheet. G-code cuts every slot and "
+                    "hole before the plate's edge; the sheet must be at least 234 x 334 mm."))
+        self._bullet(_("The SVG is the bare drawing, for LightBurn."))
 
-        self._h2(_("Tooling \u2014 Die Organizer"))
-        self._body(_("Generate SVGs for a stackable die organizer (230 \u00d7 330 mm). Two parts: "
-                    "Upper plate with slots for the dies, Lower base plate."))
-        self._bullet(_("Cut three Uppers and one Lower (wood works great; acrylic does too)."))
-        self._bullet(_("Align the four 1/8\" corner holes and glue the stack together \u2014 a book "
-                      "press lightly clamps it nicely while the glue sets."))
-        self._bullet(_("Resize the alignment holes to whatever pin you have."))
-        self._bullet(_("Generate G-code cuts it with this app: pick the material and the sheet "
-                      "size. Every slot and hole is cut before the plate's edge. The SVG is the "
-                      "bare drawing, for LightBurn or other laser software."))
-        self._blank()
+        self._sub(_("Kerf Test"))
+        self._body(_("Kerf is the full width the beam removes. Measure it for each material:"))
+        self._figure("kerf")
+        self._steps([
+            _("Pick the material and cut the test: three discs, 10, 20 and 30 mm."),
+            _("Pop the discs out and measure each hole and disc with calipers."),
+            _("Kerf = hole diameter minus disc diameter."),
+            _("Enter that full kerf in G-code Settings (LightBurn asks for half). The app "
+              "compensates every cut."),
+        ])
+        self._bullet(_("It cuts at the material's settings; untick \"Use existing G-code settings "
+                    "for this material\" to try others."))
 
-        self._h2(_("Tooling \u2014 Kerf Test"))
-        self._body(_("A quick test pattern (three circles at 10/20/30mm) for measuring kerf on any "
-                    "material."))
-        self._bullet(_("Pick the material, cut the pattern, pop out the three discs."))
-        self._bullet(_("Measure hole ID and disc OD with calipers."))
-        self._bullet(_("Kerf = hole ID \u2212 disc OD (full width of material vaporized)."))
-        self._bullet(_("Enter the full kerf in G-code Settings; the app handles compensation."))
-        self._body(_("Defaults to your existing speed/power for that material. Uncheck \"Use "
-                    "existing settings\" for a one-off test with custom values."))
-        self._blank()
+        self._sub(_("Speed & Power Test"))
+        self._body(_("Beta. Cuts small discs, each at its own speed, power and passes and engraved "
+                  "with an ID; a legend file lists them. Keep the settings of the discs that "
+                  "came free cleanly without scorching."))
+        self._bullet(_("\"Apply material defaults\" fills the fields from the material."))
+        self._bullet(_("Tick Sweep on Speed, Power or Passes to test Stops values from Start to "
+                    "End; untick to hold one value."))
+        self._bullet(_("\"Also test with air off\" runs half the discs without air."))
+        self._bullet(_("Keep the engraving readable: the IDs are the point. A hole diameter above "
+                    "0 makes washers, for shim stock."))
+        self._bullet(_("G-code only: an SVG would lose each disc's settings."))
+        self._bullet(_("Test on the material you will really cut."))
 
-        self._h2(_("Tooling \u2014 Speed & Power Test"))
-        self._body(_("Beta. Generates a sheet of small test discs, each cut at a different "
-                    "combination of speed/power/passes. Each disc is engraved with its 2-digit "
-                    "ID; a legend.txt saved alongside the G-code maps each ID to its parameters. "
-                    "Cut the sheet, inspect which discs came free cleanly without scorching, then "
-                    "use those values as your starting point for that material."))
-        self._bullet(_("Pick the material and click \"Apply material defaults\" to pre-fill the "
-                      "speed/power fields with sensible starting values for that material."))
-        self._bullet(_("Disc diameter is yours to set. Smaller saves material; bigger helps the "
-                      "engraving stay legible. 20 mm is a good default."))
-        self._bullet(_("Three sweep rows \u2014 Speed, Power, Passes. Check \"Sweep\" to test "
-                      "\"Stops\" evenly-spaced values from Start to End; uncheck to hold constant "
-                      "at \"Value\". You can sweep 0, 1, 2, or 3 variables \u2014 a single disc, "
-                      "a row, a grid, or a 3-D block."))
-        self._bullet(_("Engraving speed/power are editable too. The label engraving has to be "
-                      "readable for the test to be useful, so don't leave it at zero \u2014 the "
-                      "\"Apply material defaults\" button fills it from the material's existing "
-                      "engraving settings."))
-        self._bullet(_("\"Air assist\" toggles air on/off for every disc. \"Also test with air off\" "
-                      "doubles the matrix so half the discs run with air and half without, "
-                      "side by side."))
-        self._bullet(_("\"Preview before saving\" pops a layout view so you can sanity-check disc "
-                      "count and arrangement before committing to the file dialog."))
-        self._bullet(_("G-code only \u2014 no SVG output, since the per-disc speed/power/passes "
-                      "would be lost on import. The legend.txt is the source of truth for "
-                      "looking up which disc had which settings."))
-        self._blank()
+        self._sub(_("Pad Press Spacers"))
+        self._body(_("3D-printable 1.75 in square spacers with their thickness on top; stack them "
+                  "to set press depth. A half-step set (3.0 to 4.5 mm), a quarter-step set "
+                  "(3.25 to 4.25 mm) and a rack. Print in PLA or PETG."))
 
-        self._h2(_("Tooling \u2014 Pad Press Spacers"))
-        self._body(_("3D-printable spacer biscuits for pad pressing. 1.75\" (44.45 mm) square "
-                    "biscuits with their thickness engraved on top \u2014 stack them to set pad "
-                    "press depth. PLA or PETG both work."))
-        self._bullet(_("Half-step set: 3.0 / 3.5 / 4.0 / 4.5 mm (4 of each, 16 total)."))
-        self._bullet(_("Quarter-step set: 3.25 / 3.75 / 4.25 mm (4 of each, 12 total)."))
-        self._bullet(_("Organizer rack: 7 compartments to hold the whole spacer set."))
-        self._body(_("Save the .stl files to disk and slice them in your 3D printer software."))
-        self._blank()
+        self._sub(_("Tonehole Crescent"))
+        self._body(_("A crescent glued into the mouthpiece side of a tonehole covers part of it "
+                  "and flattens that note. Enter the tonehole ID and the percent of its open "
+                  "area to cover."))
+        self._figure("crescent")
+        self._bullet(_("Inner edge: \"Match tonehole curve\" is the classic crescent; flatter is "
+                    "shorter and wider, rounder longer and thinner. The area stays the same."))
+        self._bullet(_("For several, set each up with a quantity and click Add to list. Generate "
+                    "makes the list, or the fields when it is empty. The SVG numbers each part "
+                    "on the scrap."))
+        self._bullet(_("G-code cuts the chosen material (cork by default) half a kerf outside the "
+                    "outline, so the part comes out at size."))
+        self._bullet(_("The SVG has no kerf compensation; set it in LightBurn. Generate STL prints "
+                    "it at the thickness entered."))
 
-        self._h2(_("Tooling \u2014 Tonehole Crescent"))
-        self._body(_("A crescent set into the mouthpiece side of a tonehole covers part of it and "
-                    "flattens that note. Enter the tonehole ID and how much of its open area to "
-                    "cover; the outer edge is the tonehole ID exactly."))
-        self._bullet(_("The Inner edge slider sets how curved the inner edge is. \"Match tonehole "
-                      "curve\" gives the classic crescent; flatter makes it shorter and wider, "
-                      "rounder makes it longer and thinner. The area covered stays the same."))
-        self._bullet(_("The preview shows it mouthpiece side up, with its widest point and the "
-                      "round hole that would leave the same open area."))
-        self._bullet(_("To make several at once, set each one up, give it a quantity and click Add to "
-                      "list. Generate then puts the whole list in one file, in order. With more than "
-                      "one entry the SVG engraves each crescent's list number on the scrap beside it, "
-                      "since crescents a little different in size look alike once cut."))
-        self._bullet(_("Generate SVG to laser-cut it (no kerf compensation \u2014 set that in your "
-                      "laser software), or Generate STL to 3D print it at the thickness you enter."))
-        self._bullet(_("Generate G-code cuts it from the material you pick (cork unless you change "
-                      "it), half a kerf outside the outline so the part comes out at size."))
-        self._blank()
+        self._sub(_("Scrap Mode"))
+        self._body(_("Tick Scrap Mode on Die Inserts to spread a set over several sheets: each "
+                  "Generate fills one sheet, a window tracks what is left, and files are named "
+                  "_scrap1, _scrap2."))
 
-        self._h2(_("Tooling \u2014 Frame & Cut"))
-        self._body(_("G-code from any Tooling tool can go to the laser on an SD card, or "
-                    "straight over USB: with machine integration on (File > Feature Set) and a "
-                    "laser connected, a Frame & Cut button appears beside Generate G-code. It "
-                    "sends the same job the file would hold."))
-        self._bullet(_("Position the head at the sheet's bottom-left corner, click Start Frame, "
-                      "check the framed box, then cut. No camera calibration is needed."))
-        self._bullet(_("Speed & Power Test asks where to save its legend before it starts."))
-        self._bullet(_("In Scrap Mode each click cuts one sheet, and a sheet only counts once "
-                      "its cut has finished."))
-        self._blank()
+        self._sub(_("Frame & Cut"))
+        self._body(_("Every tool that writes G-code has Frame & Cut beside Generate G-code. It "
+                  "sends the same job the file would hold, the same way as on the Pad Maker."))
+        self._bullet(_("Jog to the sheet's bottom-left corner."))
+        self._bullet(_("Speed & Power Test asks where to save its legend before the laser moves."))
+        self._bullet(_("In Scrap Mode each click cuts one sheet; a sheet counts only once its cut "
+                    "has finished."))
 
-        self._h2(_("Tooling \u2014 Settings"))
-        self._body(_("Options > Tooling Settings: per-material G-code (acrylic, basswood) "
-                    "and die-engraving options."))
-        self._bullet(_("Acrylic / basswood G-code: speed, power, passes, kerf, air assist. "
-                      "Defaults tuned for the Falcon2 Pro 40W (3 mm acrylic; 3 mm basswood). "
-                      "Adjust to your machine."))
-        self._bullet(_("Basswood preset feeds the camera-calibration card engrave AND the die "
-                      "organizer (when you cut it in LightBurn)."))
-        self._bullet(_("Die engraving: filled vs. line mode, font sizes for ring + cutout "
-                      "engraving, ring engraving placement."))
-        self._bullet(_("Cork: the default cut was tested on 3/32 in (2.4 mm) sheet cork. Kerf and "
-                      "engraving are left at 0 for you to find with the Kerf Test and the Speed & "
-                      "Power Test; while engraving is 0 nothing is engraved on cork, and the app "
-                      "says so."))
-        self._blank()
+        self._sub(_("Settings"))
+        self._body(_("Options > Settings...: speed, power, passes, kerf and air for acrylic, "
+                  "basswood and cork, and the die engraving options (line or filled, font "
+                  "sizes, ring placement)."))
+        self._bullet(_("Die inserts and holders use the acrylic settings. Defaults suit a Falcon2 "
+                    "Pro 40W on 3 mm acrylic and basswood; adjust for your laser."))
+        self._bullet(_("The basswood settings also engrave the camera calibration card."))
+        self._bullet(_("Cork: the default cut was tested at 1000 mm/min and 30 % on 3/32 in cork "
+                    "with a 40 W laser. The kerf is not measured (0) and the engraving is not "
+                    "set (0 and 0)."))
+        self._bullet(_("While cork's engraving is not set, nothing is engraved on cork, and the "
+                    "app says so before it cuts."))
+
+    def _section_key_heights(self):
+        self._section("key_heights", _("Key Height Library"))
+        self._body(_("Record and compare key heights for different saxophones, in libraries you "
+                  "can share."))
+        self._bullet(_("Options > Layout Options... chooses which keys are shown."))
+        self._bullet(_("File > Import Matt's Key Heights downloads Matt's sets from stohrermusic.com."))
+
+    def _section_serial_lookup(self):
+        self._section("serial_lookup", _("Serial Lookup"))
+        self._body(_("Pick the maker and type the serial number to estimate the year it was made."))
+
+    def _section_screw_specs(self):
+        self._section("screw_specs", _("Screw Specs"))
+        self._body(_("Thread specifications for screws and rods, by saxophone model."))
+        self._bullet(_("File > Import Matt's Specs downloads the latest from stohrermusic.com."))
 
     def _section_tuner(self):
-        self._h2(_("Tuner"))
-        self._body(_("A 12-wheel chromatic stroboscopic tuner. "
-                    "Each wheel shows concentric rings (one per octave) of alternating "
-                    "colored and dark segments visible through a wedge-shaped cutout. "
-                    "An analog VU meter at the bottom shows the detected fundamental pitch and cents error."))
-        self._bullet(_("When the input pitch matches the reference, the pattern freezes (appears stationary)"))
-        self._bullet(_("Sharp: pattern drifts right. Flat: pattern drifts left"))
-        self._bullet(_("Faster drift = farther from in-tune. Frozen = perfectly in tune"))
-        self._bullet(_("Multiple wheels respond simultaneously from harmonics in the sound \u2014 "
-                      "this is real FFT analysis of the audio, not simulated"))
-        self._bullet(_("Per-pitch-class phase tracking with temporal smoothing keeps each "
-                      "wheel's rotation independent and stable"))
-        self._blank()
+        self._section("tuner", _("Tuner"))
+        self._body(_("A strobe tuner: one wheel per note, one ring per octave. It runs while the "
+                  "tab is open."))
+        self._bullet(_("Frozen pattern: in tune. Drifting right: sharp. Left: flat. The faster "
+                    "the drift, the further off."))
+        self._bullet(_("Several wheels move at once: those are the harmonics in your sound."))
+        self._bullet(_("The VU meter at the bottom shows the note and how many cents off it is."))
 
-        self._body(_("Rendering:"))
-        self._bullet(_("GPU-accelerated via Rust/wgpu when available \u2014 60 to 120 fps"))
-        self._bullet(_("Automatic CPU canvas fallback if the GPU path is unavailable "
-                      "(older systems, virtual machines, etc.)"))
-        self._blank()
+        self._sub(_("Controls"))
+        self._bullet(_("DISP: SENS (how loud a sound must be), BRIGHT, FPS (60, 90 or 120)."))
+        self._bullet(_("PITCH: A= reference (440 Hz by default), KEY transposition (C, Bb, Eb, F)."))
+        self._bullet(_("BIAS: NOTE brightens the played octave's ring; OCT. boosts the strongest ring."))
+        self._bullet(_("Options > Settings...: backlight and faceplate colors, frame-rate readout. "
+                    "Options > Input Device... picks the microphone."))
 
-        self._body(_("On-screen controls (the slider panel below the wheels):"))
-        self._bullet(_("DISP > SENS: how loud a signal needs to be to register"))
-        self._bullet(_("DISP > BRIGHT: master brightness for the strobe disc segments"))
-        self._bullet(_("DISP > FPS: target frame rate (60 / 90 / 120)"))
-        self._bullet(_("PITCH > A=: reference pitch in Hz (default 440)"))
-        self._bullet(_("PITCH > KEY: instrument transposition (C / Bb / Eb / F)"))
-        self._bullet(_("BIAS > NOTE: per-wheel ring brightness contrast "
-                      "(0 = all rings same brightness, 100 = played octave ring brightest)"))
-        self._bullet(_("BIAS > OCT.: dominant octave boost (emphasizes the strongest ring)"))
-        self._blank()
+        self._sub(_("Microphone"))
+        self._bullet(_("A good mic matters most on low notes. A USB condenser such as the "
+                    "Audio-Technica AT2020 USB works well, as does any condenser through an "
+                    "audio interface."))
+        self._bullet(_("Built-in laptop mics manage basic tuning but struggle low down. Bluetooth "
+                    "headset mics do not work: their sample rate is too low."))
 
-        self._body(_("Settings (Options > Settings):"))
-        self._bullet(_("Input Device: pick the microphone the tuner listens to"))
-        self._bullet(_("Backlight Color: color of the strobe disc segments"))
-        self._bullet(_("Faceplate Color: background color of the tuner display"))
-        self._bullet(_("Show frame rate on screen: overlays a small live FPS counter for diagnostics"))
-        self._blank()
-
-        self._h2(_("Microphone"))
-        self._body(_("The tuner analyzes audio from your microphone. A quality mic "
-                    "makes a significant difference in accuracy, especially for "
-                    "low notes where the fundamental frequency may be weak."))
-        self._bullet(_("The mic needs to capture the full frequency range of the "
-                      "saxophone (down to ~100 Hz for baritone). This requires a "
-                      "sample rate of at least 44.1 kHz and a flat low-frequency response."))
-        self._bullet(_("Recommended: Audio-Technica AT2020 USB (no audio interface needed)"))
-        self._bullet(_("Any condenser mic through an audio interface will also work well"))
-        self._bullet(_("Laptop/built-in mics work for basic tuning but may struggle "
-                      "with low register notes"))
-        self._bullet(_("Bluetooth headset mics do not work \u2014 their sample rate "
-                      "is too low (16 kHz) for harmonic analysis"))
-        self._bullet(_("Select your mic via Options > Input Device"))
-        self._blank()
-
-        self._body(_("The tuner activates automatically when you switch to the Tuner tab "
-                    "and stops when you leave it, so there is no CPU or audio usage when "
-                    "you are on other tabs."))
-        self._blank()
+        self._sub(_("How it works"))
+        self._bullet(_("Each wheel turns at the difference between the sound and its note, from "
+                    "real analysis of the audio, not a simulation."))
+        self._bullet(_("It draws on the graphics card where it can (60 to 120 fps) and falls back "
+                    "to a slower drawing mode where it can't."))
 
     def _section_toner(self):
-        self._h2(_("Toner \u2014 Tone Analyzer"))
+        self._section("toner", _("Toner (beta)"))
+        self._body(_("A harmonic analyzer: it finds the note you play and measures each harmonic "
+                  "up to the 20th. Every reading is the whole chain at once: player, horn, "
+                  "mouthpiece, reed, mic and room."))
+        self._body(_("So it measures change, not gear. Change one thing at a time and compare. "
+                  "Mouthpiece, player and mic routinely outweigh horn-to-horn differences; "
+                  "compare your setups with your other setups."))
 
-        # === WHAT THIS TOOL IS ===
-        self._h2(_("What This Tool Does"))
-        self._body(_("The Toner is a harmonic analyzer. It detects your fundamental pitch and "
-                    "measures the strength of each harmonic up to the 20th. Every reading "
-                    "captures the whole chain at once \u2014 you + horn + mouthpiece + reed + "
-                    "mic + room \u2014 so a single reading can't isolate any one part. The "
-                    "value comes from changing one variable at a time and watching the delta."))
-        self._blank()
+        self._sub(_("Two ways to use it"))
+        self._bullet(_("Live: watch the spectrum while you play to see how air, embouchure and "
+                    "voicing change the sound."))
+        self._bullet(_("Over time: record a session, change one thing, record another, and "
+                    "compare. The thing you changed is the difference: a mouthpiece, a mic, "
+                    "a horn, or you on another day."))
+        self._bullet(_("Be skeptical of strong conclusions from small samples."))
 
-        self._body(_("This is a tool for relative measurements, not absolute truth about gear. "
-                    "In our data, mouthpiece + player + mic routinely dwarf horn-to-horn "
-                    "differences \u2014 the same Conn 6M played by two different players on "
-                    "two different mouthpieces produced 12 dB of upper-harmonic spread, more "
-                    "than the spread across many different horns combined. Compare YOUR setups "
-                    "to YOUR other setups, and expect any single reading to be mostly about "
-                    "your current chain rather than the horn alone."))
-        self._blank()
+        self._sub(_("Before you capture"))
+        self._bullet(_("You need a preset: File > Presets.... Make, Model, Player, Mouthpiece, "
+                    "Mic Type and Mic Model are required. More fields can be switched on in "
+                    "Options > Settings... > Analysis."))
+        self._bullet(_("The SAX selector sets the transposition and is saved with the preset."))
+        self._bullet(_("A condenser mic (such as an AT2020 USB) gives the fullest picture. Ribbon "
+                    "and dynamic mics dull the upper harmonics; the Analyze tool warns when mic "
+                    "types differ."))
+        self._bullet(_("Laptop mics are not suitable. Bluetooth headset mics do not work."))
 
-        # === TWO WAYS TO USE IT ===
-        self._h2(_("Two Ways to Use It"))
+        self._sub(_("Mic placement"))
+        self._bullet(_("2 to 3 feet (60 to 90 cm) from the bell, slightly off-axis, in a quiet room. "
+                    "Closer than a foot exaggerates the low harmonics."))
+        self._bullet(_("Mic position matters more than almost anything: a few inches between "
+                    "takes can shift complexity 10 to 20 percent. Use a stand at a fixed "
+                    "spot, and note it in the Mic Position field."))
 
-        self._body(_("1. Live biofeedback while practicing"))
-        self._bullet(_("The gauges and spectrum respond in real time. The "
-                      "movement is the information \u2014 it shows how your "
-                      "air, embouchure, and voicing choices affect the "
-                      "sound moment to moment."))
-        self._blank()
+        self._sub(_("Capturing"))
+        self._steps([
+            _("Click Capture and pick or create a preset."),
+            _("Play. Hold a note about a second and it is captured; move on to the next."),
+            _("Click Stop. A summary shows which notes you covered and where the gaps are."),
+        ])
+        self._bullet(_("Capture at least 8 different notes; more is better."))
+        self._bullet(_("Calibration mode walks you up a chromatic scale, 5 seconds per note. "
+                    "File > Presets... > Import Audio File... analyzes a WAV."))
+        self._bullet(_("Sessions are dated and saved automatically."))
 
-        self._body(_("2. Tracking changes over time"))
-        self._bullet(_("Record a session, change one thing, record another. The comparison tool "
-                      "shows what moved and by how much. Works for any variable:"))
-        self._bullet(_("Switching mouthpieces \u2014 same horn, reed, mic. Delta is the mouthpiece."))
-        self._bullet(_("Day-to-day variation \u2014 same everything. Delta is you."))
-        self._bullet(_("Ribbon vs condenser \u2014 same horn, same room. Delta is the recording chain."))
-        self._bullet(_("Two horns \u2014 same player, mouthpiece, mic, room. Delta is the horn."))
-        self._blank()
-        self._body(_("Over many sessions, what stays the same emerges from what drifts. That takes "
-                    "time and discipline about what you control. Be skeptical of strong "
-                    "conclusions from small samples."))
-        self._blank()
+        self._sub(_("Display"))
+        self._bullet(_("Spectrum or Bars view, with Linear (true ratios) or dB scale."))
+        self._bullet(_("The intonation gauge shows cents flat or sharp; the IN TUNE lamp lights "
+                    "within 4 cents."))
+        self._bullet(_("Overlay on Spectrum (from the Analyze tool) shows a stored preset as blue "
+                    "ghost bars behind the live spectrum, note by note."))
 
-        # === GETTING STARTED ===
-        self._h2(_("Getting Started"))
+        self._sub(_("Analyze"))
+        self._body(_("File > Analyze... shows what differs between presets: not which is better, "
+                  "but what changed and where."))
+        self._bullet(_("Filter the picker by horn type, player, mouthpiece and mic type."))
+        self._bullet(_("One preset: its descriptors and harmonic curve. Two: side by side with a "
+                    "Difference chart. Three or more: the spread across the group."))
+        self._bullet(_("Horn Average or Per-Note shows whether a difference is everywhere or in "
+                    "one register."))
+        self._bullet(_("Percentiles rank each preset against all presets of the same sax type."))
+        self._bullet(_("Click a legend label or chart line for that preset's details. Back returns "
+                    "to the picker."))
+        self._bullet(_("The table shows each preset's mic type and rolloff, and notes when mics "
+                    "differ."))
 
-        self._body(_("Before your first capture, you need two things: a "
-                    "microphone and a preset."))
-        self._blank()
+        self._sub(_("Descriptors"))
+        self._body(_("Most useful as differences between two presets, where mic and room effects "
+                  "cancel. Choose which are shown in Options > Settings... > Analysis."))
+        self._bullet(_("Warmth (Thin to Warm): the strength of the 2nd harmonic. Not the same as "
+                    "dark: a sound can be warm and bright, or thin and dark."))
+        self._bullet(_("Some setups, metal mouthpieces played hard especially, make the 2nd "
+                    "harmonic louder than the fundamental. Warmth reads these as moderately "
+                    "warm; this part of the formula may change."))
+        self._bullet(_("Harmonic Complexity (Pure to Complex): how evenly the energy spreads over "
+                    "the harmonics."))
+        self._bullet(_("Even/Odd Ratio: even against odd harmonics, round against edgy. The most "
+                    "consistent across recording conditions. On by default."))
+        self._bullet(_("Rolloff Shape (Smooth to Peaked): bumps where harmonics stick out. Off by "
+                    "default."))
+        self._bullet(_("Evenness (Variable to Even): how alike the character is across the range. "
+                    "Needs at least 5 notes."))
 
-        self._body(_("Microphone"))
-        self._bullet(_("Mic type and model are set per preset \u2014 you'll "
-                      "enter them when creating a preset in File \u2192 "
-                      "Presets. Both are required before capturing."))
-        self._bullet(_("A condenser mic (e.g. Audio-Technica AT2020 USB) "
-                      "gives you the fullest picture \u2014 flat response "
-                      "captures upper harmonics accurately, which is "
-                      "where most of the interesting differences live."))
-        self._bullet(_("Ribbon and dynamic mics can still be used, but they "
-                      "attenuate upper harmonics, which skews complexity-based "
-                      "comparisons. The mic type is stored with your data so "
-                      "you always know what produced it, and the Analyze tool "
-                      "warns when comparing across mic types."))
-        self._bullet(_("Laptop/built-in mics are not suitable \u2014 they "
-                      "roll off both low and high frequencies and add noise"))
-        self._bullet(_("Bluetooth headset mics do not work \u2014 sample "
-                      "rate is too low (16 kHz) for harmonic analysis"))
-        self._blank()
+        self._sub(_("Character Map"))
+        self._body(_("Plots Warmth against Harmonic Complexity, so each preset sits in one of four "
+                  "corners: warm and bright, warm and dark, thin and bright, thin and dark. All "
+                  "four are real characters."))
+        self._bullet(_("Warmth comes from how the chamber and reed couple to the fundamental, "
+                    "brightness from the reed's buzz on the tip rail, so they move independently."))
+        self._bullet(_("H4-H5 mean and Rolloff are offered as other axes, but they tend to follow Warmth."))
+        self._bullet(_("Compare within one sax type: lower horns read warmer and brighter whatever "
+                    "the mouthpiece. It warns before mixing types."))
 
-        self._body(_("Mic placement"))
-        self._bullet(_("2\u20133 feet (60\u201390 cm) from the bell, slightly off-axis."))
-        self._bullet(_("Closer than 1 foot \u2014 proximity effect exaggerates low harmonics."))
-        self._bullet(_("Quieter room is better \u2014 background noise masks upper harmonics."))
-        self._bullet(_("Mic position matters more than almost anything else. Moving a few inches "
-                      "between takes \u2014 same horn, same player, minutes apart \u2014 changed rolloff "
-                      "by over 1 dB/harmonic in our tests, enough to shift complexity by 10\u201320%."))
-        self._bullet(_("For controlled comparisons, use a mic stand at a fixed position; the "
-                      "position change otherwise shows up in your data and can be larger than "
-                      "what you're trying to measure. (Or change position deliberately to study "
-                      "how much it influences capture.)"))
-        self._blank()
+        self._sub(_("Reading the differences"))
+        self._bullet(_("H1 to H4: mostly the bore; the least change in player and mouthpiece swaps."))
+        self._bullet(_("H7 to H13: where neck and mouthpiece swaps show most."))
+        self._bullet(_("H3 to H12 all together: usually mouthpiece or player."))
+        self._bullet(_("Two takes of one setup ten minutes apart differed by 1 to 3 percent on "
+                    "descriptors and about 0.3 dB/H on rolloff. Smaller differences are probably "
+                    "noise."))
+        self._bullet(_("These are observed patterns, not laws. Same-player comparisons isolate "
+                    "equipment best."))
 
-        self._body(_("Preset"))
-        self._bullet(_("A preset saves your setup details: horn + player + "
-                      "mouthpiece + mic. It pre-fills session metadata for "
-                      "quick capture start."))
-        self._bullet(_("Click Capture, then create or load a preset. "
-                      "Six fields are required: Make, Model, Player, "
-                      "Mouthpiece, Mic Type, and Mic Model. Optional "
-                      "fields like reed, serial, ligature, room, and "
-                      "preamp can be enabled in Options \u2192 Settings "
-                      "\u2192 Analysis tab."))
-        self._bullet(_("The SAX selector sets the transposition and is "
-                      "stored with the preset. When you load a preset, "
-                      "it updates automatically."))
-        self._blank()
+        self._sub(_("Recording quality"))
+        self._body(_("Rolloff, how fast the upper harmonics fade, shows how much your recording "
+                  "catches:"))
+        self._bullet(_("1.0 to 2.0 dB/H: condenser, close. Full detail."))
+        self._bullet(_("2.0 to 2.5 dB/H: good mic, further away or a lively room."))
+        self._bullet(_("Over 2.5 dB/H: ribbon, dynamic, built-in or distant mic. The app warns "
+                    "after the first few captures."))
 
-        # === CAPTURING ===
-        self._h2(_("Capturing"))
-        self._bullet(_("Click Capture, select or create a preset, then play."))
-        self._bullet(_("The tool auto-detects steady tones: hold a note "
-                      "for about a second and it triggers automatically. "
-                      "No button-pressing while playing."))
-        self._bullet(_("Move to the next note and it captures again. Play "
-                      "through the horn's range at your own pace."))
-        self._bullet(_("The first ~100ms of each note is automatically "
-                      "skipped \u2014 the attack transient doesn't represent "
-                      "the sustained tone."))
-        self._bullet(_("Capture at least 8 unique notes for a useful "
-                      "fingerprint. More is better."))
-        self._bullet(_("Click Stop when done. A coverage summary shows "
-                      "which notes you hit and where the gaps are."))
-        self._bullet(_("Every capture is timestamped. The session date "
-                      "is saved automatically, so you can track changes "
-                      "over time."))
-        self._blank()
+        self._sub(_("Presets and data"))
+        self._bullet(_("Mutate Preset copies a preset with its fields filled in, so you can change "
+                    "one thing and save it as new."))
+        self._bullet(_("Sandbox mode (Options > Settings... > Analysis) relaxes the required "
+                    "fields for other instruments and experiments. Sandbox presets are marked "
+                    "in amber."))
+        self._bullet(_("A preset's report shows its sessions over time, with the change from each "
+                    "to the next and a per-note breakdown."))
+        self._bullet(_("File > Transfer Data exports or imports the preset library."))
 
-        # === THE DISPLAY ===
-        self._h2(_("Display"))
-        self._bullet(_("Spectrum view: full FFT frequency spectrum with "
-                      "harmonics highlighted in amber and the fundamental "
-                      "in green"))
-        self._bullet(_("Bars view: one bar per harmonic, clean and simple"))
-        self._bullet(_("Scale: Linear (default) shows true amplitude ratios. "
-                      "dB shows the logarithmic audio scale."))
-        self._blank()
+        self._sub(_("WAV recording"))
+        self._body(_("On by default; the first capture asks for a folder. At the end of a session "
+                  "the recording is analyzed again, more strictly than live, and that better "
+                  "result is what is stored."))
+        self._bullet(_("Turn it off, or delete each WAV after analysis, in Options > Settings... > General."))
+        self._bullet(_("Keep the WAVs to listen back, share, or re-analyze with better tools later."))
 
-        self._h2(_("Live Display"))
-        self._body(_("The live display shows two things in real time: the "
-                    "intonation gauge (flat/sharp with cents readout, IN TUNE "
-                    "lamp within \u00b14 cents) and the spectrum bars "
-                    "(complete harmonic shape from H1 through H20)."))
-        self._blank()
-        self._body(_("Live descriptor gauges (Pure\u2194Complex, Thin\u2194Warm) "
-                    "were removed because absolute single-preset readouts "
-                    "proved too noisy to trust \u2014 mic position alone "
-                    "shifts complexity by 10\u201320% between takes, and "
-                    "the mouthpiece dominates the signal much more than the "
-                    "horn does. The descriptors still live in the Analyze "
-                    "tool, where comparing two presets cancels those "
-                    "confounders out."))
+        self._sub(_("How it works"))
+        self._bullet(_("Harmonics are measured in dB against the fundamental, so volume and mic "
+                    "gain drop out. Below -60 dB counts as noise."))
+        self._bullet(_("The first tenth of a second of each note, the attack, is skipped."))
+        self._bullet(_("The detector checks whether a loud peak is a harmonic of a lower note, "
+                    "which keeps it from reading the wrong octave."))
+        self._bullet(_("Notes are averaged first, then the notes together, so many captures of one "
+                    "register don't outweigh the rest."))
+        self._bullet(_("Only raw measurements are stored. Descriptors are worked out fresh each "
+                    "time, so improvements apply to old captures too."))
 
-        self._h2(_("Spectrum Overlay"))
-        self._body(_("You can load a preset as a ghost overlay on the "
-                    "live spectrum. From the Analyze tool, view a single "
-                    "preset or a group average, then click \"Overlay on "
-                    "Spectrum.\" Blue ghost bars appear behind the live "
-                    "display, updating per-note as you play."))
-        self._blank()
-        self._body(_("This lets you eyeball how your live sound compares "
-                    "to a stored reference \u2014 useful for quick A/B "
-                    "checks. For rigorous comparison, use the Analyze "
-                    "tool where both sides are averaged data."))
-        self._blank()
+    def _section_sharing(self):
+        self._section("sharing", _("Sharing data"))
+        self._body(_("Each data tab can export to a file and import one, to share with colleagues "
+                  "or keep a backup:"))
+        self._bullet(_("Pad presets: File > Export Pad Presets... and Import Pad Presets...."))
+        self._bullet(_("Key heights: File > Export Key Sets... and Import Key Sets...."))
+        self._bullet(_("Screw specs: File > Export Screw Specs... and Import Screw Specs...."))
+        self._bullet(_("Toner presets: File > Transfer Data."))
+        self._bullet(_("Everything: File > Import Settings from Folder... copies the settings of "
+                    "another installation."))
 
-        # === ANALYZING ===
-        self._h2(_("The Analyze Tool"))
-        self._body(_("This is where the tool earns its keep. The Analyze tool "
-                    "(File \u2192 Analyze\u2026) shows you what's different "
-                    "between two or more presets \u2014 not which one is "
-                    "\"better,\" but what changed and where."))
-        self._blank()
-        self._bullet(_("File \u2192 Analyze opens a picker with filters for horn "
-                      "type, player, mouthpiece, and mic type"))
-        self._bullet(_("Select one preset: detail view with descriptors and "
-                      "harmonic curve"))
-        self._bullet(_("Select two presets: side-by-side delta analysis with a "
-                      "Difference chart \u2014 a single curve of the "
-                      "harmonic-by-harmonic delta that instantly shows where "
-                      "the sound diverges"))
-        self._bullet(_("Select three or more: spread analysis across the group"))
-        self._bullet(_("Toggle between Horn Average and Per-Note to see whether "
-                      "differences are across the board or concentrated in "
-                      "certain registers"))
-        self._bullet(_("Population percentiles: each preset's descriptors are "
-                      "ranked against all other presets of the same sax type, "
-                      "with low/below avg/mid-range/above avg/high labels"))
-        self._bullet(_("\"Overlay on Spectrum\" loads a preset as a blue ghost "
-                      "behind the live display for real-time A/B comparison "
-                      "while playing"))
-        self._bullet(_("Clickable legend labels and chart lines show preset "
-                      "details (player, mouthpiece, mic, etc.)"))
-        self._bullet(_("Back button on analysis windows returns you to the picker "
-                      "to try a different selection"))
-        self._blank()
-        self._body(_("The table shows mic type and recording quality (rolloff "
-                    "rate) for each preset. If mic types differ, the analysis "
-                    "notes that harmonic differences may partly reflect the mic "
-                    "rather than the horn."))
-        self._blank()
-
-        # === PRESET MANAGEMENT EXTRAS ===
-        self._h2(_("Preset Management Extras"))
-        self._bullet(_("Mutate Preset: duplicates a preset with all fields "
-                      "pre-filled (name cleared) so you can change one variable "
-                      "(mouthpiece, mic, reed) and save it as a new preset. "
-                      "Streamlines A/B testing workflows."))
-        self._bullet(_("Sandbox mode: enable in Options \u2192 Settings \u2192 "
-                      "Analysis to relax field requirements for non-sax "
-                      "instruments, contact mics, effects chains, or "
-                      "experimental setups. Sandbox presets are flagged with an "
-                      "amber label so you don't confuse them with horn data."))
-        self._bullet(_("Mic position field: an optional preset field for "
-                      "documenting where the mic was placed (distance, angle, "
-                      "axis). Highly recommended \u2014 mic position is one of "
-                      "the biggest sources of variation in captures."))
-        self._blank()
-
-        # === TONE DESCRIPTORS ===
-        self._h2(_("Tone Descriptors"))
-        self._body(_("The Analyze tool computes a handful of descriptors from the "
-                    "harmonic data. They are most useful for side-by-side comparison, "
-                    "where deltas between two presets cancel out mic-position and "
-                    "room confounders. Which ones are shown is configurable in "
-                    "Options \u2192 Settings \u2192 Analysis tab \u2014 Even/Odd is "
-                    "on by default; Rolloff Shape is off by default."))
-        self._blank()
-
-        self._body(_("Warmth and brightness are independent"))
-        self._body(_("The two main descriptors \u2014 Warmth and Harmonic "
-                    "Complexity \u2014 measure independent properties of "
-                    "saxophone tone, and they don't have to agree. A horn or "
-                    "mouthpiece can be warm and bright, warm and dark, not warm "
-                    "and bright, or not warm and dark. All four are real, "
-                    "recognizable characters that players name and care about."))
-        self._blank()
-
-        self._body(_("The four quadrants:"))
-        self._bullet(_("Warm + bright: fat, supported, projecting. Vintage Conns "
-                      "played hard, some metal mouthpieces, the classic \"big\" "
-                      "tenor sound."))
-        self._bullet(_("Warm + dark: round, mellow, rich. Classical large-chamber "
-                      "mouthpieces, dark Otto Links."))
-        self._bullet(_("Not warm + bright: edgy, cutting, no body. Berg Larsen "
-                      "115/0, screaming fusion mouthpieces."))
-        self._bullet(_("Not warm + dark: hollow, woody, clarinet-like. The \"pure "
-                      "fundamental, suppressed everything else\" character. Some "
-                      "vintage large-chamber hard rubber mouthpieces sit here."))
-        self._blank()
-
-        self._body(_("Why they're independent: Warmth measures how strongly the "
-                    "2nd harmonic (the octave above the fundamental) sits in "
-                    "the tone \u2014 that comes from how the chamber and reed "
-                    "couple to the fundamental. Brightness measures how much "
-                    "energy is in the upper harmonics \u2014 that comes from "
-                    "the buzz of the reed against the tip rail. Those are "
-                    "physically decoupled mechanisms. You can engineer either "
-                    "axis without affecting the other."))
-        self._blank()
-
-        self._body(_("The Analyze tool's Character Map plots Warmth against a "
-                    "brightness measure so you can see where any selected "
-                    "preset sits in the two-dimensional character space. The "
-                    "default brightness axis is Harmonic Complexity, because "
-                    "it is the most independent of Warmth in our test data. "
-                    "The dropdown also offers H4\u2013H5 mean (the raw average "
-                    "strength of the 4th and 5th harmonics) and Rolloff "
-                    "(inverted), but those measures share a denominator with "
-                    "Warmth (both are dB relative to the fundamental) and "
-                    "tend to track Warmth rather than provide an independent "
-                    "axis."))
-        self._blank()
-
-        self._body(_("Character Map is most reliable within a single sax type. Lower-pitched horns "
-                    "read warmer and brighter regardless of mouthpiece, so cross-type comparisons "
-                    "mostly show you that physics rather than character. The tool warns before "
-                    "opening one."))
-        self._blank()
-
-        self._body(_("The descriptors in detail"))
-        self._bullet(_("Warmth (Thin \u2194 Warm) \u2014 strength of the 2nd "
-                      "harmonic relative to the fundamental. A strong H2 "
-                      "produces a round body sitting just above the fundamental, "
-                      "which is the \"fat\" or \"thick\" quality players "
-                      "describe as warmth. Note: warmth is NOT the same as "
-                      "darkness. A mouthpiece can be dark in its upper "
-                      "harmonics while still having a weak H2 (reads \"not "
-                      "warm\") or a strong H2 (reads \"warm\")."))
-        self._bullet(_("Some setups \u2014 metal mouthpieces driven hard especially \u2014 produce H2 LOUDER "
-                      "than the fundamental, a \"horn-like\" spectrum where the octave dominates. "
-                      "Real and recognized. Warmth reads these as moderately warm rather than "
-                      "maxed out (perceptually, the H2 \u2248 H1 saturation point); we're still "
-                      "working out the best characterization, so this part of the formula may "
-                      "evolve."))
-        self._blank()
-
-        self._bullet(_("Harmonic Complexity (Pure \u2194 Complex) \u2014 spectral "
-                      "flatness, a measure of how evenly distributed the "
-                      "harmonic energy is. A pure tone with one dominant "
-                      "harmonic reads low; a tone with many strong harmonics "
-                      "of comparable amplitude reads high. Tracks the simple-"
-                      "vs-rich axis of timbre."))
-        self._blank()
-
-        self._bullet(_("Even/Odd Ratio (Odd \u2194 Even) \u2014 the balance "
-                      "between even harmonics (H2, H4, H6...) and odd harmonics "
-                      "(H3, H5, H7...). Even harmonics produce a round, warm "
-                      "quality; odd harmonics produce an edgier, hollower "
-                      "quality. Conical bore instruments like saxophone "
-                      "produce both, but the ratio varies between horns and "
-                      "especially between mouthpieces. Captures something "
-                      "Warmth alone doesn't \u2014 the full balance across "
-                      "the entire harmonic series, not just H2. In our test "
-                      "data, this is the most consistent descriptor across "
-                      "varying recording conditions."))
-        self._blank()
-
-        self._bullet(_("Rolloff Shape (Smooth \u2194 Peaked) \u2014 how cleanly "
-                      "the harmonics roll off from strong to weak. A low "
-                      "value means a clean, linear rolloff; a high value "
-                      "means bumps or peaks where certain harmonics stick out. "
-                      "May correspond to what players describe as \"presence\" "
-                      "or \"projection.\" Off by default; turn on in "
-                      "Options \u2192 Settings \u2192 Analysis."))
-        self._blank()
-
-        self._bullet(_("Evenness (Variable \u2194 Even) \u2014 how uniformly "
-                      "the tone character sits across the register. Low "
-                      "evenness means the horn sounds different in different "
-                      "ranges (e.g. warm in the low end and bright on top). "
-                      "High evenness means consistent character throughout. "
-                      "Computed only when at least 5 notes are captured."))
-        self._blank()
-
-        # === WHERE DIFFERENCES COME FROM ===
-        self._h2(_("Where Differences Come From"))
-        self._body(_("The analysis text flags which harmonic range moved most. Different parts of "
-                    "the saxophone tend to affect different harmonics, though the mapping isn't "
-                    "perfectly understood:"))
-        self._blank()
-        self._bullet(_("H1\u2013H4 (low): research suggests bore-driven more than mouthpiece-driven; "
-                      "this range shows the least variation in our player/mouthpiece swaps."))
-        self._bullet(_("H7\u2013H13 (upper): where neck swaps show their biggest effect in our data, "
-                      "and where mouthpiece changes also show up."))
-        self._bullet(_("H3\u2013H12 broadband: mouthpiece and player changes tend to lift or suppress "
-                      "the whole upper series rather than a narrow band."))
-        self._blank()
-        self._body(_("These are observed patterns, not laws of physics. Same-player comparisons "
-                    "isolate equipment; cross-player comparisons can't cleanly separate horn from "
-                    "player."))
-        self._blank()
-
-        self._body(_("Measurement noise: how big does a delta need to be?"))
-        self._bullet(_("In our early data, two takes of the same setup ten minutes apart varied by "
-                      "1\u20133% on descriptors and ~0.3 dB/H on rolloff. Deltas under that floor are "
-                      "likely session-to-session noise; bigger ones are potentially real but "
-                      "still need context (same player? same mic? same room?) to interpret. Early "
-                      "estimate from one two-take data point \u2014 will tighten as more repeat data "
-                      "arrives."))
-        self._blank()
-
-        # === REPORTS ===
-        self._h2(_("Preset Reports"))
-        self._body(_("The report view shows one preset's history: "
-                    "descriptors, session-by-session changes (with "
-                    "deltas from the previous session), harmonic "
-                    "curve, and per-note breakdown. Use it to see "
-                    "how your readings on a given setup have drifted "
-                    "over time."))
-        self._blank()
-
-        # === RECORDING QUALITY ===
-        self._h2(_("Recording Quality"))
-        self._body(_("The app measures harmonic rolloff \u2014 how quickly "
-                    "upper harmonics fade relative to the fundamental. "
-                    "This tells you how much of the signal your "
-                    "recording setup is capturing:"))
-        self._bullet(_("1.0\u20132.0 dB/H: Condenser mic, close placement. "
-                      "Full harmonic detail."))
-        self._bullet(_("2.0\u20132.5 dB/H: Good mic, further away or "
-                      "reflective room."))
-        self._bullet(_("2.5+ dB/H: Ribbon, dynamic, built-in, or distant "
-                      "mic. Upper harmonics attenuated. The app warns "
-                      "you after the first few captures if this is "
-                      "detected."))
-        self._blank()
-        self._body(_("If you want to learn the most about your actual "
-                    "setup \u2014 what the horn and mouthpiece are doing "
-                    "\u2014 use a condenser mic. If you want to learn "
-                    "how your recording chain colors the sound, try "
-                    "different mics and compare. Both are valid uses."))
-        self._blank()
-
-        # === DATA MANAGEMENT ===
-        self._h2(_("Data & Transfer"))
-        self._body(_("Presets and sessions are saved automatically. Each "
-                    "session records the date, setup details, mic type, "
-                    "and mic model alongside the harmonic data."))
-        self._blank()
-        self._bullet(_("File \u2192 Transfer Data \u2192 Export/Import "
-                      "Preset Library: for backup or moving data "
-                      "between machines. Exported files are JSON."))
-        self._blank()
-
-        self._h2(_("WAV Recording"))
-        self._body(_("WAV recording is on by default. Each session writes a WAV alongside the "
-                    "harmonic data; first capture asks you to choose a folder."))
-        self._blank()
-        self._body(_("Why it matters: at the end of each session, the toner re-analyzes the "
-                    "recording offline with stricter segment detection than the live pipeline "
-                    "manages. Offline extracts about 2\u00d7 the harmonic resolution, so your stored "
-                    "fingerprints come from the better measurement (~5 seconds for a 4-minute "
-                    "recording). Disable in Options \u2192 Settings \u2192 General if you must (warning "
-                    "explains the tradeoff); you can also auto-delete the WAV after analysis."))
-        self._blank()
-        self._body(_("Other reasons to keep the WAVs:"))
-        self._bullet(_("Re-analyze with future, better tools."))
-        self._bullet(_("Share recordings for others to analyze or import."))
-        self._bullet(_("Listen back and correlate what you hear with what the data shows."))
-        self._bullet(_("Keep a record of how a horn sounded on a given day."))
-        self._blank()
-        self._body(_("Files are named with preset name + session date. The toner activates "
-                    "automatically on tab switch and stops when you leave."))
-        self._blank()
-
-        # === NERD INFO ===
-        self._h2(_("Nerd Info \u2014 How It Works Under the Hood"))
-
-        self._body(_("FFT Pipeline"))
-        self._bullet(_("16,384-sample FFT at 44.1 kHz \u2192 2.69 Hz resolution, fine enough for "
-                      "individual harmonics on the lowest baritone notes."))
-        self._bullet(_("Hann window before the FFT (\u221231.6 dB sidelobes), standard for harmonic "
-                      "analysis."))
-        self._blank()
-
-        self._body(_("Pitch Detection"))
-        self._bullet(_("Peak-picking with sub-harmonic verification: on sax the 2nd or 3rd "
-                      "harmonic is often louder than the fundamental, so the detector checks "
-                      "whether a strong peak might be H2/H3/H4/H5 of a lower note by looking "
-                      "for that candidate's own series. Prevents octave errors."))
-        self._bullet(_("Temporal hysteresis prevents frame-to-frame octave jumps."))
-        self._blank()
-
-        self._body(_("Harmonic Measurement"))
-        self._bullet(_("For each harmonic up to the 20th: peak-pick within \u00b13 bins, then parabolic "
-                      "interpolation (CCRMA method) refines frequency and amplitude. Corrects up "
-                      "to 1.42 dB of inter-bin scalloping loss."))
-        self._bullet(_("Measured in dB relative to the fundamental \u2014 normalizes out volume and "
-                      "mic gain."))
-        self._bullet(_("Harmonics under \u221260 dB are discarded as noise."))
-        self._blank()
-
-        self._body(_("Descriptors \u2014 Formulas"))
-        self._bullet(_("Harmonic Complexity uses spectral flatness (the ratio "
-                      "of geometric mean to arithmetic mean of harmonic "
-                      "amplitudes), scaled by the coverage of significant "
-                      "harmonics (those above \u221235 dB relative to the "
-                      "fundamental). A pure tone has low flatness; a complex "
-                      "tone with many strong harmonics has high flatness."))
-        self._bullet(_("Warmth measures the strength of the 2nd harmonic "
-                      "(the octave) in dB relative to the fundamental, mapped "
-                      "to a 0\u20131 range. A stronger H2 reads warmer. "
-                      "Consistent with acoustic research on even/odd harmonic "
-                      "ratios in wind instruments."))
-        self._bullet(_("Even/Odd Ratio is computed in the linear (not dB) "
-                      "amplitude domain as the sum of even harmonic amplitudes "
-                      "divided by the sum of all harmonic amplitudes. Higher "
-                      "values indicate even-harmonic dominance."))
-        self._bullet(_("Rolloff Shape is the standard deviation of residuals "
-                      "from a linear fit to the harmonic series in dB. Low "
-                      "values mean a clean exponential rolloff; high values "
-                      "mean peaks or notches in the harmonic structure."))
-        self._bullet(_("Evenness is computed as 1 minus (standard deviation of "
-                      "complexity across notes / 0.40), clamped to the 0\u20131 "
-                      "range. Requires at least 5 notes captured."))
-        self._bullet(_("Rolloff Rate is the slope (dB per harmonic) of the "
-                      "linear fit to H1\u2013H12 in dB. Used as both a "
-                      "recording-quality indicator and a darkness proxy. "
-                      "Sax-type-dependent: typical baritone 1.5\u20132.0, "
-                      "tenor 1.1\u20132.0, alto 1.9\u20132.3, soprano 2.8\u20134.0."))
-        self._blank()
-
-        self._body(_("Descriptors are never stored \u2014 they are recomputed from raw harmonic data "
-                    "using the current formulas, so improvements apply retroactively to every "
-                    "historical capture."))
-        self._blank()
-
-        self._body(_("What Gets Saved"))
-        self._bullet(_("Per capture: raw harmonic amplitudes (dB rel. fundamental), harmonic cents "
-                      "deviations, fundamental frequency, spectral centroid, signal level. "
-                      "Everything else is derived."))
-        self._bullet(_("Captures are averaged per-note first, then across notes with equal weight. "
-                      "Prevents register skew \u2014 20 high-note captures and 3 low-note captures "
-                      "still represent the whole horn evenly."))
-        self._bullet(_("The first ~100 ms of each note is skipped \u2014 attack transients contain "
-                      "broadband non-harmonic energy that doesn't represent sustained tone "
-                      "(Saldanha & Corso 1964)."))
-        self._blank()
-
-        self._body(_("Why Raw Data Matters"))
-        self._bullet(_("Spectral centroid is stored as future-proofing \u2014 the most validated "
-                      "acoustic correlate of perceived brightness in the literature."))
-        self._bullet(_("Harmonics are stored up to H20 even though current gauges use only the "
-                      "first few; low-register sax can produce 20+ audible harmonics."))
-        self._bullet(_("Today's captures will be fully usable by better analysis tools tomorrow."))
-        self._blank()
-
-    def _section_import_export(self):
-        self._h2(_("Import / Export & Sharing"))
-        self._body(_("Each data tab supports importing and exporting so you can share "
-                    "data with colleagues or back up your measurements:"))
-        self._bullet(_("Pad Presets: File > Export/Import Pad Presets to share saved pad size lists"))
-        self._bullet(_("Key Heights: File > Export/Import Key Heights to share measurement sets"))
-        self._bullet(_("Screw Specs: File > Export/Import Screw Specs to share thread data"))
-        self._bullet(_("Tone Presets: File > Transfer Data > Export/Import Preset Library"))
-        self._bullet(_("All Settings: File > Import Settings from Folder copies all config "
-                      "files from another installation"))
-        self._body(_("Exported files are standard JSON and can be emailed or shared via any method."))
-        self._blank()
-
-    def _section_padmaking_guide(self):
-        self._h2(_("Learn to Make Pads"))
-        self._body(_("If you somehow got this program and missed the guide that started it all, "
-                    "here's the complete how-to on making saxophone pads:"))
-        self._link(_("stohrermusic.com/articles/how-to-make-saxophone-pads/"),
-                    "https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/")
-
+    def _section_learn(self):
+        self._section("learn", _("Learn to make pads"))
+        self._body(_("The materials, the die holder, gluing, pressing and treating the leather "
+                  "are in Matt Stohrer's guide:"))
+        self._link(_("How to make saxophone pads"),
+                "https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/")
 
 class QuickStartWindow(tk.Toplevel):
     """The quick start guide: one small page of plain text for someone new
@@ -6891,27 +6753,45 @@ class QuickStartWindow(tk.Toplevel):
         ]
         return page
 
-    def __init__(self, parent, show_frame_cut=True):
+    LINK = "#0066CC"
+
+    def __init__(self, parent, show_frame_cut=True, on_user_guide=None):
         super().__init__(parent)
         self.title(_("Quick Start Guide"))
         self.configure(bg=DIALOG_BG)
         self.transient(parent)
         self.resizable(False, False)
+        self._on_user_guide = on_user_guide
 
         body = tk.Frame(self, bg=DIALOG_BG)
         body.pack(padx=22, pady=(14, 6))
         self.line_labels = []
-        for kind, text in self.lines(show_frame_cut):
+        page = self.lines(show_frame_cut)
+        self.guide_link = None
+        for i, (kind, text) in enumerate(page):
             if kind == 'h':
                 label = tk.Label(body, text=text, bg=DIALOG_BG, font=("Helvetica", 12, "bold"),
                                  justify="left", anchor="w", wraplength=self.WRAP)
                 label.pack(anchor="w", pady=(10, 2))
+            elif i == len(page) - 1 and on_user_guide is not None:
+                # The last line ("The rest is in Help > User Guide.") opens
+                # the User Guide itself (2026-11-09, the guide upgrade).
+                label = tk.Label(body, text=text, bg=DIALOG_BG, fg=self.LINK, cursor="hand2",
+                                 font=("Helvetica", 10, "underline"), justify="left", anchor="w",
+                                 wraplength=self.WRAP)
+                label.pack(anchor="w", pady=1)
+                label.bind("<Button-1>", lambda e: self._open_user_guide())
+                self.guide_link = label
             else:
                 label = tk.Label(body, text=text, bg=DIALOG_BG, font=("Helvetica", 10),
                                  justify="left", anchor="w", wraplength=self.WRAP)
                 label.pack(anchor="w", pady=1)
             self.line_labels.append(label)
         tk.Button(self, text=_("Close"), width=10, command=self.destroy).pack(pady=(8, 14))
+
+    def _open_user_guide(self):
+        if self._on_user_guide is not None:
+            self._on_user_guide()
 
 
 class WelcomeWindow(tk.Toplevel):

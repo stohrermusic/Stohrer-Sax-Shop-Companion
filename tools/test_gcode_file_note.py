@@ -320,7 +320,9 @@ def gui():
           frame_and_cut_never_shows_it)
 
     def the_guide_says_why():
-        src = inspect.getsource(ui_dialogs.UserGuideWindow._section_pad_generator)
+        # "Getting a job to the laser" > "G-code or SVG?" (the guide upgrade,
+        # 2026-11-09, moved it out of the Pad Maker section).
+        src = inspect.getsource(ui_dialogs.UserGuideWindow._section_laser)
         assert "G-code or SVG?" in src and "LightBurn" in src and "ignores those values" in src, \
             "the reason belongs in the user guide, not in the box"
         assert "ignores" not in NOTE
