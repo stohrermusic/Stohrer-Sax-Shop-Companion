@@ -7,7 +7,7 @@ The app can fetch reference data from https://www.stohrermusic.com:
 - **Screw Specs**: File > "Import Matt's Specs" fetches `/data/screw_specs.json` and imports each model with a "(Matt's)" suffix to avoid overwriting local entries.
 - **Key Heights**: File > "Import Matt's Key Heights" fetches `/data/key_height_library.json` and imports all presets into a dedicated "Matt's Library".
 
-All use `urllib.request` (stdlib) with a 10-second timeout and `get_ssl_context()` from config.py: certifi's bundle (every build ships it, the Intel Mac build since 2026-11-10), then the system's default certificates, then it raises and the caller shows its "Could not fetch ..." box. It never returns an unverified context: until 2026-11-10 it did (check_hostname False, CERT_NONE) whenever the default certificates could not be loaded, which silently defeated HTTPS for these downloads. `tools/test_tls_context.py` gates it (no code path returns CERT_NONE; a certificate failure reaches the user as the download error), and `--selftest` calls `config.assert_tls_ready()` so the shipped bundle is checked to have certificate authorities on every platform, the Intel Mac included. The JSON formats on the website match the app's internal format exactly, so no conversion is needed.
+All use `urllib.request` (stdlib) with a 10-second timeout and `get_ssl_context()` from config.py: certifi's bundle, then the system's default certificates, then it raises and the caller shows its "Could not fetch ..." box. It never returns an unverified context. Gated by `tools/test_tls_context.py`; `--selftest` calls `config.assert_tls_ready()` on every platform. The JSON formats on the website match the app's internal format exactly, so no conversion is needed. History: `docs/decisions/web-data.md`.
 
 When adding new data to the website, update the JSON files in `C:\code\stohrermusic\static\data\` and push to deploy. App users can then re-import to get the latest.
 
@@ -20,6 +20,7 @@ A web form at https://www.stohrermusic.com/articles/screw-specs-library/ (Submit
 After reviewing submissions in the Google Sheet:
 
 1. **Update the app's screw_specs.json**: Edit the user's local config file (platform config directory) to add verified entries. Format:
+
    ```json
    "Manufacturer": {
      "Model": {
@@ -36,7 +37,6 @@ After reviewing submissions in the Google Sheet:
    ```
 
 2. **Update the website library**: Copy the same data to `C:\code\stohrermusic\static\data\screw_specs.json`, then commit and push to deploy.
-
 3. **Field mapping** (Google Sheet columns → JSON keys):
    - Neck Screw Thread/Desc → `neck_screw_th`, `neck_screw_dia`
    - Hinge Rod Tiny/Small/Medium/Large → `hinge_tiny_*`, `hinge_small_*`, `hinge_med_*`, `hinge_lrg_*`
