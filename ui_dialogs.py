@@ -5603,8 +5603,9 @@ class UserGuideWindow(tk.Toplevel):
     button are gone, so search always covers everything.
 
     Opens maximized: a normal window filling the screen with its title bar
-    (state 'zoomed'; macOS Aqua gets a screen-filling geometry instead), not
-    kiosk full screen. NOT transient: a transient window loses its maximize
+    (state 'zoomed'; macOS Aqua, which has no such state, gets the largest
+    size Tk allows, the visible frame: see _maximize), not kiosk full
+    screen. NOT transient: a transient window loses its maximize
     button on Windows (the toner's Analyze window learned that first). On a
     wide screen the text does not run edge to edge: the reading column stays
     TEXT_MAX_PX wide (a right margin on every line, refitted on resize).
@@ -5742,9 +5743,18 @@ class UserGuideWindow(tk.Toplevel):
     # ---- window -----------------------------------------------------------
 
     def _maximize(self):
-        """A normal maximized window. macOS Aqua has no 'zoomed' state: a
-        geometry that fills the screen instead (the toner's Analyze window
-        does the same)."""
+        """A normal maximized window. Where the window manager has no
+        'zoomed' state (macOS Aqua), the window is made as large as Tk says
+        a window may be: `wm maxsize`, with no size set by the script, is
+        the screens' visible frame (the screen less the menu bar and the
+        Dock) less the window frame's own decorations, so nothing is
+        clipped. Asked for at +0+0 (Tk's y=0 is the top of the screen);
+        AppKit moves the title bar down below the menu bar, which puts the
+        frame exactly on the visible frame. A screen-sized geometry was
+        asked for before (2026-11-09): CI's Macs lose 122 to 138 px of
+        height to the menu bar, title bar and Dock, and the window manager
+        cut the window down to what fitted. A reading that is not credible
+        (0, or more than the screen) gets a screen-sized geometry instead."""
         try:
             self.state("zoomed")
             if self.state() == "zoomed":
@@ -5752,7 +5762,14 @@ class UserGuideWindow(tk.Toplevel):
         except tk.TclError:
             pass
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        self.geometry(f"{sw - 40}x{sh - 80}+20+20")
+        try:
+            max_w, max_h = (int(v) for v in self.wm_maxsize())
+        except (tk.TclError, TypeError, ValueError):
+            max_w = max_h = 0
+        if 0 < max_w <= sw and 0 < max_h <= sh:
+            self.geometry(f"{max_w}x{max_h}+0+0")
+        else:
+            self.geometry(f"{sw - 40}x{sh - 80}+20+20")
 
     def _fit_column(self, event=None):
         """Keep the text to TEXT_MAX_PX: the rest of the widget's width is

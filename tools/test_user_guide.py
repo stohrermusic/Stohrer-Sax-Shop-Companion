@@ -206,13 +206,27 @@ def gui():
     g = open_guide()
 
     def opens_maximized_not_transient_and_schedules_nothing():
+        # The rule in the window manager's own terms, not in pixels of the
+        # screen: the window is in the 'zoomed' state (Windows, X11), or,
+        # where there is no such state (macOS Aqua), it is as large as Tk
+        # says a window may be. `wm maxsize` with no size set by the script
+        # is the usable screen: on Aqua the visible frame (less the menu
+        # bar and the Dock) less the window frame's decorations. The first
+        # version asked for `screen - 100` of height, and CI's Macs, which
+        # lose 122 and 138 px to the menu bar, title bar and Dock, failed
+        # it with the window filling everything it could (e2293e4, run
+        # 42755511492). The evidence is in the message.
         sw, sh = g.winfo_screenwidth(), g.winfo_screenheight()
+        w, h = g.winfo_width(), g.winfo_height()
         try:
-            zoomed = g.state() == "zoomed"
+            state = g.state()
         except tk.TclError:
-            zoomed = False
-        assert zoomed or (g.winfo_width() >= sw - 60 and g.winfo_height() >= sh - 100), \
-            f"not maximized: state {g.state()!r}, {g.winfo_width()}x{g.winfo_height()} on a {sw}x{sh} screen"
+            state = "?"
+        max_w, max_h = (int(v) for v in g.wm_maxsize())
+        evidence = (f"state {state!r}, window {w}x{h}, Tk allows {max_w}x{max_h}, screen {sw}x{sh}, "
+                    f"{root.tk.call('tk', 'windowingsystem')}")
+        assert state == "zoomed" or (w >= 0.9 * max_w and h >= 0.8 * max_h), f"not maximized: {evidence}"
+        print(f"    ({evidence})")
         assert g.wm_transient() == "", f"transient to {g.wm_transient()!r}: no maximize button on Windows"
         assert str(g.title()) == "User Guide" and g.opened_at is None
         assert not root.tk.call("after", "info"), "the guide scheduled something"
@@ -373,7 +387,12 @@ def gui():
         def __init__(self, parent, section=None):
             super().__init__(parent, section=section)
             self.geometry("+-4000+-4000")
+            self.cursor_put_in_search = 0
             opened.append(self)
+
+        def focus_search(self):
+            self.cursor_put_in_search += 1
+            return super().focus_search()
     main_mod.UserGuideWindow = Recorded
 
     def help_opens_at_the_current_tab():
@@ -389,11 +408,19 @@ def gui():
                 assert top_line(w) == line_of(w, f"sec_{key}"), f"{key}: the heading is not at the top"
                 assert w.toc.selection() == (w._toc_items[key],)
                 w.destroy()
-            # The Welcome window's search link: the whole guide, cursor in the search box.
+            # The Welcome window's search link: the whole guide, cursor in
+            # the search box. What the window did, not what the X server
+            # granted: under xvfb there is no window manager, no Tk window
+            # ever gets the keyboard focus, and focus_get() is None on every
+            # window (Linux CI, e2293e4). Tk itself records where a window's
+            # focus goes (focus -lastfor), window manager or not.
             del opened[:]
             w = app.open_user_guide_search()
             root.update()
-            assert isinstance(w, Recorded) and w.opened_at is None and w.focus_get() == w.search_entry
+            assert isinstance(w, Recorded) and w.opened_at is None
+            assert w.cursor_put_in_search == 1 and w.focus_lastfor() == w.search_entry, \
+                (f"the cursor is not in the search box: focus_search called {w.cursor_put_in_search} time(s), "
+                 f"the window's focus goes to {w.focus_lastfor()}")
             w.destroy()
         finally:
             del opened[:]
