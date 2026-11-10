@@ -12,6 +12,7 @@ tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no
 toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, preset system, comparison)
 toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, preset storage, no tkinter)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
+threads.py              → start_worker / GcHeldRLock / gc_held: every worker thread starts here, with the cyclic collector held off while the Tk thread waits on a worker (see Worker threads)
 tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
     ↓ uses
 config.py              → Settings I/O, constants, platform config paths, migration logic, import helpers
@@ -37,6 +38,8 @@ build.py               → Cross-platform PyInstaller build script
 **The User Guide**: `UserGuideWindow` (ui_dialogs.py) is always the whole guide, with a clickable contents list, a search box and drawn figures; `section` is the key it opens at. Every paragraph is its own `_()` string. When adding a tab or feature, add a `_section_*` method (or a `_sub`), call it from `_insert_content` in order, and add the tab's key to `SECTION_KEYS` and `tab_sections`. Figures are canvases drawn from the app's own geometry helpers (`_fig_<name>`, a height in `FIGURE_HEIGHTS`), labels through `_()`, colours explicit, nothing scheduled. Drive the contents list with a click binding, never `<<TreeviewSelect>>` (they would select each other for ever). The window opens maximized and is not transient. Tests: `test_user_guide`. History: `docs/decisions/user-interface.md`.
 
 **Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs.py handles platform-specific scroll behavior (Windows/macOS/Linux).
+
+**Worker threads** (2026-11-10): start every thread through `threads.start_worker()`; take the two locks a worker holds while the Tk thread may wait on them (`CameraCalibrationDialog._port_lock`, `FalconSender._lock`) as `threads.GcHeldRLock`; put any bounded `join()` on the Tk thread inside `threads.gc_held()`; otherwise never join or block on a worker from the Tk thread, poll it with `after()`. The cyclic collector is off while the Tk thread is blocked on a worker, so a worker can never finalise a tkinter Variable (a Tcl call from the wrong thread, waited on by the Tk thread) while the Tk thread waits for it. Gated by `tools/test_threads.py` (an AST scan fails on any `threading.Thread(` in a root module outside threads.py). The deadlock this prevents, its stack and the measurements: `docs/decisions/machine-integration.md`, "The Tk-thread / worker deadlock".
 
 **macOS Quit Path**: `WM_DELETE_WINDOW` only covers the window-close button. On macOS, Cmd-Q and the app menu's Quit fire Tk's `::tk::mac::Quit`, whose default exits the process without running the close handler — settings would silently never save. `main.py` registers `root.createcommand("::tk::mac::Quit", self.on_exit)` on darwin (added v2.61). Any future work on the exit path must keep both routes pointing at `on_exit`.
 

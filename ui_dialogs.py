@@ -11,6 +11,8 @@ import os
 import sys
 import time
 
+from threads import GcHeldRLock, start_worker
+
 from config import (
     DEFAULT_SETTINGS, LIGHTBURN_COLORS, get_resonance_messages,
     ALL_KEY_HEIGHT_FIELDS, save_settings, save_presets,
@@ -4059,7 +4061,6 @@ class PolygonDrawWindow(tk.Toplevel):
             return
         self._camera_index = cam_idx
         self.status_var.set(_("Opening camera for overlay..."))
-        import threading
 
         def _worker():
             try:
@@ -4075,8 +4076,7 @@ class PolygonDrawWindow(tk.Toplevel):
             except Exception as e:
                 self.after(0, self._camera_overlay_failed, e)
 
-        threading.Thread(target=_worker, name='polydraw-overlay',
-                          daemon=True).start()
+        start_worker(_worker, name='polydraw-overlay')
 
     def _camera_overlay_ready(self, cap, notice=None):
         # User may have toggled off / cancelled / closed in the meantime.
@@ -7979,8 +7979,7 @@ class CameraCalibrationDialog(tk.Toplevel):
         self._last_progress_status = None
         self._foreign_status = None
         self._foreign_status_t = 0.0
-        import threading
-        self._port_lock = threading.RLock()
+        self._port_lock = GcHeldRLock()   # a holder has the collector off: see threads.py
         self._win_size = (self.PREVIEW_W + 380, max(self.PREVIEW_H, 600))
         # Phase state: 'engrave' or 'capture'. Decided after the
         # persisted-offset check below — if SSC saved an offset from
@@ -8362,7 +8361,6 @@ class CameraCalibrationDialog(tk.Toplevel):
         skips its read whenever a button holds the port (_holds_port)."""
         if self._phase != 'engrave' or not self._falcon_port:
             return
-        import threading
 
         def _worker():
             st = None
@@ -8384,8 +8382,7 @@ class CameraCalibrationDialog(tk.Toplevel):
             except (RuntimeError, tk.TclError):
                 pass  # app shutting down
 
-        threading.Thread(target=_worker, name='camcal-mpos',
-                         daemon=True).start()
+        start_worker(_worker, name='camcal-mpos')
 
     def _mpos_polled(self, st):
         if not self.winfo_exists():
@@ -8425,7 +8422,6 @@ class CameraCalibrationDialog(tk.Toplevel):
             return
         self._status_var.set(_("Homing..."))
         self.update_idletasks()
-        import threading
         result = {}
 
         def _worker():
@@ -8437,8 +8433,7 @@ class CameraCalibrationDialog(tk.Toplevel):
                 result['ok'] = False
                 result['msg'] = str(exc)
 
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
+        t = start_worker(_worker, name='camcal-home')
         # after()-poll until done. wait_variable pumps the Tk event
         # loop without the WM_DELETE_WINDOW destroy-root-mid-loop
         # hazard of `while t.is_alive(): self.update()`.
@@ -9067,7 +9062,6 @@ class CameraCalibrationDialog(tk.Toplevel):
         DirectShow device and two refresh loops, only one of which
         _stop_refresh could cancel. Paths that want a fresh handle
         (reconnect, switch, recycle) release ``self._cap`` first."""
-        import threading
         if self._cap is not None or self._cam_opening:
             mlog.info("camera #%s: %s -- already %s, not reopening",
                       self._camera_index, reason,
@@ -9089,8 +9083,7 @@ class CameraCalibrationDialog(tk.Toplevel):
             except Exception as e:
                 self.after(0, self._camera_failed, e)
 
-        threading.Thread(target=_worker, name='camcal-open',
-                          daemon=True).start()
+        start_worker(_worker, name='camcal-open')
 
     def _camera_ready(self, cap, first_frame, notice=None):
         self._cam_opening = False
@@ -9973,7 +9966,6 @@ class CameraCaptureDialog(tk.Toplevel):
     def _open_camera_and_start(self):
         """Background-thread camera open so the dialog stays responsive
         during cv2.VideoCapture's 1-3 second initialization."""
-        import threading
         self._status_var.set(
             _("Opening camera..."))
 
@@ -9992,8 +9984,7 @@ class CameraCaptureDialog(tk.Toplevel):
             except Exception as e:
                 self.after(0, self._camera_failed, e)
 
-        threading.Thread(target=_worker, name='camcap-open',
-                          daemon=True).start()
+        start_worker(_worker, name='camcap-open')
 
     def _camera_ready(self, cap, notice=None):
         if not self.winfo_exists():
@@ -10932,7 +10923,6 @@ class FalconRunDialog(tk.Toplevel):
                     parent=self):
                 return
             self._stop_stream()
-        import threading
         try:
             self._home_btn.config(state="disabled", text=_("Homing..."))
         except tk.TclError:
@@ -10949,8 +10939,7 @@ class FalconRunDialog(tk.Toplevel):
                 result['ok'] = False
                 result['msg'] = str(exc)
 
-        t = threading.Thread(target=worker, daemon=True)
-        t.start()
+        t = start_worker(worker, name='run-home')
 
         def check():
             if t.is_alive():
@@ -11260,7 +11249,6 @@ class LiveCameraWindow(tk.Toplevel):
         self.after(50, self._open_camera_async)
 
     def _open_camera_async(self):
-        import threading
 
         def _worker():
             asked = self._camera_index
@@ -11274,8 +11262,7 @@ class LiveCameraWindow(tk.Toplevel):
                 mlog.warning("live camera preview: could not open camera "
                              "#%s: %s", asked, e)
 
-        threading.Thread(target=_worker, name='livecam-open',
-                          daemon=True).start()
+        start_worker(_worker, name='livecam-open')
 
     def _camera_ready(self, cap, notice=None):
         if self._closed:

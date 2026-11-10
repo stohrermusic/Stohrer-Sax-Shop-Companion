@@ -10,6 +10,7 @@ import logging
 import math
 
 # --- Local Imports ---
+from threads import start_worker
 from config import (
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
@@ -2495,8 +2496,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return
         if not self._laser_watch_busy:
             self._laser_watch_busy = True
-            import threading
-            threading.Thread(target=self._laser_watch_worker, name='laser-watch', daemon=True).start()
+            start_worker(self._laser_watch_worker, name='laser-watch')
         self.root.after(LASER_WATCH_PERIOD_MS, self._laser_watch_tick)
 
     def _laser_watch_worker(self):
@@ -2594,8 +2594,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         watch.request_rescan()
         if not self._laser_watch_busy:
             self._laser_watch_busy = True
-            import threading
-            threading.Thread(target=self._laser_watch_worker, name='laser-watch', daemon=True).start()
+            start_worker(self._laser_watch_worker, name='laser-watch')
 
     def _machine_enabled(self):
         """True iff the user has opted into machine integration.
@@ -2816,7 +2815,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         could destroy root mid-loop during the 60s home and produce a
         TclError on the next iteration.
         """
-        import threading
         result = {}
 
         def _worker():
@@ -2829,8 +2827,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 result['msg'] = str(exc)
 
         self._show_homing_status()
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
+        t = start_worker(_worker, name='home-laser')
         # after()-poll until the worker finishes. wait_variable lets
         # the Tk event loop keep running (status modal stays painted,
         # other dialogs respond) without burning CPU in a tight loop.

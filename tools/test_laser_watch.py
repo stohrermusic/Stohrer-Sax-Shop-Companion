@@ -753,10 +753,14 @@ def gui():
             except BaseException as e:      # noqa: BLE001 - the point is that nothing gets here
                 errors.append(e)
         # On its own thread, as in the app: with no main loop left, Tk refuses
-        # the worker's after() ("main thread is not in main loop").
-        t = threading.Thread(target=run, name="laser-watch-test")
-        t.start()
-        t.join(15)
+        # the worker's after() ("main thread is not in main loop"). Started
+        # and joined with the collector held off (threads.py): a collection
+        # on the worker could finalise one of the destroyed app's Variables,
+        # a Tcl call from the wrong thread, while this thread waits on it.
+        from threads import gc_held, start_worker
+        with gc_held():
+            t = start_worker(run, name="laser-watch-test")
+            t.join(15)
         fs.list_serial_ports, fs.probe_grbl_port = keep
         assert not t.is_alive(), "the worker hung"
         assert not errors, f"the worker raised after the window was gone: {errors!r}"

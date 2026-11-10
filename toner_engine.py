@@ -16,8 +16,9 @@ import math
 import json
 import logging
 import os
-import threading
 from collections import deque, namedtuple
+
+from threads import gc_held, start_worker
 
 log = logging.getLogger(__name__)
 
@@ -265,9 +266,9 @@ def check_mic_quality():
         except Exception:
             box['result'] = (False, "unknown")
 
-    t = threading.Thread(target=query, name="mic-check", daemon=True)
-    t.start()
-    t.join(MIC_CHECK_BOUND_S)
+    with gc_held():                  # the Tk thread waits here: see threads.py
+        t = start_worker(query, name="mic-check")
+        t.join(MIC_CHECK_BOUND_S)
     if t.is_alive():
         log.warning("the audio device did not answer a device query in %.0f s; "
                     "the microphone check is skipped", MIC_CHECK_BOUND_S)

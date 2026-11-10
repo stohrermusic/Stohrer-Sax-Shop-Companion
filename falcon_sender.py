@@ -39,6 +39,8 @@ from __future__ import annotations
 import logging
 import re
 import threading
+
+from threads import GcHeldRLock, gc_held, start_worker
 import time
 from collections import deque
 
@@ -490,7 +492,7 @@ class FalconSender:
         self._worker = None
         self._stop_flag = threading.Event()
         self._pause_flag = threading.Event()
-        self._lock = threading.RLock()
+        self._lock = GcHeldRLock()   # a holder has the collector off: see threads.py
         # Outstanding jogs whose ``ok`` Grbl hasn't yet returned. Each
         # ``$J=`` ack must be consumed BEFORE we treat any ``ok`` as a
         # stream-line ack — otherwise the character-counting protocol
@@ -661,7 +663,8 @@ class FalconSender:
                      self._stream_session, self._sent_lines,
                      self._total_lines)
             self.send_realtime(RT_SOFT_RESET)
-            self._worker.join(timeout=2.0)
+            with gc_held():          # the Tk thread waits here: see threads.py
+                self._worker.join(timeout=2.0)
         self._worker = None
 
     def unlock(self):
@@ -835,7 +838,8 @@ class FalconSender:
         # is_alive() is still True for milliseconds after the worker
         # has logically completed.
         if self._worker is not None and self._worker.is_alive():
-            self._worker.join(timeout=0.5)
+            with gc_held():
+                self._worker.join(timeout=0.5)
             if self._worker.is_alive():
                 raise RuntimeError("A stream is already in progress")
         self._stop_flag.clear()
@@ -879,11 +883,8 @@ class FalconSender:
             preview,
         )
         self._last_stream_type = stream_type
-        self._worker = threading.Thread(
-            target=self._stream_worker, args=(list(gcode_lines),),
-            name='FalconSender-stream', daemon=True,
-        )
-        self._worker.start()
+        self._worker = start_worker(self._stream_worker, args=(list(gcode_lines),),
+                                    name='FalconSender-stream')
 
     def is_streaming(self):
         return self._worker is not None and self._worker.is_alive()
