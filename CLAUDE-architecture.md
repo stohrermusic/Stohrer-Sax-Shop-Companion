@@ -11,6 +11,7 @@ tuner_tab.py            → TunerTabMixin (Chromatic strobe tuner tab, StrobeWhe
 tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no tkinter)
 toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, preset system, comparison)
 toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, preset storage, no tkinter)
+machine_control.py      → MachineControlMixin (Options > Machine, Frame & Cut, the laser watch, the camera plumbing: the machine half of the app, not a tab; see The machine mixin)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
 threads.py              → start_worker / GcHeldRLock / gc_held: every worker thread starts here, with the cyclic collector held off while the Tk thread waits on a worker (see Worker threads)
 tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
@@ -50,6 +51,8 @@ build.py               → Cross-platform PyInstaller build script
 **Cross-Platform Helpers**: `bind_mousewheel()` in ui_dialogs/common.py handles platform-specific scroll behavior (Windows/macOS/Linux).
 
 **The ui_dialogs package** (2026-11-10): add a dialog to the module whose dialogs it shares code with, and its name to `ui_dialogs/__init__.py` (both the import and `__all__`); every caller imports from the package, never from a submodule. A dialog that another dialog constructs and that a suite stands in for on the package (`ui_dialogs.FalconRunDialog = Fake`) is looked up through the package at call time (`_pkg.FalconRunDialog(...)`), never bound at import; the five are named in each module's `_pkg` line. Why and how it was cut: `docs/decisions/user-interface.md`, "ui_dialogs becomes a package".
+
+**The machine mixin** (2026-11-10): the Machine menu handlers, Frame & Cut, the laser watch and the camera plumbing are `machine_control.MachineControlMixin`, mixed into `PadSVGGeneratorApp` beside the tab mixins; the scrap session stays in main. The three constants `MACHINE_MENU_LASER_ITEMS`, `MACHINE_MENU_CAMERA_ITEMS` and `LASER_WATCH_PERIOD_MS` live there and main re-imports them, so `main.<name>` keeps working. A main-level name that a moved method reads and a suite replaces on main (`main.NestingPreviewWindow`, `main.machine_supported`) is read through `machine_control._FromMain` at the call; every other name is a plain import. Add a name to `_FromMain` only on both counts. `on_frame_and_cut` is read as source by `test_lid_confirm`, `test_frame_cut_alignment` and `test_framing_power`: keep it one function. Why and how it was cut: `docs/decisions/machine-integration.md`, "The machine half of main.py becomes a mixin".
 
 **Worker threads** (2026-11-10): start every thread through `threads.start_worker()`; take the two locks a worker holds while the Tk thread may wait on them (`CameraCalibrationDialog._port_lock`, `FalconSender._lock`) as `threads.GcHeldRLock`; put any bounded `join()` on the Tk thread inside `threads.gc_held()`; otherwise never join or block on a worker from the Tk thread, poll it with `after()`. The cyclic collector is off while the Tk thread is blocked on a worker, so a worker can never finalise a tkinter Variable (a Tcl call from the wrong thread, waited on by the Tk thread) while the Tk thread waits for it. Gated by `tools/test_threads.py` (an AST scan fails on any `threading.Thread(` in a root module outside threads.py). The deadlock this prevents, its stack and the measurements: `docs/decisions/machine-integration.md`, "The Tk-thread / worker deadlock".
 
@@ -122,12 +125,12 @@ Tests: `test_welcome`. History: `docs/decisions/user-interface.md`.
 
 File > Feature Set lets users show/hide tabs. It only lists what the build can run: no Tuner/Toner on a Mac without the audio stack (`main.audio_supported`), no Machine menu toggle without pyserial (`main.machine_supported`) — i.e. the Intel Mac build. Saving merges into `visible_tabs` rather than replacing it, so a tab the build doesn't offer keeps its saved value. As of v2.0 the Tuner is default-on (no longer marked experimental); only the Toner remains hidden by default. Toner requires a one-time beta terms acceptance dialog (scrollable text explaining beta status, three ways to use it, and setup steps: input device, recording folder, preset fields, required preset fields). Acceptance is stored in `toner_unlocked` in settings. The `visible_tabs` dict in settings controls which tabs are shown.
 
-**Machine Integration (v2.5+, experimental, opt-in)** — File > Feature Set also exposes an `experimental_machine_menu` toggle (default False). When on, the Pad Maker tab gains an Options > Machine submenu, a Frame & Cut button, and the polygon-draw dialog grows its "Get from camera" + live overlay UI. When off, none of that surfaces — the app behaves like pre-v2.5. Helper `_machine_enabled()` in main.py is the single source of truth and is called by `_refresh_machine_ui_state()` whenever the toggle changes or the calibration file appears/disappears.
+**Machine Integration (v2.5+, experimental, opt-in)** — File > Feature Set also exposes an `experimental_machine_menu` toggle (default False). When on, the Pad Maker tab gains an Options > Machine submenu, a Frame & Cut button, and the polygon-draw dialog grows its "Get from camera" + live overlay UI. When off, none of that surfaces — the app behaves like pre-v2.5. Helper `_machine_enabled()` (machine_control.py) is the single source of truth and is called by `_refresh_machine_ui_state()` whenever the toggle changes or the calibration file appears/disappears.
 
 **Gating: the laser and the camera are gated separately.** Frame & Cut never requires a camera calibration, on either tab. `_refresh_machine_ui_state()` is the one place the rule is enforced:
 
 - *Toggle off* (or no pyserial in the build, `machine_supported()`): nothing machine-related shows; the Machine menu is not built at all.
-- *Toggle on*: the Machine menu's laser items are enabled (Home Laser, Test Connection, Clear Errors, Reset Falcon, Framing Power: `main.MACHINE_MENU_LASER_ITEMS`), and Camera Calibration as always. Once a laser is detected (`falcon_port`), the Frame & Cut button shows on the Pad Maker and on every Tooling section that writes G-code. One rule for both tabs, no calibration. `falcon_port` is set and cleared by the laser watch (CLAUDE-engines.md "The laser watch"), on the Tk thread, for the whole session: the button appears within seconds of the laser being plugged in after launch and goes again when its port is no longer listed (which also clears `_falcon_homed_this_session`). Before 2026-11-09 the app probed the ports until a laser answered and never looked again.
+- *Toggle on*: the Machine menu's laser items are enabled (Home Laser, Test Connection, Clear Errors, Reset Falcon, Framing Power: `machine_control.MACHINE_MENU_LASER_ITEMS`), and Camera Calibration as always. Once a laser is detected (`falcon_port`), the Frame & Cut button shows on the Pad Maker and on every Tooling section that writes G-code. One rule for both tabs, no calibration. `falcon_port` is set and cleared by the laser watch (CLAUDE-engines.md "The laser watch"), on the Tk thread, for the whole session: the button appears within seconds of the laser being plugged in after launch and goes again when its port is no longer listed (which also clears `_falcon_homed_this_session`). Before 2026-11-09 the app probed the ports until a laser answered and never looked again.
 - *Toggle on and a camera calibration on disk*: everything that uses the camera. Camera-Polygon Inset Margin in the menu (`MACHINE_MENU_CAMERA_ITEMS`), the "Live camera preview" tick, and through `_camera_capture_ready()` (the toggle and `_camera_calibration_present()`) "Get from camera", the live overlay in the shape dialog, Try Auto Locate and "Re-capture from camera".
 
 With no calibration a Frame & Cut run opens no camera and has no Auto Locate target. The toggle is restart-required; buttons and items follow detection and calibration live. History: `docs/decisions/machine-integration.md`.
@@ -139,7 +142,7 @@ A condensed map of the new (v2.5) cross-cutting subsystem since it touches sever
 ```
 File > Feature Set toggle (experimental_machine_menu)
   ↓ (when on)
-main._machine_enabled() + _refresh_machine_ui_state()
+MachineControlMixin._machine_enabled() + _refresh_machine_ui_state()   (machine_control.py)
   ├─ Options > Machine submenu items
   │   ├─ Home Laser → falcon_sender.FalconSender.home($H)
   │   ├─ Test Connection → falcon_sender.FalconSender.get_status(?)
@@ -165,7 +168,7 @@ main._machine_enabled() + _refresh_machine_ui_state()
       └─ Cut dialog (FalconRunDialog) — same G92 prefix as framing
   Tooling > Frame & Cut buttons (Die Inserts, Die Holders, Die Organizer, Kerf Test,
                                  Speed & Power Test, Tonehole Crescent)
-      └─ main.on_frame_and_cut(tooling_job=...) — the same routine from the
+      └─ MachineControlMixin.on_frame_and_cut(tooling_job=...) — the same routine from the
          framing lines on; bounding-box framing, G92 X0 Y0, no polygon, no
          Auto Locate
 ```

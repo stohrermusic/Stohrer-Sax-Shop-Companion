@@ -77,7 +77,7 @@ def no_raw_thread_start_in_the_app():
                     bad.append(f"{f}:{node.lineno} (Thread imported by name)")
     assert not bad, "threads started outside threads.start_worker: " + ", ".join(bad)
     users = [f for f in app_modules() if "start_worker(" in open(os.path.join(ROOT, f), encoding="utf-8").read()]
-    assert {"main.py", "ui_dialogs/machine.py", "falcon_sender.py", "toner_engine.py"} <= set(users), users
+    assert {"machine_control.py", "ui_dialogs/machine.py", "falcon_sender.py", "toner_engine.py"} <= set(users), users
 
 
 def no_suite_with_a_tk_root_starts_a_raw_thread():

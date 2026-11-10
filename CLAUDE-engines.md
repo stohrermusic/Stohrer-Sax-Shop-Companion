@@ -176,7 +176,7 @@ History: `docs/decisions/machine-integration.md`.
 
 ## The laser watch
 
-`falcon_sender.LaserWatch` (bookkeeping only) run by `main._start_laser_watch` finds a laser plugged in after launch and loses one unplugged.
+`falcon_sender.LaserWatch` (bookkeeping only) run by `MachineControlMixin._start_laser_watch` (machine_control.py) finds a laser plugged in after launch and loses one unplugged.
 
 - `_start_laser_watch` is called from the `__main__` block only, never from `__init__`, `_selftest` or `run_tour`. `_detect_falcon_async()` is a no-op when no watch exists, so building the app probes nothing.
 - `probe_grbl_port` asks `?` first and accepts any status report; only a silent port gets Ctrl-X and the banner wait.
@@ -192,7 +192,7 @@ Every camera window opens its camera through `camera_capture.open_camera_or_fall
 - If the saved number fails, the resolver is tried once more and the window runs on what opened. Nothing is saved: only a calibration save or Switch camera changes `camera_index_override`. An explicit, non-saved number never falls back.
 - **With a calibration on disk the only stand-in is the camera `find_falcon_camera_index()` identifies**; a calibration belongs to one camera. An unreadable calibration file counts as present.
 - A fallback is never silent: the status line shows `fallback_notice(saved, used)` and one warning is logged.
-- The app never competes with itself: `main._release_live_camera()` closes `LiveCameraWindow` before the shape dialog and Camera Calibration open a camera.
+- The app never competes with itself: `MachineControlMixin._release_live_camera()` closes `LiveCameraWindow` before the shape dialog and Camera Calibration open a camera.
 
 Tests: `test_camera_fallback`, `test_calibration_dialog`. History: `docs/decisions/machine-integration.md`.
 
@@ -200,7 +200,7 @@ Tests: `test_camera_fallback`, `test_calibration_dialog`. History: `docs/decisio
 
 Die Inserts (and its Scrap Mode), Die Holders, Die Organizer, Kerf Test, Speed & Power Test and Tonehole Crescent each have Frame & Cut beside Generate G-code.
 
-- One routine: `main.on_frame_and_cut(tooling_job=None)`. A Tooling handler passes a function returning `{'gcode_text', 'material', 'label', 'count'}` (optional `'scrap_num'`, `'after_cut'`) or None. The laser check comes first.
+- One routine: `MachineControlMixin.on_frame_and_cut(tooling_job=None)` (machine_control.py). A Tooling handler passes a function returning `{'gcode_text', 'material', 'label', 'count'}` (optional `'scrap_num'`, `'after_cut'`) or None. The laser check comes first.
 - The machine half reads the job's own values, never the Pad Maker's state. A job not nested on the loaded shape (every Tooling job; card on "Fit card to paper") has `on_shape` False: no framing polygon, no flip override, `G92 X0 Y0`, no Auto Locate target.
 - Everything after a successful `connect()` is inside the `try` whose `finally` disconnects; the sleep lock is taken after the last early return.
 - **`on_frame_and_cut`'s source is read by `test_lid_confirm`, `test_frame_cut_alignment` and `test_framing_power`.** If the method is ever split, those source checks move with it.

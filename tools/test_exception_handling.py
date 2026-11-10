@@ -42,14 +42,15 @@ ALLOWED = {
     # falcon_sender.py: closing a port that may already be closed
     ('falcon_sender.py', 'FalconSender.disconnect'): 1,
     ('falcon_sender.py', 'probe_grbl_port'): 1,
-    # main.py: icon, disconnect() after a menu action, tour and selftest teardown, the excepthook's box
+    # machine_control.py: disconnect() after a menu action, the live camera, Frame & Cut's teardown
+    ('machine_control.py', 'MachineControlMixin._on_machine_clear_errors'): 2,
+    ('machine_control.py', 'MachineControlMixin._on_machine_home_falcon'): 2,
+    ('machine_control.py', 'MachineControlMixin._on_machine_reset_falcon'): 1,
+    ('machine_control.py', 'MachineControlMixin._on_machine_test_connection'): 2,
+    ('machine_control.py', 'MachineControlMixin._release_live_camera'): 1,
+    ('machine_control.py', 'MachineControlMixin.on_frame_and_cut'): 2,
+    # main.py: icon, tour and selftest teardown, the excepthook's box
     ('main.py', 'PadSVGGeneratorApp.__init__'): 1,
-    ('main.py', 'PadSVGGeneratorApp._on_machine_clear_errors'): 2,
-    ('main.py', 'PadSVGGeneratorApp._on_machine_home_falcon'): 2,
-    ('main.py', 'PadSVGGeneratorApp._on_machine_reset_falcon'): 1,
-    ('main.py', 'PadSVGGeneratorApp._on_machine_test_connection'): 2,
-    ('main.py', 'PadSVGGeneratorApp._release_live_camera'): 1,
-    ('main.py', 'PadSVGGeneratorApp.on_frame_and_cut'): 2,
     ('main.py', '_handle_exception'): 1,
     ('main.py', '_selftest'): 1,
     ('main.py', '_selftest._plain_hook'): 1,
