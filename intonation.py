@@ -25,12 +25,12 @@ import math
 import statistics
 from dataclasses import dataclass, field
 
-from toner_engine import (
-    SAX_NOTE_RANGES, SAX_TRANSPOSITIONS, _capture_is_plausible, _shift_note, note_name_to_midi, player_note_name,
-    transpose_note,
+from toner_engine import (  # noqa: F401  (A4_HZ, OFF_NOTE_CENTS, cents_from_equal_temperament, corrected_label
+    A4_HZ, OFF_NOTE_CENTS, SAX_TRANSPOSITIONS, _capture_is_plausible,  # and midi_to_hz lived
+    cents_from_equal_temperament, corrected_capture, corrected_label, midi_to_hz, note_name_to_midi,  # here until
+    player_note_name, transpose_note,  # 2026-11-11 and are still read from this module; the engine owns them now)
 )
 
-A4_HZ = 440.0
 LOW_REGISTER_TOP_WRITTEN_MIDI = 73      # written C#5: the last note of the low register
 PALM_KEYS_FROM_WRITTEN_MIDI = 86        # written D6: the palm keys begin
 FRAME_SECONDS = 0.033                   # one analysis frame at 30 fps, for a take's length
@@ -38,16 +38,6 @@ FRAME_SECONDS = 0.033                   # one analysis frame at 30 fps, for a ta
 
 class IntonationError(ValueError):
     """A run that cannot be made; the message says why."""
-
-
-def midi_to_hz(midi, reference_hz=A4_HZ):
-    """The equal-tempered frequency of a MIDI number at this A."""
-    return reference_hz * 2 ** ((midi - 69) / 12)
-
-
-def cents_from_equal_temperament(f0_hz, concert_midi, reference_hz=A4_HZ):
-    """How far a fundamental lies from its note's equal-tempered pitch, in cents."""
-    return 1200.0 * math.log2(f0_hz / midi_to_hz(concert_midi, reference_hz))
 
 
 def written_midi(concert_midi, sax_type):
@@ -153,36 +143,6 @@ class IntonationRun:
         return [r.note for r in self.readings]
 
 
-OFF_NOTE_CENTS = 50.0
-"""How far a take's pitch may lie from its labelled note and still be that note: half a
-semitone, beyond which it is nearer another note. The line is clean in practice: in Matt's
-library (8,114 captures, 2026-11-10) the furthest kept take is 49.7 cents off and the nearest
-left-out one 112 cents; the 551 left out are six presets from 2026-03-23/25 whose labels sit
-two transpositions below the sounding pitch (an early storage mistake), plus detector slips."""
-
-
-def corrected_label(concert_midi, f0_hz, sax_type, reference_hz=A4_HZ):
-    """The note a take with the March 2026 label really is, or None.
-
-    Six presets captured on 2026-03-23/25 (the Toner's first weeks) stored every
-    `note` two transpositions below the sounding pitch: 28 semitones on a tenor, 18 on
-    an alto, 4 on a soprano. Matt (2026-11-10): "Correct for sure." The rule applies
-    only when the label is off by exactly 2T, within OFF_NOTE_CENTS, AND the corrected
-    note lies in the horn's range; nothing else is ever re-labelled. A take an octave
-    above that again is the detector's own slip on the lowest asked notes (its pitch
-    is not the asked note either) and stays out. Read-side only."""
-    shift = 2 * SAX_TRANSPOSITIONS.get(sax_type, 0)
-    if shift == 0:
-        return None
-    candidate = concert_midi + shift
-    lo, hi = SAX_NOTE_RANGES.get(sax_type, (0, 127))
-    if not lo <= candidate <= hi:
-        return None
-    if abs(cents_from_equal_temperament(f0_hz, candidate, reference_hz)) > OFF_NOTE_CENTS:
-        return None
-    return candidate
-
-
 def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     """The sessions' captures (each a dict with "captures") as an IntonationRun.
 
@@ -191,9 +151,10 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     "unlabelled"; one whose pitch is further than OFF_NOTE_CENTS from its labelled
     note (at the reference pitch) under "off_note": it is not that note, and the
     chart must never draw a point that is not its note. The one exception is a label
-    that is exactly two transpositions low (`corrected_label`): the take is charted
-    under the note it is and counted in `corrected`. Read-side only: nothing on
-    disk changes. Takes of the same written note are one reading."""
+    that is exactly two transpositions low (`toner_engine.corrected_capture`, the
+    rule the fingerprint applies too, written once): the take is charted under the
+    note it is and counted in `corrected`. Read-side only: nothing on disk changes.
+    Takes of the same written note are one reading."""
     if sax_type not in SAX_TRANSPOSITIONS:
         raise IntonationError(f"unknown saxophone type {sax_type!r}")
     readings = {}
@@ -201,6 +162,7 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     for s in sessions:
         caps = s.get("captures", []) or []
         for cap in caps:
+            cap, fixed = corrected_capture(cap, sax_type, reference_hz)
             concert = note_name_to_midi(cap.get("note", ""))
             try:
                 f0 = float(cap.get("fundamental_freq") or 0.0)
@@ -209,18 +171,14 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
             if concert is None or f0 <= 0:
                 unlabelled += 1
                 continue
-            # the pitch against the label first: a take that is not its note is counted as
-            # that, even when its (wrong) label is also outside the horn's range
+            if fixed:
+                corrected += 1
+            # the pitch against the label: a take that is not its note is counted as that,
+            # even when its (wrong) label is also outside the horn's range
             cents = cents_from_equal_temperament(f0, concert, reference_hz)
             if abs(cents) > OFF_NOTE_CENTS:
-                fixed = corrected_label(concert, f0, sax_type, reference_hz)
-                if fixed is None:
-                    off_note += 1
-                    continue
-                corrected += 1
-                cap = dict(cap, note=_shift_note(cap["note"], fixed - concert))
-                concert = fixed
-                cents = cents_from_equal_temperament(f0, concert, reference_hz)
+                off_note += 1
+                continue
             if not _capture_is_plausible(cap, sax_type):
                 implausible += 1
                 continue
@@ -340,8 +298,9 @@ def offset_and_shape(run):
 
 __all__ = [
     "A4_HZ", "FRAME_SECONDS", "LOW_REGISTER_TOP_WRITTEN_MIDI", "PALM_KEYS_FROM_WRITTEN_MIDI",
-    "IntonationError", "IntonationRun", "NoteReading", "NoteSpread", "Take",
-    "cents_from_equal_temperament", "low_register_offset", "midi_to_hz", "note_spreads", "offset_and_shape",
+    "IntonationError", "IntonationRun", "NoteReading", "NoteSpread", "OFF_NOTE_CENTS", "Take",
+    "cents_from_equal_temperament", "corrected_capture", "corrected_label", "low_register_offset", "midi_to_hz",
+    "note_spreads", "offset_and_shape",
     "overlay", "register_changes", "register_of_written", "run_from_captures", "run_from_preset",
     "written_band", "written_midi",
 ]

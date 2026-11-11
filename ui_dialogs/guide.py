@@ -837,8 +837,8 @@ class UserGuideWindow(tk.Toplevel):
 
         self._sub(_("Machine integration"))
         self._steps([
-            _("File > Feature Set..., under Experimental / In Progress: tick \"Machine menu "
-              "(direct Falcon serial control)\". Restart."),
+            _("File > Feature Set..., under Experimental / In Progress: tick \"Direct machine "
+              "control (GRBL)\". Restart."),
             _("Connect the laser by USB, before or after starting the app. Frame & Cut "
               "appears within seconds."),
         ])

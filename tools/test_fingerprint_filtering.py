@@ -132,6 +132,26 @@ a4 = fp["per_note"]["A4"]
 test("A4 H2 averaged correctly (no contamination)",
      abs(a4["harmonics_db"][1] - (-8.0)) < 0.01)
 
+# ================================================
+print("\n=== Test 5b: the March 2026 labels are corrected before the filter (the chart's one rule) ===")
+from toner_engine import corrected_capture, midi_to_hz  # noqa: E402
+# a tenor's written E4 is concert D3 (midi 50); six presets from 2026-03 stored it as A#0, 28 semitones low
+march = make_capture("A#0", realistic_alto_harmonics(), midi_to_hz(50))
+fixed, was_corrected = corrected_capture(march, "Tenor")
+test("A#0 at D3's pitch is corrected to D3 on tenor", was_corrected is True and fixed["note"] == "D3")
+test("the capture itself is not touched (a copy carries the corrected label)",
+     march["note"] == "A#0" and fixed is not march)
+fp = compute_fingerprint([{"captures": [march]}], "Tenor")
+test("the corrected capture is kept under D3 and counted as corrected",
+     fp["capture_count"] == 1 and list(fp["per_note"]) == ["D3"] and fp["corrected"] == 1)
+slip = make_capture("A#0", realistic_alto_harmonics(), midi_to_hz(62))   # an octave above that again
+test("a slip an octave above the 2T is not corrected and stays out, as before",
+     corrected_capture(slip, "Tenor")[1] is False
+     and compute_fingerprint([{"captures": [slip]}], "Tenor")["capture_count"] == 0)
+good = make_capture("D3", realistic_alto_harmonics(), midi_to_hz(50))
+test("a label that is its pitch comes back as the same object, uncorrected",
+     corrected_capture(good, "Tenor")[0] is good and corrected_capture(good, "Tenor")[1] is False)
+
 
 # ================================================
 print("\n=== Test 6: Tenor range bounds (G#2 to E5 concert) ===")

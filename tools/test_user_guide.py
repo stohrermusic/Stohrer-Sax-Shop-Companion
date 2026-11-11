@@ -77,7 +77,7 @@ MUST_SAY = [
     "LightBurn asks for half",
     "Test on the material you will really cut",
     "DESIGNED BY PHIL NOY", "\"NOY\"", "noysaxophonesupplies.com",
-    "Machine menu (direct Falcon serial control)",      # the Feature Set tick, as the dialog names it
+    "Direct machine control (GRBL)",                    # the Feature Set tick, as the dialog names it
     "Camera #1 could not be opened; showing camera #2.",
     "ignores those values",                             # G-code or SVG?
     "Only one \"max\" line per sheet",
@@ -137,7 +137,7 @@ def it_says_what_it_must():
     assert not stray, f"the guide still says: {stray}"
     # The tick it names is the one the Feature Set dialog has.
     import main as main_mod
-    assert 'Machine menu (direct Falcon serial control)' in inspect.getsource(main_mod), "the Feature Set tick was renamed"
+    assert 'Direct machine control (GRBL)' in inspect.getsource(main_mod), "the Feature Set tick was renamed"
     # G-code or SVG? sits in the laser section with its reason (test_gcode_file_note reads it too).
     import ui_dialogs
     laser = inspect.getsource(ui_dialogs.UserGuideWindow._section_laser)

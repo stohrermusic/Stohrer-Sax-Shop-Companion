@@ -65,13 +65,36 @@ def style_for(index):
     return LINE_STYLES[index % len(LINE_STYLES)]
 
 
+TITLE_SEPARATOR = " \u00b7 "     # between the runs' names in the chart's own title
+
+
+def runs_title(lines, width, size):
+    """The chart's own title line: one run's name, or the names of several joined with
+    TITLE_SEPARATOR, cut to what the width holds (0.6 px a character at `size`) with
+    three dots; "" with no run. Matt, 2026-11-11 ("yes"): a title line above the legend
+    on a multi-run chart, so an exported picture says what it compares."""
+    names = [str(line.get("name", "")) for line in lines]
+    names = [n for n in names if n]
+    if not names:
+        return ""
+    text = TITLE_SEPARATOR.join(names)
+    room = max(8, int((width - 24) / (0.6 * size)))
+    if len(text) > room:
+        text = text[:room - 3].rstrip() + "..."
+    return text
+
+
 def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px=FONT_PX, footnote=""):
     """The chart for `overlay` (intonation.overlay(runs): notes low to high, registers,
-    lines of points) as primitives in a width x height pixel frame. `footnote` is one
+    lines of points) as primitives in a width x height pixel frame. `title` is the line
+    above the legend: a string as given, "" for none, None for the runs' own
+    (`runs_title`: one run's name, or the names of several joined). `footnote` is one
     plain line under the notes (what was left out, and why)."""
     notes = list(overlay.get("notes", []))
     registers = overlay.get("registers", {})
     lines = overlay.get("lines", [])
+    if title is None:
+        title = runs_title(lines, width, int(font_px * 1.2))
     prims = [{"kind": "background", "color": BACKGROUND, "width": width, "height": height}]
     # ---- the frame ------------------------------------------------------------------------
     title_h = int(font_px * 1.4) + 6 if title else 0

@@ -216,6 +216,49 @@ check("the PDF is one page, every object at its xref offset, Helvetica, the titl
       "the notes turned 90 degrees, the register line dashed", the_pdf_is_one_page_with_the_title)
 
 
+def a_multi_run_chart_carries_a_title_line():
+    """Matt, 2026-11-11 ("yes"): a title line above the legend on a multi-run chart, made in the
+    primitives so the canvas, the PNG and the PDF carry it alike: the runs' names joined with a
+    middle dot; one run's chart is titled with its name; "" stays none; a long list is cut with
+    three dots to what the width holds."""
+    size = int(C.FONT_PX * 1.2)
+
+    def title_of(prims):
+        return [p for p in of("text", prims) if p["y"] == 8 and p["anchor"] == "n"]
+
+    def legend_y(prims):
+        return min(p["y1"] for p in of("line", prims) if p["dash"] is None and p["x2"] - p["x1"] == 22)
+
+    prims = C.chart_primitives(OV, W, H, title=None)
+    t = title_of(prims)
+    assert len(t) == 1 and t[0]["text"] == "Mark VI, Link 7* \u00b7 Conn 10M" and t[0]["bold"] and t[0]["size"] == size, t
+    assert legend_y(prims) > 8 + int(C.FONT_PX * 1.4), f"the legend is not below the title: {legend_y(prims)}"
+    none = C.chart_primitives(OV, W, H, title="")
+    assert not title_of(none), "an explicit empty title still drew one"
+    assert legend_y(none) < legend_y(prims), "the legend did not move up without a title"
+    one = C.chart_primitives(I.overlay([RUN_B]), W, H, title=None)
+    assert [p["text"] for p in title_of(one)] == ["Conn 10M"], title_of(one)
+    assert not title_of(C.chart_primitives(I.overlay([]), W, H, title=None)), "an empty chart has no title"
+    # a long list is cut to what the width holds, ending in three dots
+    many = I.overlay([RUN_A, RUN_B] * 3)
+    for i, line in enumerate(many["lines"]):
+        line["name"] = f"A long preset name number {i} on a tenor"
+    long = title_of(C.chart_primitives(many, W, H, title=None))[0]["text"]
+    assert long.endswith("...") and long.startswith("A long preset name number 0") and len(long) <= (W - 24) / (0.6 * size), long
+    assert C.runs_title(many["lines"], 4000, size).count(C.TITLE_SEPARATOR) == 5, "a wide chart holds all six names"
+    # the renderers carry it: the PDF's text, the PNG's title band has ink
+    pdf = C.render_pdf(prims, W, H)
+    content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf, re.S).group(1)).decode("latin-1")
+    assert "(Mark VI, Link 7* \xb7 Conn 10M) Tj" in content, "the title is not in the PDF's text"
+    from PIL import Image
+    import io
+    band = Image.open(io.BytesIO(C.render_png(prims, W, H))).convert("L").crop((0, 8, W, 8 + int(C.FONT_PX * 1.4)))
+    assert min(band.getdata()) < 128, "no ink in the PNG's title band"
+check("a multi-run chart carries a title line above the legend: the runs' names joined, one run's own name, none "
+      "when asked for none, a long list cut with three dots; the PDF's text and the PNG carry it",
+      a_multi_run_chart_carries_a_title_line)
+
+
 def an_empty_chart_still_draws():
     prims = C.chart_primitives(I.overlay([]), W, H)
     assert prims[0]["kind"] == "background" and not of("marker", prims) and not of("polyline", prims), "prims[0][\"kind\"] == \"background\" and not of(\"marker\", prims) and not of(\"polyline\", prims)"

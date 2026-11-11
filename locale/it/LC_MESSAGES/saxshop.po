@@ -2123,8 +2123,8 @@ msgstr ""
 "Sperimentali / in sviluppo"
 
 #: main.py:3144
-msgid "Machine menu (direct Falcon serial control)"
-msgstr "Menu Macchina (controllo seriale diretto del Falcon)"
+msgid "Direct machine control (GRBL)"
+msgstr "Controllo diretto della macchina (GRBL)"
 
 #: main.py:3183
 msgid "Restart the app for the language change to take effect."
@@ -2189,7 +2189,7 @@ msgstr "on"
 
 #: toner_tab.py:499
 msgid "SAX SELECTOR"
-msgstr "SELETTORE SASSOFONO"
+msgstr "SELETTORE SAX"
 
 #: toner_tab.py:554
 msgid "sandbox (concert pitch)"
@@ -6504,11 +6504,11 @@ msgstr "Integrazione con la macchina"
 
 #: ui_dialogs/guide.py:840
 msgid ""
-"File > Feature Set..., under Experimental / In Progress: tick \"Machine "
-"menu (direct Falcon serial control)\". Restart."
+"File > Feature Set..., under Experimental / In Progress: tick \"Direct "
+"machine control (GRBL)\". Restart."
 msgstr ""
 "File > Funzionalità attive..., in Sperimentali / in sviluppo: spunti "
-"\"Menu Macchina (controllo seriale diretto del Falcon)\". Riavvii."
+"\"Controllo diretto della macchina (GRBL)\". Riavvii."
 
 #: ui_dialogs/guide.py:842
 msgid ""

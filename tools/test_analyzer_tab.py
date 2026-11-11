@@ -811,6 +811,8 @@ def main():
         chart_now()
         texts = chart_texts()
         assert "Bench" in texts and "Other — 2026-10-02 10:00:00" in texts, texts
+        # the title line above the legend names what is compared (Matt, 2026-11-11), on the canvas too
+        assert "Bench · Other — 2026-10-02 10:00:00" in texts, texts
         kinds = chart_markers()
         assert "oval" in kinds and "polygon" in kinds, kinds        # a circle for the first run, squares for the second
         # Other's second session, an alto: D4 and E4 sound, written B4 and C#5

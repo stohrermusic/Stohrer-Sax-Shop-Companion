@@ -3228,7 +3228,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                      font=("Helvetica", 11, "bold")).pack(anchor="w")
             tk.Checkbutton(
                 frame,
-                text=_("Machine menu (direct Falcon serial control)"),
+                text=_("Direct machine control (GRBL)"),
                 variable=machine_menu_var, bg=bg,
                 font=("Helvetica", 10)).pack(anchor="w")
 

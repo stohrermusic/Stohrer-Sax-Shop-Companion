@@ -1288,6 +1288,75 @@ def compute_rolloff_rate(harmonics_db):
     return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
 
 
+A4_HZ = 440.0
+
+
+def midi_to_hz(midi, reference_hz=A4_HZ):
+    """The equal-tempered frequency of a MIDI number at this A."""
+    return reference_hz * 2 ** ((midi - 69) / 12)
+
+
+def cents_from_equal_temperament(f0_hz, concert_midi, reference_hz=A4_HZ):
+    """How far a fundamental lies from its note's equal-tempered pitch, in cents."""
+    return 1200.0 * math.log2(f0_hz / midi_to_hz(concert_midi, reference_hz))
+
+
+OFF_NOTE_CENTS = 50.0
+"""How far a take's pitch may lie from its labelled note and still be that note: half a
+semitone, beyond which it is nearer another note. The line is clean in practice: in Matt's
+library (8,114 captures, 2026-11-10) the furthest kept take is 49.7 cents off and the nearest
+left-out one 112 cents; the 551 left out are six presets from 2026-03-23/25 whose labels sit
+two transpositions below the sounding pitch (an early storage mistake), plus detector slips."""
+
+
+def corrected_label(concert_midi, f0_hz, sax_type, reference_hz=A4_HZ):
+    """The note a take with the March 2026 label really is, or None.
+
+    Six presets captured on 2026-03-23/25 (the Toner's first weeks) stored every
+    `note` two transpositions below the sounding pitch: 28 semitones on a tenor, 18 on
+    an alto, 4 on a soprano. Matt (2026-11-10): "Correct for sure." The rule applies
+    only when the label is off by exactly 2T, within OFF_NOTE_CENTS, AND the corrected
+    note lies in the horn's range; nothing else is ever re-labelled. A take an octave
+    above that again is the detector's own slip on the lowest asked notes (its pitch
+    is not the asked note either) and stays out. Read-side only. Lived in intonation.py
+    until 2026-11-11; here so the fingerprint applies the same rule (Matt: "Yes, apply
+    it"), through corrected_capture, the one place that applies it to a capture."""
+    shift = 2 * SAX_TRANSPOSITIONS.get(sax_type, 0)
+    if shift == 0:
+        return None
+    candidate = concert_midi + shift
+    lo, hi = SAX_NOTE_RANGES.get(sax_type, (0, 127))
+    if not lo <= candidate <= hi:
+        return None
+    if abs(cents_from_equal_temperament(f0_hz, candidate, reference_hz)) > OFF_NOTE_CENTS:
+        return None
+    return candidate
+
+
+def corrected_capture(cap, sax_type, reference_hz=A4_HZ):
+    """The capture under the note it really is, and whether that differs from its label.
+
+    `cap` itself, unchanged, when its label is within OFF_NOTE_CENTS of its pitch, when
+    it has no readable note or fundamental, or when no correction applies; else a copy
+    with `note` moved by corrected_label's rule, the one correction there is (the March
+    2026 labels, exactly two transpositions low). The chart (intonation.run_from_captures)
+    and the fingerprint (compute_fingerprint) both go through here, so the rule is written
+    once. Read-side only: the capture on disk is never touched."""
+    concert = note_name_to_midi(cap.get("note", ""))
+    try:
+        f0 = float(cap.get("fundamental_freq") or 0.0)
+    except (TypeError, ValueError):
+        f0 = 0.0
+    if concert is None or f0 <= 0:
+        return cap, False
+    if abs(cents_from_equal_temperament(f0, concert, reference_hz)) <= OFF_NOTE_CENTS:
+        return cap, False
+    fixed = corrected_label(concert, f0, sax_type, reference_hz)
+    if fixed is None:
+        return cap, False
+    return dict(cap, note=_shift_note(cap["note"], fixed - concert)), True
+
+
 def _capture_is_plausible(cap, sax_type):
     """Return True if a capture should be included in fingerprint averaging.
 
@@ -1330,11 +1399,14 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
     the averaged harmonics, then averages descriptors across notes with
     equal weight per note. This prevents register skew.
 
-    Captures whose detected note is outside SAX_NOTE_RANGES[sax_type] OR
-    whose harmonics include a physically-impossible value (>+20 dB above
-    the labeled fundamental, indicating a sub-octave detection error) are
-    silently dropped before averaging. The raw on-disk captures are NOT
-    modified — this is a read-side filter.
+    A capture with the March 2026 label (exactly two transpositions below its
+    pitch; corrected_capture, the rule the chart uses) is grouped under the note
+    it really is (Matt, 2026-11-11: "Yes, apply it"). Then captures whose note is
+    outside SAX_NOTE_RANGES[sax_type] OR whose harmonics include a
+    physically-impossible value (>+20 dB above the labeled fundamental,
+    indicating a sub-octave detection error) are silently dropped before
+    averaging. The raw on-disk captures are NOT modified — this is a read-side
+    correction and filter.
 
     Returns dict with:
         'harmonics_db': averaged harmonic dB curve across all notes
@@ -1342,12 +1414,17 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         'note_count': total unique notes
         'capture_count': total captures kept (after filtering)
         'per_note': dict of note_name -> averaged capture with computed descriptors
+        'corrected': captures grouped under a corrected label (kept or not)
     """
     all_captures = []
     per_note = {}
+    corrected = 0
 
     for session in sessions:
         for cap in session.get('captures', []):
+            cap, fixed = corrected_capture(cap, sax_type)
+            if fixed:
+                corrected += 1
             if not _capture_is_plausible(cap, sax_type):
                 continue
             note = cap.get('note', '')
@@ -1417,6 +1494,7 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         'per_note': per_note_avg,
         'rolloff_rate': compute_rolloff_rate(overall_harmonics),
         'mic_type': mic_type,
+        'corrected': corrected,
     }
 
 

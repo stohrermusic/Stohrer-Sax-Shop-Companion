@@ -6,6 +6,7 @@
 - **Frame & Cut no longer needs a camera calibration.** Turn on direct machine control (File > Feature Set), plug in the laser, and the button is there. The camera features still need the calibration.
 - **Plug the laser in whenever.** The app notices it being connected, switched off or moved to another USB socket while it is running.
 - **Adhesive rings (beta).** A ring of double-sided tape per pad, for silicone wraps. Sizing Rules > Lesser-used settings.
+- **The Toner is now the Analyzer.** It opens on an intonation chart: play your horn and see how sharp or flat each note is, compare runs from your library, export as PNG or PDF. The harmonic analysis is still there, behind a switch, and experimental.
 - **A new User Guide.** Shorter, with a clickable contents list, search and figures. Help > User Guide. There is also a one-page Quick Start Guide.
 - **Tooling jobs are in Job History.**
 - **G-code files are for the laser, not LightBurn.** LightBurn ignores the speeds and powers a G-code file carries; for LightBurn, use Generate SVG. The app now says so when it writes one.

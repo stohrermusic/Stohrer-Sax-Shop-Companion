@@ -276,7 +276,7 @@ def main():
             walk(dlg)
             dlg.destroy()
             assert "Key Height Library" in texts, texts  # the dialog was found
-            for gone in ("Tuner", "Analyzer", "Machine menu (direct Falcon serial control)"):
+            for gone in ("Tuner", "Analyzer", "Direct machine control (GRBL)"):
                 assert gone not in texts, f"{gone!r} still offered: {texts}"
         step("feature set")
         check("Feature Set doesn't offer what the build can't run", feature_set_omits)

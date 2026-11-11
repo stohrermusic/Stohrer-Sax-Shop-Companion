@@ -322,6 +322,58 @@ check("fingerprint with 5 notes: evenness 0.525662436, richness 0.245330778, rol
                           "warmth": 0.6666666666666666, "even_odd": 0.7463856675706021}),
                near(te.compute_fingerprint([S5], "Alto")["rolloff_rate"], 2.925)))
 
+def t_fp_march_labels():
+    """Matt, 2026-11-11: "Yes, apply it." The fingerprint groups a capture with the March 2026 label (exactly
+    two transpositions below its pitch, the corrected note in the horn's range) under the note it is, through
+    the chart's one rule (toner_engine.corrected_capture); a slip an octave above that again is left where it
+    was; an ordinary preset's fingerprint is identical to the one computed without the rule."""
+    # a tenor's written E4 is concert D3 (midi 50); the March presets stored it as A#0 (22), 28 semitones low
+    d3, dsharp3 = te.midi_to_hz(50), te.midi_to_hz(51)
+    march = {"captures": [cap("A#0", STD, d3), cap("A#0", WARM, d3 * 1.004), cap("B0", THIN, dsharp3)]}
+    fp = te.compute_fingerprint([march], "Tenor")
+    assert sorted(fp["per_note"]) == ["D#3", "D3"], f"the March labels were not grouped under their notes: {sorted(fp['per_note'])}"
+    assert fp["corrected"] == 3 and fp["capture_count"] == 3 and fp["note_count"] == 2, (fp["corrected"], fp["capture_count"], fp["note_count"])
+    near_list(fp["per_note"]["D3"]["harmonics_db"], [0.0, -2.0, -5.0, -8.0, -11.5, -15.0, -18.5, -22.0, -25.5, -29.0])
+    # the same captures under their true labels give the same fingerprint, key for key
+    true = {"captures": [cap("D3", STD, d3), cap("D3", WARM, d3 * 1.004), cap("D#3", THIN, dsharp3)]}
+    fp_true = te.compute_fingerprint([true], "Tenor")
+    assert fp_true["corrected"] == 0, fp_true["corrected"]
+    assert {k: v for k, v in fp.items() if k != "corrected"} == {k: v for k, v in fp_true.items() if k != "corrected"}, "corrected and true-labelled fingerprints differ"
+    # the raw captures are not touched
+    assert [c["note"] for c in march["captures"]] == ["A#0", "A#0", "B0"], "a capture dict was modified"
+    # a slip an octave above the 2T (the detector's own, on the lowest asked notes) is not corrected; its label
+    # A#0 is out of the tenor's range and it is dropped, exactly as before
+    slip = {"captures": [cap("A#0", STD, te.midi_to_hz(50 + 12))]}
+    fps = te.compute_fingerprint([slip], "Tenor")
+    assert fps["corrected"] == 0 and fps["capture_count"] == 0 and fps["per_note"] == {}, (fps["corrected"], fps["capture_count"], sorted(fps["per_note"]))
+    # a slip whose wrong label happens to lie in range is filed under that label, as before: the rule is not wider
+    slip_in = {"captures": [cap("C3", STD, te.midi_to_hz(48 + 28 + 12))]}
+    fpi = te.compute_fingerprint([slip_in], "Tenor")
+    assert fpi["corrected"] == 0 and sorted(fpi["per_note"]) == ["C3"], (fpi["corrected"], sorted(fpi["per_note"]))
+    # a corrected note still goes through the filter: an impossible harmonic keeps it out
+    bad = {"captures": [cap("A#0", [0.0, 25.0, -5.0], d3)]}
+    fpb = te.compute_fingerprint([bad], "Tenor")
+    assert fpb["corrected"] == 1 and fpb["capture_count"] == 0, (fpb["corrected"], fpb["capture_count"])
+    # an ordinary preset: identical to the fingerprint computed with the correction stood in as a no-op
+    orig = te.corrected_capture
+    te.corrected_capture = lambda c, sax, reference_hz=te.A4_HZ: (c, False)
+    try:
+        plain1, plain5 = te.compute_fingerprint([S1], "Alto"), te.compute_fingerprint([S5], "Alto")
+    finally:
+        te.corrected_capture = orig
+    assert te.compute_fingerprint([S1], "Alto") == plain1 and te.compute_fingerprint([S5], "Alto") == plain5, "an ordinary preset's fingerprint changed under the rule"
+    assert plain1["corrected"] == 0 and plain5["corrected"] == 0, (plain1["corrected"], plain5["corrected"])
+    # one rule, one place: the chart's run corrects the same captures through the same function
+    import intonation as I
+    run = I.run_from_captures([march], "Tenor")
+    assert run.corrected == 3 and run.notes == ["E4", "F4"], (run.corrected, run.notes)
+    assert I.corrected_label is te.corrected_label and I.corrected_capture is te.corrected_capture, "the chart and the fingerprint do not share the rule"
+    assert I.OFF_NOTE_CENTS == te.OFF_NOTE_CENTS == 50.0 and I.midi_to_hz is te.midi_to_hz, "the bound or the pitch helper is written twice"
+check("fingerprint: the March 2026 labels (exactly two transpositions low, corrected note in range) are grouped under "
+      "the note they are through the chart's one rule, the raw captures untouched; a slip an octave above stays out "
+      "(or under its in-range label) as before; a corrected note still meets the filter; an ordinary preset is "
+      "identical with the rule stood in as a no-op", t_fp_march_labels)
+
 def t_plausible():
     assert te._capture_is_plausible(cap("C3", STD, 130.81), "Alto") is True, "te._capture_is_plausible(cap(\"C3\", STD, 130.81), \"Alto\") is True"
     assert te._capture_is_plausible(cap("B2", STD, 123.47), "Alto") is False, "te._capture_is_plausible(cap(\"B2\", STD, 123.47), \"Alto\") is False"

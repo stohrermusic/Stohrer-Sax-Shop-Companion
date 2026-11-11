@@ -2133,8 +2133,8 @@ msgstr ""
 "Expérimental / En cours"
 
 #: main.py:3144
-msgid "Machine menu (direct Falcon serial control)"
-msgstr "Menu Machine (contrôle série direct du Falcon)"
+msgid "Direct machine control (GRBL)"
+msgstr "Commande directe de la machine (GRBL)"
 
 #: main.py:3183
 msgid "Restart the app for the language change to take effect."
@@ -6565,11 +6565,11 @@ msgstr "Intégration machine"
 
 #: ui_dialogs/guide.py:840
 msgid ""
-"File > Feature Set..., under Experimental / In Progress: tick \"Machine "
-"menu (direct Falcon serial control)\". Restart."
+"File > Feature Set..., under Experimental / In Progress: tick \"Direct "
+"machine control (GRBL)\". Restart."
 msgstr ""
-"Fichier > Fonctionnalités…, sous Expérimental / En cours : cochez « Menu "
-"Machine (contrôle série direct du Falcon) ». Redémarrez."
+"Fichier > Fonctionnalités…, sous Expérimental / En cours : cochez « Commande "
+"directe de la machine (GRBL) ». Redémarrez."
 
 #: ui_dialogs/guide.py:842
 msgid ""

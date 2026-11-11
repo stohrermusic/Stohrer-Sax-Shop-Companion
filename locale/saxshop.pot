@@ -1897,7 +1897,7 @@ msgid ""
 msgstr ""
 
 #: main.py:3144
-msgid "Machine menu (direct Falcon serial control)"
+msgid "Direct machine control (GRBL)"
 msgstr ""
 
 #: main.py:3183
@@ -5621,8 +5621,8 @@ msgstr ""
 
 #: ui_dialogs/guide.py:840
 msgid ""
-"File > Feature Set..., under Experimental / In Progress: tick \"Machine "
-"menu (direct Falcon serial control)\". Restart."
+"File > Feature Set..., under Experimental / In Progress: tick \"Direct "
+"machine control (GRBL)\". Restart."
 msgstr ""
 
 #: ui_dialogs/guide.py:842

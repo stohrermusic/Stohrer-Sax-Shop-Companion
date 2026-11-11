@@ -1917,9 +1917,10 @@ class TonerTabMixin:
             logging.getLogger(__name__).exception("the intonation chart could not be built")
             runs = []
         low_left = bool(self.settings.get("toner_settings", {}).get("chart_low_notes_left", True))
-        title = runs[0].name if len(runs) == 1 and not self._toner_compare_runs else ""
+        # the title is the runs' own: the loaded preset's name, or the compared runs' names joined
+        # (Matt, 2026-11-11), made in the primitives so the canvas, the PNG and the PDF agree
         prims = intonation_chart.chart_primitives(intonation_overlay(runs), width, height,
-                                                  title=title, low_left=low_left,
+                                                  title=None, low_left=low_left,
                                                   footnote=self._toner_chart_footnote(runs))
         return runs, prims
 

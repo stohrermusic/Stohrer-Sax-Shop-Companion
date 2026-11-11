@@ -2138,8 +2138,8 @@ msgstr ""
 "Experimentell / In Arbeit"
 
 #: main.py:3144
-msgid "Machine menu (direct Falcon serial control)"
-msgstr "Maschine-Menü (direkte Falcon-Steuerung)"
+msgid "Direct machine control (GRBL)"
+msgstr "Direkte Maschinensteuerung (GRBL)"
 
 #: main.py:3183
 msgid "Restart the app for the language change to take effect."
@@ -2217,7 +2217,7 @@ msgstr "SITZUNG"
 
 #: toner_tab.py:594 toner_tab.py:601 toner_tab.py:2864 toner_tab.py:2880
 msgid "no preset"
-msgstr "keine Voreinstellung"
+msgstr "keine Voreinst."
 
 #: toner_tab.py:606 toner_tab.py:2750
 msgid "Load..."
@@ -2237,7 +2237,7 @@ msgstr "geführt"
 
 #: toner_tab.py:639 toner_tab.py:3014
 msgid "Capture"
-msgstr "Aufnehmen"
+msgstr "Aufnahme"
 
 #: toner_tab.py:650
 msgid ""
@@ -6580,11 +6580,11 @@ msgstr "Maschinenanbindung"
 
 #: ui_dialogs/guide.py:840
 msgid ""
-"File > Feature Set..., under Experimental / In Progress: tick \"Machine "
-"menu (direct Falcon serial control)\". Restart."
+"File > Feature Set..., under Experimental / In Progress: tick \"Direct "
+"machine control (GRBL)\". Restart."
 msgstr ""
-"Datei > Funktionsumfang..., unter Experimentell / In Arbeit: „Maschine-"
-"Menü (direkte Falcon-Steuerung)“ ankreuzen. Neu starten."
+"Datei > Funktionsumfang..., unter Experimentell / In Arbeit: „Direkte "
+"Maschinensteuerung (GRBL)“ ankreuzen. Neu starten."
 
 #: ui_dialogs/guide.py:842
 msgid ""
