@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-10 09:16-0500\n"
+"POT-Creation-Date: 2026-11-10 19:53-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -27,93 +27,93 @@ msgstr ""
 msgid "Camera opened but returned no frame."
 msgstr ""
 
-#: config.py:671
+#: config.py:687
 msgid "Resonance added!"
 msgstr ""
 
-#: config.py:671
+#: config.py:687
 msgid "Pad resonance increased!"
 msgstr ""
 
-#: config.py:671
+#: config.py:687
 msgid "More resonance now!"
 msgstr ""
 
-#: config.py:672
+#: config.py:688
 msgid "Timbral focus enhanced!"
 msgstr ""
 
-#: config.py:672
+#: config.py:688
 msgid "Harmonic alignment optimized!"
 msgstr ""
 
-#: config.py:672
+#: config.py:688
 msgid "Acoustic reflection matrix calibrated!"
 msgstr ""
 
-#: config.py:673
+#: config.py:689
 msgid "Core vibrations synchronized!"
 msgstr ""
 
-#: config.py:673
+#: config.py:689
 msgid "Nodal points stabilized!"
 msgstr ""
 
-#: config.py:673
+#: config.py:689
 msgid "Overtone series enriched!"
 msgstr ""
 
-#: config.py:674
+#: config.py:690
 msgid "Sonic clarity has been improved!"
 msgstr ""
 
-#: config.py:674
+#: config.py:690
 msgid "Relacquer devaluation reversed!"
 msgstr ""
 
-#: config.py:674
+#: config.py:690
 msgid "Heavy mass screws ain't SHIT!"
 msgstr ""
 
-#: config.py:675
+#: config.py:691
 msgid "Now you don't even have to fit the neck!"
 msgstr ""
 
-#: config.py:675
+#: config.py:691
 msgid "Let's call this the ULTRAhaul!"
 msgstr ""
 
-#: config.py:675
+#: config.py:691
 msgid "Now safe to use hot glue!"
 msgstr ""
 
-#: config.py:676
+#: config.py:692
 msgid "Look at me! I am the resonator now!"
 msgstr ""
 
-#: config.py:1385
+#: config.py:1433
 msgid "Error Saving Settings"
 msgstr ""
 
-#: config.py:1385
+#: config.py:1433
 #, python-brace-format
 msgid ""
 "Could not save settings:\n"
 "{e}"
 msgstr ""
 
-#: config.py:1406
+#: config.py:1454
 msgid "Library Updated"
 msgstr ""
 
-#: config.py:1407
+#: config.py:1455
 #, python-brace-format
 msgid ""
 "Your existing {preset_type_name} sets have been moved into a new library "
 "called 'My Presets'."
 msgstr ""
 
-#: config.py:1421
+#: config.py:1469
 msgid "Error Saving Preset"
 msgstr ""
 
@@ -121,7 +121,7 @@ msgstr ""
 msgid "Save as Set"
 msgstr ""
 
-#: library_features.py:142 main.py:769 toner_tab.py:1824 toner_tab.py:5434
+#: library_features.py:142 main.py:781 toner_tab.py:2275 toner_tab.py:5945
 msgid "Library:"
 msgstr ""
 
@@ -141,8 +141,8 @@ msgstr ""
 msgid "Serial:"
 msgstr ""
 
-#: library_features.py:194 library_features.py:681 toner_tab.py:1878
-#: toner_tab.py:5458
+#: library_features.py:194 library_features.py:681 toner_tab.py:2329
+#: toner_tab.py:5969
 msgid "Notes:"
 msgstr ""
 
@@ -161,7 +161,7 @@ msgstr ""
 msgid "mm"
 msgstr ""
 
-#: library_features.py:209 main.py:1073
+#: library_features.py:209 main.py:1085
 msgid "inches"
 msgstr ""
 
@@ -175,9 +175,9 @@ msgstr ""
 
 #: library_features.py:291 library_features.py:332 library_features.py:366
 #: library_features.py:384 library_features.py:408 library_features.py:419
-#: library_features.py:430 library_features.py:435 main.py:2491 main.py:2502
-#: main.py:2513 main.py:2519 main.py:2530 main.py:2594 main.py:2619
-#: main.py:2637
+#: library_features.py:430 library_features.py:435 main.py:2503 main.py:2514
+#: main.py:2525 main.py:2531 main.py:2542 main.py:2606 main.py:2631
+#: main.py:2649
 msgid "All Libraries"
 msgstr ""
 
@@ -197,16 +197,16 @@ msgstr ""
 msgid "Please fill in at least Make, Model, and Size before saving."
 msgstr ""
 
-#: library_features.py:317 main.py:2559
+#: library_features.py:317 main.py:2571
 msgid "Overwrite"
 msgstr ""
 
-#: library_features.py:317 main.py:2559
+#: library_features.py:317 main.py:2571
 #, python-brace-format
 msgid "A set named '{name}' already exists in this library. Overwrite it?"
 msgstr ""
 
-#: library_features.py:323 main.py:2584
+#: library_features.py:323 main.py:2596
 msgid "Preset Saved"
 msgstr ""
 
@@ -215,7 +215,7 @@ msgstr ""
 msgid "Preset '{name}' saved successfully to '{active_library}'."
 msgstr ""
 
-#: library_features.py:369 library_features.py:422 main.py:2505 main.py:2622
+#: library_features.py:369 library_features.py:422 main.py:2517 main.py:2634
 msgid "Delete Library"
 msgstr ""
 
@@ -224,7 +224,7 @@ msgstr ""
 msgid "Are you sure you want to delete the empty library '{selected_lib}'?"
 msgstr ""
 
-#: library_features.py:374 main.py:2627
+#: library_features.py:374 main.py:2639
 msgid "Library Deleted"
 msgstr ""
 
@@ -233,16 +233,16 @@ msgstr ""
 msgid "Library '{selected_lib}' deleted."
 msgstr ""
 
-#: library_features.py:381 library_features.py:389 main.py:2634 main.py:2642
-#: main.py:2657
+#: library_features.py:381 library_features.py:389 main.py:2646 main.py:2654
+#: main.py:2669
 msgid "Delete Error"
 msgstr ""
 
-#: library_features.py:381 main.py:2634
+#: library_features.py:381 main.py:2646
 msgid "Please load a set to delete."
 msgstr ""
 
-#: library_features.py:389 main.py:2642
+#: library_features.py:389 main.py:2654
 msgid ""
 "Cannot delete from 'All Libraries' view. Please select the specific "
 "library first."
@@ -259,7 +259,7 @@ msgid ""
 "'{selected_lib}' library?"
 msgstr ""
 
-#: library_features.py:403 main.py:2655
+#: library_features.py:403 main.py:2667
 msgid "Preset Deleted"
 msgstr ""
 
@@ -272,20 +272,20 @@ msgstr ""
 msgid "Import Key Height Sets"
 msgstr ""
 
-#: library_features.py:441 library_features.py:881 main.py:2677
+#: library_features.py:441 library_features.py:881 main.py:2689
 #: ui_dialogs/presets_io.py:220 ui_dialogs/sizing.py:2090
 #: ui_dialogs/sizing.py:2109
 msgid "JSON files"
 msgstr ""
 
-#: library_features.py:441 library_features.py:881 main.py:2677
+#: library_features.py:441 library_features.py:881 main.py:2689
 #: ui_dialogs/presets_io.py:220 ui_dialogs/sizing.py:2090
 #: ui_dialogs/sizing.py:2109
 msgid "All files"
 msgstr ""
 
-#: library_features.py:462 library_features.py:988 main.py:2697 main.py:2780
-#: toner_tab.py:5546 toner_tab.py:5701 ui_dialogs/presets_io.py:332
+#: library_features.py:462 library_features.py:988 main.py:2709 main.py:2792
+#: toner_tab.py:6056 toner_tab.py:6211 ui_dialogs/presets_io.py:332
 #: ui_dialogs/presets_io.py:445 ui_dialogs/sizing.py:2117
 #: ui_dialogs/sizing.py:2120
 msgid "Import Error"
@@ -298,7 +298,7 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:477 library_features.py:822 main.py:2714
+#: library_features.py:477 library_features.py:822 main.py:2726
 msgid "Connection Error"
 msgstr ""
 
@@ -310,7 +310,7 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: library_features.py:481 library_features.py:826 main.py:2718
+#: library_features.py:481 library_features.py:826 main.py:2730
 msgid "Data Error"
 msgstr ""
 
@@ -323,8 +323,8 @@ msgid ""
 msgstr ""
 
 #: library_features.py:486 library_features.py:499 library_features.py:524
-#: library_features.py:831 library_features.py:873 main.py:2723
-#: toner_tab.py:4823 toner_tab.py:5552
+#: library_features.py:831 library_features.py:873 main.py:2735
+#: toner_tab.py:5333 toner_tab.py:6062
 msgid "No Data"
 msgstr ""
 
@@ -348,8 +348,8 @@ msgid ""
 "Overwrite with latest from web?"
 msgstr ""
 
-#: library_features.py:521 library_features.py:870 main.py:2776
-#: toner_tab.py:5737 ui_dialogs/presets_io.py:334 ui_dialogs/presets_io.py:442
+#: library_features.py:521 library_features.py:870 main.py:2788
+#: toner_tab.py:6255 ui_dialogs/presets_io.py:334 ui_dialogs/presets_io.py:442
 #: ui_dialogs/presets_io.py:447
 msgid "Import Complete"
 msgstr ""
@@ -517,12 +517,12 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: machine_control.py:258 main.py:2235 main.py:2426 tooling_tab.py:1426
+#: machine_control.py:258 main.py:2247 main.py:2438 tooling_tab.py:1426
 #: tooling_tab.py:1620 tooling_tab.py:1662
 msgid "Session Complete!"
 msgstr ""
 
-#: machine_control.py:259 main.py:1515 main.py:2186
+#: machine_control.py:259 main.py:1527 main.py:2198
 msgid "All pads have been placed!"
 msgstr ""
 
@@ -723,7 +723,7 @@ msgid ""
 "that starts leaving a mark."
 msgstr ""
 
-#: machine_control.py:956 main.py:1717 main.py:2804 main.py:3608
+#: machine_control.py:956 main.py:1729 main.py:2816 main.py:3472
 #: ui_dialogs/common.py:26 ui_dialogs/sizing.py:2178
 msgid "Adhesive rings"
 msgstr ""
@@ -748,16 +748,16 @@ msgstr ""
 msgid "Save Failed"
 msgstr ""
 
-#: machine_control.py:1019 toner_tab.py:1489 toner_tab.py:3134
-#: tooling_tab.py:1926 ui_dialogs/guide.py:1422
+#: machine_control.py:1019 toner_tab.py:1561 toner_tab.py:3644
+#: tooling_tab.py:1926 ui_dialogs/guide.py:1455
 msgid "OK"
 msgstr ""
 
-#: machine_control.py:1021 machine_control.py:1083 main.py:2895 main.py:2990
-#: main.py:3223 main.py:3281 toner_tab.py:1491 toner_tab.py:1768
-#: toner_tab.py:1983 toner_tab.py:2049 toner_tab.py:2214 toner_tab.py:2317
-#: toner_tab.py:3554 toner_tab.py:5390 toner_tab.py:5521 toner_tab.py:5682
-#: ui_dialogs/gcode_settings.py:196 ui_dialogs/machine.py:204
+#: machine_control.py:1021 machine_control.py:1083 main.py:2907 main.py:3002
+#: main.py:3143 toner_tab.py:1563 toner_tab.py:1805 toner_tab.py:1984
+#: toner_tab.py:2219 toner_tab.py:2441 toner_tab.py:2507 toner_tab.py:2672
+#: toner_tab.py:2775 toner_tab.py:4064 toner_tab.py:5901 toner_tab.py:6032
+#: toner_tab.py:6192 ui_dialogs/gcode_settings.py:196 ui_dialogs/machine.py:204
 #: ui_dialogs/machine.py:1077 ui_dialogs/machine.py:2775
 #: ui_dialogs/machine.py:3342 ui_dialogs/presets_io.py:36
 #: ui_dialogs/presets_io.py:486 ui_dialogs/presets_io.py:544
@@ -787,7 +787,7 @@ msgstr ""
 msgid "Inset must be a number 0-50."
 msgstr ""
 
-#: machine_control.py:1080 toner_tab.py:1766 ui_dialogs/gcode_settings.py:603
+#: machine_control.py:1080 toner_tab.py:2217 ui_dialogs/gcode_settings.py:603
 #: ui_dialogs/presets_io.py:34 ui_dialogs/presets_io.py:543
 #: ui_dialogs/sizing.py:2695 ui_dialogs/sizing.py:2823
 msgid "Save"
@@ -812,7 +812,7 @@ msgid ""
 "{e}"
 msgstr ""
 
-#: machine_control.py:1235 main.py:2135 main.py:2244 main.py:2355 main.py:2438
+#: machine_control.py:1235 main.py:2147 main.py:2256 main.py:2367 main.py:2450
 msgid "An Error Occurred"
 msgstr ""
 
@@ -834,7 +834,7 @@ msgid ""
 "material (not Exact Size)."
 msgstr ""
 
-#: machine_control.py:1304 main.py:2104 main.py:2292 tooling_tab.py:1184
+#: machine_control.py:1304 main.py:2116 main.py:2304 tooling_tab.py:1184
 #: tooling_tab.py:1229
 msgid "Nesting Error"
 msgstr ""
@@ -872,11 +872,11 @@ msgstr ""
 msgid "Cutting — {m}"
 msgstr ""
 
-#: main.py:288 main.py:1995
+#: main.py:287 main.py:2007
 msgid "Scrap Session Active"
 msgstr ""
 
-#: main.py:289
+#: main.py:288
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining in your scrap session.\n"
@@ -884,331 +884,331 @@ msgid ""
 "Exit anyway? (Session will be lost)"
 msgstr ""
 
-#: main.py:380 main.py:453 main.py:468 main.py:482 main.py:505
+#: main.py:379 main.py:452 main.py:467 main.py:481 main.py:504
 msgid "File"
 msgstr ""
 
-#: main.py:381
+#: main.py:380
 msgid "Import Pad Presets..."
 msgstr ""
 
-#: main.py:382
+#: main.py:381
 msgid "Export Pad Presets..."
 msgstr ""
 
-#: main.py:384 ui_dialogs/presets_io.py:348
+#: main.py:383 ui_dialogs/presets_io.py:348
 msgid "Import Matt's Pad Sets"
 msgstr ""
 
-#: main.py:386
+#: main.py:385
 msgid "Job History..."
 msgstr ""
 
-#: main.py:388
+#: main.py:387
 msgid "Import Settings from Folder..."
 msgstr ""
 
-#: main.py:390
+#: main.py:389
 msgid "Feature Set..."
 msgstr ""
 
-#: main.py:392 main.py:458 main.py:473 main.py:483
+#: main.py:391 main.py:457 main.py:472 main.py:482
 msgid "Exit"
 msgstr ""
 
-#: main.py:395 main.py:461 main.py:486 main.py:497 main.py:515
+#: main.py:394 main.py:460 main.py:485 main.py:496 main.py:514
 msgid "Options"
 msgstr ""
 
-#: main.py:396
+#: main.py:395
 msgid "Sizing Rules..."
 msgstr ""
 
-#: main.py:397
+#: main.py:396
 msgid "Layer Colors..."
 msgstr ""
 
-#: main.py:399
+#: main.py:398
 msgid "G-code Settings..."
 msgstr ""
 
-#: main.py:412
+#: main.py:411
 msgid "Machine"
 msgstr ""
 
-#: main.py:417
+#: main.py:416
 msgid "Camera Calibration..."
 msgstr ""
 
-#: main.py:422
+#: main.py:421
 msgid "Camera-Polygon Inset Margin..."
 msgstr ""
 
-#: main.py:427
+#: main.py:426
 msgid "Framing Power..."
 msgstr ""
 
-#: main.py:432
+#: main.py:431
 msgid "Home Laser"
 msgstr ""
 
-#: main.py:436
+#: main.py:435
 msgid "Test Connection"
 msgstr ""
 
-#: main.py:440
+#: main.py:439
 msgid "Clear Errors ($X)"
 msgstr ""
 
-#: main.py:444
+#: main.py:443
 msgid "Reset Falcon (soft-reset)"
 msgstr ""
 
-#: main.py:454
+#: main.py:453
 msgid "Import Key Sets..."
 msgstr ""
 
-#: main.py:455
+#: main.py:454
 msgid "Import Matt's Key Heights"
 msgstr ""
 
-#: main.py:456
+#: main.py:455
 msgid "Export Key Sets..."
 msgstr ""
 
-#: main.py:462
+#: main.py:461
 msgid "Layout Options..."
 msgstr ""
 
-#: main.py:469
+#: main.py:468
 msgid "Import Screw Specs..."
 msgstr ""
 
-#: main.py:470
+#: main.py:469
 msgid "Import Matt's Specs"
 msgstr ""
 
-#: main.py:471
+#: main.py:470
 msgid "Export Screw Specs..."
 msgstr ""
 
-#: main.py:487 main.py:498 main.py:516
+#: main.py:486 main.py:497 main.py:515
 msgid "Settings..."
 msgstr ""
 
-#: main.py:499
+#: main.py:498
 msgid "Input Device..."
 msgstr ""
 
-#: main.py:506
+#: main.py:505
 msgid "Presets..."
 msgstr ""
 
-#: main.py:507 toner_tab.py:1623
+#: main.py:506 toner_tab.py:2074
 msgid "Analyze..."
 msgstr ""
 
-#: main.py:510
+#: main.py:509
 msgid "Transfer Data"
 msgstr ""
 
-#: main.py:511
+#: main.py:510
 msgid "Export Preset Library..."
 msgstr ""
 
-#: main.py:512
+#: main.py:511
 msgid "Import Preset Library..."
 msgstr ""
 
-#: main.py:517
+#: main.py:516
 msgid "Capture Threshold..."
 msgstr ""
 
-#: main.py:522
+#: main.py:521
 msgid "Help"
 msgstr ""
 
-#: main.py:523 ui_dialogs/guide.py:1298
+#: main.py:522 ui_dialogs/guide.py:1331
 msgid "Welcome"
 msgstr ""
 
-#: main.py:524 ui_dialogs/guide.py:1235
+#: main.py:523 ui_dialogs/guide.py:1268
 msgid "Quick Start Guide"
 msgstr ""
 
-#: main.py:525
+#: main.py:524
 msgid "User Guide..."
 msgstr ""
 
-#: main.py:527
+#: main.py:526
 msgid "Open Log File"
 msgstr ""
 
-#: main.py:529 ui_dialogs/guide.py:1343
+#: main.py:528 ui_dialogs/guide.py:1376
 msgid "About"
 msgstr ""
 
-#: main.py:637 ui_dialogs/guide.py:80 ui_dialogs/guide.py:674
+#: main.py:649 ui_dialogs/guide.py:80 ui_dialogs/guide.py:674
 msgid "Pad Maker"
 msgstr ""
 
-#: main.py:642 main.py:3051 ui_dialogs/guide.py:81 ui_dialogs/guide.py:988
+#: main.py:654 main.py:3063 ui_dialogs/guide.py:81 ui_dialogs/guide.py:988
 msgid "Key Height Library"
 msgstr ""
 
-#: main.py:647 main.py:3052 ui_dialogs/guide.py:82 ui_dialogs/guide.py:995
+#: main.py:659 main.py:3064 ui_dialogs/guide.py:82 ui_dialogs/guide.py:995
 msgid "Serial Lookup"
 msgstr ""
 
-#: main.py:652 main.py:3053 ui_dialogs/guide.py:83 ui_dialogs/guide.py:999
+#: main.py:664 main.py:3065 ui_dialogs/guide.py:83 ui_dialogs/guide.py:999
 msgid "Screw Specs"
 msgstr ""
 
-#: main.py:656 main.py:3054 ui_dialogs/guide.py:84 ui_dialogs/guide.py:878
+#: main.py:668 main.py:3066 ui_dialogs/guide.py:84 ui_dialogs/guide.py:878
 msgid "Tooling"
 msgstr ""
 
-#: main.py:661 main.py:3055 ui_dialogs/guide.py:85 ui_dialogs/guide.py:1004
+#: main.py:673 main.py:3067 ui_dialogs/guide.py:85 ui_dialogs/guide.py:1004
 msgid "Tuner"
 msgstr ""
 
-#: main.py:666 ui_dialogs/guide.py:1033
-msgid "Toner (beta)"
+#: main.py:678 main.py:3068 ui_dialogs/guide.py:86 ui_dialogs/guide.py:1033
+msgid "Analyzer"
 msgstr ""
 
-#: main.py:752
+#: main.py:764
 msgid "Enter pad sizes (e.g. 42.0x3):"
 msgstr ""
 
-#: main.py:778 main.py:2499 main.py:2587
+#: main.py:790 main.py:2511 main.py:2599
 msgid "Load Pad Preset"
 msgstr ""
 
-#: main.py:788
+#: main.py:800
 msgid "Save as Preset"
 msgstr ""
 
-#: main.py:789
+#: main.py:801
 msgid "View Notes"
 msgstr ""
 
-#: main.py:792 main.py:2507 toner_tab.py:2060 ui_dialogs/gcode_settings.py:861
+#: main.py:804 main.py:2519 toner_tab.py:2518 ui_dialogs/gcode_settings.py:861
 #: ui_dialogs/gcode_settings.py:867 ui_dialogs/gcode_settings.py:873
 #: ui_dialogs/sizing.py:2064 ui_dialogs/sizing.py:2068
 #: ui_dialogs/sizing.py:2074
 msgid "Delete Preset"
 msgstr ""
 
-#: main.py:815
+#: main.py:827
 msgid "Materials"
 msgstr ""
 
-#: main.py:828 ui_dialogs/guide.py:716
+#: main.py:840 ui_dialogs/guide.py:716
 msgid "Center Hole"
 msgstr ""
 
-#: main.py:832 toner_tab.py:5638
+#: main.py:844 toner_tab.py:6148
 msgid "None"
 msgstr ""
 
-#: main.py:835
+#: main.py:847
 msgid "Custom:"
 msgstr ""
 
-#: main.py:843 tooling_tab.py:238 tooling_tab.py:332 tooling_tab.py:426
+#: main.py:855 tooling_tab.py:238 tooling_tab.py:332 tooling_tab.py:426
 #: tooling_tab.py:631
 msgid "Sheet Size"
 msgstr ""
 
-#: main.py:847 main.py:3420
+#: main.py:859 main.py:3282
 #, python-brace-format
 msgid "Width ({units}):"
 msgstr ""
 
-#: main.py:853 main.py:3421
+#: main.py:865 main.py:3283
 #, python-brace-format
 msgid "Height ({units}):"
 msgstr ""
 
-#: main.py:870 main.py:1274 tooling_tab.py:263 ui_dialogs/guide.py:731
+#: main.py:882 main.py:1286 tooling_tab.py:263 ui_dialogs/guide.py:731
 #: ui_dialogs/guide.py:961
 msgid "Scrap Mode"
 msgstr ""
 
-#: main.py:881 tooling_tab.py:266 ui_dialogs/machine.py:195
+#: main.py:893 toner_tab.py:1983 tooling_tab.py:266 ui_dialogs/machine.py:195
 msgid "Clear"
 msgstr ""
 
-#: main.py:888
+#: main.py:900
 msgid "Edge Bias"
 msgstr ""
 
-#: main.py:909 main.py:1250
+#: main.py:921 main.py:1262
 msgid "ctr"
 msgstr ""
 
-#: main.py:926
+#: main.py:938
 msgid "Fit card to paper:"
 msgstr ""
 
-#: main.py:953
+#: main.py:965
 msgid "Draw / Capture Shape..."
 msgstr ""
 
-#: main.py:955
+#: main.py:967
 msgid "Draw Shape..."
 msgstr ""
 
-#: main.py:963 toner_tab.py:2256
+#: main.py:975 toner_tab.py:2714
 msgid "Unload"
 msgstr ""
 
-#: main.py:967
+#: main.py:979
 msgid "Output filename base (no extension):"
 msgstr ""
 
-#: main.py:977 tooling_tab.py:285 tooling_tab.py:362 tooling_tab.py:456
+#: main.py:989 tooling_tab.py:285 tooling_tab.py:362 tooling_tab.py:456
 #: tooling_tab.py:516 tooling_tab.py:882 ui_dialogs/guide.py:625
 msgid "Generate SVG"
 msgstr ""
 
-#: main.py:978 tooling_tab.py:287 tooling_tab.py:364 tooling_tab.py:458
+#: main.py:990 tooling_tab.py:287 tooling_tab.py:364 tooling_tab.py:458
 #: tooling_tab.py:518 tooling_tab.py:718 tooling_tab.py:886
 #: ui_dialogs/guide.py:624
 msgid "Generate G-code"
 msgstr ""
 
-#: main.py:980 tooling_tab.py:75 ui_dialogs/guide.py:626
+#: main.py:992 tooling_tab.py:75 ui_dialogs/guide.py:626
 #: ui_dialogs/guide.py:849 ui_dialogs/guide.py:966
 msgid "Frame & Cut"
 msgstr ""
 
-#: main.py:996 tooling_tab.py:724
+#: main.py:1008 tooling_tab.py:724
 msgid "Preview before saving"
 msgstr ""
 
-#: main.py:1009
+#: main.py:1021
 msgid "Live camera preview"
 msgstr ""
 
-#: main.py:1016
+#: main.py:1028
 msgid "Eject SD card after G-code export"
 msgstr ""
 
-#: main.py:1060
+#: main.py:1072
 #, python-brace-format
 msgid "Shape loaded ({n} pts)"
 msgstr ""
 
-#: main.py:1064
+#: main.py:1076
 msgid "Using rectangle dimensions"
 msgstr ""
 
-#: main.py:1073
+#: main.py:1085
 msgid "centimeters"
 msgstr ""
 
-#: main.py:1076
+#: main.py:1088
 #, python-brace-format
 msgid ""
 "Draw Custom Shape - How to Use\n"
@@ -1225,11 +1225,11 @@ msgid ""
 "Note: Generation can take 5-10x longer for complex shapes."
 msgstr ""
 
-#: main.py:1086
+#: main.py:1098
 msgid "Draw Custom Shape"
 msgstr ""
 
-#: main.py:1142
+#: main.py:1154
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1238,39 +1238,39 @@ msgid ""
 "Adjust dimensions and click Generate again."
 msgstr ""
 
-#: main.py:1151 main.py:1156
+#: main.py:1163 main.py:1168
 msgid "Scrap Generated"
 msgstr ""
 
-#: main.py:1165
+#: main.py:1177
 msgid "A custom shape is loaded for the next scrap:"
 msgstr ""
 
-#: main.py:1175
+#: main.py:1187
 msgid "Re-capture from camera"
 msgstr ""
 
-#: main.py:1179
+#: main.py:1191
 msgid "Unload Shape"
 msgstr ""
 
-#: main.py:1182
+#: main.py:1194
 msgid "Keep Shape"
 msgstr ""
 
-#: main.py:1250
+#: main.py:1262 toner_tab.py:482
 msgid "off"
 msgstr ""
 
-#: main.py:1275
+#: main.py:1287
 msgid "Please select exactly one material to use Scrap Mode."
 msgstr ""
 
-#: main.py:1283 main.py:1345 tooling_tab.py:1457 tooling_tab.py:1482
+#: main.py:1295 main.py:1357 tooling_tab.py:1457 tooling_tab.py:1482
 msgid "Clear Session?"
 msgstr ""
 
-#: main.py:1284
+#: main.py:1296
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining.\n"
@@ -1279,21 +1279,21 @@ msgid ""
 "Continue?"
 msgstr ""
 
-#: main.py:1319
+#: main.py:1331
 msgid "Done!"
 msgstr ""
 
-#: main.py:1326
+#: main.py:1338
 #, python-brace-format
 msgid "{remaining} left, {pending} on this scrap ({count} scraps)"
 msgstr ""
 
-#: main.py:1329
+#: main.py:1341
 #, python-brace-format
 msgid "{remaining} left ({count} scraps)"
 msgstr ""
 
-#: main.py:1346
+#: main.py:1358
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining.\n"
@@ -1301,30 +1301,30 @@ msgid ""
 "Clear session?"
 msgstr ""
 
-#: main.py:1487 main.py:1504 main.py:2305 tooling_tab.py:1636
+#: main.py:1499 main.py:1516 main.py:2317 tooling_tab.py:1636
 msgid "Select Folder to Save G-code"
 msgstr ""
 
-#: main.py:1495 main.py:2176
+#: main.py:1507 main.py:2188
 msgid "Material Mismatch"
 msgstr ""
 
-#: main.py:1496 main.py:2177
+#: main.py:1508 main.py:2189
 #, python-brace-format
 msgid ""
 "Current session is for {material}.\n"
 "Clear session to switch materials."
 msgstr ""
 
-#: main.py:1515 main.py:2186 tooling_tab.py:1576
+#: main.py:1527 main.py:2198 tooling_tab.py:1576
 msgid "Session Complete"
 msgstr ""
 
-#: main.py:1524 main.py:2196
+#: main.py:1536 main.py:2208
 msgid "No Pads Fit"
 msgstr ""
 
-#: main.py:1525 main.py:2197
+#: main.py:1537 main.py:2209
 #, python-brace-format
 msgid ""
 "No pads could be placed on this scrap.\n"
@@ -1333,20 +1333,20 @@ msgid ""
 "Try a larger scrap piece."
 msgstr ""
 
-#: main.py:1542
+#: main.py:1554
 msgid "Scrap Mode Progress"
 msgstr ""
 
-#: main.py:1569 tooling_tab.py:1712
+#: main.py:1581 tooling_tab.py:1712
 msgid "Remaining"
 msgstr ""
 
-#: main.py:1577
+#: main.py:1589
 msgid "On this scrap"
 msgstr ""
 
-#: main.py:1585 main.py:2131 main.py:2344 main.py:2347 main.py:2350
-#: toner_tab.py:2796 tooling_tab.py:1205 tooling_tab.py:1265
+#: main.py:1597 main.py:2143 main.py:2356 main.py:2359 main.py:2362
+#: toner_tab.py:3272 tooling_tab.py:1205 tooling_tab.py:1265
 #: tooling_tab.py:1719 tooling_tab.py:2033 tooling_tab.py:2589
 #: tooling_tab.py:2673 tooling_tab.py:2702 tooling_tab.py:2810
 #: tooling_tab.py:2867 tooling_tab.py:3059 tooling_tab.py:3131
@@ -1354,38 +1354,38 @@ msgstr ""
 msgid "Done"
 msgstr ""
 
-#: main.py:1596 toner_tab.py:1648 toner_tab.py:4808 toner_tab.py:5116
+#: main.py:1608 toner_tab.py:2099 toner_tab.py:5318 toner_tab.py:5626
 #: tooling_tab.py:1728 tuner_tab.py:1368 ui_dialogs/guide.py:189
-#: ui_dialogs/guide.py:1265 ui_dialogs/guide.py:1317 ui_dialogs/history.py:116
+#: ui_dialogs/guide.py:1298 ui_dialogs/guide.py:1350 ui_dialogs/history.py:116
 #: ui_dialogs/machine.py:934 ui_dialogs/machine.py:2683
 #: ui_dialogs/machine.py:3218 ui_dialogs/machine.py:3426
 msgid "Close"
 msgstr ""
 
-#: main.py:1641 tooling_tab.py:1760
+#: main.py:1653 tooling_tab.py:1760
 msgid "All done!"
 msgstr ""
 
-#: main.py:1644
+#: main.py:1656
 #, python-brace-format
 msgid "{placed} on scrap #{num}, {done} / {total} cut"
 msgstr ""
 
-#: main.py:1649
+#: main.py:1661
 #, python-brace-format
 msgid "{done} / {total} pads complete"
 msgstr ""
 
-#: main.py:1659 main.py:1668 main.py:1678
+#: main.py:1671 main.py:1680 main.py:1690
 msgid " (none)"
 msgstr ""
 
-#: main.py:1682
+#: main.py:1694
 #, python-brace-format
 msgid "{material} | {scraps} scrap(s) used"
 msgstr ""
 
-#: main.py:1759 main.py:1762 main.py:1838 main.py:1842 tooling_tab.py:988
+#: main.py:1771 main.py:1774 main.py:1850 main.py:1854 tooling_tab.py:988
 #: tooling_tab.py:992 tooling_tab.py:1135 tooling_tab.py:1139
 #: tooling_tab.py:1978 tooling_tab.py:2240 tooling_tab.py:2246
 #: tooling_tab.py:2250 tooling_tab.py:2257 tooling_tab.py:2261
@@ -1400,15 +1400,15 @@ msgstr ""
 msgid "Invalid Input"
 msgstr ""
 
-#: main.py:1759
+#: main.py:1771
 msgid "Custom hole size must be a valid number."
 msgstr ""
 
-#: main.py:1762
+#: main.py:1774
 msgid "Custom hole size must be greater than zero."
 msgstr ""
 
-#: main.py:1776 main.py:1793 main.py:1852 main.py:1857 toner_tab.py:5271
+#: main.py:1788 main.py:1805 main.py:1864 main.py:1869 toner_tab.py:5782
 #: tooling_tab.py:1173 tooling_tab.py:1209 tooling_tab.py:1218
 #: tooling_tab.py:1270 tooling_tab.py:1551 tooling_tab.py:1631
 #: tooling_tab.py:1675 tooling_tab.py:1950 tooling_tab.py:2037
@@ -1419,20 +1419,20 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: main.py:1776
+#: main.py:1788
 msgid "No valid pad sizes entered."
 msgstr ""
 
-#: main.py:1782
+#: main.py:1794
 #, python-brace-format
 msgid "  … and {n} more"
 msgstr ""
 
-#: main.py:1784
+#: main.py:1796
 msgid "Some lines skipped"
 msgstr ""
 
-#: main.py:1785
+#: main.py:1797
 #, python-brace-format
 msgid ""
 "These lines couldn't be read as \"size x quantity\" and won't be cut:\n"
@@ -1442,15 +1442,15 @@ msgid ""
 "Continue without them?"
 msgstr ""
 
-#: main.py:1793
+#: main.py:1805
 msgid "Only one pad size can use 'max' quantity at a time."
 msgstr ""
 
-#: main.py:1812
+#: main.py:1824
 msgid "Can't group a 'max' size"
 msgstr ""
 
-#: main.py:1813
+#: main.py:1825
 #, python-brace-format
 msgid ""
 "{size} mm is set to 'max', but Labeled Zones is grouping {lo}–{hi} mm. A "
@@ -1460,51 +1460,51 @@ msgid ""
 " the rest."
 msgstr ""
 
-#: main.py:1824
+#: main.py:1836
 msgid ""
 "Warning: The current font size is too large for some pads and the "
 "engraving will be skipped:\n"
 "\n"
 msgstr ""
 
-#: main.py:1827
+#: main.py:1839
 msgid ""
 "\n"
 "Do you want to proceed?"
 msgstr ""
 
-#: main.py:1828
+#: main.py:1840
 msgid "Engraving Size Warning"
 msgstr ""
 
-#: main.py:1838 tooling_tab.py:988 tooling_tab.py:1135 tooling_tab.py:2723
+#: main.py:1850 tooling_tab.py:988 tooling_tab.py:1135 tooling_tab.py:2723
 msgid "Sheet width and height must be valid numbers."
 msgstr ""
 
-#: main.py:1842
+#: main.py:1854
 msgid "Sheet width and height must be greater than zero."
 msgstr ""
 
-#: main.py:1852
+#: main.py:1864
 #, python-brace-format
 msgid "Unknown unit '{units}' in settings."
 msgstr ""
 
-#: main.py:1857
+#: main.py:1869
 msgid "Please enter a base filename."
 msgstr ""
 
-#: main.py:1996
+#: main.py:2008
 msgid ""
 "Finish or clear the current scrap session before loading a job from "
 "history."
 msgstr ""
 
-#: main.py:2051
+#: main.py:2063
 msgid "Job Loaded"
 msgstr ""
 
-#: main.py:2052
+#: main.py:2064
 msgid ""
 "Pad list, materials and sheet size are back.\n"
 "\n"
@@ -1512,46 +1512,46 @@ msgid ""
 "piece you're cutting now."
 msgstr ""
 
-#: main.py:2075 main.py:2269
+#: main.py:2087 main.py:2281
 msgid "No Materials Selected"
 msgstr ""
 
-#: main.py:2075
+#: main.py:2087
 msgid "Please select at least one material."
 msgstr ""
 
-#: main.py:2082 main.py:2275
+#: main.py:2094 main.py:2287
 msgid "Preview"
 msgstr ""
 
-#: main.py:2083 main.py:2276
+#: main.py:2095 main.py:2288
 msgid ""
 "Preview works with one material at a time.\n"
 "Please select a single material to preview its layout."
 msgstr ""
 
-#: main.py:2103 main.py:2291
+#: main.py:2115 main.py:2303
 msgid "paper"
 msgstr ""
 
-#: main.py:2103 main.py:2291
+#: main.py:2115 main.py:2303
 msgid "sheet"
 msgstr ""
 
-#: main.py:2104 main.py:2292
+#: main.py:2116 main.py:2304
 #, python-brace-format
 msgid "Could not fit all '{material}' pieces on the specified {size_desc} size."
 msgstr ""
 
-#: main.py:2117 main.py:2166 tooling_tab.py:1594
+#: main.py:2129 main.py:2178 tooling_tab.py:1594
 msgid "Select Folder to Save SVGs"
 msgstr ""
 
-#: main.py:2131
+#: main.py:2143
 msgid "SVG files generated successfully."
 msgstr ""
 
-#: main.py:2135
+#: main.py:2147
 #, python-brace-format
 msgid ""
 "Something went wrong during generation:\n"
@@ -1559,15 +1559,15 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2153 main.py:2373
+#: main.py:2165 main.py:2385
 msgid "Scrap Mode Error"
 msgstr ""
 
-#: main.py:2154
+#: main.py:2166
 msgid "Please select exactly one material for scrap mode."
 msgstr ""
 
-#: main.py:2236 main.py:2427
+#: main.py:2248 main.py:2439
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1576,7 +1576,7 @@ msgid ""
 "Files saved to: {save_dir}"
 msgstr ""
 
-#: main.py:2244 main.py:2438
+#: main.py:2256 main.py:2450
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -1584,37 +1584,37 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2269
+#: main.py:2281
 msgid "Please select at least one material (G-code not supported for Exact Size)."
 msgstr ""
 
-#: main.py:2312
+#: main.py:2324
 msgid "Working"
 msgstr ""
 
-#: main.py:2322
+#: main.py:2334
 msgid "Generating G-code..."
 msgstr ""
 
-#: main.py:2344
+#: main.py:2356
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
 "SD card safely ejected — you can remove it now!"
 msgstr ""
 
-#: main.py:2347
+#: main.py:2359
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
 "Please safely eject the SD card before removing."
 msgstr ""
 
-#: main.py:2350
+#: main.py:2362
 msgid "G-code files generated successfully."
 msgstr ""
 
-#: main.py:2355
+#: main.py:2367
 #, python-brace-format
 msgid ""
 "Something went wrong during G-code generation:\n"
@@ -1622,37 +1622,37 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2374
+#: main.py:2386
 msgid ""
 "Please select exactly one material for scrap mode.\n"
 "(G-code not supported for Exact Size)"
 msgstr ""
 
-#: main.py:2532
+#: main.py:2544
 msgid "Library Name"
 msgstr ""
 
-#: main.py:2533
+#: main.py:2545
 msgid "Enter a library name to save to:"
 msgstr ""
 
-#: main.py:2546 main.py:2550
+#: main.py:2558 main.py:2562
 msgid "Save Pad Preset"
 msgstr ""
 
-#: main.py:2546
+#: main.py:2558
 msgid "Enter a name for this preset:"
 msgstr ""
 
-#: main.py:2550
+#: main.py:2562
 msgid "Cannot save an empty list."
 msgstr ""
 
-#: main.py:2572
+#: main.py:2584
 msgid "Duplicate Detected"
 msgstr ""
 
-#: main.py:2573
+#: main.py:2585
 #, python-brace-format
 msgid ""
 "This pad list is identical to '{pname}' in '{lib}'.\n"
@@ -1660,61 +1660,61 @@ msgid ""
 "Save anyway?"
 msgstr ""
 
-#: main.py:2584
+#: main.py:2596
 #, python-brace-format
 msgid "Preset '{name}' saved successfully."
 msgstr ""
 
-#: main.py:2623
+#: main.py:2635
 #, python-brace-format
 msgid "Are you sure you want to delete the empty library '{lib}'?"
 msgstr ""
 
-#: main.py:2627
+#: main.py:2639
 #, python-brace-format
 msgid "Library '{lib}' deleted."
 msgstr ""
 
-#: main.py:2645
+#: main.py:2657
 msgid "Delete Pad Preset"
 msgstr ""
 
-#: main.py:2645
+#: main.py:2657
 #, python-brace-format
 msgid ""
 "Are you sure you want to delete the preset '{preset}' from the '{lib}' "
 "library?"
 msgstr ""
 
-#: main.py:2655
+#: main.py:2667
 #, python-brace-format
 msgid "Preset '{preset}' deleted."
 msgstr ""
 
-#: main.py:2657
+#: main.py:2669
 msgid "Could not find the preset to delete."
 msgstr ""
 
-#: main.py:2663 toner_tab.py:1246
+#: main.py:2675 toner_tab.py:1316
 msgid "Notes"
 msgstr ""
 
-#: main.py:2663
+#: main.py:2675
 msgid "No preset loaded."
 msgstr ""
 
-#: main.py:2676
+#: main.py:2688
 msgid "Import Pad Presets"
 msgstr ""
 
-#: main.py:2697
+#: main.py:2709
 #, python-brace-format
 msgid ""
 "Could not import pad presets:\n"
 "{error}"
 msgstr ""
 
-#: main.py:2715
+#: main.py:2727
 #, python-brace-format
 msgid ""
 "Could not fetch pad sets from stohrermusic.com:\n"
@@ -1722,7 +1722,7 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2719
+#: main.py:2731
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -1730,19 +1730,19 @@ msgid ""
 "{error}"
 msgstr ""
 
-#: main.py:2723
+#: main.py:2735
 msgid "No pad set data found on the server."
 msgstr ""
 
-#: main.py:2731
+#: main.py:2743
 msgid "Select Folder with Settings"
 msgstr ""
 
-#: main.py:2739
+#: main.py:2751
 msgid "No Settings Found"
 msgstr ""
 
-#: main.py:2740
+#: main.py:2752
 msgid ""
 "No config files found in the selected folder.\n"
 "\n"
@@ -1750,7 +1750,7 @@ msgid ""
 "key_height_library.json, screw_specs.json, toner_data.json"
 msgstr ""
 
-#: main.py:2746
+#: main.py:2758
 #, python-brace-format
 msgid ""
 "The following files will be imported and will REPLACE your current "
@@ -1761,11 +1761,11 @@ msgid ""
 "Are you sure you want to continue?"
 msgstr ""
 
-#: main.py:2750
+#: main.py:2762
 msgid "Confirm Import"
 msgstr ""
 
-#: main.py:2777
+#: main.py:2789
 #, python-brace-format
 msgid ""
 "Successfully imported {count} file(s).\n"
@@ -1773,33 +1773,33 @@ msgid ""
 "Imported: {files}"
 msgstr ""
 
-#: main.py:2780
+#: main.py:2792
 #, python-brace-format
 msgid ""
 "Could not import settings:\n"
 "{error}"
 msgstr ""
 
-#: main.py:2801 main.py:3606 tooling_tab.py:482 tooling_tab.py:550
+#: main.py:2813 main.py:3470 tooling_tab.py:482 tooling_tab.py:550
 #: ui_dialogs/sizing.py:772 ui_dialogs/sizing.py:2175
 msgid "Felt"
 msgstr ""
 
-#: main.py:2801 main.py:3606 tooling_tab.py:482 tooling_tab.py:550
+#: main.py:2813 main.py:3470 tooling_tab.py:482 tooling_tab.py:550
 #: ui_dialogs/sizing.py:773 ui_dialogs/sizing.py:2176
 msgid "Card"
 msgstr ""
 
-#: main.py:2801 main.py:3606 tooling_tab.py:482 tooling_tab.py:550
+#: main.py:2813 main.py:3470 tooling_tab.py:482 tooling_tab.py:550
 #: ui_dialogs/guide.py:764 ui_dialogs/sizing.py:770 ui_dialogs/sizing.py:2174
 msgid "Leather"
 msgstr ""
 
-#: main.py:2816 main.py:2828 main.py:2888 toner_tab.py:1071
+#: main.py:2828 main.py:2840 main.py:2900 toner_tab.py:1127
 msgid "Input Device"
 msgstr ""
 
-#: main.py:2817
+#: main.py:2829
 msgid ""
 "On Linux, audio input is locked to the system default.\n"
 "\n"
@@ -1807,122 +1807,475 @@ msgid ""
 "(PulseAudio or PipeWire)."
 msgstr ""
 
-#: main.py:2824
+#: main.py:2836
 msgid "No Devices"
 msgstr ""
 
-#: main.py:2824 toner_tab.py:1113
+#: main.py:2836 toner_tab.py:1169
 msgid "No audio input devices found."
 msgstr ""
 
-#: main.py:2837
+#: main.py:2849
 msgid "Select audio input device:"
 msgstr ""
 
-#: main.py:2839
+#: main.py:2851
 msgid ""
 "Showing devices with 44.1 kHz+ sample rate.\n"
 "Bluetooth headsets are excluded (sample rate too low)."
 msgstr ""
 
-#: main.py:2844 main.py:2847 tuner_tab.py:1247 tuner_tab.py:1250
+#: main.py:2856 main.py:2859 tuner_tab.py:1247 tuner_tab.py:1250
 msgid "System Default"
 msgstr ""
 
-#: main.py:2889
+#: main.py:2901
 #, python-brace-format
 msgid "Audio input set to: {dev_name}"
 msgstr ""
 
-#: main.py:2893 main.py:2988 main.py:3279 ui_dialogs/gcode_settings.py:194
+#: main.py:2905 main.py:3000 main.py:3141 ui_dialogs/gcode_settings.py:194
 #: ui_dialogs/sizing.py:74
 msgid "Apply"
 msgstr ""
 
-#: main.py:2901
+#: main.py:2913
 msgid "Capture Threshold"
 msgstr ""
 
-#: main.py:2910
+#: main.py:2922
 msgid ""
 "Set the minimum signal level to trigger capture.\n"
 "Raise the threshold if chair noises or breathing\n"
 "trigger false captures."
 msgstr ""
 
-#: main.py:2919
+#: main.py:2931
 msgid "Current level:"
 msgstr ""
 
-#: main.py:2934
+#: main.py:2946
 msgid "Threshold:"
 msgstr ""
 
-#: main.py:2998 main.py:3007 main.py:3271 main.py:3274
+#: main.py:3010 main.py:3019 main.py:3133 main.py:3136
 msgid "Feature Set"
 msgstr ""
 
-#: main.py:3009
+#: main.py:3021
 msgid ""
 "Choose which tabs to show.\n"
 "The Pad Maker is always on."
 msgstr ""
 
-#: main.py:3014
+#: main.py:3026
 msgid "Language"
 msgstr ""
 
-#: main.py:3031
+#: main.py:3043
 msgid " (restart to apply)"
 msgstr ""
 
-#: main.py:3035
+#: main.py:3047
 msgid "Tool Tips"
 msgstr ""
 
-#: main.py:3039
+#: main.py:3051
 msgid "Show tool tips when hovering over settings"
 msgstr ""
 
-#: main.py:3042
+#: main.py:3054
 msgid ""
 "\n"
 "Tabs"
 msgstr ""
 
-#: main.py:3058 ui_dialogs/guide.py:86
-msgid "Toner"
-msgstr ""
-
-#: main.py:3072
+#: main.py:3091
 msgid ""
 "\n"
 "Experimental / In Progress"
 msgstr ""
 
-#: main.py:3092
+#: main.py:3095
 msgid "Machine menu (direct Falcon serial control)"
 msgstr ""
 
-#: main.py:3099
-msgid "Toner — Beta Notice"
+#: main.py:3134
+msgid "Restart the app for the language change to take effect."
 msgstr ""
 
-#: main.py:3109
-msgid "Harmonic Tone Analyzer"
+#: main.py:3137
+msgid "Changes will take effect next time you open the app."
 msgstr ""
 
-#: main.py:3128
+#: main.py:3231
+msgid "Log File"
+msgstr ""
+
+#: main.py:3231
+#, python-brace-format
 msgid ""
-"This feature is in beta. Run it in full screen.\n"
+"No log file found.\n"
+"Expected at: {log_path}"
+msgstr ""
+
+#: main.py:3619
+msgid "Unexpected Error"
+msgstr ""
+
+#: main.py:3620
+#, python-brace-format
+msgid ""
+"{exc_type}: {exc_value}\n"
 "\n"
-"The Toner is a real-time harmonic analyzer that captures the frequency "
-"content of your recorded sound, extracting and analyzing the saxophone-"
-"specific content: the fundamental and its overtones. A microphone picks "
-"up your sound, an FFT extracts the harmonic series, and the display shows"
-" you what's happening in real time. You can capture sessions, save "
-"presets for different setups (horn + mouthpiece + player + reed + mic), "
-"and compare them side by side.\n"
+"Details saved to log file (Help > Open Log File)."
+msgstr ""
+
+#: toner_tab.py:308
+msgid "Compare..."
+msgstr ""
+
+#: toner_tab.py:312 ui_dialogs/sizing.py:1188
+msgid "Export..."
+msgstr ""
+
+#: toner_tab.py:380 tuner_tab.py:1149
+msgid "IN TUNE"
+msgstr ""
+
+#: toner_tab.py:407 toner_tab.py:2982 toner_tab.py:3286
+#: ui_dialogs/machine.py:3308
+msgid "Pause"
+msgstr ""
+
+#: toner_tab.py:481
+msgid "HARMONICS"
+msgstr ""
+
+#: toner_tab.py:482
+msgid "on"
+msgstr ""
+
+#: toner_tab.py:496
+msgid "SAX SELECTOR"
+msgstr ""
+
+#: toner_tab.py:551
+msgid "sandbox (concert pitch)"
+msgstr ""
+
+#: toner_tab.py:586
+msgid "SESSION"
+msgstr ""
+
+#: toner_tab.py:591 toner_tab.py:598 toner_tab.py:2830 toner_tab.py:2846
+msgid "no preset"
+msgstr ""
+
+#: toner_tab.py:603 toner_tab.py:2716
+msgid "Load..."
+msgstr ""
+
+#: toner_tab.py:613
+msgid "MODE"
+msgstr ""
+
+#: toner_tab.py:615
+msgid "free"
+msgstr ""
+
+#: toner_tab.py:626
+msgid "guided"
+msgstr ""
+
+#: toner_tab.py:636 toner_tab.py:2980
+msgid "Capture"
+msgstr ""
+
+#: toner_tab.py:647
+msgid ""
+"The Analyzer requires PortAudio.\n"
+"\n"
+"Install it with:\n"
+"  sudo apt install libportaudio2\n"
+"\n"
+"Then restart the application."
+msgstr ""
+
+#: toner_tab.py:652
+msgid ""
+"The Analyzer is not available on this Mac.\n"
+"\n"
+"This feature requires Apple Silicon (M1 or newer).\n"
+"\n"
+"All other features work normally."
+msgstr ""
+
+#: toner_tab.py:656
+msgid ""
+"The Analyzer is not available on this system.\n"
+"\n"
+"If you see this on Windows, try reinstalling the app.\n"
+"\n"
+"All other features work normally."
+msgstr ""
+
+#: toner_tab.py:829
+#, python-brace-format
+msgid "Overlay: {name} ({detail})"
+msgstr ""
+
+#: toner_tab.py:914
+msgid "experimental"
+msgstr ""
+
+#: toner_tab.py:1110
+msgid "Analyzer Settings"
+msgstr ""
+
+#: toner_tab.py:1124
+msgid "General"
+msgstr ""
+
+#: toner_tab.py:1137 tuner_tab.py:1243
+msgid "System Default (set in system audio settings)"
+msgstr ""
+
+#: toner_tab.py:1164
+msgid ""
+"Microphone the analyzer uses for capture and live analysis. The mic type "
+"and model that get saved with each capture are configured per preset "
+"(File → Presets), not here."
+msgstr ""
+
+#: toner_tab.py:1172
+msgid ""
+"Mic type and model are set per preset\n"
+"in File → Presets."
+msgstr ""
+
+#: toner_tab.py:1177 toner_tab.py:3021 toner_tab.py:3034
+msgid "Recording"
+msgstr ""
+
+#: toner_tab.py:1183
+msgid ""
+"⚠ Without WAV recording, post-capture analysis will be roughly half as "
+"accurate."
+msgstr ""
+
+#: toner_tab.py:1194
+msgid "Record WAV during capture"
+msgstr ""
+
+#: toner_tab.py:1200
+msgid ""
+"Save the raw audio for each capture as a WAV file. WAV recording lets the"
+" post-capture re-analysis average over the full take (much more accurate "
+"than the live readings). Strongly recommended."
+msgstr ""
+
+#: toner_tab.py:1208
+msgid "Delete WAV after analysis"
+msgstr ""
+
+#: toner_tab.py:1213
+msgid ""
+"Automatically delete each WAV after the post-capture analysis runs. Saves"
+" disk space, but you lose the ability to re-analyze a session if "
+"descriptors or algorithms change later."
+msgstr ""
+
+#: toner_tab.py:1225 toner_tab.py:2917 toner_tab.py:2922
+msgid "Choose Recording Folder"
+msgstr ""
+
+#: toner_tab.py:1230
+msgid "Folder..."
+msgstr ""
+
+#: toner_tab.py:1241
+msgid "Pitch"
+msgstr ""
+
+#: toner_tab.py:1247
+msgid "Reference pitch  A ="
+msgstr ""
+
+#: toner_tab.py:1254
+msgid "Hz"
+msgstr ""
+
+#: toner_tab.py:1265
+msgid "Written pitch (what the player fingers)"
+msgstr ""
+
+#: toner_tab.py:1269
+msgid "Concert pitch (actual sounding frequency)"
+msgstr ""
+
+#: toner_tab.py:1274
+msgid ""
+"Show note names as the player reads them on the page. An alto sax "
+"fingering A sounds C — written pitch still shows it as A."
+msgstr ""
+
+#: toner_tab.py:1278
+msgid ""
+"Show note names at actual sounding frequency. An alto fingering A is "
+"shown as C in concert pitch."
+msgstr ""
+
+#: toner_tab.py:1282
+msgid "Intonation Chart"
+msgstr ""
+
+#: toner_tab.py:1287
+msgid "Low notes on the left"
+msgstr ""
+
+#: toner_tab.py:1292
+msgid ""
+"Which way the notes run along the bottom of the chart. Untick to put the "
+"low notes on the right."
+msgstr ""
+
+#: toner_tab.py:1299 toner_tab.py:4847
+msgid "Analysis"
+msgstr ""
+
+#: toner_tab.py:1302
+msgid "Preset Fields"
+msgstr ""
+
+#: toner_tab.py:1306
+msgid "Show these optional fields when creating presets."
+msgstr ""
+
+#: toner_tab.py:1310 toner_tab.py:2289 toner_tab.py:2300 toner_tab.py:5956
+#: toner_tab.py:5961
+msgid "Serial #"
+msgstr ""
+
+#: toner_tab.py:1311 toner_tab.py:2289 toner_tab.py:2301 toner_tab.py:5956
+#: toner_tab.py:5964
+msgid "Reed"
+msgstr ""
+
+#: toner_tab.py:1312 toner_tab.py:2289 toner_tab.py:2302 toner_tab.py:5956
+msgid "Ligature"
+msgstr ""
+
+#: toner_tab.py:1313 toner_tab.py:2289 toner_tab.py:2303 toner_tab.py:5956
+#: ui_dialogs/guide.py:1097
+msgid "Mic Position"
+msgstr ""
+
+#: toner_tab.py:1314
+msgid "Room / Environment"
+msgstr ""
+
+#: toner_tab.py:1315
+msgid "Preamp / Interface"
+msgstr ""
+
+#: toner_tab.py:1347
+msgid "Heavy Mass Neck Screw"
+msgstr ""
+
+#: toner_tab.py:1357
+msgid "Processing..."
+msgstr ""
+
+#: toner_tab.py:1363
+msgid "Removing option..."
+msgstr ""
+
+#: toner_tab.py:1395
+msgid "Analysis Descriptors"
+msgstr ""
+
+#: toner_tab.py:1399
+msgid "Choose which descriptors appear in the Analyze tool."
+msgstr ""
+
+#: toner_tab.py:1406
+msgid "Harmonic Complexity"
+msgstr ""
+
+#: toner_tab.py:1415 toner_tab.py:4820 toner_tab.py:5409
+msgid "Warmth"
+msgstr ""
+
+#: toner_tab.py:1420
+msgid "Even/Odd Harmonic Balance"
+msgstr ""
+
+#: toner_tab.py:1428 toner_tab.py:4822
+msgid "Rolloff Shape"
+msgstr ""
+
+#: toner_tab.py:1435 toner_tab.py:4823
+msgid "Evenness"
+msgstr ""
+
+#: toner_tab.py:1472
+#, python-brace-format
+msgid "Detailed description of {label}."
+msgstr ""
+
+#: toner_tab.py:1475
+msgid "Sandbox Mode"
+msgstr ""
+
+#: toner_tab.py:1480
+msgid "Allow sandbox mode"
+msgstr ""
+
+#: toner_tab.py:1485
+msgid ""
+"Sandbox presets can capture any pitched sound\n"
+"without requiring mic type or instrument fields.\n"
+"Good for experiments, non-sax instruments, or\n"
+"unconventional setups like contact mics."
+msgstr ""
+
+#: toner_tab.py:1565
+msgid "Apply all changes and close."
+msgstr ""
+
+#: toner_tab.py:1566 ui_dialogs/gcode_settings.py:201
+msgid "Close without applying any changes."
+msgstr ""
+
+#: toner_tab.py:1598
+msgid "Concert"
+msgstr ""
+
+#: toner_tab.py:1602
+#, python-brace-format
+msgid "Written ({sax})"
+msgstr ""
+
+#: toner_tab.py:1682
+msgid "Harmonics — Experimental"
+msgstr ""
+
+#: toner_tab.py:1692
+msgid "Harmonic analyzer (experimental)"
+msgstr ""
+
+#: toner_tab.py:1711
+msgid ""
+"This part of the Analyzer is experimental. Run it in full screen.\n"
+"\n"
+"The harmonic analyzer captures the frequency content of your recorded "
+"sound, extracting and analyzing the saxophone-specific content: the "
+"fundamental and its overtones. A microphone picks up your sound, an FFT "
+"extracts the harmonic series, and the display shows you what's happening "
+"in real time. You can capture sessions, save presets for different setups"
+" (horn + mouthpiece + player + reed + mic), and compare them side by "
+"side.\n"
 "\n"
 "The formulas and scaling may still shift as we gather more data. The raw "
 "harmonic measurements are always saved, so any future analytical "
@@ -1956,13 +2309,13 @@ msgid ""
 "3. Preset Fields — choose which variable fields to show when creating "
 "presets.\n"
 "\n"
-"Then create a preset in File > Presets. Six fields are always required: "
-"Make, Model, Player, Mouthpiece, Mic Type, and Mic Model. If you want "
-"accuracy, a high quality condenser mic will give the most accurate "
-"readings, but you can also use the toner to compare and learn about mic "
-"and mic placement effects.\n"
+"Then create a preset in File > Presets. For harmonic captures six fields "
+"are required: Make, Model, Player, Mouthpiece, Mic Type, and Mic Model. "
+"If you want accuracy, a high quality condenser mic will give the most "
+"accurate readings, but you can also use it to compare and learn about mic"
+" and mic placement effects.\n"
 "\n"
-"HELP IMPROVE THE TONER\n"
+"HELP IMPROVE THE ANALYZER\n"
 "\n"
 "I need more data! Please help by contributing recordings and preset "
 "files. Every recording helps calibrate the descriptors and uncover what "
@@ -1974,7 +2327,7 @@ msgid ""
 "\n"
 msgstr ""
 
-#: main.py:3206
+#: toner_tab.py:1788
 msgid ""
 "\n"
 "This feature is in active development. Please contact me with "
@@ -1982,452 +2335,212 @@ msgid ""
 "screenshots are super helpful.\n"
 msgstr ""
 
-#: main.py:3221
-msgid "I Understand — Enable Toner"
+#: toner_tab.py:1803
+msgid "I Understand — Enable Harmonics"
 msgstr ""
 
-#: main.py:3272
-msgid "Restart the app for the language change to take effect."
+#: toner_tab.py:1899
+msgid "No captures yet."
 msgstr ""
 
-#: main.py:3275
-msgid "Changes will take effect next time you open the app."
+#: toner_tab.py:1901
+msgid "Load a preset and capture to chart its intonation."
 msgstr ""
 
-#: main.py:3369
-msgid "Log File"
+#: toner_tab.py:1931 toner_tab.py:1936 toner_tab.py:1969 toner_tab.py:1982
+msgid "Compare"
 msgstr ""
 
-#: main.py:3369
+#: toner_tab.py:1931
+msgid "No presets with captures yet."
+msgstr ""
+
+#: toner_tab.py:1942
+#, python-brace-format
+msgid "Tick the presets or sessions to draw together (up to {n})."
+msgstr ""
+
+#: toner_tab.py:1969
+#, python-brace-format
+msgid "Pick up to {n}."
+msgstr ""
+
+#: toner_tab.py:1991 toner_tab.py:2012 toner_tab.py:2015 toner_tab.py:6190
+msgid "Export"
+msgstr ""
+
+#: toner_tab.py:1991
+msgid "Nothing to export yet."
+msgstr ""
+
+#: toner_tab.py:1996
+msgid "Export Chart"
+msgstr ""
+
+#: toner_tab.py:2003
+msgid "Intonation chart"
+msgstr ""
+
+#: toner_tab.py:2012
 #, python-brace-format
 msgid ""
-"No log file found.\n"
-"Expected at: {log_path}"
+"Could not write the file:\n"
+"{e}"
 msgstr ""
 
-#: main.py:3755
-msgid "Unexpected Error"
-msgstr ""
-
-#: main.py:3756
+#: toner_tab.py:2015
 #, python-brace-format
-msgid ""
-"{exc_type}: {exc_value}\n"
-"\n"
-"Details saved to log file (Help > Open Log File)."
+msgid "Saved {path}"
 msgstr ""
 
-#: toner_tab.py:341 tuner_tab.py:1149
-msgid "IN TUNE"
-msgstr ""
-
-#: toner_tab.py:368 toner_tab.py:2506 toner_tab.py:2810
-#: ui_dialogs/machine.py:3308
-msgid "Pause"
-msgstr ""
-
-#: toner_tab.py:447
-msgid "SAX SELECTOR"
-msgstr ""
-
-#: toner_tab.py:502
-msgid "sandbox (concert pitch)"
-msgstr ""
-
-#: toner_tab.py:537
-msgid "SESSION"
-msgstr ""
-
-#: toner_tab.py:542 toner_tab.py:549 toner_tab.py:2356 toner_tab.py:2372
-msgid "no preset"
-msgstr ""
-
-#: toner_tab.py:554 toner_tab.py:2258
-msgid "Load..."
-msgstr ""
-
-#: toner_tab.py:564
-msgid "MODE"
-msgstr ""
-
-#: toner_tab.py:566
-msgid "free"
-msgstr ""
-
-#: toner_tab.py:577
-msgid "cal"
-msgstr ""
-
-#: toner_tab.py:587 toner_tab.py:2504
-msgid "Capture"
-msgstr ""
-
-#: toner_tab.py:778
-#, python-brace-format
-msgid "Overlay: {name} ({detail})"
-msgstr ""
-
-#: toner_tab.py:1054
-msgid "Tone Analyzer Settings"
-msgstr ""
-
-#: toner_tab.py:1068
-msgid "General"
-msgstr ""
-
-#: toner_tab.py:1081 tuner_tab.py:1243
-msgid "System Default (set in system audio settings)"
-msgstr ""
-
-#: toner_tab.py:1108
-msgid ""
-"Microphone the toner uses for capture and live analysis. The mic type and"
-" model that get saved with each capture are configured per preset (File →"
-" Presets), not here."
-msgstr ""
-
-#: toner_tab.py:1116
-msgid ""
-"Mic type and model are set per preset\n"
-"in File → Presets."
-msgstr ""
-
-#: toner_tab.py:1121 toner_tab.py:2545 toner_tab.py:2558
-msgid "Recording"
-msgstr ""
-
-#: toner_tab.py:1127
-msgid ""
-"⚠ Without WAV recording, post-capture analysis will be roughly half as "
-"accurate."
-msgstr ""
-
-#: toner_tab.py:1138
-msgid "Record WAV during capture"
-msgstr ""
-
-#: toner_tab.py:1144
-msgid ""
-"Save the raw audio for each capture as a WAV file. WAV recording lets the"
-" post-capture re-analysis average over the full take (much more accurate "
-"than the live readings). Strongly recommended."
-msgstr ""
-
-#: toner_tab.py:1152
-msgid "Delete WAV after analysis"
-msgstr ""
-
-#: toner_tab.py:1157
-msgid ""
-"Automatically delete each WAV after the post-capture analysis runs. Saves"
-" disk space, but you lose the ability to re-analyze a session if "
-"descriptors or algorithms change later."
-msgstr ""
-
-#: toner_tab.py:1169 toner_tab.py:2441 toner_tab.py:2446
-msgid "Choose Recording Folder"
-msgstr ""
-
-#: toner_tab.py:1174
-msgid "Folder..."
-msgstr ""
-
-#: toner_tab.py:1185
-msgid "Pitch"
-msgstr ""
-
-#: toner_tab.py:1191
-msgid "Reference pitch  A ="
-msgstr ""
-
-#: toner_tab.py:1198
-msgid "Hz"
-msgstr ""
-
-#: toner_tab.py:1209
-msgid "Written pitch (what the player fingers)"
-msgstr ""
-
-#: toner_tab.py:1213
-msgid "Concert pitch (actual sounding frequency)"
-msgstr ""
-
-#: toner_tab.py:1218
-msgid ""
-"Show note names as the player reads them on the page. An alto sax "
-"fingering A sounds C — written pitch still shows it as A."
-msgstr ""
-
-#: toner_tab.py:1222
-msgid ""
-"Show note names at actual sounding frequency. An alto fingering A is "
-"shown as C in concert pitch."
-msgstr ""
-
-#: toner_tab.py:1229 toner_tab.py:4337
-msgid "Analysis"
-msgstr ""
-
-#: toner_tab.py:1232
-msgid "Preset Fields"
-msgstr ""
-
-#: toner_tab.py:1236
-msgid "Show these optional fields when creating presets."
-msgstr ""
-
-#: toner_tab.py:1240 toner_tab.py:1838 toner_tab.py:1849 toner_tab.py:5445
-#: toner_tab.py:5450
-msgid "Serial #"
-msgstr ""
-
-#: toner_tab.py:1241 toner_tab.py:1838 toner_tab.py:1850 toner_tab.py:5445
-#: toner_tab.py:5453
-msgid "Reed"
-msgstr ""
-
-#: toner_tab.py:1242 toner_tab.py:1838 toner_tab.py:1851 toner_tab.py:5445
-msgid "Ligature"
-msgstr ""
-
-#: toner_tab.py:1243 toner_tab.py:1838 toner_tab.py:1852 toner_tab.py:5445
-#: ui_dialogs/guide.py:1065
-msgid "Mic Position"
-msgstr ""
-
-#: toner_tab.py:1244
-msgid "Room / Environment"
-msgstr ""
-
-#: toner_tab.py:1245
-msgid "Preamp / Interface"
-msgstr ""
-
-#: toner_tab.py:1277
-msgid "Heavy Mass Neck Screw"
-msgstr ""
-
-#: toner_tab.py:1287
-msgid "Processing..."
-msgstr ""
-
-#: toner_tab.py:1293
-msgid "Removing option..."
-msgstr ""
-
-#: toner_tab.py:1325
-msgid "Analysis Descriptors"
-msgstr ""
-
-#: toner_tab.py:1329
-msgid "Choose which descriptors appear in the Analyze tool."
-msgstr ""
-
-#: toner_tab.py:1336
-msgid "Harmonic Complexity"
-msgstr ""
-
-#: toner_tab.py:1345 toner_tab.py:4310 toner_tab.py:4899
-msgid "Warmth"
-msgstr ""
-
-#: toner_tab.py:1350
-msgid "Even/Odd Harmonic Balance"
-msgstr ""
-
-#: toner_tab.py:1358 toner_tab.py:4312
-msgid "Rolloff Shape"
-msgstr ""
-
-#: toner_tab.py:1365 toner_tab.py:4313
-msgid "Evenness"
-msgstr ""
-
-#: toner_tab.py:1402
-#, python-brace-format
-msgid "Detailed description of {label}."
-msgstr ""
-
-#: toner_tab.py:1405
-msgid "Sandbox Mode"
-msgstr ""
-
-#: toner_tab.py:1410
-msgid "Allow sandbox mode"
-msgstr ""
-
-#: toner_tab.py:1415
-msgid ""
-"Sandbox presets can capture any pitched sound\n"
-"without requiring mic type or instrument fields.\n"
-"Good for experiments, non-sax instruments, or\n"
-"unconventional setups like contact mics."
-msgstr ""
-
-#: toner_tab.py:1493
-msgid "Apply all changes and close."
-msgstr ""
-
-#: toner_tab.py:1494 ui_dialogs/gcode_settings.py:201
-msgid "Close without applying any changes."
-msgstr ""
-
-#: toner_tab.py:1526
-msgid "Concert"
-msgstr ""
-
-#: toner_tab.py:1530
-#, python-brace-format
-msgid "Written ({sax})"
-msgstr ""
-
-#: toner_tab.py:1573 toner_tab.py:1583
+#: toner_tab.py:2024 toner_tab.py:2034
 msgid "Tone Presets"
 msgstr ""
 
-#: toner_tab.py:1620
+#: toner_tab.py:2071
 msgid "Load for Capture"
 msgstr ""
 
-#: toner_tab.py:1627
+#: toner_tab.py:2078
 msgid "Edit Notes..."
 msgstr ""
 
-#: toner_tab.py:1635
+#: toner_tab.py:2086
 msgid "New Preset..."
 msgstr ""
 
-#: toner_tab.py:1638
+#: toner_tab.py:2089
 msgid "Mutate..."
 msgstr ""
 
-#: toner_tab.py:1641
+#: toner_tab.py:2092
 msgid "Import Audio File..."
 msgstr ""
 
-#: toner_tab.py:1645 ui_dialogs/gcode_settings.py:609 ui_dialogs/sizing.py:416
+#: toner_tab.py:2096 ui_dialogs/gcode_settings.py:609 ui_dialogs/sizing.py:416
 #: ui_dialogs/sizing.py:619 ui_dialogs/sizing.py:722 ui_dialogs/sizing.py:889
 #: ui_dialogs/sizing.py:1184
 msgid "Delete"
 msgstr ""
 
-#: toner_tab.py:1719
+#: toner_tab.py:2170
 #, python-brace-format
 msgid "Notes — {name}"
 msgstr ""
 
-#: toner_tab.py:1733 ui_dialogs/presets_io.py:534
+#: toner_tab.py:2184 ui_dialogs/presets_io.py:534
 #, python-brace-format
 msgid "Notes for \"{name}\":"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1839 toner_tab.py:1895 toner_tab.py:1898
-#: toner_tab.py:5445 toner_tab.py:5446
+#: toner_tab.py:2289 toner_tab.py:2290 toner_tab.py:2346 toner_tab.py:2352
+#: toner_tab.py:5956 toner_tab.py:5957
 msgid "Preset Name"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1840 toner_tab.py:5445 toner_tab.py:5447
+#: toner_tab.py:2289 toner_tab.py:2291 toner_tab.py:2353 toner_tab.py:5956
+#: toner_tab.py:5958 ui_dialogs/guide.py:1040
 msgid "Horn Type"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1841 toner_tab.py:1899 toner_tab.py:5445
-#: toner_tab.py:5448 ui_dialogs/guide.py:1051
+#: toner_tab.py:2289 toner_tab.py:2292 toner_tab.py:2354 toner_tab.py:5956
+#: toner_tab.py:5959 ui_dialogs/guide.py:1040 ui_dialogs/guide.py:1083
 msgid "Make"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1842 toner_tab.py:1900 toner_tab.py:5445
-#: toner_tab.py:5449 ui_dialogs/guide.py:1051
+#: toner_tab.py:2289 toner_tab.py:2293 toner_tab.py:2355 toner_tab.py:5956
+#: toner_tab.py:5960 ui_dialogs/guide.py:1040 ui_dialogs/guide.py:1083
 msgid "Model"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1843 toner_tab.py:1901 toner_tab.py:5445
-#: toner_tab.py:5451 ui_dialogs/guide.py:1051
+#: toner_tab.py:2289 toner_tab.py:2294 toner_tab.py:2356 toner_tab.py:5956
+#: toner_tab.py:5962 ui_dialogs/guide.py:1040 ui_dialogs/guide.py:1083
 msgid "Player"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1844 toner_tab.py:1902 toner_tab.py:5445
-#: toner_tab.py:5452 ui_dialogs/guide.py:1051
+#: toner_tab.py:2289 toner_tab.py:2295 toner_tab.py:2357 toner_tab.py:5956
+#: toner_tab.py:5963 ui_dialogs/guide.py:1040 ui_dialogs/guide.py:1083
 msgid "Mouthpiece"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1845 toner_tab.py:1903 toner_tab.py:4464
-#: toner_tab.py:5445 ui_dialogs/guide.py:1051
+#: toner_tab.py:2289 toner_tab.py:2296 toner_tab.py:2361 toner_tab.py:4974
+#: toner_tab.py:5956 ui_dialogs/guide.py:1083
 msgid "Mic Type"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1846 toner_tab.py:1904 toner_tab.py:5445
-#: ui_dialogs/guide.py:1051
+#: toner_tab.py:2289 toner_tab.py:2297 toner_tab.py:2362 toner_tab.py:5956
+#: ui_dialogs/guide.py:1083
 msgid "Mic Model"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1853 toner_tab.py:5445
+#: toner_tab.py:2289 toner_tab.py:2304 toner_tab.py:5956
 msgid "Room"
 msgstr ""
 
-#: toner_tab.py:1838 toner_tab.py:1854 toner_tab.py:5445
+#: toner_tab.py:2289 toner_tab.py:2305 toner_tab.py:5956
 msgid "Preamp"
 msgstr ""
 
-#: toner_tab.py:1862
+#: toner_tab.py:2313
 msgid "Sandbox"
 msgstr ""
 
-#: toner_tab.py:1866
+#: toner_tab.py:2317
 msgid "(any sound, no required fields)"
 msgstr ""
 
-#: toner_tab.py:1908
+#: toner_tab.py:2366
 msgid "Required Field"
 msgstr ""
 
-#: toner_tab.py:1909
+#: toner_tab.py:2367
 #, python-brace-format
 msgid "Please enter {label}."
 msgstr ""
 
-#: toner_tab.py:1938 toner_tab.py:2166 toner_tab.py:5397
+#: toner_tab.py:2396 toner_tab.py:2624 toner_tab.py:5908
 msgid "New Tone Preset"
 msgstr ""
 
-#: toner_tab.py:1948 toner_tab.py:2176
+#: toner_tab.py:2406 toner_tab.py:2634
 msgid "Create Tone Preset"
 msgstr ""
 
-#: toner_tab.py:1964 toner_tab.py:2030 toner_tab.py:2196
+#: toner_tab.py:2422 toner_tab.py:2488 toner_tab.py:2654
 msgid "Duplicate Name"
 msgstr ""
 
-#: toner_tab.py:1965 toner_tab.py:2031 toner_tab.py:2197 toner_tab.py:5475
+#: toner_tab.py:2423 toner_tab.py:2489 toner_tab.py:2655 toner_tab.py:5986
 #, python-brace-format
 msgid "'{name}' already exists in '{lib}'."
 msgstr ""
 
-#: toner_tab.py:1982
+#: toner_tab.py:2440
 msgid "Create"
 msgstr ""
 
-#: toner_tab.py:1998 toner_tab.py:2008
+#: toner_tab.py:2456 toner_tab.py:2466
 msgid "Mutate Preset"
 msgstr ""
 
-#: toner_tab.py:2010
+#: toner_tab.py:2468
 msgid "Change what you need, save as a new preset."
 msgstr ""
 
-#: toner_tab.py:2048
+#: toner_tab.py:2506
 msgid "Save as New"
 msgstr ""
 
-#: toner_tab.py:2061
+#: toner_tab.py:2519
 #, python-brace-format
 msgid "Delete preset '{name}' from '{lib}'?"
 msgstr ""
 
-#: toner_tab.py:2090
+#: toner_tab.py:2548
 msgid "No Preset Loaded"
 msgstr ""
 
-#: toner_tab.py:2091
+#: toner_tab.py:2549
 msgid ""
 "Load a preset first to capture data.\n"
 "\n"
@@ -2435,11 +2548,11 @@ msgid ""
 "File > Presets to create and manage presets."
 msgstr ""
 
-#: toner_tab.py:2112
+#: toner_tab.py:2570
 msgid "Calibration Capture"
 msgstr ""
 
-#: toner_tab.py:2113
+#: toner_tab.py:2571
 msgid ""
 "Calibration walks through every note in the saxophone's range, one at a "
 "time.\n"
@@ -2459,70 +2572,70 @@ msgid ""
 "    capture threshold in Options > Capture Threshold"
 msgstr ""
 
-#: toner_tab.py:2136
+#: toner_tab.py:2594
 msgid "Note Range"
 msgstr ""
 
-#: toner_tab.py:2137
+#: toner_tab.py:2595
 #, python-brace-format
 msgid ""
 "{skipped} low notes skipped — below detection range for {sax}.\n"
 "Calibration will cover {total} notes."
 msgstr ""
 
-#: toner_tab.py:2155 ui_dialogs/machine.py:3323
+#: toner_tab.py:2614 ui_dialogs/machine.py:3323
 msgid "Stop"
 msgstr ""
 
-#: toner_tab.py:2178
+#: toner_tab.py:2636
 msgid ""
 "A preset saves your setup details: horn + player + mouthpiece.\n"
 "It pre-fills session metadata for quick capture start."
 msgstr ""
 
-#: toner_tab.py:2212
+#: toner_tab.py:2670
 msgid "Create && Start Capturing"
 msgstr ""
 
-#: toner_tab.py:2221 toner_tab.py:5352
+#: toner_tab.py:2679 toner_tab.py:5863
 msgid "Select Preset"
 msgstr ""
 
-#: toner_tab.py:2221
+#: toner_tab.py:2679
 msgid "Select a preset first."
 msgstr ""
 
-#: toner_tab.py:2270 toner_tab.py:3210
+#: toner_tab.py:2728 toner_tab.py:3720
 msgid "No Presets"
 msgstr ""
 
-#: toner_tab.py:2271
+#: toner_tab.py:2729
 msgid "No presets yet. Create one in File > Presets."
 msgstr ""
 
-#: toner_tab.py:2275 ui_dialogs/gcode_settings.py:770
+#: toner_tab.py:2733 ui_dialogs/gcode_settings.py:770
 #: ui_dialogs/gcode_settings.py:775 ui_dialogs/sizing.py:1983
 #: ui_dialogs/sizing.py:1986
 msgid "Load Preset"
 msgstr ""
 
-#: toner_tab.py:2316 ui_dialogs/gcode_settings.py:600 ui_dialogs/sizing.py:1166
+#: toner_tab.py:2774 ui_dialogs/gcode_settings.py:600 ui_dialogs/sizing.py:1166
 msgid "Load"
 msgstr ""
 
-#: toner_tab.py:2368
+#: toner_tab.py:2842
 msgid "sandbox"
 msgstr ""
 
-#: toner_tab.py:2370
+#: toner_tab.py:2844
 msgid "mic not set"
 msgstr ""
 
-#: toner_tab.py:2390
+#: toner_tab.py:2866
 msgid "Mic Type Required"
 msgstr ""
 
-#: toner_tab.py:2391
+#: toner_tab.py:2867
 msgid ""
 "This preset has no mic type set.\n"
 "\n"
@@ -2530,178 +2643,183 @@ msgid ""
 "or create a new preset with mic type specified."
 msgstr ""
 
-#: toner_tab.py:2442
+#: toner_tab.py:2918
 msgid ""
 "WAV recording is enabled but no folder has been chosen.\n"
 "\n"
 "Please select a folder where recordings will be saved."
 msgstr ""
 
-#: toner_tab.py:2546
+#: toner_tab.py:3022
 msgid "WAV recording failed — file was not created."
 msgstr ""
 
-#: toner_tab.py:2554
+#: toner_tab.py:3030
 msgid "Recording Saved"
 msgstr ""
 
-#: toner_tab.py:2555
+#: toner_tab.py:3031
 #, python-brace-format
 msgid ""
 "WAV saved to:\n"
 "{path}"
 msgstr ""
 
-#: toner_tab.py:2559
+#: toner_tab.py:3035
 #, python-brace-format
 msgid ""
 "Could not save WAV recording:\n"
 "{e}"
 msgstr ""
 
-#: toner_tab.py:2569
+#: toner_tab.py:3045
 msgid "Performing WAV analysis..."
 msgstr ""
 
-#: toner_tab.py:2582 toner_tab.py:2587
+#: toner_tab.py:3058 toner_tab.py:3063
 msgid "WAV Analysis"
 msgstr ""
 
-#: toner_tab.py:2583
+#: toner_tab.py:3059
 #, python-brace-format
 msgid ""
 "WAV analysis failed, keeping live captures:\n"
 "{e}"
 msgstr ""
 
-#: toner_tab.py:2588
+#: toner_tab.py:3064
 msgid ""
 "WAV analysis found no stable segments.\n"
 "Keeping live captures."
 msgstr ""
 
-#: toner_tab.py:2615
+#: toner_tab.py:3091
 msgid "WAV Analysis Complete"
 msgstr ""
 
-#: toner_tab.py:2634
+#: toner_tab.py:3110
 msgid "Capture Summary"
 msgstr ""
 
-#: toner_tab.py:2644
+#: toner_tab.py:3120
 #, python-brace-format
 msgid "Session: {name}"
 msgstr ""
 
-#: toner_tab.py:2653
+#: toner_tab.py:3129
 #, python-brace-format
 msgid "{total} captures across {unique} unique notes"
 msgstr ""
 
-#: toner_tab.py:2747
+#: toner_tab.py:3223
 msgid "Good coverage across registers!"
 msgstr ""
 
-#: toner_tab.py:2777 toner_tab.py:2800
+#: toner_tab.py:3253 toner_tab.py:3276
 msgid "Discard Session"
 msgstr ""
 
-#: toner_tab.py:2778
+#: toner_tab.py:3254
 msgid ""
 "Discard all captures from this session?\n"
 "\n"
 "This cannot be undone."
 msgstr ""
 
-#: toner_tab.py:2794
+#: toner_tab.py:3270
 msgid "Resume Capturing"
 msgstr ""
 
-#: toner_tab.py:2811
+#: toner_tab.py:3287
 msgid "Resumed..."
 msgstr ""
 
-#: toner_tab.py:2817 ui_dialogs/machine.py:3311
+#: toner_tab.py:3293 ui_dialogs/machine.py:3311
 msgid "Resume"
 msgstr ""
 
-#: toner_tab.py:2818
+#: toner_tab.py:3294
 msgid "Paused"
 msgstr ""
 
-#: toner_tab.py:2866
+#: toner_tab.py:3345
 #, python-brace-format
 msgid "Free: {note} ({count} frames)"
 msgstr ""
 
-#: toner_tab.py:2869
+#: toner_tab.py:3349
 msgid "Free mode — play anything..."
 msgstr ""
 
-#: toner_tab.py:2871
+#: toner_tab.py:3350
 #, python-brace-format
 msgid "({count} notes captured)"
 msgstr ""
 
-#: toner_tab.py:2880
+#: toner_tab.py:3352
+#, python-brace-format
+msgid "{note} too short to keep"
+msgstr ""
+
+#: toner_tab.py:3363
 #, python-brace-format
 msgid "Calibration starting in {seconds:.0f}s... get ready"
 msgstr ""
 
-#: toner_tab.py:2888
+#: toner_tab.py:3371
 #, python-brace-format
 msgid "Play {note} (1/{total})"
 msgstr ""
 
-#: toner_tab.py:2889 toner_tab.py:2921 toner_tab.py:3015
+#: toner_tab.py:3372 toner_tab.py:3405 toner_tab.py:3513
 msgid "waiting..."
 msgstr ""
 
-#: toner_tab.py:2899
+#: toner_tab.py:3382
 msgid "Calibration Complete"
 msgstr ""
 
-#: toner_tab.py:2900
+#: toner_tab.py:3383
 #, python-brace-format
 msgid ""
 "Calibration capture finished!\n"
 "{count} notes recorded."
 msgstr ""
 
-#: toner_tab.py:2916
+#: toner_tab.py:3400
 #, python-brace-format
 msgid "Recording {note}... ({i}/{total})"
 msgstr ""
 
-#: toner_tab.py:2920 toner_tab.py:3014
+#: toner_tab.py:3404 toner_tab.py:3512
 #, python-brace-format
 msgid "Play {note} ({i}/{total})"
 msgstr ""
 
-#: toner_tab.py:2946
+#: toner_tab.py:3436
 #, python-brace-format
 msgid "Recording {note}... {seconds:.1f}s ({i}/{total})"
 msgstr ""
 
-#: toner_tab.py:2948
+#: toner_tab.py:3438
 #, python-brace-format
 msgid "({count} frames)"
 msgstr ""
 
-#: toner_tab.py:2995
+#: toner_tab.py:3493
 #, python-brace-format
 msgid "Captured {note} ✓  stop playing..."
 msgstr ""
 
-#: toner_tab.py:3100
+#: toner_tab.py:3610
 msgid "Recording Quality"
 msgstr ""
 
-#: toner_tab.py:3110
+#: toner_tab.py:3620
 msgid "⚠ Recording Quality"
 msgstr ""
 
-#: toner_tab.py:3114
+#: toner_tab.py:3624
 #, python-brace-format
 msgid ""
 "Upper harmonics are dropping off steeply ({rate:.1f} dB/harmonic).\n"
@@ -2715,53 +2833,53 @@ msgid ""
 "2–3 feet from the bell."
 msgstr ""
 
-#: toner_tab.py:3120
+#: toner_tab.py:3630
 msgid "Don't show this again for this preset"
 msgstr ""
 
-#: toner_tab.py:3211
+#: toner_tab.py:3721
 msgid "No presets with captures to analyze."
 msgstr ""
 
-#: toner_tab.py:3215
+#: toner_tab.py:3725
 msgid "Analyze Tone Data"
 msgstr ""
 
-#: toner_tab.py:3227
+#: toner_tab.py:3737
 msgid "Select one or more presets or sessions to analyze, compare, or overlay."
 msgstr ""
 
-#: toner_tab.py:3289 ui_dialogs/guide.py:114
+#: toner_tab.py:3799 ui_dialogs/guide.py:114
 msgid "Search:"
 msgstr ""
 
-#: toner_tab.py:3439
+#: toner_tab.py:3949
 #, python-brace-format
 msgid "{date}  ({caps} caps, {notes} notes)"
 msgstr ""
 
-#: toner_tab.py:3455 ui_dialogs/presets_io.py:126 ui_dialogs/presets_io.py:258
+#: toner_tab.py:3965 ui_dialogs/presets_io.py:126 ui_dialogs/presets_io.py:258
 #: ui_dialogs/presets_io.py:362
 msgid "Select All"
 msgstr ""
 
-#: toner_tab.py:3457
+#: toner_tab.py:3967
 msgid "Deselect All"
 msgstr ""
 
-#: toner_tab.py:3490
+#: toner_tab.py:4000
 msgid "Select"
 msgstr ""
 
-#: toner_tab.py:3491
+#: toner_tab.py:4001
 msgid "Select at least one preset or session."
 msgstr ""
 
-#: toner_tab.py:3504 toner_tab.py:3540
+#: toner_tab.py:4014 toner_tab.py:4050
 msgid "Mixed Sax Types"
 msgstr ""
 
-#: toner_tab.py:3505
+#: toner_tab.py:4015
 #, python-brace-format
 msgid ""
 "You're comparing presets across different sax types ({types}).\n"
@@ -2777,17 +2895,17 @@ msgid ""
 "Continue anyway?"
 msgstr ""
 
-#: toner_tab.py:3528
+#: toner_tab.py:4038
 msgid "Select More"
 msgstr ""
 
-#: toner_tab.py:3529
+#: toner_tab.py:4039
 msgid ""
 "Select at least 2 presets to average.\n"
 "(Individual sessions are not included in group averages.)"
 msgstr ""
 
-#: toner_tab.py:3541
+#: toner_tab.py:4051
 #, python-brace-format
 msgid ""
 "You're averaging presets across different sax types ({types}).\n"
@@ -2801,215 +2919,215 @@ msgid ""
 "Continue anyway?"
 msgstr ""
 
-#: toner_tab.py:3548
+#: toner_tab.py:4058
 msgid "Analyze Selected"
 msgstr ""
 
-#: toner_tab.py:3550
+#: toner_tab.py:4060
 msgid "Average Selected"
 msgstr ""
 
-#: toner_tab.py:3552
+#: toner_tab.py:4062
 msgid "Clear Overlay"
 msgstr ""
 
-#: toner_tab.py:3567
+#: toner_tab.py:4077
 #, python-brace-format
 msgid "Analyze — {name}"
 msgstr ""
 
-#: toner_tab.py:3569
+#: toner_tab.py:4079
 msgid "Analyze — Comparison"
 msgstr ""
 
-#: toner_tab.py:3647
+#: toner_tab.py:4157
 msgid "⚠ Sandbox preset — non-standard setup, compare with caution"
 msgstr ""
 
-#: toner_tab.py:3658
+#: toner_tab.py:4168
 msgid "Horn Average"
 msgstr ""
 
-#: toner_tab.py:3662
+#: toner_tab.py:4172
 msgid "Per-Note"
 msgstr ""
 
-#: toner_tab.py:3679
+#: toner_tab.py:4189
 msgid "Chart:"
 msgstr ""
 
-#: toner_tab.py:3681
+#: toner_tab.py:4191
 msgid "Overlay"
 msgstr ""
 
-#: toner_tab.py:3685
+#: toner_tab.py:4195
 msgid "Bars"
 msgstr ""
 
-#: toner_tab.py:3690
+#: toner_tab.py:4200
 msgid "Difference"
 msgstr ""
 
-#: toner_tab.py:3699
+#: toner_tab.py:4209
 msgid "Scale:"
 msgstr ""
 
-#: toner_tab.py:3701
+#: toner_tab.py:4211
 msgid "dB"
 msgstr ""
 
-#: toner_tab.py:3705
+#: toner_tab.py:4215
 msgid "Linear"
 msgstr ""
 
-#: toner_tab.py:3713
+#: toner_tab.py:4223
 msgid "Note:"
 msgstr ""
 
-#: toner_tab.py:3735 toner_tab.py:4913
+#: toner_tab.py:4245 toner_tab.py:5423
 msgid "Harmonic Data"
 msgstr ""
 
-#: toner_tab.py:3911
+#: toner_tab.py:4421
 msgid "Δ dB"
 msgstr ""
 
-#: toner_tab.py:3926
+#: toner_tab.py:4436
 msgid "amp"
 msgstr ""
 
-#: toner_tab.py:3943
+#: toner_tab.py:4453
 msgid "Harmonic #"
 msgstr ""
 
-#: toner_tab.py:3954
+#: toner_tab.py:4464
 #, python-brace-format
 msgid "No data for {note}: {missing}"
 msgstr ""
 
-#: toner_tab.py:3988
+#: toner_tab.py:4498
 #, python-brace-format
 msgid "↑ {n1} stronger   ↓ {n2} stronger"
 msgstr ""
 
-#: toner_tab.py:4070
+#: toner_tab.py:4580
 msgid "Character Map (Warmth × Brightness)"
 msgstr ""
 
-#: toner_tab.py:4078
+#: toner_tab.py:4588
 msgid "Y axis (brightness):"
 msgstr ""
 
-#: toner_tab.py:4088 toner_tab.py:4091 toner_tab.py:4106 toner_tab.py:4148
-#: toner_tab.py:4219
+#: toner_tab.py:4598 toner_tab.py:4601 toner_tab.py:4616 toner_tab.py:4658
+#: toner_tab.py:4729
 msgid "Complexity"
 msgstr ""
 
-#: toner_tab.py:4091 toner_tab.py:4210 toner_tab.py:4217
+#: toner_tab.py:4601 toner_tab.py:4720 toner_tab.py:4727
 msgid "H4-H5 mean"
 msgstr ""
 
-#: toner_tab.py:4091 toner_tab.py:4108 toner_tab.py:4148
+#: toner_tab.py:4601 toner_tab.py:4618 toner_tab.py:4658
 msgid "Rolloff (inverted)"
 msgstr ""
 
-#: toner_tab.py:4142
+#: toner_tab.py:4652
 msgid "No brightness data for selected measure"
 msgstr ""
 
-#: toner_tab.py:4180
+#: toner_tab.py:4690
 msgid "warm + bright"
 msgstr ""
 
-#: toner_tab.py:4184
+#: toner_tab.py:4694
 msgid "thin + bright"
 msgstr ""
 
-#: toner_tab.py:4188
+#: toner_tab.py:4698
 msgid "warm + dark"
 msgstr ""
 
-#: toner_tab.py:4192
+#: toner_tab.py:4702
 msgid "thin + dark"
 msgstr ""
 
-#: toner_tab.py:4203
+#: toner_tab.py:4713
 msgid "← thin    Warmth    warm →"
 msgstr ""
 
-#: toner_tab.py:4309 toner_tab.py:4898
+#: toner_tab.py:4819 toner_tab.py:5408
 msgid "H. Complexity"
 msgstr ""
 
-#: toner_tab.py:4311
+#: toner_tab.py:4821
 msgid "Even H. Bal."
 msgstr ""
 
-#: toner_tab.py:4431
+#: toner_tab.py:4941
 #, python-brace-format
 msgid "P = percentile among {count} {sax} presets"
 msgstr ""
 
-#: toner_tab.py:4439
+#: toner_tab.py:4949
 msgid "Rec. Quality"
 msgstr ""
 
-#: toner_tab.py:4777
+#: toner_tab.py:5287
 msgid "Overlay on Spectrum"
 msgstr ""
 
-#: toner_tab.py:4783 toner_tab.py:5091
+#: toner_tab.py:5293 toner_tab.py:5601
 msgid "← Back"
 msgstr ""
 
-#: toner_tab.py:4805 toner_tab.py:5113
+#: toner_tab.py:5315 toner_tab.py:5623
 msgid "Maximize"
 msgstr ""
 
-#: toner_tab.py:4824
+#: toner_tab.py:5334
 msgid "Selected presets have no captures."
 msgstr ""
 
-#: toner_tab.py:4828
+#: toner_tab.py:5338
 msgid "Group Average"
 msgstr ""
 
-#: toner_tab.py:4877
+#: toner_tab.py:5387
 #, python-brace-format
 msgid "Group Average: {count} presets"
 msgstr ""
 
-#: toner_tab.py:4884
+#: toner_tab.py:5394
 #, python-brace-format
 msgid "{count} total captures"
 msgstr ""
 
-#: toner_tab.py:4888
+#: toner_tab.py:5398
 msgid "Group Descriptors"
 msgstr ""
 
-#: toner_tab.py:4990
+#: toner_tab.py:5500
 msgid "Average"
 msgstr ""
 
-#: toner_tab.py:5007
+#: toner_tab.py:5517
 msgid "Per-Preset Breakdown"
 msgstr ""
 
-#: toner_tab.py:5071
+#: toner_tab.py:5581
 #, python-brace-format
 msgid "Group Average ({count} presets)"
 msgstr ""
 
-#: toner_tab.py:5086
+#: toner_tab.py:5596
 msgid "Overlay on Spectrum..."
 msgstr ""
 
-#: toner_tab.py:5136
+#: toner_tab.py:5646
 msgid "Microphone Notice"
 msgstr ""
 
-#: toner_tab.py:5137
+#: toner_tab.py:5647
 #, python-brace-format
 msgid ""
 "Your input device appears to be a built-in microphone (\"{device}\").\n"
@@ -3021,16 +3139,16 @@ msgid ""
 "USB."
 msgstr ""
 
-#: toner_tab.py:5160 tuner_tab.py:1394 tuner_tab.py:1415
+#: toner_tab.py:5670 tuner_tab.py:1394 tuner_tab.py:1415
 #, python-brace-format
 msgid "Audio error: {err}"
 msgstr ""
 
-#: toner_tab.py:5199
+#: toner_tab.py:5709
 msgid "Microphone Quality"
 msgstr ""
 
-#: toner_tab.py:5200
+#: toner_tab.py:5710
 msgid ""
 "Your microphone appears to have poor low-frequency response. Low register"
 " readings may be inaccurate.\n"
@@ -3039,105 +3157,105 @@ msgid ""
 "USB."
 msgstr ""
 
-#: toner_tab.py:5217
+#: toner_tab.py:5728
 #, python-brace-format
 msgid "{freq:.1f} Hz"
 msgstr ""
 
-#: toner_tab.py:5246 tuner_tab.py:1733
+#: toner_tab.py:5757 tuner_tab.py:1733
 msgid "Click here to retry"
 msgstr ""
 
-#: toner_tab.py:5271
-msgid "Toner engine not available."
+#: toner_tab.py:5782
+msgid "Analyzer engine not available."
 msgstr ""
 
-#: toner_tab.py:5276
+#: toner_tab.py:5787
 msgid "Select Audio File to Analyze"
 msgstr ""
 
-#: toner_tab.py:5286
+#: toner_tab.py:5797
 msgid "Import Audio File"
 msgstr ""
 
-#: toner_tab.py:5296
+#: toner_tab.py:5807
 #, python-brace-format
 msgid "Import: {filename}"
 msgstr ""
 
-#: toner_tab.py:5298
+#: toner_tab.py:5809
 msgid ""
 "Select a preset for this recording, or create one.\n"
 "Add notes about the source (who, when, where recorded)."
 msgstr ""
 
-#: toner_tab.py:5317
+#: toner_tab.py:5828
 msgid "Existing preset:"
 msgstr ""
 
-#: toner_tab.py:5329
+#: toner_tab.py:5840
 msgid "Create new preset..."
 msgstr ""
 
-#: toner_tab.py:5334
+#: toner_tab.py:5845
 msgid "Source notes:"
 msgstr ""
 
-#: toner_tab.py:5353
+#: toner_tab.py:5864
 msgid "Select a preset from the list."
 msgstr ""
 
-#: toner_tab.py:5388
+#: toner_tab.py:5899
 msgid "Import && Analyze"
 msgstr ""
 
-#: toner_tab.py:5407
+#: toner_tab.py:5918
 msgid "Create Tone Preset for Audio Import"
 msgstr ""
 
-#: toner_tab.py:5409
+#: toner_tab.py:5920
 msgid "Describe the horn and setup heard in the recording."
 msgstr ""
 
-#: toner_tab.py:5467
+#: toner_tab.py:5978
 msgid "Name Required"
 msgstr ""
 
-#: toner_tab.py:5468
+#: toner_tab.py:5979
 msgid "Please enter a preset name."
 msgstr ""
 
-#: toner_tab.py:5474
+#: toner_tab.py:5985
 msgid "Duplicate"
 msgstr ""
 
-#: toner_tab.py:5519
+#: toner_tab.py:6030
 msgid "Create && Import"
 msgstr ""
 
-#: toner_tab.py:5532
+#: toner_tab.py:6042
 #, python-brace-format
 msgid "Analyzing {filename}..."
 msgstr ""
 
-#: toner_tab.py:5546
+#: toner_tab.py:6056
 #, python-brace-format
 msgid ""
 "Could not analyze file:\n"
 "{e}"
 msgstr ""
 
-#: toner_tab.py:5553
+#: toner_tab.py:6063
 msgid ""
 "No stable note segments found in the file.\n"
 "The file may be too short, too quiet, or contain no sustained tones."
 msgstr ""
 
-#: toner_tab.py:5583
+#: toner_tab.py:6093
 msgid "File Imported"
 msgstr ""
 
-#: toner_tab.py:5584
+#: toner_tab.py:6094
 #, python-brace-format
 msgid ""
 "Extracted {count} note segments from '{filename}'.\n"
@@ -3146,85 +3264,87 @@ msgid ""
 "Preset now has {total} unique notes total."
 msgstr ""
 
-#: toner_tab.py:5599
+#: toner_tab.py:6109
 msgid "Nothing to Export"
 msgstr ""
 
-#: toner_tab.py:5599
+#: toner_tab.py:6109
 msgid "No tone presets to export."
 msgstr ""
 
-#: toner_tab.py:5604 toner_tab.py:5661
+#: toner_tab.py:6114 toner_tab.py:6171
 msgid "Export Tone Presets"
 msgstr ""
 
-#: toner_tab.py:5614
+#: toner_tab.py:6124
 msgid "Select presets to export:"
 msgstr ""
 
-#: toner_tab.py:5627
+#: toner_tab.py:6137
 #, python-brace-format
 msgid "[{lib}] {name} ({caps} captures)"
 msgstr ""
 
-#: toner_tab.py:5635
+#: toner_tab.py:6145
 msgid "All"
 msgstr ""
 
-#: toner_tab.py:5654
+#: toner_tab.py:6164
 msgid "Nothing Selected"
 msgstr ""
 
-#: toner_tab.py:5655
+#: toner_tab.py:6165
 msgid "Select at least one preset to export."
 msgstr ""
 
-#: toner_tab.py:5673 ui_dialogs/presets_io.py:230 ui_dialogs/sizing.py:2099
+#: toner_tab.py:6183 ui_dialogs/presets_io.py:230 ui_dialogs/sizing.py:2099
 msgid "Export Successful"
 msgstr ""
 
-#: toner_tab.py:5674
+#: toner_tab.py:6184
 #, python-brace-format
 msgid ""
 "Exported {count} presets to:\n"
 "{path}"
 msgstr ""
 
-#: toner_tab.py:5676 ui_dialogs/presets_io.py:233 ui_dialogs/sizing.py:2103
+#: toner_tab.py:6186 ui_dialogs/presets_io.py:233 ui_dialogs/sizing.py:2103
 msgid "Export Error"
 msgstr ""
 
-#: toner_tab.py:5676
+#: toner_tab.py:6186
 #, python-brace-format
 msgid ""
 "Could not export:\n"
 "{e}"
 msgstr ""
 
-#: toner_tab.py:5680
-msgid "Export"
-msgstr ""
-
-#: toner_tab.py:5691
+#: toner_tab.py:6201
 msgid "Import Tone Presets"
 msgstr ""
 
-#: toner_tab.py:5701 ui_dialogs/sizing.py:2117
+#: toner_tab.py:6211 ui_dialogs/sizing.py:2117
 #, python-brace-format
 msgid ""
 "Could not read file:\n"
 "{e}"
 msgstr ""
 
-#: toner_tab.py:5705
-msgid "Invalid Format"
+#: toner_tab.py:6220
+msgid ""
+"It was written by a newer version of the program. Update the app to "
+"import it."
 msgstr ""
 
-#: toner_tab.py:5705
+#: toner_tab.py:6222
 msgid "File is not a valid tone presets export."
 msgstr ""
 
-#: toner_tab.py:5738
+#: toner_tab.py:6223
+msgid "Invalid Format"
+msgstr ""
+
+#: toner_tab.py:6256
 #, python-brace-format
 msgid "Imported {count} new presets/sessions."
 msgstr ""
@@ -5014,7 +5134,7 @@ msgstr ""
 msgid "Three ways to the laser. Do not mix them."
 msgstr ""
 
-#: ui_dialogs/guide.py:649 ui_dialogs/guide.py:1306 ui_dialogs/guide.py:1349
+#: ui_dialogs/guide.py:649 ui_dialogs/guide.py:1339 ui_dialogs/guide.py:1382
 msgid "Stohrer Sax Shop Companion"
 msgstr ""
 
@@ -5704,7 +5824,7 @@ msgstr ""
 msgid "G-code only: an SVG would lose each disc's settings."
 msgstr ""
 
-#: ui_dialogs/guide.py:939 ui_dialogs/guide.py:1225
+#: ui_dialogs/guide.py:939 ui_dialogs/guide.py:1258
 msgid "Test on the material you will really cut."
 msgstr ""
 
@@ -5900,7 +6020,7 @@ msgid ""
 " headset mics do not work: their sample rate is too low."
 msgstr ""
 
-#: ui_dialogs/guide.py:1026 ui_dialogs/guide.py:1161
+#: ui_dialogs/guide.py:1026 ui_dialogs/guide.py:1193
 msgid "How it works"
 msgstr ""
 
@@ -5918,76 +6038,153 @@ msgstr ""
 
 #: ui_dialogs/guide.py:1034
 msgid ""
-"A harmonic analyzer: it finds the note you play and measures each "
-"harmonic up to the 20th. Every reading is the whole chain at once: "
-"player, horn, mouthpiece, reed, mic and room."
+"The Analyzer listens to you play and charts your intonation: each written"
+" note as played, in cents. Its harmonic side, behind the HARMONICS "
+"switch, is experimental and measures the overtones."
 msgstr ""
 
-#: ui_dialogs/guide.py:1037
-msgid ""
-"So it measures change, not gear. Change one thing at a time and compare. "
-"Mouthpiece, player and mic routinely outweigh horn-to-horn differences; "
-"compare your setups with your other setups."
-msgstr ""
-
-#: ui_dialogs/guide.py:1041
-msgid "Two ways to use it"
+#: ui_dialogs/guide.py:1038
+msgid "An intonation run"
 msgstr ""
 
 #: ui_dialogs/guide.py:1042
+#, python-brace-format
+msgid ""
+"Load a preset: Load... on the control strip, or File > Presets... to "
+"create one. {fields} are required."
+msgstr ""
+
+#: ui_dialogs/guide.py:1044
+msgid ""
+"Click Capture and play. Each note held long enough is kept, and the chart"
+" draws as you go."
+msgstr ""
+
+#: ui_dialogs/guide.py:1046
+msgid "Click Stop. The run is saved with the preset, dated."
+msgstr ""
+
+#: ui_dialogs/guide.py:1048
+msgid ""
+"Free mode, the default, takes the notes as you play them. Guided mode "
+"walks you up a chromatic scale, 5 seconds a note, with a large note name "
+"to play."
+msgstr ""
+
+#: ui_dialogs/guide.py:1050
+msgid ""
+"The readout counts the frames a held note has given and turns green once "
+"there are enough to keep, about a second. A note let go sooner is named "
+"as too short."
+msgstr ""
+
+#: ui_dialogs/guide.py:1053
+msgid ""
+"Several takes of one note are one point: their median, with a bar from "
+"the lowest to the highest."
+msgstr ""
+
+#: ui_dialogs/guide.py:1055
+msgid ""
+"The dashed line marks the register change. The SAX selector sets the "
+"written names and is saved with the preset."
+msgstr ""
+
+#: ui_dialogs/guide.py:1058
+msgid "Compare and export"
+msgstr ""
+
+#: ui_dialogs/guide.py:1059
+msgid ""
+"Compare... draws other presets, or single sessions of them, with yours: "
+"each run in its own colour and marker."
+msgstr ""
+
+#: ui_dialogs/guide.py:1061
+msgid "Export... writes the chart as a PNG or a PDF."
+msgstr ""
+
+#: ui_dialogs/guide.py:1062
+msgid "Low notes on the left or on the right: Options > Settings... > General."
+msgstr ""
+
+#: ui_dialogs/guide.py:1064
+msgid "Harmonics (experimental)"
+msgstr ""
+
+#: ui_dialogs/guide.py:1065
+msgid ""
+"The HARMONICS switch on the control strip puts the harmonic analyzer in "
+"place of the chart: it finds the note you play and measures each harmonic"
+" up to the 20th. Its presets also need Mic Type and Mic Model."
+msgstr ""
+
+#: ui_dialogs/guide.py:1068
+msgid ""
+"Every reading is the whole chain at once: player, horn, mouthpiece, reed,"
+" mic and room. So it measures change, not gear. Change one thing at a "
+"time and compare. Mouthpiece, player and mic routinely outweigh horn-to-"
+"horn differences; compare your setups with your other setups."
+msgstr ""
+
+#: ui_dialogs/guide.py:1073
+msgid "Two ways to use it"
+msgstr ""
+
+#: ui_dialogs/guide.py:1074
 msgid ""
 "Live: watch the spectrum while you play to see how air, embouchure and "
 "voicing change the sound."
 msgstr ""
 
-#: ui_dialogs/guide.py:1044
+#: ui_dialogs/guide.py:1076
 msgid ""
 "Over time: record a session, change one thing, record another, and "
 "compare. The thing you changed is the difference: a mouthpiece, a mic, a "
 "horn, or you on another day."
 msgstr ""
 
-#: ui_dialogs/guide.py:1047
+#: ui_dialogs/guide.py:1079
 msgid "Be skeptical of strong conclusions from small samples."
 msgstr ""
 
-#: ui_dialogs/guide.py:1049
+#: ui_dialogs/guide.py:1081
 msgid "Before you capture"
 msgstr ""
 
-#: ui_dialogs/guide.py:1052
+#: ui_dialogs/guide.py:1084
 #, python-brace-format
 msgid ""
 "You need a preset: File > Presets.... {fields} are required. More fields "
 "can be switched on in Options > Settings... > Analysis."
 msgstr ""
 
-#: ui_dialogs/guide.py:1054
+#: ui_dialogs/guide.py:1086
 msgid "The SAX selector sets the transposition and is saved with the preset."
 msgstr ""
 
-#: ui_dialogs/guide.py:1055
+#: ui_dialogs/guide.py:1087
 msgid ""
 "A condenser mic (such as an AT2020 USB) gives the fullest picture. Ribbon"
 " and dynamic mics dull the upper harmonics; the Analyze tool warns when "
 "mic types differ."
 msgstr ""
 
-#: ui_dialogs/guide.py:1058
+#: ui_dialogs/guide.py:1090
 msgid "Laptop mics are not suitable. Bluetooth headset mics do not work."
 msgstr ""
 
-#: ui_dialogs/guide.py:1060
+#: ui_dialogs/guide.py:1092
 msgid "Mic placement"
 msgstr ""
 
-#: ui_dialogs/guide.py:1061
+#: ui_dialogs/guide.py:1093
 msgid ""
 "2 to 3 feet (60 to 90 cm) from the bell, slightly off-axis, in a quiet "
 "room. Closer than a foot exaggerates the low harmonics."
 msgstr ""
 
-#: ui_dialogs/guide.py:1063
+#: ui_dialogs/guide.py:1095
 #, python-brace-format
 msgid ""
 "Mic position matters more than almost anything: a few inches between "
@@ -5995,438 +6192,440 @@ msgid ""
 " and note it in the {field} field."
 msgstr ""
 
-#: ui_dialogs/guide.py:1067
+#: ui_dialogs/guide.py:1099
 msgid "Capturing"
 msgstr ""
 
-#: ui_dialogs/guide.py:1069
+#: ui_dialogs/guide.py:1101
 msgid "Click Capture and pick or create a preset."
 msgstr ""
 
-#: ui_dialogs/guide.py:1070
+#: ui_dialogs/guide.py:1102
 msgid "Play. Hold a note about a second and it is captured; move on to the next."
 msgstr ""
 
-#: ui_dialogs/guide.py:1071
+#: ui_dialogs/guide.py:1103
 msgid ""
 "Click Stop. A summary shows which notes you covered and where the gaps "
 "are."
 msgstr ""
 
-#: ui_dialogs/guide.py:1073
+#: ui_dialogs/guide.py:1105
 msgid "Capture at least 8 different notes; more is better."
 msgstr ""
 
-#: ui_dialogs/guide.py:1074
+#: ui_dialogs/guide.py:1106
 msgid ""
-"Calibration mode walks you up a chromatic scale, 5 seconds per note. File"
-" > Presets... > Import Audio File... analyzes a WAV."
+"Guided mode walks you up a chromatic scale, 5 seconds per note. File > "
+"Presets... > Import Audio File... analyzes a WAV."
 msgstr ""
 
-#: ui_dialogs/guide.py:1076
+#: ui_dialogs/guide.py:1108
 msgid "Sessions are dated and saved automatically."
 msgstr ""
 
-#: ui_dialogs/guide.py:1078
+#: ui_dialogs/guide.py:1110
 msgid "Display"
 msgstr ""
 
-#: ui_dialogs/guide.py:1079
+#: ui_dialogs/guide.py:1111
 msgid "Spectrum or Bars view, with Linear (true ratios) or dB scale."
 msgstr ""
 
-#: ui_dialogs/guide.py:1080
+#: ui_dialogs/guide.py:1112
 msgid ""
 "The intonation gauge shows cents flat or sharp; the IN TUNE lamp lights "
 "within 4 cents."
 msgstr ""
 
-#: ui_dialogs/guide.py:1082
+#: ui_dialogs/guide.py:1114
 msgid ""
 "Overlay on Spectrum (from the Analyze tool) shows a stored preset as blue"
 " ghost bars behind the live spectrum, note by note."
 msgstr ""
 
-#: ui_dialogs/guide.py:1085
+#: ui_dialogs/guide.py:1117
 msgid "Analyze"
 msgstr ""
 
-#: ui_dialogs/guide.py:1086
+#: ui_dialogs/guide.py:1118
 msgid ""
 "File > Analyze... shows what differs between presets: not which is "
 "better, but what changed and where."
 msgstr ""
 
-#: ui_dialogs/guide.py:1088
+#: ui_dialogs/guide.py:1120
 msgid "Filter the picker by horn type, player, mouthpiece and mic type."
 msgstr ""
 
-#: ui_dialogs/guide.py:1089
+#: ui_dialogs/guide.py:1121
 msgid ""
 "One preset: its descriptors and harmonic curve. Two: side by side with a "
 "Difference chart. Three or more: the spread across the group."
 msgstr ""
 
-#: ui_dialogs/guide.py:1091
+#: ui_dialogs/guide.py:1123
 msgid ""
 "Horn Average or Per-Note shows whether a difference is everywhere or in "
 "one register."
 msgstr ""
 
-#: ui_dialogs/guide.py:1093
+#: ui_dialogs/guide.py:1125
 msgid "Percentiles rank each preset against all presets of the same sax type."
 msgstr ""
 
-#: ui_dialogs/guide.py:1094
+#: ui_dialogs/guide.py:1126
 msgid ""
 "Click a legend label or chart line for that preset's details. Back "
 "returns to the picker."
 msgstr ""
 
-#: ui_dialogs/guide.py:1096
+#: ui_dialogs/guide.py:1128
 msgid ""
 "The table shows each preset's mic type and rolloff, and notes when mics "
 "differ."
 msgstr ""
 
-#: ui_dialogs/guide.py:1099
+#: ui_dialogs/guide.py:1131
 msgid "Descriptors"
 msgstr ""
 
-#: ui_dialogs/guide.py:1100
+#: ui_dialogs/guide.py:1132
 msgid ""
 "Most useful as differences between two presets, where mic and room "
 "effects cancel. Choose which are shown in Options > Settings... > "
 "Analysis."
 msgstr ""
 
-#: ui_dialogs/guide.py:1102
+#: ui_dialogs/guide.py:1134
 msgid ""
 "Warmth (Thin to Warm): the strength of the 2nd harmonic. Not the same as "
 "dark: a sound can be warm and bright, or thin and dark."
 msgstr ""
 
-#: ui_dialogs/guide.py:1104
+#: ui_dialogs/guide.py:1136
 msgid ""
 "Some setups, metal mouthpieces played hard especially, make the 2nd "
 "harmonic louder than the fundamental. Warmth reads these as moderately "
 "warm; this part of the formula may change."
 msgstr ""
 
-#: ui_dialogs/guide.py:1107
+#: ui_dialogs/guide.py:1139
 msgid ""
 "Harmonic Complexity (Pure to Complex): how evenly the energy spreads over"
 " the harmonics."
 msgstr ""
 
-#: ui_dialogs/guide.py:1109
+#: ui_dialogs/guide.py:1141
 msgid ""
 "Even/Odd Ratio: even against odd harmonics, round against edgy. The most "
 "consistent across recording conditions. On by default."
 msgstr ""
 
-#: ui_dialogs/guide.py:1111
+#: ui_dialogs/guide.py:1143
 msgid ""
 "Rolloff Shape (Smooth to Peaked): bumps where harmonics stick out. Off by"
 " default."
 msgstr ""
 
-#: ui_dialogs/guide.py:1113
+#: ui_dialogs/guide.py:1145
 msgid ""
 "Evenness (Variable to Even): how alike the character is across the range."
 " Needs at least 5 notes."
 msgstr ""
 
-#: ui_dialogs/guide.py:1116
+#: ui_dialogs/guide.py:1148
 msgid "Character Map"
 msgstr ""
 
-#: ui_dialogs/guide.py:1117
+#: ui_dialogs/guide.py:1149
 msgid ""
 "Plots Warmth against Harmonic Complexity, so each preset sits in one of "
 "four corners: warm and bright, warm and dark, thin and bright, thin and "
 "dark. All four are real characters."
 msgstr ""
 
-#: ui_dialogs/guide.py:1120
+#: ui_dialogs/guide.py:1152
 msgid ""
 "Warmth comes from how the chamber and reed couple to the fundamental, "
 "brightness from the reed's buzz on the tip rail, so they move "
 "independently."
 msgstr ""
 
-#: ui_dialogs/guide.py:1122
+#: ui_dialogs/guide.py:1154
 msgid ""
 "H4-H5 mean and Rolloff are offered as other axes, but they tend to follow"
 " Warmth."
 msgstr ""
 
-#: ui_dialogs/guide.py:1123
+#: ui_dialogs/guide.py:1155
 msgid ""
 "Compare within one sax type: lower horns read warmer and brighter "
 "whatever the mouthpiece. It warns before mixing types."
 msgstr ""
 
-#: ui_dialogs/guide.py:1126
+#: ui_dialogs/guide.py:1158
 msgid "Reading the differences"
 msgstr ""
 
-#: ui_dialogs/guide.py:1127
+#: ui_dialogs/guide.py:1159
 msgid ""
 "H1 to H4: mostly the bore; the least change in player and mouthpiece "
 "swaps."
 msgstr ""
 
-#: ui_dialogs/guide.py:1128
+#: ui_dialogs/guide.py:1160
 msgid "H7 to H13: where neck and mouthpiece swaps show most."
 msgstr ""
 
-#: ui_dialogs/guide.py:1129
+#: ui_dialogs/guide.py:1161
 msgid "H3 to H12 all together: usually mouthpiece or player."
 msgstr ""
 
-#: ui_dialogs/guide.py:1130
+#: ui_dialogs/guide.py:1162
 msgid ""
 "Two takes of one setup ten minutes apart differed by 1 to 3 percent on "
 "descriptors and about 0.3 dB/H on rolloff. Smaller differences are "
 "probably noise."
 msgstr ""
 
-#: ui_dialogs/guide.py:1133
+#: ui_dialogs/guide.py:1165
 msgid ""
 "These are observed patterns, not laws. Same-player comparisons isolate "
 "equipment best."
 msgstr ""
 
-#: ui_dialogs/guide.py:1136
+#: ui_dialogs/guide.py:1168
 msgid "Recording quality"
 msgstr ""
 
-#: ui_dialogs/guide.py:1137
+#: ui_dialogs/guide.py:1169
 msgid ""
 "Rolloff, how fast the upper harmonics fade, shows how much your recording"
 " catches:"
 msgstr ""
 
-#: ui_dialogs/guide.py:1139
+#: ui_dialogs/guide.py:1171
 msgid "1.0 to 2.0 dB/H: condenser, close. Full detail."
 msgstr ""
 
-#: ui_dialogs/guide.py:1140
+#: ui_dialogs/guide.py:1172
 msgid "2.0 to 2.5 dB/H: good mic, further away or a lively room."
 msgstr ""
 
-#: ui_dialogs/guide.py:1141
+#: ui_dialogs/guide.py:1173
 msgid ""
 "Over 2.5 dB/H: ribbon, dynamic, built-in or distant mic. The app warns "
 "after the first few captures."
 msgstr ""
 
-#: ui_dialogs/guide.py:1144
+#: ui_dialogs/guide.py:1176
 msgid "Presets and data"
 msgstr ""
 
-#: ui_dialogs/guide.py:1145
+#: ui_dialogs/guide.py:1177
 msgid ""
 "Mutate Preset copies a preset with its fields filled in, so you can "
 "change one thing and save it as new."
 msgstr ""
 
-#: ui_dialogs/guide.py:1147
+#: ui_dialogs/guide.py:1179
 msgid ""
 "Sandbox mode (Options > Settings... > Analysis) relaxes the required "
 "fields for other instruments and experiments. Sandbox presets are marked "
 "in amber."
 msgstr ""
 
-#: ui_dialogs/guide.py:1150
+#: ui_dialogs/guide.py:1182
 msgid ""
 "A preset's report shows its sessions over time, with the change from each"
 " to the next and a per-note breakdown."
 msgstr ""
 
-#: ui_dialogs/guide.py:1152
+#: ui_dialogs/guide.py:1184
 msgid "File > Transfer Data exports or imports the preset library."
 msgstr ""
 
-#: ui_dialogs/guide.py:1154
+#: ui_dialogs/guide.py:1186
 msgid "WAV recording"
 msgstr ""
 
-#: ui_dialogs/guide.py:1155
+#: ui_dialogs/guide.py:1187
 msgid ""
 "On by default; the first capture asks for a folder. At the end of a "
 "session the recording is analyzed again, more strictly than live, and "
 "that better result is what is stored."
 msgstr ""
 
-#: ui_dialogs/guide.py:1158
+#: ui_dialogs/guide.py:1190
 msgid ""
 "Turn it off, or delete each WAV after analysis, in Options > Settings... "
 "> General."
 msgstr ""
 
-#: ui_dialogs/guide.py:1159
+#: ui_dialogs/guide.py:1191
 msgid ""
 "Keep the WAVs to listen back, share, or re-analyze with better tools "
 "later."
 msgstr ""
 
-#: ui_dialogs/guide.py:1162
+#: ui_dialogs/guide.py:1194
 msgid ""
 "Harmonics are measured in dB against the fundamental, so volume and mic "
 "gain drop out. Below -60 dB counts as noise."
 msgstr ""
 
-#: ui_dialogs/guide.py:1164
-msgid "The first tenth of a second of each note, the attack, is skipped."
+#: ui_dialogs/guide.py:1196
+msgid ""
+"Only the frames whose whole analysis window lies inside the note count, "
+"so the attack and the release are left out."
 msgstr ""
 
-#: ui_dialogs/guide.py:1165
+#: ui_dialogs/guide.py:1198
 msgid ""
 "The detector checks whether a loud peak is a harmonic of a lower note, "
 "which keeps it from reading the wrong octave."
 msgstr ""
 
-#: ui_dialogs/guide.py:1167
+#: ui_dialogs/guide.py:1200
 msgid ""
 "Notes are averaged first, then the notes together, so many captures of "
 "one register don't outweigh the rest."
 msgstr ""
 
-#: ui_dialogs/guide.py:1169
+#: ui_dialogs/guide.py:1202
 msgid ""
 "Only raw measurements are stored. Descriptors are worked out fresh each "
 "time, so improvements apply to old captures too."
 msgstr ""
 
-#: ui_dialogs/guide.py:1173
+#: ui_dialogs/guide.py:1206
 msgid "Sharing data"
 msgstr ""
 
-#: ui_dialogs/guide.py:1174
+#: ui_dialogs/guide.py:1207
 msgid ""
 "Each data tab can export to a file and import one, to share with "
 "colleagues or keep a backup:"
 msgstr ""
 
-#: ui_dialogs/guide.py:1176
+#: ui_dialogs/guide.py:1209
 msgid "Pad presets: File > Export Pad Presets... and Import Pad Presets...."
 msgstr ""
 
-#: ui_dialogs/guide.py:1177
+#: ui_dialogs/guide.py:1210
 msgid "Key heights: File > Export Key Sets... and Import Key Sets...."
 msgstr ""
 
-#: ui_dialogs/guide.py:1178
+#: ui_dialogs/guide.py:1211
 msgid "Screw specs: File > Export Screw Specs... and Import Screw Specs...."
 msgstr ""
 
-#: ui_dialogs/guide.py:1179
-msgid "Toner presets: File > Transfer Data."
+#: ui_dialogs/guide.py:1212
+msgid "Analyzer presets: File > Transfer Data."
 msgstr ""
 
-#: ui_dialogs/guide.py:1180
+#: ui_dialogs/guide.py:1213
 msgid ""
 "Everything: File > Import Settings from Folder... copies the settings of "
 "another installation."
 msgstr ""
 
-#: ui_dialogs/guide.py:1184
+#: ui_dialogs/guide.py:1217
 msgid "Learn to make pads"
 msgstr ""
 
-#: ui_dialogs/guide.py:1185
+#: ui_dialogs/guide.py:1218
 msgid ""
 "The materials, the die holder, gluing, pressing and treating the leather "
 "are in Matt Stohrer's guide:"
 msgstr ""
 
-#: ui_dialogs/guide.py:1187
+#: ui_dialogs/guide.py:1220
 msgid "How to make saxophone pads"
 msgstr ""
 
-#: ui_dialogs/guide.py:1212
+#: ui_dialogs/guide.py:1245
 msgid "Three ways to cut"
 msgstr ""
 
-#: ui_dialogs/guide.py:1213
+#: ui_dialogs/guide.py:1246
 msgid "SD card: Generate G-code, save it to the card, run it on the laser."
 msgstr ""
 
-#: ui_dialogs/guide.py:1214
+#: ui_dialogs/guide.py:1247
 msgid ""
 "LightBurn: Generate SVG, open it in LightBurn, set speed and power for "
 "each color."
 msgstr ""
 
-#: ui_dialogs/guide.py:1217
+#: ui_dialogs/guide.py:1250
 msgid ""
 "Frame & Cut: laser on USB, jog to the corner, frame, cut. Switch it on in"
 " File > Feature Set."
 msgstr ""
 
-#: ui_dialogs/guide.py:1220
+#: ui_dialogs/guide.py:1253
 msgid "Do not mix them"
 msgstr ""
 
-#: ui_dialogs/guide.py:1221
+#: ui_dialogs/guide.py:1254
 msgid "G-code is not for LightBurn. SVG is not for the SD card."
 msgstr ""
 
-#: ui_dialogs/guide.py:1222
+#: ui_dialogs/guide.py:1255
 msgid "Before you cut"
 msgstr ""
 
-#: ui_dialogs/guide.py:1223
+#: ui_dialogs/guide.py:1256
 msgid ""
 "Speeds and powers are in Options > G-code Settings (Pad Maker) and "
 "Options > Settings (Tooling)."
 msgstr ""
 
-#: ui_dialogs/guide.py:1226
+#: ui_dialogs/guide.py:1259
 msgid "Die inserts and holders use the Acrylic settings."
 msgstr ""
 
-#: ui_dialogs/guide.py:1227
+#: ui_dialogs/guide.py:1260
 msgid "The rest is in Help > User Guide."
 msgstr ""
 
-#: ui_dialogs/guide.py:1309
+#: ui_dialogs/guide.py:1342
 #, python-brace-format
 msgid "Version {version}"
 msgstr ""
 
-#: ui_dialogs/guide.py:1312
+#: ui_dialogs/guide.py:1345
 msgid "Thank you for installing."
 msgstr ""
 
-#: ui_dialogs/guide.py:1315
+#: ui_dialogs/guide.py:1348
 msgid "Questions? Search the User Guide."
 msgstr ""
 
-#: ui_dialogs/guide.py:1316
+#: ui_dialogs/guide.py:1349
 msgid "Click here for the quick start guide"
 msgstr ""
 
-#: ui_dialogs/guide.py:1351
+#: ui_dialogs/guide.py:1384
 msgid "by Matt Stohrer"
 msgstr ""
 
-#: ui_dialogs/guide.py:1353
+#: ui_dialogs/guide.py:1386
 msgid "~Salingeresque Sax Repair Techno-poet~"
 msgstr ""
 
-#: ui_dialogs/guide.py:1355
+#: ui_dialogs/guide.py:1388
 #, python-brace-format
 msgid "Version {version}  •  Built {build}"
 msgstr ""
 
-#: ui_dialogs/guide.py:1358
+#: ui_dialogs/guide.py:1391
 msgid "Check for a newer version"
 msgstr ""
 
-#: ui_dialogs/guide.py:1366
+#: ui_dialogs/guide.py:1399
 msgid ""
 "•  SVG & G-code generation for laser-cut pads\n"
 "•  Key height library with import/export\n"
@@ -6434,36 +6633,36 @@ msgid ""
 "•  OEM screw & rod specifications\n"
 "•  Die insert & die holder tooling\n"
 "•  Chromatic strobe tuner\n"
-"•  Harmonic tone analyzer"
+"•  Intonation chart and harmonic analyzer"
 msgstr ""
 
-#: ui_dialogs/guide.py:1383
+#: ui_dialogs/guide.py:1416
 msgid "Questions or feedback:"
 msgstr ""
 
-#: ui_dialogs/guide.py:1393
+#: ui_dialogs/guide.py:1426
 msgid "Like this app? Want to say thanks?"
 msgstr ""
 
-#: ui_dialogs/guide.py:1396
+#: ui_dialogs/guide.py:1429
 msgid ""
 "PayPal: stohrermusic@gmail.com\n"
 "Venmo: @matthew-stohrer"
 msgstr ""
 
-#: ui_dialogs/guide.py:1405
+#: ui_dialogs/guide.py:1438
 msgid "Join my "
 msgstr ""
 
-#: ui_dialogs/guide.py:1407
+#: ui_dialogs/guide.py:1440
 msgid "YouTube channel"
 msgstr ""
 
-#: ui_dialogs/guide.py:1414
+#: ui_dialogs/guide.py:1447
 msgid " as a paying member"
 msgstr ""
 
-#: ui_dialogs/guide.py:1417
+#: ui_dialogs/guide.py:1450
 msgid ""
 "Or email me for my address to send a six-pack,\n"
 "some old tools, or whatever!"
@@ -8400,10 +8599,6 @@ msgstr ""
 
 #: ui_dialogs/sizing.py:1186
 msgid "Import..."
-msgstr ""
-
-#: ui_dialogs/sizing.py:1188
-msgid "Export..."
 msgstr ""
 
 #: ui_dialogs/sizing.py:1191

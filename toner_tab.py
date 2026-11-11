@@ -1,7 +1,12 @@
 """
-Toner tab mixin for Stohrer Sax Shop Companion.
+Analyzer tab mixin for Stohrer Sax Shop Companion (the "Toner" until 2026-11-10;
+the code keeps its toner_ names, its settings keys and its file names).
 
-Harmonic tone analyzer for saxophone. Shows a live spectrum analyzer
+The tab opens on the intonation chart: every note of the loaded preset's captures
+as played, in cents (intonation.py, drawn by intonation_chart.py), with Compare...
+for other presets' runs and Export... for a PNG or PDF. The HARMONICS switch puts
+the harmonic analyzer (experimental, behind a one-time terms dialog) in its place:
+a live spectrum analyzer
 (full FFT or harmonic-only bars) on the left and an intonation gauge
 with note display on the right. Auto-detects fundamental pitch and
 analyzes harmonic content in real time. (The live VU-style descriptor
@@ -44,7 +49,10 @@ try:
         transpose_note, reverse_transpose_note, note_to_freq,
         compute_population_stats, percentile_rank,
         find_out_of_range_notes, note_name_to_midi,
+        unwrap_tone_import, TonePresetsImportError,
     )
+    from intonation import IntonationError, run_from_captures, overlay as intonation_overlay
+    import intonation_chart
     _TONER_IMPORTS_OK = True
 except ImportError:
     _TONER_IMPORTS_OK = False
@@ -96,6 +104,9 @@ FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 
 CAL_COUNTDOWN_S = 10.0                # seconds of countdown before calibration starts
 DEFAULT_STABLE_THRESHOLD = 25         # frames — initial stable-note threshold
 PRESET_NAME_MAX_DISPLAY = 20         # characters before truncating preset name
+CAPTURE_FG = "#FFCC00"               # the capture readout while the held note is too short to keep
+CAPTURE_READY_FG = "#00CC00"         # ...and once it would be kept (the IN TUNE lamp's green)
+CHART_W, CHART_H = 1000, 450         # the exported chart, in pixels (the PNG at twice that)
 
 
 def _note_sort_key(note_name):
@@ -218,6 +229,8 @@ class TonerTabMixin:
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
         self._toner_too_short = None       # the last free-mode note not kept: (concert note, seconds heard, whole-window frames)
         self._toner_cal_last_signal = 0.0  # audio time of the last frame over the threshold while recording a calibration note
+        self._toner_compare_runs = []      # Compare...: [(library, preset, session date or None)]; empty = the loaded preset
+        self._toner_chart_redraw_id = None
         self._toner_cal_index = 0          # Current note index in calibration sequence
         self._toner_cal_notes = list(CALIBRATION_NOTES)  # Filtered at calibration start
         self._toner_cal_recording = False  # Whether we're actively recording in calibration
@@ -277,10 +290,31 @@ class TonerTabMixin:
         self._toner_main_frame._skip_theme = True
         self._toner_main_frame.pack(fill="both", expand=True)
 
-        # --- Top area: spectrum (left) + gauges (right) ---
+        # --- Top area, one of two (_toner_show_harmonics): the intonation chart,
+        # or with the HARMONICS switch on, spectrum (left) + gauges (right) ---
+        self._toner_chart_frame = tk.Frame(self._toner_main_frame, bg=bg)
+        self._toner_chart_frame._skip_theme = True
+        self._toner_chart_canvas = tk.Canvas(
+            self._toner_chart_frame, bg=intonation_chart.BACKGROUND,
+            highlightthickness=0, borderwidth=0)
+        self._toner_chart_canvas._skip_theme = True
+        self._toner_chart_canvas.pack(fill="both", expand=True)
+        self._toner_chart_canvas.bind("<Configure>", self._toner_on_chart_resize)
+        chart_row = tk.Frame(self._toner_chart_frame, bg=bg)
+        chart_row._skip_theme = True
+        chart_row.pack(fill="x", pady=(4, 0))
+        self._toner_compare_btn = tk.Button(
+            chart_row, text=_("Compare..."), font=("Helvetica", 9),
+            command=self._toner_open_compare_dialog)
+        self._toner_compare_btn.pack(side="left")
+        self._toner_export_btn = tk.Button(
+            chart_row, text=_("Export..."), font=("Helvetica", 9),
+            command=self._toner_export_chart)
+        self._toner_export_btn.pack(side="left", padx=(6, 0))
+
         top_frame = tk.Frame(self._toner_main_frame, bg=bg)
         top_frame._skip_theme = True
-        top_frame.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+        self._toner_harmonics_frame = top_frame
         top_frame.columnconfigure(0, weight=3)
         top_frame.columnconfigure(1, weight=1)
         top_frame.rowconfigure(0, weight=1)
@@ -359,7 +393,7 @@ class TonerTabMixin:
         # Not packed yet — shown during capture
 
         self._toner_capture_label = tk.Label(
-            self._toner_capture_frame, text="", bg="#333300", fg="#FFCC00",
+            self._toner_capture_frame, text="", bg="#333300", fg=CAPTURE_FG,
             font=("Helvetica", 11, "bold"))
         self._toner_capture_label.pack(side="left", padx=10, pady=4)
 
@@ -382,6 +416,7 @@ class TonerTabMixin:
         ctrl_frame = tk.Frame(self._toner_main_frame, bg=ctrl_bg, padx=8, pady=10)
         ctrl_frame._skip_theme = True
         ctrl_frame.pack(fill="x", padx=5, pady=(0, 4))
+        self._toner_ctrl_frame = ctrl_frame
 
         eq_lbl_font = ("Helvetica", 8)
 
@@ -410,6 +445,7 @@ class TonerTabMixin:
             def _on_change(*args):
                 var.set(val_top if int_var.get() == 0 else val_bottom)
             int_var.trace_add("write", _on_change)
+            return int_var
 
         # ========== LEFT COLUMN: display switches ==========
         left_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
@@ -436,6 +472,14 @@ class TonerTabMixin:
         _make_vswitch(left_col, "SENS", sens_str,
                       "high", "low", "high", "low", 3)
         sens_str.trace_add("write", _sens_from_switch)
+
+        # HARMONICS: the harmonic analyzer (experimental) in place of the chart.
+        # Off at every start; the first "on" asks the terms (_toner_on_harmonics_switched).
+        self._toner_harmonics_var = tk.StringVar(value="off")
+        self._toner_harmonics_int = _make_vswitch(
+            left_col, _("HARMONICS"), self._toner_harmonics_var,
+            "off", "on", _("off"), _("on"), 4)
+        self._toner_harmonics_var.trace_add("write", self._toner_on_harmonics_switched)
 
         # ========== CENTER COLUMN: sax selector ==========
         # Center column expands to push left/right apart and center the selector
@@ -560,7 +604,7 @@ class TonerTabMixin:
             command=self._toner_load_unload_toggle)
         self._toner_load_unload_btn.pack(side="left", padx=(0, 10))
 
-        # MODE switch (free/cal)
+        # MODE switch (free/guided; the values stay "free"/"calibration")
         self._toner_mode_var = tk.StringVar(value="free")
         mode_ch = tk.Frame(right_col, bg=ctrl_bg)
         mode_ch._skip_theme = True
@@ -568,7 +612,7 @@ class TonerTabMixin:
         tk.Label(mode_ch, text=_("MODE"), bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack(pady=(0, 1))
         tk.Label(mode_ch, text=_("free"), bg=ctrl_bg, fg="#AAAAAA",
-                 font=("Helvetica", 8), width=4).pack()
+                 font=("Helvetica", 8)).pack()
         mode_int = tk.IntVar(value=0)
         tk.Scale(mode_ch, variable=mode_int, from_=0, to=1,
                  orient="vertical", length=50, width=14,
@@ -578,8 +622,8 @@ class TonerTabMixin:
                  troughcolor="#444444", highlightthickness=0,
                  sliderrelief="raised", sliderlength=20,
                  borderwidth=2).pack()
-        tk.Label(mode_ch, text=_("cal"), bg=ctrl_bg, fg="#AAAAAA",
-                 font=("Helvetica", 8), width=4).pack()
+        tk.Label(mode_ch, text=_("guided"), bg=ctrl_bg, fg="#AAAAAA",
+                 font=("Helvetica", 8)).pack()
 
         def _on_mode_change(*args):
             self._toner_mode_var.set("free" if mode_int.get() == 0
@@ -593,22 +637,24 @@ class TonerTabMixin:
             command=self._toner_toggle_capture)
         self._toner_capture_btn.pack(side="left", ipady=4)
 
+        self._toner_show_harmonics(False)
+
     def _create_toner_fallback(self, parent):
         """Fallback UI when audio libraries are unavailable."""
         bg = self.root.cget('bg')
         if sys.platform == 'linux':
-            msg = ("The Tone Analyzer requires PortAudio.\n\n"
-                   "Install it with:\n"
-                   "  sudo apt install libportaudio2\n\n"
-                   "Then restart the application.")
+            msg = _("The Analyzer requires PortAudio.\n\n"
+                    "Install it with:\n"
+                    "  sudo apt install libportaudio2\n\n"
+                    "Then restart the application.")
         elif sys.platform == 'darwin':
-            msg = ("The Tone Analyzer is not available on this Mac.\n\n"
-                   "This feature requires Apple Silicon (M1 or newer).\n\n"
-                   "All other features work normally.")
+            msg = _("The Analyzer is not available on this Mac.\n\n"
+                    "This feature requires Apple Silicon (M1 or newer).\n\n"
+                    "All other features work normally.")
         else:
-            msg = ("The Tone Analyzer is not available on this system.\n\n"
-                   "If you see this on Windows, try reinstalling the app.\n\n"
-                   "All other features work normally.")
+            msg = _("The Analyzer is not available on this system.\n\n"
+                    "If you see this on Windows, try reinstalling the app.\n\n"
+                    "All other features work normally.")
         tk.Label(parent, text=msg,
                  bg=bg, fg="gray", font=("Helvetica", 12),
                  justify="center").pack(expand=True)
@@ -863,6 +909,10 @@ class TonerTabMixin:
             10, 44, text="", fill=GHOST_COLOR,
             font=("Helvetica", 9), anchor="nw")
 
+        # The harmonic analyzer is experimental; its own view says so
+        cv.create_text(w - 10, h - 16, text=_("experimental"), fill="#555555",
+                       font=("Helvetica", 8), anchor="se")
+
         self._toner_bars_built = True
         # delete("all") above wiped any error message; put it back (same
         # mechanism as the tuner — see _tuner_build_wheels_canvas).
@@ -1041,6 +1091,7 @@ class TonerTabMixin:
         if self._toner_engine:
             self._toner_engine.set_sax_type(self._toner_sax_var.get())
         self._toner_update_pitch_mode_label()
+        self._toner_chart_changed()
 
     def _toner_lock_sax_selector(self, locked):
         """Lock or unlock the sax selector (locked when preset is loaded)."""
@@ -1055,7 +1106,7 @@ class TonerTabMixin:
         from ui_dialogs import add_tooltip
 
         dlg = tk.Toplevel(self.root)
-        dlg.title(_("Tone Analyzer Settings"))
+        dlg.title(_("Analyzer Settings"))
         dlg.transient(self.root)
         dlg.grab_set()
 
@@ -1109,7 +1160,7 @@ class TonerTabMixin:
             listbox.selection_set(current_idx)
             listbox.see(current_idx)
             add_tooltip(listbox,
-                        _("Microphone the toner uses for capture and "
+                        _("Microphone the analyzer uses for capture and "
                         "live analysis. The mic type and model that get "
                         "saved with each capture are configured per "
                         "preset (File → Presets), not here."))
@@ -1225,6 +1276,20 @@ class TonerTabMixin:
         add_tooltip(concert_rb,
                     _("Show note names at actual sounding frequency. An alto "
                     "fingering A is shown as C in concert pitch."))
+
+        # --- Intonation chart ---
+        chart_frame = tk.LabelFrame(gen_frame, text=_("Intonation Chart"), bg=bg,
+                                    fg=fg, padx=10, pady=8)
+        chart_frame.pack(fill="x", pady=(0, 8))
+        low_left_var = tk.BooleanVar(
+            value=self.settings.get("toner_settings", {}).get("chart_low_notes_left", True))
+        low_left_cb = tk.Checkbutton(chart_frame, text=_("Low notes on the left"),
+                                     variable=low_left_var, bg=bg, fg=fg,
+                                     font=("Helvetica", 9))
+        low_left_cb.pack(anchor="w")
+        add_tooltip(low_left_cb,
+                    _("Which way the notes run along the bottom of the chart. "
+                    "Untick to put the low notes on the right."))
 
         # ==================================================================
         # ANALYSIS TAB
@@ -1472,6 +1537,8 @@ class TonerTabMixin:
             # Analysis descriptors
             ts = self.settings.setdefault("toner_settings", {})
             ts["analysis_descriptors"] = {k: v.get() for k, v in desc_vars.items()}
+            ts["chart_low_notes_left"] = bool(low_left_var.get())
+            self._toner_chart_changed()
 
             # Sandbox
             self.settings["toner_sandbox_enabled"] = sandbox_var.get()
@@ -1560,12 +1627,391 @@ class TonerTabMixin:
                 self._toner_engine.set_reference_pitch(hz)
         except (ValueError, tk.TclError):  # a DoubleVar holding a non-number raises TclError on get()
             pass
+        self._toner_chart_changed()
 
     def _toner_on_canvas_resize(self, event):
         if event.width > 50 and event.height > 50:
             if hasattr(self, '_toner_resize_id'):
                 self.root.after_cancel(self._toner_resize_id)
             self._toner_resize_id = self.root.after(50, self._toner_build_spectrum_bars)
+
+    # ------------------------------------------------------------------
+    # THE TOP AREA: INTONATION CHART / HARMONICS SWITCH (2026-11-10)
+    # ------------------------------------------------------------------
+
+    def _toner_harmonics_on(self):
+        """Whether the HARMONICS switch stands at on (the harmonic analyzer is the view)."""
+        var = getattr(self, '_toner_harmonics_var', None)
+        return var is not None and var.get() == "on"
+
+    def _toner_show_harmonics(self, on):
+        """Put the harmonic analyzer (on) or the intonation chart in the top area."""
+        shown = self._toner_harmonics_frame if on else self._toner_chart_frame
+        hidden = self._toner_chart_frame if on else self._toner_harmonics_frame
+        hidden.pack_forget()
+        if not shown.winfo_manager():
+            first = self._toner_main_frame.pack_slaves()     # the capture bar if shown, else the controls
+            kw = {"before": first[0]} if first else {}
+            shown.pack(fill="both", expand=True, padx=5, pady=(5, 0), **kw)
+        if not on:
+            self._toner_chart_changed()
+
+    def _toner_on_harmonics_switched(self, *args):
+        on = self._toner_harmonics_var.get() == "on"
+        if on and not self.settings.get("toner_unlocked"):
+            # The terms are a modal dialog: not from inside the slider's own event
+            self.root.after_idle(self._toner_ask_harmonics_terms)
+            return
+        self._toner_show_harmonics(on)
+
+    def _toner_ask_harmonics_terms(self):
+        """The one-time terms before the harmonic analyzer shows; declined, the switch goes back."""
+        if self._toner_harmonics_var.get() != "on":
+            return
+        if self.settings.get("toner_unlocked") or self._toner_show_harmonics_terms():
+            self.settings["toner_unlocked"] = True
+            save_settings(self.settings)
+            self._toner_show_harmonics(True)
+        else:
+            self._toner_harmonics_int.set(0)     # the slider's own trace puts the var back to "off"
+
+    def _toner_show_harmonics_terms(self):
+        """The harmonic analyzer's terms (experimental). Returns True if accepted."""
+        terms = tk.Toplevel(self.root)
+        terms.title(_("Harmonics \u2014 Experimental"))
+        terms.resizable(True, True)
+        terms.transient(self.root)
+        terms.grab_set()
+        terms.minsize(460, 400)
+
+        tbg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        frm = tk.Frame(terms, bg=tbg, padx=20, pady=15)
+        frm.pack(fill="both", expand=True)
+
+        tk.Label(frm, text=_("Harmonic analyzer (experimental)"), bg=tbg,
+                 font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+        txt_frame = tk.Frame(frm, bg=tbg)
+        txt_frame.pack(fill="both", expand=True)
+        txt = tk.Text(txt_frame, wrap="word", font=("Helvetica", 10),
+                      bg=tbg, relief="flat", highlightthickness=0,
+                      padx=8, pady=8, spacing3=4)
+        txt.pack(side="left", fill="both", expand=True)
+        sb = tk.Scrollbar(txt_frame, command=txt.yview)
+        sb.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=sb.set)
+
+        # Tag for the data-sharing link
+        txt.tag_configure("link",
+                          font=("Helvetica", 10, "underline"),
+                          foreground="#0066CC")
+
+        txt.insert("end",
+            _("This part of the Analyzer is experimental. Run it in full screen.\n\n"
+
+            "The harmonic analyzer captures the frequency content of your "
+            "recorded sound, extracting and analyzing the saxophone-specific "
+            "content: the fundamental and its overtones. A microphone picks up "
+            "your sound, an FFT extracts the harmonic series, and the display "
+            "shows you what's happening in real time. You can capture sessions, "
+            "save presets for different setups (horn + mouthpiece + "
+            "player + reed + mic), and compare them side by side.\n\n"
+
+            "The formulas and scaling may still shift as we gather more data. "
+            "The raw harmonic measurements are always saved, so any future "
+            "analytical improvements apply retroactively to all your "
+            "historical captures.\n\n"
+
+            "THREE WAYS TO USE IT\n\n"
+
+            "1. Instant feedback \u2014 see how you affect the sound with "
+            "your embouchure, support, voicing, mic placement, etc.\n\n"
+
+            "2. Controlled comparison \u2014 change a variable and compare "
+            "readings to see what changes in your sound. More readings, "
+            "better data.\n\n"
+
+            "3. Tracking your sound over time \u2014 same horn, same setup, "
+            "just you and your practice. Sessions are dated, so you "
+            "can see how your tone evolves week to week or month "
+            "to month.\n\n"
+
+            "BEFORE YOUR FIRST CAPTURE\n\n"
+
+            "Check Options > Settings:\n\n"
+
+            "1. Input Device \u2014 select your audio input. It should "
+            "automatically choose your default. Best practice is to have "
+            "your mic plugged in before running the program.\n\n"
+
+            "2. Recording Folder \u2014 this program does its best work by "
+            "analyzing WAV files it records during your sessions. Choose "
+            "where these WAV files are stored, and whether to keep them "
+            "after analysis or automatically delete.\n\n"
+
+            "3. Preset Fields \u2014 choose which variable fields to show when "
+            "creating presets.\n\n"
+
+            "Then create a preset in File > Presets. For harmonic captures six "
+            "fields are required: Make, Model, Player, Mouthpiece, Mic Type, and "
+            "Mic Model. If you want accuracy, a high quality condenser "
+            "mic will give the most accurate readings, but you can also "
+            "use it to compare and learn about mic and mic "
+            "placement effects.\n\n"
+
+            "HELP IMPROVE THE ANALYZER\n\n"
+
+            "I need more data! Please help by contributing recordings "
+            "and preset files. Every recording helps calibrate the "
+            "descriptors and uncover what they actually measure across "
+            "different horns, mouthpieces, mics, and players. If you'd "
+            "like to contribute, export your preset library via File > "
+            "Transfer Data > Export Preset Library... and make yourself "
+            "a folder and drop the resulting JSON file (and any WAV "
+            "recordings you'd like to share) in the shared folder below:\n\n")
+        )
+
+        # Clickable Google Drive link
+        import webbrowser
+        drive_url = ("https://drive.google.com/drive/folders/"
+                     "1fZndlhDv57vdr6lApOQcvvVFP6pK0sj_?usp=drive_link")
+        txt.insert("end", drive_url + "\n", "link")
+        txt.tag_bind("link", "<Button-1>",
+                     lambda e: webbrowser.open(drive_url))
+        txt.tag_bind("link", "<Enter>",
+                     lambda e: txt.config(cursor="hand2"))
+        txt.tag_bind("link", "<Leave>",
+                     lambda e: txt.config(cursor=""))
+
+        txt.insert("end",
+            _("\nThis feature is in active development. Please contact me "
+            "with suggestions, questions, problems. If you experience a "
+            "bug or problem, screenshots are super helpful.\n")
+        )
+
+        txt.configure(state="disabled")
+
+        result = {"accepted": False}
+
+        def accept():
+            result["accepted"] = True
+            terms.destroy()
+
+        btn_frame = tk.Frame(frm, bg=tbg)
+        btn_frame.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_frame, text=_("I Understand \u2014 Enable Harmonics"),
+                  command=accept).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text=_("Cancel"),
+                  command=terms.destroy).pack(side="left")
+
+        terms.wait_window()
+        return result["accepted"]
+
+    def _toner_on_chart_resize(self, event):
+        if event.width > 50 and event.height > 50:
+            self._toner_chart_changed()
+
+    def _toner_chart_changed(self):
+        """Redraw the chart soon (debounced: captures can land in a burst)."""
+        if not hasattr(self, '_toner_chart_canvas'):
+            return
+        if self._toner_chart_redraw_id is not None:
+            try:
+                self.root.after_cancel(self._toner_chart_redraw_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._toner_chart_redraw_id = None
+        try:
+            self._toner_chart_redraw_id = self.root.after(100, self._toner_draw_chart)
+        except tk.TclError:
+            pass    # root window destroyed during shutdown
+
+    def _toner_chart_runs(self):
+        """The runs the chart draws: the ones picked in Compare..., else the loaded
+        preset with the session being captured merged in (by date, as the save does)."""
+        try:
+            hz = pitch_or_default(self._toner_pitch_var.get())
+        except (AttributeError, tk.TclError):
+            hz = 440.0
+        selector_sax = self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else "Alto"
+
+        def run_of(preset, sessions, label):
+            sax = preset.get('horn_type') if preset.get('horn_type') in SAX_TYPES else selector_sax
+            try:
+                return run_from_captures(sessions, sax, hz, label)
+            except IntonationError:
+                return None
+
+        runs = []
+        if self._toner_compare_runs:
+            for lib, name, date in self._toner_compare_runs:
+                preset = self._toner_presets.get(lib, {}).get(name)
+                if not isinstance(preset, dict):
+                    continue
+                sessions = preset.get('sessions', []) or []
+                label = name
+                if date is not None:
+                    sessions = [s for s in sessions if s.get('date') == date]
+                    label = f"{name} \u2014 {date}"
+                run = run_of(preset, sessions, label)
+                if run is not None:
+                    runs.append(run)
+            return runs
+        lib, name = self._toner_active_library, self._toner_active_preset
+        preset = self._toner_presets.get(lib, {}).get(name) if lib and name else None
+        if not isinstance(preset, dict):
+            return runs
+        sessions = list(preset.get('sessions', []) or [])
+        live = self._toner_active_session
+        if live:
+            sessions = [s for s in sessions if s.get('date') != live.get('date')] + [live]
+        run = run_of(preset, sessions, name)
+        if run is not None:
+            runs.append(run)
+        return runs
+
+    def _toner_chart_prims(self, width, height):
+        """The chart as it stands, as (runs, primitives) for a width x height frame."""
+        try:
+            runs = self._toner_chart_runs()
+        except Exception:
+            logging.getLogger(__name__).exception("the intonation chart could not be built")
+            runs = []
+        low_left = bool(self.settings.get("toner_settings", {}).get("chart_low_notes_left", True))
+        title = runs[0].name if len(runs) == 1 and not self._toner_compare_runs else ""
+        prims = intonation_chart.chart_primitives(intonation_overlay(runs), width, height,
+                                                  title=title, low_left=low_left)
+        return runs, prims
+
+    def _toner_draw_chart(self):
+        self._toner_chart_redraw_id = None
+        cv = getattr(self, '_toner_chart_canvas', None)
+        if cv is None:
+            return
+        w, h = cv.winfo_width(), cv.winfo_height()
+        if w < 50 or h < 50:
+            return
+        runs, prims = self._toner_chart_prims(w, h)
+        intonation_chart.draw_on_canvas(cv, prims, tag="chart")
+        if not any(r.readings for r in runs):
+            if self._toner_active_preset or self._toner_compare_runs:
+                text = _("No captures yet.")
+            else:
+                text = _("Load a preset and capture to chart its intonation.")
+            cv.create_text(w / 2, h / 2, text=text, fill="#666666",
+                           font=("Helvetica", 11), tags="chart")
+        cv.tag_raise("calprompt")
+
+    def _toner_free_kept_frames(self):
+        """How many frames of the note being held a capture would keep if it ended now."""
+        times = [f['t'] for f in self._toner_free_accumulator if 't' in f]
+        if not times:
+            return 0
+        return sum(1 for keep in whole_window(times, times[0], times[-1]) if keep)
+
+    def _toner_open_compare_dialog(self):
+        """Pick the runs the chart draws: presets with captures, or single sessions of them."""
+        from ui_dialogs import bind_mousewheel
+        items = []   # (label, indent, library, preset, session date or None)
+        for lib, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict):
+                continue
+            for name, preset in lib_presets.items():
+                if not isinstance(preset, dict):
+                    continue
+                with_caps = [s for s in preset.get('sessions', []) or [] if s.get('captures')]
+                if not with_caps:
+                    continue
+                items.append((f"[{lib}] {name}", 0, lib, name, None))
+                if len(with_caps) > 1:
+                    for s in with_caps:
+                        items.append((s.get('date', ''), 1, lib, name, s.get('date')))
+        if not items:
+            messagebox.showinfo(_("Compare"), _("No presets with captures yet."), parent=self.root)
+            return
+        limit = len(intonation_chart.LINE_STYLES)
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Compare"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
+        frame.pack(fill="both", expand=True)
+        tk.Label(frame, text=_("Tick the presets or sessions to draw together (up to {n}).").format(n=limit),
+                 bg=bg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 6))
+
+        list_outer = tk.Frame(frame, bg=bg)
+        list_outer.pack(fill="both", expand=True)
+        canvas = tk.Canvas(list_outer, bg=bg, highlightthickness=0, width=380,
+                           height=min(300, 26 * len(items) + 8))
+        sb = tk.Scrollbar(list_outer, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg=bg)
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        bind_mousewheel(inner, canvas)
+
+        picked = set(self._toner_compare_runs)
+        rows = []
+        for label, indent, lib, name, date in items:
+            var = tk.BooleanVar(value=(lib, name, date) in picked)
+            tk.Checkbutton(inner, text=label, variable=var, bg=bg, anchor="w",
+                           font=("Helvetica", 9)).pack(anchor="w", padx=(22 * indent, 0))
+            rows.append((var, lib, name, date))
+
+        def apply():
+            chosen = [(lib, name, date) for var, lib, name, date in rows if var.get()]
+            if len(chosen) > limit:
+                messagebox.showinfo(_("Compare"), _("Pick up to {n}.").format(n=limit), parent=dlg)
+                return
+            self._toner_compare_runs = chosen
+            self._toner_chart_changed()
+            dlg.destroy()
+
+        def clear():
+            self._toner_compare_runs = []
+            self._toner_chart_changed()
+            dlg.destroy()
+
+        btns = tk.Frame(frame, bg=bg)
+        btns.pack(fill="x", pady=(8, 0))
+        tk.Button(btns, text=_("Compare"), command=apply).pack(side="left", padx=(0, 5))
+        tk.Button(btns, text=_("Clear"), command=clear).pack(side="left", padx=(0, 5))
+        tk.Button(btns, text=_("Cancel"), command=dlg.destroy).pack(side="left")
+
+    def _toner_export_chart(self):
+        """Write the chart as it stands to a PNG or PDF file (told apart by the name's extension)."""
+        from tkinter import filedialog
+        runs, _prims = self._toner_chart_prims(CHART_W, CHART_H)
+        if not any(r.readings for r in runs):
+            messagebox.showinfo(_("Export"), _("Nothing to export yet."), parent=self.root)
+            return
+        stem = runs[0].name if len(runs) == 1 else "intonation"
+        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in stem).strip() or "intonation"
+        path = filedialog.asksaveasfilename(
+            title=_("Export Chart"), defaultextension=".png",
+            filetypes=[("PNG", "*.png"), ("PDF", "*.pdf")],
+            initialfile=safe + ".png", parent=self.root)
+        if not path:
+            return
+        try:
+            runs, prims = self._toner_chart_prims(CHART_W, CHART_H)
+            title = runs[0].name if len(runs) == 1 else _("Intonation chart")
+            if path.lower().endswith(".pdf"):
+                data = intonation_chart.render_pdf(prims, CHART_W, CHART_H, title=title)
+            else:
+                data = intonation_chart.render_png(prims, CHART_W, CHART_H, scale=2)
+            with open(path, "wb") as f:
+                f.write(data)
+        except Exception as e:
+            logging.getLogger(__name__).exception("the chart export failed")
+            messagebox.showerror(_("Export"), _("Could not write the file:\n{e}").format(e=e),
+                                 parent=self.root)
+            return
+        messagebox.showinfo(_("Export"), _("Saved {path}").format(path=path), parent=self.root)
 
     # ------------------------------------------------------------------
     # PROFILE MANAGEMENT
@@ -1898,15 +2344,22 @@ class TonerTabMixin:
         if sandbox:
             required = [("name", _("Preset Name"))]
         else:
+            # An intonation run needs the horn (type, make, model), the player and
+            # the mouthpiece; the mic matters to the harmonic side only (Matt,
+            # 2026-11-10), so it is asked for while the HARMONICS switch is on.
             required = [
                 ("name", _("Preset Name")),
+                ("horn_type", _("Horn Type")),
                 ("horn_make", _("Make")),
                 ("horn_model", _("Model")),
                 ("player", _("Player")),
                 ("mouthpiece", _("Mouthpiece")),
-                ("mic_type", _("Mic Type")),
-                ("mic_model", _("Mic Model")),
             ]
+            if self._toner_harmonics_on():
+                required += [
+                    ("mic_type", _("Mic Type")),
+                    ("mic_model", _("Mic Model")),
+                ]
         for key, label in required:
             if key in fields and not fields[key].get().strip():
                 messagebox.showwarning(_("Required Field"),
@@ -2151,6 +2604,7 @@ class TonerTabMixin:
             self._toner_stable_threshold = FREE_STABLE_FRAMES
             self._toner_capture_state = 'free_listening'
             self._toner_free_accumulator = []
+            self._toner_too_short = None
             is_sb = (self._toner_active_session or {}).get('sandbox')
             label_text = "[sandbox] Play anything..." if is_sb else "Play anything..."
 
@@ -2158,9 +2612,8 @@ class TonerTabMixin:
         self._toner_stable_count = 0
         self._toner_capture_btn.configure(text=_("Stop"))
 
-        self._toner_capture_frame.pack(fill="x", padx=5,
-            before=self._toner_main_frame.winfo_children()[-1])
-        self._toner_capture_label.configure(text=label_text)
+        self._toner_capture_frame.pack(fill="x", padx=5, before=self._toner_ctrl_frame)
+        self._toner_capture_label.configure(text=label_text, fg=CAPTURE_FG)
         self._toner_capture_progress.configure(text="")
 
 
@@ -2340,7 +2793,18 @@ class TonerTabMixin:
         return engine.audio_time_s if engine is not None else 0.0
 
     def _toner_update_cal_prompt(self, text, status=""):
-        """Update the large calibration prompt on the spectrum canvas."""
+        """Update the large guided-capture prompt on the spectrum canvas, and on
+        the chart canvas (which is what shows while HARMONICS is off)."""
+        chart = getattr(self, '_toner_chart_canvas', None)
+        if chart is not None:
+            chart.delete("calprompt")
+            if text:
+                cw = chart.winfo_width()
+                chart.create_text(cw - 10, 10, text=text, fill="#333333",
+                                  font=("Helvetica", 48, "bold"), anchor="ne", tags="calprompt")
+                if status:
+                    chart.create_text(cw - 10, 65, text=status, fill="#666666",
+                                      font=("Helvetica", 14), anchor="ne", tags="calprompt")
         cv = self._toner_spectrum_canvas
         if hasattr(self, '_toner_cal_prompt'):
             if text:
@@ -2387,6 +2851,7 @@ class TonerTabMixin:
                 self._toner_concert_pitch.set(True)
                 self._toner_update_pitch_mode_label()
         self._toner_update_load_unload_btn()
+        self._toner_chart_changed()
 
     def _toner_start_new_session_and_listen(self):
         """Create a new session for the active preset and begin listening."""
@@ -2395,7 +2860,8 @@ class TonerTabMixin:
         if self._toner_active_library and self._toner_active_preset:
             lib = self._toner_presets.get(self._toner_active_library, {})
             preset_check = lib.get(self._toner_active_preset, {})
-        if not preset_check.get('sandbox') and not preset_check.get('mic_type'):
+        if (not preset_check.get('sandbox') and not preset_check.get('mic_type')
+                and self._toner_harmonics_on()):
             messagebox.showinfo(_("Mic Type Required"),
                 _("This preset has no mic type set.\n\n"
                 "Use Mutate in File \u2192 Presets to add mic info,\n"
@@ -2868,15 +3334,23 @@ class TonerTabMixin:
             # Count unique notes captured so far (cached set)
             notes_so_far = self._toner_captured_notes
 
+            # The readout counts the frames a capture would keep if the note ended
+            # now, and turns green once there are enough (Matt, 2026-11-10: "have
+            # the frames or whatever it shows turn green when its long enough to use").
             if self._toner_stable_note:
                 disp = self._toner_transpose_note(self._toner_stable_note)
+                kept = self._toner_free_kept_frames()
                 self._toner_capture_label.configure(
-                    text=_("Free: {note} ({count} frames)").format(note=disp, count=self._toner_stable_count))
+                    text=_("Free: {note} ({count} frames)").format(note=disp, count=kept),
+                    fg=CAPTURE_READY_FG if kept >= FREE_MIN_FRAMES else CAPTURE_FG)
             else:
                 self._toner_capture_label.configure(
-                    text=_("Free mode \u2014 play anything..."))
-            self._toner_capture_progress.configure(
-                text=_("({count} notes captured)").format(count=len(notes_so_far)))
+                    text=_("Free mode \u2014 play anything..."), fg=CAPTURE_FG)
+            progress = _("({count} notes captured)").format(count=len(notes_so_far))
+            if self._toner_too_short:
+                progress += "   " + _("{note} too short to keep").format(
+                    note=self._toner_transpose_note(self._toner_too_short[0]))
+            self._toner_capture_progress.configure(text=progress)
             return
 
         # --- CAL COUNTDOWN: 10-second prep before calibration starts ---
@@ -3006,6 +3480,7 @@ class TonerTabMixin:
                     if self._toner_active_session is not None:
                         self._toner_active_session['captures'].append(capture_entry)
                         self._toner_captured_notes.add(concert_note)
+                        self._toner_chart_changed()
                         self._toner_save_active_session()
                         self._toner_check_rolloff_warning()
 
@@ -3087,6 +3562,7 @@ class TonerTabMixin:
         if self._toner_active_session is not None:
             self._toner_active_session['captures'].append(capture_entry)
             self._toner_captured_notes.add(dominant_note)
+            self._toner_chart_changed()
             self._toner_schedule_save()
             self._toner_check_rolloff_warning()
 
@@ -5238,8 +5714,9 @@ class TonerTabMixin:
             # Update session lamp
             self._toner_update_session_lamp()
 
-            # Update spectrum
-            self._toner_render_spectrum(result)
+            # Update spectrum (only while the harmonic analyzer is the view shown)
+            if self._toner_harmonics_on():
+                self._toner_render_spectrum(result)
 
             # Update note display + intonation gauge
             if result.fundamental_freq > 0:
@@ -5301,7 +5778,7 @@ class TonerTabMixin:
         from tkinter import filedialog
 
         if not self._toner_engine:
-            messagebox.showerror(_("Error"), _("Toner engine not available."))
+            messagebox.showerror(_("Error"), _("Analyzer engine not available."))
             return
 
         # Step 1: Select the audio file first
@@ -5559,10 +6036,9 @@ class TonerTabMixin:
         filename = os.path.basename(filepath)
 
         # Show progress
-        self._toner_capture_frame.pack(fill="x", padx=5,
-            before=self._toner_main_frame.winfo_children()[-1])
+        self._toner_capture_frame.pack(fill="x", padx=5, before=self._toner_ctrl_frame)
         self._toner_capture_label.configure(
-            text=_("Analyzing {filename}...").format(filename=filename))
+            text=_("Analyzing {filename}...").format(filename=filename), fg=CAPTURE_FG)
         self._toner_capture_progress.configure(text="")
         self.root.update_idletasks()
 
@@ -5734,8 +6210,16 @@ class TonerTabMixin:
             messagebox.showerror(_("Import Error"), _("Could not read file:\n{e}").format(e=e))
             return
 
-        if not isinstance(imported, dict):
-            messagebox.showerror(_("Invalid Format"), _("File is not a valid tone presets export."))
+        # A wrapped file carries the libraries with a format version;
+        # one this app does not read yet is refused, and the file is left alone.
+        try:
+            imported = unwrap_tone_import(imported)
+        except TonePresetsImportError as e:
+            if "newer" in str(e):
+                reason = _("It was written by a newer version of the program. Update the app to import it.")
+            else:
+                reason = _("File is not a valid tone presets export.")
+            messagebox.showerror(_("Invalid Format"), reason)
             return
 
         # Check if flat (old format) or nested (library format)

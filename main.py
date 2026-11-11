@@ -16,7 +16,7 @@ from config import (
     GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
     append_job_history, load_job_history, save_job_history,
     find_config_files_in_directory, import_config_files,
-    get_ssl_context, get_input_devices,
+    get_ssl_context, get_input_devices, migrate_analyzer_tab,
     setup_logging, get_log_file,
     settings_to_sizing_preset, settings_to_gcode_presets,
 )
@@ -132,12 +132,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         from ui_dialogs import set_tooltips_enabled
         set_tooltips_enabled(self.settings.get("tooltips_enabled", True))
 
-        # Ensure Toner is hidden unless explicitly unlocked
-        if not self.settings.get("toner_unlocked"):
-            visible = self.settings.get("visible_tabs", {})
-            if visible.get("Toner"):
-                visible["Toner"] = False
-                save_settings(self.settings)
+        # The Analyzer tab is on by default (2026-11-10); the one-time migration
+        # turns it on for a user whose toner was forced hidden, once. The beta
+        # terms go on gating the tab's Harmonics switch, not the tab. In memory
+        # only: building the app writes nothing (--selftest, --tour, the suites);
+        # the flag goes to disk with the next regular save.
+        migrate_analyzer_tab(self.settings)
 
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
@@ -548,6 +548,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         request: the library and audio tabs ask for 850 px and more on
         every platform and are built to live in less.
 
+        The Analyzer's control strip is the one other thing counted
+        (2026-11-10): one row of switches, the sax selector and Load /
+        MODE / Capture, about 910 px in English and 1040 in German, which
+        pack clips from the right when the page is narrower. At the 640 px
+        start the Capture button was off the page; while the tab was the
+        opt-in Toner its terms said "run it in full screen", and now the
+        tab shows by default.
+
         The room between the window's width and a notebook page's width
         (the pack padx round the notebook, its own border and inset) is
         MEASURED on the page that is mapped, not assumed: it is the same
@@ -569,6 +577,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             tooling = getattr(self, 'tooling_tab_frame', None)
             if tooling is not None and str(tooling) in visible:
                 need = max(need, tooling.winfo_reqwidth() + self._notebook_page_chrome_px())
+            toner = getattr(self, 'toner_tab_frame', None)
+            strip = getattr(self, '_toner_ctrl_frame', None)
+            if toner is not None and strip is not None and str(toner) in visible:
+                # the strip packs with padx=5 inside the tab's main frame
+                need = max(need, strip.winfo_reqwidth() + 10 + self._notebook_page_chrome_px())
             cur_w = self.root.winfo_width()
             if cur_w <= 1:
                 cur_w = 640
@@ -661,9 +674,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.notebook.add(self.tuner_tab_frame, text=_('Tuner'))
         self.create_tuner_tab(self.tuner_tab_frame)
 
-        # --- Create Tab 7: Toner ---
+        # --- Create Tab 7: Analyzer (the Toner until 2026-11-10; the attribute and keys keep the name) ---
         self.toner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.toner_tab_frame, text=_('Toner (beta)'))
+        self.notebook.add(self.toner_tab_frame, text=_('Analyzer'))
         self.create_toner_tab(self.toner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
@@ -3053,25 +3066,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             ("Screw Specs", _("Screw Specs")),
             ("Tooling", _("Tooling")),
             ("Tuner", _("Tuner")),
-        ]
-        experimental_tabs = [
-            ("Toner", _("Toner")),
+            ("Toner", _("Analyzer")),    # the storage key stays "Toner" (2026-11-10)
         ]
         if not audio_supported():
             # A build that can't run them doesn't offer them (Intel Mac).
-            main_tabs = [t for t in main_tabs if t[0] != "Tuner"]
-            experimental_tabs = []
+            main_tabs = [t for t in main_tabs if t[0] not in ("Tuner", "Toner")]
 
         check_vars = {}
         for key, display in main_tabs:
-            var = tk.BooleanVar(value=visible.get(key, True))
-            tk.Checkbutton(frame, text=display, variable=var, bg=bg,
-                           font=("Helvetica", 10)).pack(anchor="w")
-            check_vars[key] = var
-
-        tk.Label(frame, text=_("\nExperimental / In Progress"), bg=bg,
-                 font=("Helvetica", 11, "bold")).pack(anchor="w")
-        for key, display in experimental_tabs:
             var = tk.BooleanVar(value=visible.get(key, True))
             tk.Checkbutton(frame, text=display, variable=var, bg=bg,
                            font=("Helvetica", 10)).pack(anchor="w")
@@ -3087,158 +3089,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         machine_menu_var = tk.BooleanVar(
             value=self.settings.get("experimental_machine_menu", False))
         if machine_supported():  # not offered on a build without pyserial
+            tk.Label(frame, text=_("\nExperimental / In Progress"), bg=bg,
+                     font=("Helvetica", 11, "bold")).pack(anchor="w")
             tk.Checkbutton(
                 frame,
                 text=_("Machine menu (direct Falcon serial control)"),
                 variable=machine_menu_var, bg=bg,
                 font=("Helvetica", 10)).pack(anchor="w")
 
-        def _show_toner_terms(parent_dlg):
-            """Show toner beta terms acceptance dialog. Returns True if accepted."""
-            terms = tk.Toplevel(parent_dlg)
-            terms.title(_("Toner — Beta Notice"))
-            terms.resizable(True, True)
-            terms.transient(parent_dlg)
-            terms.grab_set()
-            terms.minsize(460, 400)
-
-            tbg = parent_dlg.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
-            frm = tk.Frame(terms, bg=tbg, padx=20, pady=15)
-            frm.pack(fill="both", expand=True)
-
-            tk.Label(frm, text=_("Harmonic Tone Analyzer"), bg=tbg,
-                     font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
-
-            txt_frame = tk.Frame(frm, bg=tbg)
-            txt_frame.pack(fill="both", expand=True)
-            txt = tk.Text(txt_frame, wrap="word", font=("Helvetica", 10),
-                          bg=tbg, relief="flat", highlightthickness=0,
-                          padx=8, pady=8, spacing3=4)
-            txt.pack(side="left", fill="both", expand=True)
-            sb = tk.Scrollbar(txt_frame, command=txt.yview)
-            sb.pack(side="right", fill="y")
-            txt.configure(yscrollcommand=sb.set)
-
-            # Tag for the data-sharing link
-            txt.tag_configure("link",
-                              font=("Helvetica", 10, "underline"),
-                              foreground="#0066CC")
-
-            txt.insert("end",
-                _("This feature is in beta. Run it in full screen.\n\n"
-
-                "The Toner is a real-time harmonic analyzer that captures the "
-                "frequency content of your recorded sound, extracting and "
-                "analyzing the saxophone-specific content: the fundamental "
-                "and its overtones. A microphone picks up your sound, an FFT "
-                "extracts the harmonic series, and the display shows you "
-                "what's happening in real time. You can capture sessions, "
-                "save presets for different setups (horn + mouthpiece + "
-                "player + reed + mic), and compare them side by side.\n\n"
-
-                "The formulas and scaling may still shift as we gather more data. "
-                "The raw harmonic measurements are always saved, so any future "
-                "analytical improvements apply retroactively to all your "
-                "historical captures.\n\n"
-
-                "THREE WAYS TO USE IT\n\n"
-
-                "1. Instant feedback \u2014 see how you affect the sound with "
-                "your embouchure, support, voicing, mic placement, etc.\n\n"
-
-                "2. Controlled comparison \u2014 change a variable and compare "
-                "readings to see what changes in your sound. More readings, "
-                "better data.\n\n"
-
-                "3. Tracking your sound over time \u2014 same horn, same setup, "
-                "just you and your practice. Sessions are dated, so you "
-                "can see how your tone evolves week to week or month "
-                "to month.\n\n"
-
-                "BEFORE YOUR FIRST CAPTURE\n\n"
-
-                "Check Options > Settings:\n\n"
-
-                "1. Input Device \u2014 select your audio input. It should "
-                "automatically choose your default. Best practice is to have "
-                "your mic plugged in before running the program.\n\n"
-
-                "2. Recording Folder \u2014 this program does its best work by "
-                "analyzing WAV files it records during your sessions. Choose "
-                "where these WAV files are stored, and whether to keep them "
-                "after analysis or automatically delete.\n\n"
-
-                "3. Preset Fields \u2014 choose which variable fields to show when "
-                "creating presets.\n\n"
-
-                "Then create a preset in File > Presets. Six fields are always "
-                "required: Make, Model, Player, Mouthpiece, Mic Type, and "
-                "Mic Model. If you want accuracy, a high quality condenser "
-                "mic will give the most accurate readings, but you can also "
-                "use the toner to compare and learn about mic and mic "
-                "placement effects.\n\n"
-
-                "HELP IMPROVE THE TONER\n\n"
-
-                "I need more data! Please help by contributing recordings "
-                "and preset files. Every recording helps calibrate the "
-                "descriptors and uncover what they actually measure across "
-                "different horns, mouthpieces, mics, and players. If you'd "
-                "like to contribute, export your preset library via File > "
-                "Transfer Data > Export Preset Library... and make yourself "
-                "a folder and drop the resulting JSON file (and any WAV "
-                "recordings you'd like to share) in the shared folder below:\n\n")
-            )
-
-            # Clickable Google Drive link
-            import webbrowser
-            drive_url = ("https://drive.google.com/drive/folders/"
-                         "1fZndlhDv57vdr6lApOQcvvVFP6pK0sj_?usp=drive_link")
-            txt.insert("end", drive_url + "\n", "link")
-            txt.tag_bind("link", "<Button-1>",
-                         lambda e: webbrowser.open(drive_url))
-            txt.tag_bind("link", "<Enter>",
-                         lambda e: txt.config(cursor="hand2"))
-            txt.tag_bind("link", "<Leave>",
-                         lambda e: txt.config(cursor=""))
-
-            txt.insert("end",
-                _("\nThis feature is in active development. Please contact me "
-                "with suggestions, questions, problems. If you experience a "
-                "bug or problem, screenshots are super helpful.\n")
-            )
-
-            txt.configure(state="disabled")
-
-            result = {"accepted": False}
-
-            def accept():
-                result["accepted"] = True
-                terms.destroy()
-
-            btn_frame = tk.Frame(frm, bg=tbg)
-            btn_frame.pack(fill="x", pady=(10, 0))
-            tk.Button(btn_frame, text=_("I Understand — Enable Toner"),
-                      command=accept).pack(side="left", padx=(0, 5))
-            tk.Button(btn_frame, text=_("Cancel"),
-                      command=terms.destroy).pack(side="left")
-
-            terms.wait_window()
-            return result["accepted"]
-
         def apply():
             # Merge, don't replace: tabs this build doesn't offer (Tuner and
             # Toner on the Intel Mac) keep whatever was saved for them.
             new_visible = dict(self.settings.get("visible_tabs", {}))
             new_visible.update({name: var.get() for name, var in check_vars.items()})
-
-            # Toner requires terms acceptance if not previously unlocked
-            if new_visible.get("Toner") and not self.settings.get("toner_unlocked"):
-                if not _show_toner_terms(dlg):
-                    new_visible["Toner"] = False
-                    check_vars["Toner"].set(False)
-                    return
-                self.settings["toner_unlocked"] = True
 
             tabs_changed = (new_visible != self.settings.get("visible_tabs", {}))
 
@@ -3574,6 +3437,8 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         if engine is not None:
             engine.synthetic_hz = 233.08
         app._toner_mic_checked = True
+        if app.settings.get("toner_unlocked") and hasattr(app, '_toner_harmonics_var'):
+            app._toner_harmonics_var.set("on")      # the spectrum on the tone; the chart otherwise
         app.notebook.add(app.toner_tab_frame)
         app._fit_window_to_tabs()
         app.notebook.select(app.toner_tab_frame)
@@ -3842,13 +3707,16 @@ if __name__ == '__main__':
                         engine.synthetic_hz = 440.0
                     app.notebook.select(app.tuner_tab_frame)
                 else:
-                    # Toner: Bb3 with harmonics. The tab is hidden unless the
-                    # profile has it unlocked (SAXSHOP_CONFIG_DIR lets CI
-                    # supply one); re-adding the frame un-hides it either way.
+                    # Analyzer: Bb3 with harmonics. With the harmonics unlocked
+                    # in the profile (SAXSHOP_CONFIG_DIR lets CI supply one) the
+                    # switch goes on and the spectrum shows; else the chart.
+                    # Re-adding the frame un-hides a tab a profile hid.
                     engine = getattr(app, '_toner_engine', None)
                     if engine is not None:
                         engine.synthetic_hz = 233.08
                     app._toner_mic_checked = True   # no modal mic notice
+                    if app.settings.get("toner_unlocked") and hasattr(app, '_toner_harmonics_var'):
+                        app._toner_harmonics_var.set("on")
                     app.notebook.add(app.toner_tab_frame)
                     app._fit_window_to_tabs()
                     app.notebook.select(app.toner_tab_frame)

@@ -597,6 +597,25 @@ def get_framing_power_s(material, settings):
         return min(10, FRAMING_POWER_S_MAX)
 
 
+def migrate_analyzer_tab(settings):
+    """The Analyzer tab is on by default since 2026-11-10 (it was the Toner, hidden
+    until the beta terms were accepted). Run once per settings file, at startup:
+    a user who never unlocked the toner had its tab forced hidden, so for them the
+    new default applies; a user who had unlocked it and hid it chose that, and
+    keeps it. The terms (`toner_unlocked`) go on gating the Harmonics switch.
+    Returns True when it ran. Nothing is written here: the flag reaches the disk
+    with the next regular save (on exit, Feature Set, a dialog's OK), so building
+    the app, `--selftest`, `--tour` and the suites write nothing (the first version
+    saved at once and `test_adhesive_ring_upgrade` caught it)."""
+    if settings.get("analyzer_tab_shown_v3"):
+        return False
+    visible = settings.setdefault("visible_tabs", {})
+    if not settings.get("toner_unlocked") and visible.get("Toner") is False:
+        visible["Toner"] = True
+    settings["analyzer_tab_shown_v3"] = True
+    return True
+
+
 def material_settings_to_gcode_preset(mat_settings):
     """Pull just the G-code preset keys out of one material's settings block."""
     out = {}
@@ -1001,6 +1020,7 @@ DEFAULT_SETTINGS = {
         "gauge_bias": {"richness": 0, "warmth": 0},
         "sax_type": "Alto",
         "concert_pitch": False,
+        "chart_low_notes_left": True,   # the intonation chart: low notes on the left (Matt's default), or flipped
         "analysis_descriptors": {
             "richness": True,
             "warmth": True,
@@ -1203,7 +1223,8 @@ DEFAULT_SETTINGS = {
     "visible_sax_types": None,  # None = all types, or list of type names
 
     # TONER ACCESS
-    "toner_unlocked": False,
+    "toner_unlocked": False,            # the harmonics side's one-time terms were accepted (gates the Harmonics switch)
+    "analyzer_tab_shown_v3": False,     # the one-time migration below has run (the Analyzer tab default-on, 2026-11-10)
     "toner_sandbox_enabled": False,  # Show sandbox checkbox when creating presets
 
     # EXPERIMENTAL FEATURES — opt-in via Feature Set dialog. Off by
@@ -1232,7 +1253,7 @@ DEFAULT_SETTINGS = {
         "Screw Specs": True,
         "Tooling": True,
         "Tuner": True,
-        "Toner": False,
+        "Toner": True,      # the Analyzer tab (its settings key keeps the old name); default-on since 2026-11-10
     },
 
     "key_layout": {

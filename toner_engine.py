@@ -1805,6 +1805,40 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
 DEFAULT_LIBRARY = "My Presets"
 
 
+IMPORT_FORMAT_VERSION = 2                     # the highest wrapped version this app reads
+
+
+class TonePresetsImportError(ValueError):
+    """An import file that cannot be read; the message says why."""
+
+
+def unwrap_tone_import(data):
+    """A loaded import file as `{library: {preset: data}}`.
+
+    Three forms come in: this app's nested form and its flat form (a top-level
+    preset with a "sessions" list, which the caller wraps as "Imported"), and a
+    wrapped file, `{"format": "<a name>", "format_version": N, "libraries": {...}}`
+    (2026-11-10), known by its shape: a `format` that is a string beside `libraries`
+    (in the nested form every top-level value is a library, a dict). The wrapper is removed; a format_version
+    above IMPORT_FORMAT_VERSION, or one that is not a whole number, is refused in
+    words (TonePresetsImportError), and the caller leaves the file alone."""
+    if not isinstance(data, dict):
+        raise TonePresetsImportError("not a tone presets file (not a JSON object)")
+    if isinstance(data.get("format"), str) and "libraries" in data:
+        version = data.get("format_version", 1)
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise TonePresetsImportError(f"the file's format_version {version!r} is not a version number")
+        if version > IMPORT_FORMAT_VERSION:
+            raise TonePresetsImportError(
+                f"the file was written by a newer program (format v{version}; this one reads up to "
+                f"v{IMPORT_FORMAT_VERSION})")
+        libraries = data.get("libraries")
+        if not isinstance(libraries, dict):
+            raise TonePresetsImportError("the file's libraries are missing")
+        return libraries
+    return data
+
+
 def load_tone_presets(filepath):
     """Load tone presets from JSON file.
 

@@ -1,9 +1,9 @@
-# Tone Analyzer (Toner)
+# The Analyzer (the Toner until 2026-11-10)
 
-Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
+The tab is called Analyzer and opens on the intonation chart; the harmonic analyzer is behind the HARMONICS switch, experimental. The code, the settings keys (`toner_*`, `visible_tabs["Toner"]`, `toner_unlocked`) and the file names keep the old name. Architecture mirrors the tuner:
 
 - `toner_engine.py`: Pure audio/math — FFT with 16384-sample window (~2.7 Hz resolution), fundamental detection via peak-picking with harmonic series verification (a sub-harmonic candidate must show its own peak plus harmonics at multiples coprime to the divisor — see "Pitch reading" below), temporal hysteresis, harmonic extraction up to 20th harmonic (noise floor cutoff at -60 dB) with parabolic amplitude correction and Hann closed-form frequency, spectral centroid computation, descriptor computation (complexity, warmth). `TonerEngine` manages its own sounddevice input stream independently from the tuner. Preset storage uses `load_tone_presets()`/`save_tone_presets()` with `TONER_DATA_FILE` (`toner_data.json`, auto-migrated from old `tone_profiles.json`).
-- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab with spectrum canvas (left), intonation gauge + note display (right), and control strip (bottom). Preset management, comparison tool with multi-select and filtering, import/export.
+- `toner_tab.py`: All tkinter UI — `TonerTabMixin` builds the tab: the top area is one of two frames (`_toner_show_harmonics`): the chart frame (a white `tk.Canvas` drawing `intonation_chart` primitives, with Compare... and Export... under it) or the harmonics frame (spectrum canvas left, intonation gauge + note display right); the control strip (bottom) carries the VIEW / SCALE / FPS / SENS / HARMONICS switches, the sax selector, Load..., MODE (free / guided) and Capture. Preset management, comparison tool with multi-select and filtering, import/export.
 - The toner auto-starts/stops when switching tabs, same as the tuner.
 - Same three mechanisms as the tuner engine and tab (see CLAUDE-engines.md "Strobe Tuner"): numpy and sounddevice imported separately; `TonerEngine.synthetic_hz` feeds a Bb3-with-harmonics tone for tests and the CI tours (`test_toner_live`); `_toner_error_state` is redrawn after `_toner_build_spectrum_bars` wipes the canvas.
 
@@ -14,6 +14,18 @@ Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
 - Comparison analysis includes harmonic-range interpretation: H1-H4 shifts = bore, H7-H13 shifts = neck/mpc, broadband = mpc/player. Same-player comparisons noted as more reliable.
 - Scale toggle switches between linear (default, true amplitude ratios) and dB (logarithmic).
 - Spectrum overlay: a preset can be loaded as a ghost overlay on the live spectrum (via Analyze > single preset or group average > Overlay on Spectrum). Blue ghost bars update per-note as you play. All live descriptor gauges (delta and absolute) have been removed — the analyze tool (both sides averaged) is where comparison actually works.
+
+## The Analyzer tab (2026-11-10)
+
+- **The chart** draws `intonation.overlay` of the runs from `_toner_chart_runs()`: the ones picked in Compare... (`_toner_compare_runs`, `(library, preset, session date or None)`, up to `len(LINE_STYLES)`), else the loaded preset with the session being captured merged in by date. Redraws go through `_toner_chart_changed()` (debounced 100 ms): after each capture, on preset load and unload (`_toner_update_preset_label`), on a sax or pitch change, on resize and on the Settings tick. Export writes `render_png` (scale 2) or `render_pdf` of the same primitives at `CHART_W` x `CHART_H`, told apart by the file name's extension. The chart shows written notes and cents as played, nothing else (Matt).
+- **The HARMONICS switch** stands at off at every start (not persisted). `_toner_harmonics_on()` is the one reader. The spectrum renders only while it is on. The large guided-capture prompt is drawn on the chart canvas too (`_toner_update_cal_prompt`, tag `calprompt`), since that is the view shown while the switch is off.
+- **Required fields** (`_toner_validate_required_fields`): name, horn type, make, model, player and mouthpiece; mic type and model only while HARMONICS is on, and the "Mic Type Required" stop at Capture likewise. Sandbox presets need the name only, as before.
+- **The free readout** counts the frames a capture would keep if the note ended now (`_toner_free_kept_frames`, `whole_window` over the accumulator) and turns `CAPTURE_READY_FG` (the IN TUNE green) at `FREE_MIN_FRAMES`; a note let go sooner is named in the progress line (`_toner_too_short`) until the next note is kept.
+- **Import** goes through `toner_engine.unwrap_tone_import`: a wrapped file (`format`, `format_version`, `libraries`) is unwrapped; a newer `format_version` is refused in words and the file left alone.
+- **Settings**: `toner_settings.chart_low_notes_left` (Options > Settings > General, "Low notes on the left").
+- The window-fit rule in main.py counts the control strip (see CLAUDE-architecture.md, Feature Set).
+
+Tests: `test_analyzer_tab` (guarded), `test_intonation_chart`, `test_toner_live`. History: `docs/decisions/toner.md`, "The Analyzer, round 2".
 
 ## Pitch reading
 
@@ -53,7 +65,7 @@ Duplicates a preset with all fields pre-filled (name cleared), letting users cha
 
 ## Settings Dialog
 
-Options > Settings opens a tabbed dialog (General: input device, recording, pitch; Analysis: preset fields, descriptor visibility). Capture Threshold stays as a standalone menu item due to its live level meter.
+Options > Settings opens a tabbed dialog (General: input device, recording, pitch, the intonation chart's "Low notes on the left"; Analysis: preset fields, descriptor visibility). Capture Threshold stays as a standalone menu item due to its live level meter.
 
 ## Capture Performance
 
@@ -61,7 +73,7 @@ During free-mode capture, JSON saves are deferred to every 10 seconds (`_toner_s
 
 ## Capture Modes
 
-Two selectable capture modes: "free" (continuous micro-captures while playing naturally, one per held note) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). Which frames of a note count, and the clock: "Capture rules" above. A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
+Two selectable capture modes, the MODE switch's free / guided (the values stay "free" and "calibration"): "free" (continuous micro-captures while playing naturally, one per held note; the default) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). Which frames of a note count, and the clock: "Capture rules" above. A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
 
 ## Auto-Transposition
 

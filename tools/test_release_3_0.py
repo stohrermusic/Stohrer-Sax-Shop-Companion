@@ -493,6 +493,8 @@ GUARDED_SUITES = (
     "test_toner_live", "test_tooltips", "test_tuner_canvas", "test_zone_labels",
     # the laser watch's app-level checks (2026-11-09, the connection work)
     "test_laser_watch",
+    # the Analyzer tab (2026-11-10)
+    "test_analyzer_tab",
     # the camera fallback's real-window checks (2026-11-09, the follow-up round)
     "test_camera_fallback",
     # the User Guide (2026-11-09, the guide upgrade)

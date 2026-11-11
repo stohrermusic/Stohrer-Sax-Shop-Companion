@@ -227,6 +227,7 @@ TONER_SETTINGS = Dict({
                        note="the live descriptor gauges were removed 2026-04-06; nothing reads this"),
     "sax_type": Str(choices=SAX_TYPES),
     "concert_pitch": Bool(),
+    "chart_low_notes_left": Bool(),                          # the intonation chart's direction
     "analysis_descriptors": Dict({"richness": Bool(), "warmth": Bool(), "even_odd": Bool(), "rolloff_shape": Bool()}),
 })
 
@@ -351,6 +352,7 @@ SCHEMA = {
     "toner_wav_reanalyze": Bool(), "toner_wav_auto_delete": Bool(),
     "visible_sax_types": List(items=Str(), nullable=True),    # None = all types
     "toner_unlocked": Bool(), "toner_sandbox_enabled": Bool(),
+    "analyzer_tab_shown_v3": Bool(),                          # config.migrate_analyzer_tab has run
     "experimental_machine_menu": Bool(),
     "show_preview": Bool(), "seen_preview_tutorial": Bool(),
     "last_pad_library": Str(), "last_key_library": Str(),

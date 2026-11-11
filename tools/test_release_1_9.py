@@ -443,10 +443,11 @@ print("\n--- 7. Visible Tabs Defaults ---")
 
 vt = DEFAULT_SETTINGS["visible_tabs"]
 # Tuner became default-on in v2.0 — it's no longer marked experimental.
-# Only Toner remains hidden by default (still beta, requires terms acceptance).
+# The Toner (the Analyzer since 2026-11-10) followed: the tab shows by default and
+# only its harmonic side is behind the terms (toner_unlocked).
 test("Tuner defaults to True (no longer experimental)",
      vt.get("Tuner") is True)
-test("Toner defaults to False", vt.get("Toner") is False)
+test("Toner (the Analyzer tab) defaults to True", vt.get("Toner") is True)
 test("Key Height Library defaults to True", vt.get("Key Height Library") is True)
 test("Serial Lookup defaults to True", vt.get("Serial Lookup") is True)
 test("Screw Specs defaults to True", vt.get("Screw Specs") is True)

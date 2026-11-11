@@ -92,7 +92,7 @@ def cover(schema, defaults, path=""):
 def schema_covers_the_defaults_both_ways():
     bad = cover(ss.SCHEMA, DEFAULT_SETTINGS)
     assert not bad, "\n    " + "\n    ".join(bad)
-    assert len(ss.SCHEMA) == len(DEFAULT_SETTINGS) == 104, len(ss.SCHEMA)
+    assert len(ss.SCHEMA) == len(DEFAULT_SETTINGS) == 105, len(ss.SCHEMA)
 check("the schema covers exactly DEFAULT_SETTINGS' keys, both ways, at every level; every default passes",
       schema_covers_the_defaults_both_ways)
 

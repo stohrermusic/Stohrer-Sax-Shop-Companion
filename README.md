@@ -72,7 +72,7 @@ The die inserts and holders follow Phil Noy's method, which he shares freely. Ea
 - **Serial Lookup**: year of manufacture by maker and serial number.
 - **Screw Specs**: thread specs by model; import Matt's from [stohrermusic.com](https://www.stohrermusic.com/articles/screw-specs-library/).
 - **Strobe Tuner**: 12-wheel chromatic strobe, transposing, 60 to 120 fps.
-- **Tone Analyzer** (beta): measures the harmonics of your sound and compares setups over time. Needs a good microphone.
+- **Analyzer**: charts your intonation, note by note, and compares runs from your library; export as PNG or PDF. The harmonic analyzer (experimental) measures the overtones of your sound. Needs a good microphone.
 - **In the app**: a searchable User Guide with figures, a one-page Quick Start Guide, English, Spanish, German, French and Italian, import and export of every library.
 
 ## Install
@@ -81,7 +81,7 @@ Download the latest build from [Releases](https://github.com/stohrermusic/Stohre
 
 **Windows**: run the installer.
 
-**macOS**: should work, but Matt doesn't have a Mac for testing. Two builds. Apple Silicon has everything. Intel has everything except the Tuner, Tone Analyzer and direct machine control.
+**macOS**: should work, but Matt doesn't have a Mac for testing. Two builds. Apple Silicon has everything. Intel has everything except the Tuner, Analyzer and direct machine control.
 
 <details>
 <summary>macOS install steps (complicated because Mac makes it hard if you don't want to pay them $100 a year to be a "developer")</summary>
@@ -91,7 +91,7 @@ Download the latest build from [Releases](https://github.com/stohrermusic/Stohre
    ```
    xattr -cr /Applications/SaxShopCompanion.app
    ```
-3. Open it normally. Allow microphone access when the Tuner or Tone Analyzer asks (and camera access for the camera features).
+3. Open it normally. Allow microphone access when the Tuner or Analyzer asks (and camera access for the camera features).
 
 If an older version never asked for microphone access, clear the old refusal and relaunch:
 ```

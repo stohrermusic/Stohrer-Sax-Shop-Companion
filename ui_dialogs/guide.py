@@ -83,7 +83,7 @@ class UserGuideWindow(tk.Toplevel):
         "screw_specs": _("Screw Specs"),
         "tooling": _("Tooling"),
         "tuner": _("Tuner"),
-        "toner": _("Toner"),
+        "toner": _("Analyzer"),
     }
     TEXT_MAX_PX = 760       # the reading column
     TEXT_PADX = 15
@@ -1030,13 +1030,45 @@ class UserGuideWindow(tk.Toplevel):
                     "to a slower drawing mode where it can't."))
 
     def _section_toner(self):
-        self._section("toner", _("Toner (beta)"))
-        self._body(_("A harmonic analyzer: it finds the note you play and measures each harmonic "
-                  "up to the 20th. Every reading is the whole chain at once: player, horn, "
-                  "mouthpiece, reed, mic and room."))
-        self._body(_("So it measures change, not gear. Change one thing at a time and compare. "
-                  "Mouthpiece, player and mic routinely outweigh horn-to-horn differences; "
-                  "compare your setups with your other setups."))
+        self._section("toner", _("Analyzer"))
+        self._body(_("The Analyzer listens to you play and charts your intonation: each written "
+                  "note as played, in cents. Its harmonic side, behind the HARMONICS switch, "
+                  "is experimental and measures the overtones."))
+
+        self._sub(_("An intonation run"))
+        # The required fields as the preset form names them, in the user's language.
+        needed = ", ".join([_("Horn Type"), _("Make"), _("Model"), _("Player"), _("Mouthpiece")])
+        self._steps([
+            _("Load a preset: Load... on the control strip, or File > Presets... to create one. "
+              "{fields} are required.").format(fields=needed),
+            _("Click Capture and play. Each note held long enough is kept, and the chart draws "
+              "as you go."),
+            _("Click Stop. The run is saved with the preset, dated."),
+        ])
+        self._bullet(_("Free mode, the default, takes the notes as you play them. Guided mode walks "
+                    "you up a chromatic scale, 5 seconds a note, with a large note name to play."))
+        self._bullet(_("The readout counts the frames a held note has given and turns green once "
+                    "there are enough to keep, about a second. A note let go sooner is named as "
+                    "too short."))
+        self._bullet(_("Several takes of one note are one point: their median, with a bar from the "
+                    "lowest to the highest."))
+        self._bullet(_("The dashed line marks the register change. The SAX selector sets the written "
+                    "names and is saved with the preset."))
+
+        self._sub(_("Compare and export"))
+        self._bullet(_("Compare... draws other presets, or single sessions of them, with yours: each "
+                    "run in its own colour and marker."))
+        self._bullet(_("Export... writes the chart as a PNG or a PDF."))
+        self._bullet(_("Low notes on the left or on the right: Options > Settings... > General."))
+
+        self._sub(_("Harmonics (experimental)"))
+        self._body(_("The HARMONICS switch on the control strip puts the harmonic analyzer in place "
+                  "of the chart: it finds the note you play and measures each harmonic up to the "
+                  "20th. Its presets also need Mic Type and Mic Model."))
+        self._body(_("Every reading is the whole chain at once: player, horn, mouthpiece, reed, "
+                  "mic and room. So it measures change, not gear. Change one thing at a time "
+                  "and compare. Mouthpiece, player and mic routinely outweigh horn-to-horn "
+                  "differences; compare your setups with your other setups."))
 
         self._sub(_("Two ways to use it"))
         self._bullet(_("Live: watch the spectrum while you play to see how air, embouchure and "
@@ -1071,7 +1103,7 @@ class UserGuideWindow(tk.Toplevel):
             _("Click Stop. A summary shows which notes you covered and where the gaps are."),
         ])
         self._bullet(_("Capture at least 8 different notes; more is better."))
-        self._bullet(_("Calibration mode walks you up a chromatic scale, 5 seconds per note. "
+        self._bullet(_("Guided mode walks you up a chromatic scale, 5 seconds per note. "
                     "File > Presets... > Import Audio File... analyzes a WAV."))
         self._bullet(_("Sessions are dated and saved automatically."))
 
@@ -1161,7 +1193,8 @@ class UserGuideWindow(tk.Toplevel):
         self._sub(_("How it works"))
         self._bullet(_("Harmonics are measured in dB against the fundamental, so volume and mic "
                     "gain drop out. Below -60 dB counts as noise."))
-        self._bullet(_("The first tenth of a second of each note, the attack, is skipped."))
+        self._bullet(_("Only the frames whose whole analysis window lies inside the note count, "
+                    "so the attack and the release are left out."))
         self._bullet(_("The detector checks whether a loud peak is a harmonic of a lower note, "
                     "which keeps it from reading the wrong octave."))
         self._bullet(_("Notes are averaged first, then the notes together, so many captures of one "
@@ -1176,7 +1209,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Pad presets: File > Export Pad Presets... and Import Pad Presets...."))
         self._bullet(_("Key heights: File > Export Key Sets... and Import Key Sets...."))
         self._bullet(_("Screw specs: File > Export Screw Specs... and Import Screw Specs...."))
-        self._bullet(_("Toner presets: File > Transfer Data."))
+        self._bullet(_("Analyzer presets: File > Transfer Data."))
         self._bullet(_("Everything: File > Import Settings from Folder... copies the settings of "
                     "another installation."))
 
@@ -1369,7 +1402,7 @@ class AboutDialog(tk.Toplevel):
             "\u2022  OEM screw & rod specifications\n"
             "\u2022  Die insert & die holder tooling\n"
             "\u2022  Chromatic strobe tuner\n"
-            "\u2022  Harmonic tone analyzer"
+            "\u2022  Intonation chart and harmonic analyzer"
         )
         tk.Label(self, text=features, bg=DIALOG_BG,
                  font=("Helvetica", 10), justify="left",

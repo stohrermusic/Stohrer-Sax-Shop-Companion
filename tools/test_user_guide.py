@@ -66,7 +66,7 @@ def check(name, fn):
 TOOL_BUTTONS = ["Die Inserts", "Die Holders", "Die Organizer", "Kerf Test", "Speed & Power Test",
                 "Pad Press Spacers", "Tonehole Crescent"]
 SECTION_TITLES = ["Pad Maker", "Getting a job to the laser", "Tooling", "Key Height Library", "Serial Lookup",
-                  "Screw Specs", "Tuner", "Toner (beta)", "Sharing data", "Learn to make pads"]
+                  "Screw Specs", "Tuner", "Analyzer", "Sharing data", "Learn to make pads"]
 MUST_SAY = [
     "Is the lid closed?",                               # the lid question, on Start Frame
     "low power is still power",                         # framing is a live laser
