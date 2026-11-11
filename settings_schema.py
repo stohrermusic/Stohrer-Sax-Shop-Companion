@@ -228,6 +228,7 @@ TONER_SETTINGS = Dict({
     "sax_type": Str(choices=SAX_TYPES),
     "concert_pitch": Bool(),
     "chart_low_notes_left": Bool(),                          # the intonation chart's direction
+    "harmonics_on": Bool(),                                  # the HARMONICS switch's last position
     "analysis_descriptors": Dict({"richness": Bool(), "warmth": Bool(), "even_odd": Bool(), "rolloff_shape": Bool()}),
 })
 

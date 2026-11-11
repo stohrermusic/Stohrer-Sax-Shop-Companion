@@ -25,9 +25,19 @@ migration and the switch's terms run as a new user sees them):
   - Export...: a PNG (opens, twice the chart's size) and a one-page PDF with the title
   - the Settings dialog's "Low notes on the left" tick, saved and flipping the axis
   - the tour's stop for the tab
-  - in German, in a child process: the tab builds and its control strip fits
-Frames run under a real mainloop with a quit timer (see test_tuner_canvas for why a
-root.update() loop can't be used). Self-skips without a display or the audio stack.
+  - the window (Matt, 2026-11-10: "have it resize itself"): the start-up width is the
+    old rule's (tab labels and the Tooling tab, never the Analyzer's strip); selecting
+    the tab widens a narrower window to the strip (Capture on the page), never past the
+    screen; leaving puts the width back; a size the user chose while on the tab, a
+    window already wide enough and a maximized window are left alone
+  - the HARMONICS switch remembers its position across launches, but "on" in a profile
+    that never unlocked counts as off
+  - in every language, in a child process each: the tab builds, the start-up width is
+    not the strip's, the select widens and the leave restores; German labels translated
+Nothing waits a fixed time for the window manager: each geometry change is awaited
+with a bounded poll under the mainloop (settle), so Aqua's late geometry cannot fail a
+check. Frames run under a real mainloop with a quit timer (see test_tuner_canvas for
+why a root.update() loop can't be used). Self-skips without a display or the audio stack.
 """
 import json
 import os
@@ -191,6 +201,16 @@ def main():
         root.after(ms, root.quit)
         root.mainloop()
 
+    def settle(pred, timeout=6.0, what="the window"):
+        """Run the mainloop in slices until pred() holds (a geometry change applied by the
+        window manager, late on Aqua) or the bound passes; never a fixed wait."""
+        deadline = time.time() + timeout
+        while not pred() and time.time() < deadline:
+            run(100)
+        assert pred(), f"{what} did not settle within {timeout:.0f} s"
+
+    W = {}      # the window's sizes as the checks find them
+
     def toplevels():
         return [w for w in root.winfo_children() if isinstance(w, tk.Toplevel)]
 
@@ -224,15 +244,25 @@ def main():
         assert app.settings.get("analyzer_tab_shown_v3") is True, "the build did not run the migration"
         assert "analyzer_tab_shown_v3" not in settings_on_disk(), "building the app wrote the settings file"
         assert app._toner_harmonics_var.get() == "off" and app._toner_mode_var.get() == "free"
+        # the start-up width is the old rule's, not the strip's: the window is narrower than the
+        # strip needs (the Pad Maker is the first tab; nothing has selected the Analyzer yet)
+        root.update_idletasks()
+        W["start"] = (root.winfo_width(), root.winfo_height())
+        W["need"] = app._analyzer_strip_need_px()
+        assert W["start"][0] < W["need"], f"the window opened {W['start'][0]} px wide, the strip's {W['need']}"
+        assert getattr(app, "_analyzer_widened", None) is None
         app.notebook.select(app.toner_tab_frame)
-        run(400)
+        # selecting the tab widens the window to the strip, height unchanged, never past the screen
+        want_w = min(W["need"], root.winfo_screenwidth())
+        settle(lambda: root.winfo_width() == want_w, what="the widening on select")
+        W["widened"] = root.winfo_width()
+        assert root.winfo_height() == W["start"][1], (root.winfo_height(), W["start"][1])
+        assert app._analyzer_widened == (W["start"][0], want_w), app._analyzer_widened
         assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()
         assert app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget("bg") == "#FFFFFF"
-        # the window opened wide enough for the whole control strip: the Capture button, packed
-        # last and rightmost, is on the page (at the 640 px start it was not)
+        # the whole control strip is on the page: the Capture button, packed last and rightmost
         strip, btn = app._toner_ctrl_frame, app._toner_capture_btn
-        assert strip.winfo_reqwidth() <= app._toner_main_frame.winfo_width(), \
-            (strip.winfo_reqwidth(), app._toner_main_frame.winfo_width(), root.winfo_width())
+        settle(lambda: strip.winfo_reqwidth() <= app._toner_main_frame.winfo_width(), what="the page's width")
         assert btn.winfo_ismapped(), "the Capture button is off the page"
         assert btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width()
         texts = [w.cget("text") for w in widgets(app._toner_main_frame, tk.Label)]
@@ -256,6 +286,110 @@ def main():
         dlg.destroy()
         assert "Analyzer" in texts and "Toner" not in texts and "Tuner" in texts, texts
     check("Feature Set offers the tab as Analyzer, in the main list", feature_set_lists_the_analyzer)
+
+    # ---------------------------------------------------------------- the window, case by case
+    def width_is(w):
+        return lambda: root.winfo_width() == w
+
+    def leaving_puts_the_width_back():
+        start_w, start_h = W["start"]
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width going back on leaving")
+        assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None
+        # and again: select widens, leave restores
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the second widening")
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the second restore")
+    check("leaving the tab puts the width back to what it was, height unchanged", leaving_puts_the_width_back)
+
+    def a_size_the_user_chose_stays():
+        start_w, start_h = W["start"]
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the widening")
+        chosen = W["widened"] + 40
+        root.geometry(f"{chosen}x{start_h}")              # the user drags the window wider while on the tab
+        settle(width_is(chosen), what="the user's resize")
+        app.notebook.select(app.pad_tab)
+        run(400)
+        assert root.winfo_width() == chosen, f"the app took back a width the user chose: {root.winfo_width()}"
+        assert getattr(app, "_analyzer_widened", None) is None
+        root.geometry(f"{start_w}x{start_h}")
+        settle(width_is(start_w), what="the reset for the next check")
+    check("a size the user chose while on the tab is left alone on leaving", a_size_the_user_chose_stays)
+
+    def a_window_already_wide_enough_is_left_alone():
+        start_w, start_h = W["start"]
+        wide = W["need"] + 60
+        root.geometry(f"{wide}x{start_h}")
+        settle(width_is(wide), what="the wide window")
+        app.notebook.select(app.toner_tab_frame)
+        run(400)
+        assert root.winfo_width() == wide and getattr(app, "_analyzer_widened", None) is None
+        assert app._toner_capture_btn.winfo_ismapped()
+        app.notebook.select(app.pad_tab)
+        run(400)
+        assert root.winfo_width() == wide, root.winfo_width()
+        root.geometry(f"{start_w}x{start_h}")
+        settle(width_is(start_w), what="the reset for the next check")
+    check("a window already wide enough is left alone, on select and on leave", a_window_already_wide_enough_is_left_alone)
+
+    def a_maximized_window_is_left_alone():
+        start_w, start_h = W["start"]
+        # the guard itself, on every platform: a window that says it is zoomed is not widened,
+        # however narrow (here: the start-up width, with state() stood in)
+        root.state = lambda *a, **k: "zoomed"
+        try:
+            app.notebook.select(app.toner_tab_frame)
+            run(400)
+            assert root.winfo_width() == start_w, f"a zoomed window was widened to {root.winfo_width()}"
+            assert getattr(app, "_analyzer_widened", None) is None
+            app.notebook.select(app.pad_tab)
+            run(400)
+            assert root.winfo_width() == start_w
+        finally:
+            del root.state
+        # and a really maximized window, where the window manager has one
+        try:
+            root.state("zoomed")
+        except tk.TclError as e:
+            print(f"        (skipped: this window manager has no zoomed state: {e})")
+            return
+        run(400)
+        if root.state() != "zoomed":
+            print("        (skipped: the window manager did not maximize the window; no WM under xvfb)")
+            root.state("normal")
+            return
+        w = root.winfo_width()
+        app.notebook.select(app.toner_tab_frame)
+        run(400)
+        assert root.state() == "zoomed" and root.winfo_width() == w, (root.state(), root.winfo_width(), w)
+        assert getattr(app, "_analyzer_widened", None) is None
+        app.notebook.select(app.pad_tab)
+        run(400)
+        assert root.state() == "zoomed" and root.winfo_width() == w
+        root.state("normal")
+        settle(width_is(start_w), what="the window back from maximized")
+    check("a maximized window is left alone, on select and on leave", a_maximized_window_is_left_alone)
+
+    def never_wider_than_the_screen():
+        start_w, start_h = W["start"]
+        narrow = W["need"] - 100                              # a screen narrower than the strip needs
+        root.winfo_screenwidth = lambda: narrow
+        try:
+            app.notebook.select(app.toner_tab_frame)
+            settle(width_is(narrow), what="the widening capped at the screen")
+            assert app._analyzer_widened == (start_w, narrow)
+            # what happens then: the strip still overflows and pack drops its last column
+            assert app._toner_ctrl_frame.winfo_reqwidth() > app._toner_main_frame.winfo_width()
+            app.notebook.select(app.pad_tab)
+            settle(width_is(start_w), what="the restore from the capped width")
+        finally:
+            del root.winfo_screenwidth
+    check("the widening never goes past the screen (on a screen too narrow the strip still overflows)",
+          never_wider_than_the_screen)
+    app.notebook.select(app.toner_tab_frame)
+    settle(width_is(W["widened"]), what="the tab back for the rest")
 
     # ---------------------------------------------------------------- the switch and the terms
     def the_switch_and_the_terms():
@@ -294,11 +428,16 @@ def main():
         app._toner_harmonics_var.set("on")
         run(200)
         assert app._toner_harmonics_frame.winfo_ismapped()
+        # the position is remembered in the settings (written with the next regular save)
+        assert app.settings["toner_settings"]["harmonics_on"] is True
+        app._toner_save_settings()
+        assert app.settings["toner_settings"]["harmonics_on"] is True
         app._toner_harmonics_var.set("off")
         run(200)
+        assert app.settings["toner_settings"]["harmonics_on"] is False
     check("HARMONICS: declined terms put the switch back and unlock nothing; accepted terms unlock (saved) and show "
-          "the spectrum view, marked experimental; off again shows the chart; unlocked, the terms are not asked again",
-          the_switch_and_the_terms)
+          "the spectrum view, marked experimental; off again shows the chart; unlocked, the terms are not asked again; "
+          "the position is remembered in the settings", the_switch_and_the_terms)
 
     # ---------------------------------------------------------------- required fields both ways
     def required_fields_both_ways():
@@ -406,13 +545,17 @@ def main():
             app._toner_mode_var.set("calibration")
             app._toner_toggle_capture()
             assert app._toner_capture_state == "cal_countdown"
-            run(900)
-            assert app._toner_capture_state in ("calibration",), app._toner_capture_state
+            # the loop's frame rate is whatever this machine manages: wait for each state, bounded
+            settle(lambda: app._toner_capture_state == "calibration", timeout=15.0, what="the countdown")
             prompt = [app._toner_chart_canvas.itemcget(i, "text")
                       for i in app._toner_chart_canvas.find_withtag("calprompt")]
-            assert prompt and prompt[0] == "A#3", prompt      # the large note name, on the chart canvas too
-            run(2200)
-            assert app._toner_capture_state == "cal_pause", app._toner_capture_state
+            # the large note name, as a player writes it, whether still waiting or already recording
+            assert prompt and prompt[0] == "Bb3", prompt
+            settle(lambda: app._toner_capture_state == "cal_pause", timeout=20.0, what="the recording")
+            prompt = [app._toner_chart_canvas.itemcget(i, "text")
+                      for i in app._toner_chart_canvas.find_withtag("calprompt")]
+            assert "A#3" not in prompt, prompt
+            assert "Bb3" in app._toner_capture_label.cget("text"), app._toner_capture_label.cget("text")
             caps = app._toner_active_session["captures"]
             assert len(caps) == 1 and caps[0]["method"] == "calibration", caps
             assert caps[0]["written_note"] == "A#3" and caps[0]["note"] == "C#3", caps[0]
@@ -421,7 +564,7 @@ def main():
             app._toner_stop()
             run(300)
             texts = chart_texts()
-            assert "A#3" in texts and "Other" in texts, texts
+            assert "Bb3" in texts and "A#3" not in texts and "Other" in texts, texts
             assert len(chart_markers()) >= 1
         finally:
             toner_tab.CAL_COUNTDOWN_S, toner_tab.CALIBRATION_DURATION_S = old
@@ -607,16 +750,45 @@ sys.path.insert(0, sys.argv[1])
 from i18n import init_translation
 init_translation(sys.argv[2])
 import tkinter as tk
+import time
+import tkinter as tk
+from tkinter import font as tkfont, ttk
 root = tk.Tk()
 root.geometry("+0+0")
+import main as main_mod
 from main import PadSVGGeneratorApp
 app = PadSVGGeneratorApp(root)
 app._toner_mic_checked = True
+
+def run(ms):
+    root.after(ms, root.quit); root.mainloop()
+
+def settle(pred, timeout=6.0):
+    deadline = time.time() + timeout
+    while not pred() and time.time() < deadline:
+        run(100)
+    return pred()
+
 root.update()
-root.after(300, root.quit)
-root.mainloop()                       # the window-fit rule runs after_idle
+run(400)                              # the window-fit rule runs after_idle
+# the old rule's own measure: the tab labels and the Tooling tab, never the strip
+style = ttk.Style(root)
+spec = style.lookup("TNotebook.Tab", "font") or "TkDefaultFont"
+font = tkfont.nametofont(spec) if spec in tkfont.names(root) else tkfont.Font(root, font=spec)
+visible = [t for t in app.notebook.tabs() if app.notebook.tab(t, "state") != "hidden"]
+formula = sum(font.measure(app.notebook.tab(t, "text")) for t in visible) + main_mod.TAB_LABEL_PADDING_PX * len(visible) + 40
+formula = max(formula, app.tooling_tab_frame.winfo_reqwidth() + app._notebook_page_chrome_px())
+start_w, start_h = root.winfo_width(), root.winfo_height()
+need = app._analyzer_strip_need_px()
+screen_w = root.winfo_screenwidth()
 app.notebook.select(app.toner_tab_frame)
-root.update()
+want = max(start_w, min(need, screen_w))
+settled = settle(lambda: root.winfo_width() == want)
+after_select = (root.winfo_width(), root.winfo_height())
+harm_mapped = app._toner_harmonics_frame.winfo_ismapped()
+chart_mapped = app._toner_chart_frame.winfo_ismapped()
+capture_mapped = app._toner_capture_btn.winfo_ismapped()
+page_w = app._toner_main_frame.winfo_width()
 labels = []
 def walk(w):
     for c in w.winfo_children():
@@ -624,41 +796,68 @@ def walk(w):
             labels.append(c.cget("text"))
         walk(c)
 walk(app._toner_ctrl_frame)
-out = {"tab": app.notebook.tab(app.toner_tab_frame, "text"), "labels": labels,
-       "ctrl_req": app._toner_ctrl_frame.winfo_reqwidth(), "page_w": app._toner_main_frame.winfo_width(),
-       "window_w": root.winfo_width(), "capture_mapped": app._toner_capture_btn.winfo_ismapped(),
-       "chart": app._toner_chart_frame.winfo_ismapped(), "buttons": [b.cget("text") for b in app._toner_chart_frame.winfo_children()[1].winfo_children()]}
+buttons = [b.cget("text") for b in app._toner_chart_frame.winfo_children()[1].winfo_children()]
+app.notebook.select(app.pad_tab)
+settled_back = settle(lambda: root.winfo_width() == start_w)
+after_leave = (root.winfo_width(), root.winfo_height())
+out = {"tab": app.notebook.tab(app.toner_tab_frame, "text"), "labels": labels, "buttons": buttons,
+       "formula_w": formula, "start": [start_w, start_h], "need": need, "screen_w": screen_w,
+       "settled": settled, "after_select": list(after_select), "page_w": page_w,
+       "harm_mapped": harm_mapped, "chart_mapped": chart_mapped, "capture_mapped": capture_mapped,
+       "settled_back": settled_back, "after_leave": list(after_leave),
+       "harmonics_var": app._toner_harmonics_var.get()}
 app._toner_stop()
 root.destroy()
 print("REPORT " + json.dumps(out))
 '''
 
-    def in_german():
+    CASES = [
+        ("en", {"language": "en"}), ("es", {"language": "es"}), ("de", {"language": "de"}),
+        ("fr", {"language": "fr"}), ("it", {"language": "it"}),
+        # the switch remembered on, with the terms accepted; and "on" in a profile that never
+        # unlocked (a hand edit), which counts as off
+        ("en-remembered-on", {"language": "en", "toner_unlocked": True, "toner_settings": {"harmonics_on": True}}),
+        ("en-hand-edited-on", {"language": "en", "toner_settings": {"harmonics_on": True}}),
+    ]
+
+    def in_every_language_and_the_remembered_switch():
         reports = {}
-        for lang in ("en", "de"):
-            folder = tempfile.mkdtemp(prefix=f"ssc-analyzer-{lang}-")
+        for case, profile in CASES:
+            folder = tempfile.mkdtemp(prefix=f"ssc-analyzer-{case}-")
             with open(os.path.join(folder, "app_settings.json"), "w", encoding="utf-8") as f:
-                json.dump({"language": lang, "toner_record_wav": False}, f)
+                json.dump(dict(profile, toner_record_wav=False), f)
             env = dict(os.environ, SAXSHOP_CONFIG_DIR=folder, PYTHONIOENCODING="utf-8")
-            p = subprocess.run([sys.executable, "-c", CHILD, REPO, lang], capture_output=True, text=True, env=env,
-                               timeout=240, cwd=REPO, encoding="utf-8")
+            p = subprocess.run([sys.executable, "-c", CHILD, REPO, profile["language"]], capture_output=True,
+                               text=True, env=env, timeout=240, cwd=REPO, encoding="utf-8")
             line = [ln for ln in (p.stdout or "").splitlines() if ln.startswith("REPORT ")]
-            assert p.returncode == 0 and line, (lang, p.returncode, (p.stdout or "")[-300:], (p.stderr or "")[-1200:])
-            reports[lang] = json.loads(line[0][7:])
+            assert p.returncode == 0 and line, (case, p.returncode, (p.stdout or "")[-300:], (p.stderr or "")[-1200:])
+            reports[case] = json.loads(line[0][7:])
+        for case, r in reports.items():
+            start_w, start_h = r["start"]
+            # the start-up width is the old rule's: at least its measure, and never the strip's
+            assert start_w >= r["formula_w"], f"{case}: opened {start_w} px, the tab/Tooling rule asks {r['formula_w']}"
+            assert start_w < r["need"], f"{case}: the start-up window ({start_w} px) is already the strip's ({r['need']})"
+            want = max(start_w, min(r["need"], r["screen_w"]))
+            assert r["settled"] and r["after_select"] == [want, start_h], (case, r["after_select"], want, start_h)
+            assert r["capture_mapped"] or r["need"] > r["screen_w"], f"{case}: Capture off the page at {r['after_select']}"
+            assert r["settled_back"] and r["after_leave"] == [start_w, start_h], (case, r["after_leave"], r["start"])
+            assert len(r["buttons"]) == 2, (case, r["buttons"])
+        plain = {c: r for c, r in reports.items() if "-" not in c}
+        for case, r in plain.items():
+            assert r["chart_mapped"] and not r["harm_mapped"] and r["harmonics_var"] == "off", case
         en, de = reports["en"], reports["de"]
-        for lang, r in reports.items():
-            assert r["chart"], f"{lang}: the chart is not the view shown"
-            assert len(r["buttons"]) == 2, (lang, r["buttons"])
-            assert r["ctrl_req"] <= r["page_w"] and r["capture_mapped"], \
-                f"{lang}: the control strip asks {r['ctrl_req']} px of a {r['page_w']} px page ({r['window_w']} px window)"
         assert "HARMONICS" in en["labels"] and "guided" in en["labels"], en["labels"]
         assert len(de["labels"]) == len(en["labels"]), (de["labels"], en["labels"])
-        # the German catalog carries the new strings once it is compiled; the switch labels are
-        # translated (a word the two languages share may stay)
         changed = [a for a, b in zip(en["labels"], de["labels"]) if a != b and re.search(r"[A-Za-z]{3,}", a)]
         assert changed, "no control-strip label is translated in German"
-    check("in German (a child process): the tab builds on the chart, its control strip fits the page, and its "
-          "labels are translated", in_german)
+        on = reports["en-remembered-on"]
+        assert on["harm_mapped"] and not on["chart_mapped"] and on["harmonics_var"] == "on", on
+        hand = reports["en-hand-edited-on"]
+        assert hand["chart_mapped"] and not hand["harm_mapped"] and hand["harmonics_var"] == "off", hand
+    check("in every language (a child process each): the start-up width is the old rule's, selecting the tab widens "
+          "to the strip and leaving restores, German labels translated; the switch remembered on shows the spectrum "
+          "on an unlocked profile and counts as off on one that never unlocked",
+          in_every_language_and_the_remembered_switch)
 
     print("=" * 60)
     print(f"{sum(results)}/{len(results)} passed")

@@ -49,9 +49,9 @@ def cap(concert_midi, cents, frames=30):
             "harmonics_db": [0.0, -3.0, -6.0], "n_frames": frames, "method": "free"}
 
 
-# Two tenor runs: A over concert G#2..E4 (written A#3..F#5, both registers), B over part of it.
+# Two tenor runs: A over concert G#2..E4 (written Bb3..F#5, both registers), B over part of it.
 RUN_A = I.run_from_captures([{"captures": [cap(44 + k, -6 + k) for k in range(0, 19)]
-                                           + [cap(44, 4)]}], "Tenor", name="Mark VI, Link 7*")   # A#3 twice: 2 takes
+                                           + [cap(44, 4)]}], "Tenor", name="Mark VI, Link 7*")   # Bb3 twice: 2 takes
 RUN_B = I.run_from_captures([{"captures": [cap(46 + k, 3 - k) for k in range(0, 8)]}], "Tenor", name="Conn 10M")
 OV = I.overlay([RUN_A, RUN_B])
 W, H = 800, 400
@@ -72,7 +72,7 @@ print("=" * 60)
 
 
 def the_frame_and_the_axis():
-    assert OV["notes"][0] == "A#3" and OV["notes"][-1] == "E5" and len(OV["notes"]) == 19
+    assert OV["notes"][0] == "Bb3" and OV["notes"][-1] == "E5" and len(OV["notes"]) == 19
     assert PRIMS[0]["kind"] == "background" and PRIMS[0]["width"] == W and PRIMS[0]["height"] == H
     xs = notes_x(PRIMS)
     assert set(xs) == set(OV["notes"]), set(xs) ^ set(OV["notes"])
@@ -113,7 +113,7 @@ def flipped_puts_the_low_notes_on_the_right():
     prims = C.chart_primitives(OV, W, H, low_left=False)
     xs = notes_x(prims)
     assert sorted(xs, key=xs.get) == list(reversed(OV["notes"]))
-    assert xs["A#3"] > xs["E5"]
+    assert xs["Bb3"] > xs["E5"]
     dashed = [p for p in of("line", prims) if p.get("dash")]
     assert xs["D5"] < dashed[0]["x1"] < xs["C#5"]
 check("the preference flips it: low notes on the right, the register line between the same two notes",
@@ -131,9 +131,9 @@ def one_colour_and_marker_per_run():
     assert len(polys[0]["points"]) == 19 and len(polys[1]["points"]) == 8
     xs = notes_x(PRIMS)
     assert [round(x) for x, _y in polys[1]["points"]] == [round(xs[n]) for n in RUN_B.notes], "B's points sit on its notes"
-    # the spread bar: A#3 has two takes (4 and -6 cents): a vertical bar in A's colour, none for single takes
+    # the spread bar: Bb3 has two takes (4 and -6 cents): a vertical bar in A's colour, none for single takes
     bars = [p for p in of("line") if p["color"] == C.LINE_STYLES[0][0] and p["x1"] == p["x2"] and not p.get("dash")]
-    assert len(bars) == 1 and abs(bars[0]["x1"] - xs["A#3"]) < 1e-6, bars
+    assert len(bars) == 1 and abs(bars[0]["x1"] - xs["Bb3"]) < 1e-6, bars
     assert not [p for p in of("line") if p["color"] == C.LINE_STYLES[1][0] and p["x1"] == p["x2"] and p["y1"] != p["y2"]]
     # seven styles, then they cycle; five marker shapes
     assert len(C.LINE_STYLES) == 7 and C.style_for(7) == C.LINE_STYLES[0] and set(C.MARKERS) >= {s for _c, s in C.LINE_STYLES}

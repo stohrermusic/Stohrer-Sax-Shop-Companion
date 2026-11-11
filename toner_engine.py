@@ -1034,6 +1034,21 @@ def transpose_note(concert_note, sax_type):
     return _shift_note(concert_note, shift)
 
 
+PLAYER_SPELLING = {"A#": "Bb", "D#": "Eb"}     # the rest (C#, F#, G#) a player writes as sharps
+
+
+def player_note_name(note_name):
+    """A note name as a saxophone player writes it: Bb and Eb for A# and D#, the other
+    sharps as they are (Matt, 2026-11-10). For display only: stored names, the pitch
+    tables and the parsers keep this app's sharps-only spelling."""
+    if not note_name or len(note_name) < 2:
+        return note_name
+    pc, octave = note_name[:2], note_name[2:]
+    if pc in PLAYER_SPELLING:
+        return PLAYER_SPELLING[pc] + octave
+    return note_name
+
+
 def reverse_transpose_note(written_note, sax_type):
     """Transpose a written pitch note name back to concert pitch.
 

@@ -548,13 +548,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         request: the library and audio tabs ask for 850 px and more on
         every platform and are built to live in less.
 
-        The Analyzer's control strip is the one other thing counted
-        (2026-11-10): one row of switches, the sax selector and Load /
-        MODE / Capture, about 910 px in English and 1040 in German, which
-        pack clips from the right when the page is narrower. At the 640 px
-        start the Capture button was off the page; while the tab was the
-        opt-in Toner its terms said "run it in full screen", and now the
-        tab shows by default.
+        The Analyzer's control strip (about 910 px in English, 1040 in
+        German, which pack clips from the right when the page is narrower)
+        is NOT counted here: the window widens for it when that tab is
+        selected and goes back when the user leaves it
+        (_widen_for_analyzer / _unwiden_after_analyzer; Matt, 2026-11-10:
+        "have it resize itself" rather than a wider start-up).
 
         The room between the window's width and a notebook page's width
         (the pack padx round the notebook, its own border and inset) is
@@ -577,17 +576,63 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             tooling = getattr(self, 'tooling_tab_frame', None)
             if tooling is not None and str(tooling) in visible:
                 need = max(need, tooling.winfo_reqwidth() + self._notebook_page_chrome_px())
-            toner = getattr(self, 'toner_tab_frame', None)
-            strip = getattr(self, '_toner_ctrl_frame', None)
-            if toner is not None and strip is not None and str(toner) in visible:
-                # the strip packs with padx=5 inside the tab's main frame
-                need = max(need, strip.winfo_reqwidth() + 10 + self._notebook_page_chrome_px())
             cur_w = self.root.winfo_width()
             if cur_w <= 1:
                 cur_w = 640
             if need > cur_w:
                 h = self.root.winfo_height()
                 self.root.geometry(f"{int(need)}x{h if h > 1 else 720}")
+        except tk.TclError:
+            pass
+
+    def _analyzer_strip_need_px(self):
+        """The window width the Analyzer's control strip needs: its request,
+        the strip's own padx (5 a side inside the tab's main frame) and the
+        notebook's chrome; 0 while the tab has no strip (the fallback UI)."""
+        strip = getattr(self, '_toner_ctrl_frame', None)
+        if strip is None:
+            return 0
+        return int(strip.winfo_reqwidth() + 10 + self._notebook_page_chrome_px())
+
+    def _widen_for_analyzer(self):
+        """On selecting the Analyzer tab: a window narrower than its control
+        strip (pack would drop the Capture button off the page) is widened
+        to fit, never past the screen, height and position unchanged. A
+        maximized window is left alone, and so is one already wide enough.
+        What was widened is remembered for _unwiden_after_analyzer."""
+        try:
+            if self.root.state() == 'zoomed' or getattr(self, '_analyzer_widened', None):
+                return
+            self.root.update_idletasks()
+            need = self._analyzer_strip_need_px()
+            cur_w, h = self.root.winfo_width(), self.root.winfo_height()
+            if cur_w <= 1 or h <= 1 or need <= cur_w:
+                return
+            new_w = min(need, self.root.winfo_screenwidth())
+            if new_w <= cur_w:
+                return
+            self.root.geometry(f"{new_w}x{h}")
+            self._analyzer_widened = (cur_w, new_w)
+        except tk.TclError:
+            pass
+
+    def _unwiden_after_analyzer(self):
+        """On leaving the Analyzer tab: the width goes back to what it was
+        before _widen_for_analyzer, but only if the app did the widening and
+        the window is still exactly that wide (a size the user chose since,
+        or a maximize, is theirs and stays). Height and position unchanged."""
+        record = getattr(self, '_analyzer_widened', None)
+        self._analyzer_widened = None
+        if not record:
+            return
+        before, widened_to = record
+        try:
+            if self.root.state() == 'zoomed':
+                return
+            self.root.update_idletasks()
+            if self.root.winfo_width() != widened_to:
+                return
+            self.root.geometry(f"{before}x{self.root.winfo_height()}")
         except tk.TclError:
             pass
 
@@ -633,12 +678,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         # Start/stop audio tabs
         if selected == str(self.tuner_tab_frame):
+            self._unwiden_after_analyzer()
             self._toner_stop()
             self._tuner_start()
         elif selected == str(self.toner_tab_frame):
             self._tuner_stop()
+            self._widen_for_analyzer()
             self._toner_start()
         else:
+            self._unwiden_after_analyzer()
             self._tuner_stop()
             self._toner_stop()
 

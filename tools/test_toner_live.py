@@ -361,7 +361,7 @@ def main():
         assert app._toner_capture_state == "cal_countdown", "the countdown runs on audio time, not the wall clock"
         tick(toner_tab.CAL_COUNTDOWN_S)                              # ...the sound handed over does
         app._toner_process_capture_frame(silence())
-        assert app._toner_capture_state == "calibration" and app._toner_capture_label.cget("text") == "Play A#3 (1/32)"
+        assert app._toner_capture_state == "calibration" and app._toner_capture_label.cget("text") == "Play Bb3 (1/32)"
         # a frame under the capture threshold does not start the recording
         g_sharp2 = 103.83
         app._toner_process_capture_frame(frame(g_sharp2, "G#2", level=0.4))

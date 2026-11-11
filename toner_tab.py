@@ -46,7 +46,7 @@ try:
         get_rolloff_threshold,
         load_tone_presets, save_tone_presets,
         analyze_audio_file, check_mic_quality,
-        transpose_note, reverse_transpose_note, note_to_freq,
+        transpose_note, reverse_transpose_note, note_to_freq, player_note_name,
         compute_population_stats, percentile_rank,
         find_out_of_range_notes, note_name_to_midi,
         unwrap_tone_import, TonePresetsImportError,
@@ -474,8 +474,11 @@ class TonerTabMixin:
         sens_str.trace_add("write", _sens_from_switch)
 
         # HARMONICS: the harmonic analyzer (experimental) in place of the chart.
-        # Off at every start; the first "on" asks the terms (_toner_on_harmonics_switched).
-        self._toner_harmonics_var = tk.StringVar(value="off")
+        # Where it was left (toner_settings.harmonics_on), and only with the terms
+        # accepted: "on" in a file that never unlocked is a hand edit and counts as
+        # off. The first "on" asks the terms (_toner_on_harmonics_switched).
+        remembered_on = bool(toner_settings.get("harmonics_on")) and bool(self.settings.get("toner_unlocked"))
+        self._toner_harmonics_var = tk.StringVar(value="on" if remembered_on else "off")
         self._toner_harmonics_int = _make_vswitch(
             left_col, _("HARMONICS"), self._toner_harmonics_var,
             "off", "on", _("off"), _("on"), 4)
@@ -637,7 +640,7 @@ class TonerTabMixin:
             command=self._toner_toggle_capture)
         self._toner_capture_btn.pack(side="left", ipady=4)
 
-        self._toner_show_harmonics(False)
+        self._toner_show_harmonics(self._toner_harmonics_var.get() == "on")
 
     def _create_toner_fallback(self, parent):
         """Fallback UI when audio libraries are unavailable."""
@@ -1564,29 +1567,38 @@ class TonerTabMixin:
         add_tooltip(ok_btn, _("Apply all changes and close."))
         add_tooltip(cancel_btn, _("Close without applying any changes."))
 
-    def _toner_transpose_note(self, concert_note):
-        """Transpose a concert pitch note name to written pitch for display.
+    def _toner_transpose_note(self, concert_note, player=True):
+        """Transpose a concert pitch note name to written pitch for display,
+        spelled as a player writes it (Bb, Eb) unless player=False (the
+        stored `detected_as` keeps this app's sharps).
 
-        Returns the original note if concert pitch display is on.
+        Returns the original note (spelled) if concert pitch display is on.
         Uses the engine's pure transpose_note() function.
         """
-        if not concert_note or self._toner_concert_pitch.get():
+        if not concert_note:
             return concert_note
-        return transpose_note(concert_note, self._toner_sax_var.get())
+        if self._toner_concert_pitch.get():
+            shown = concert_note
+        else:
+            shown = transpose_note(concert_note, self._toner_sax_var.get())
+        return player_note_name(shown) if player else shown
 
     def _toner_display_note_for_preset(self, concert_note, preset=None):
-        """Transpose a concert note for display using a preset's horn type.
+        """Transpose a concert note for display using a preset's horn type,
+        spelled as a player writes it.
 
         Used in reports and comparisons where the active sax selector might
         not match the preset being viewed.
         """
-        if not concert_note or self._toner_concert_pitch.get():
+        if not concert_note:
             return concert_note
+        if self._toner_concert_pitch.get():
+            return player_note_name(concert_note)
         if preset:
             sax_type = preset.get('horn_type', self._toner_sax_var.get())
         else:
             sax_type = self._toner_sax_var.get()
-        return transpose_note(concert_note, sax_type)
+        return player_note_name(transpose_note(concert_note, sax_type))
 
     def _toner_update_pitch_mode_label(self):
         """Update the pitch mode indicator on the spectrum canvas."""
@@ -1648,6 +1660,8 @@ class TonerTabMixin:
         """Put the harmonic analyzer (on) or the intonation chart in the top area."""
         shown = self._toner_harmonics_frame if on else self._toner_chart_frame
         hidden = self._toner_chart_frame if on else self._toner_harmonics_frame
+        # remembered across launches (written with the next settings save)
+        self.settings.setdefault("toner_settings", {})["harmonics_on"] = bool(on)
         hidden.pack_forget()
         if not shown.winfo_manager():
             first = self._toner_main_frame.pack_slaves()     # the capture bar if shown, else the controls
@@ -3365,7 +3379,7 @@ class TonerTabMixin:
             # Countdown done — start calibration
             self._toner_capture_state = 'calibration'
             cal_notes = self._toner_cal_notes
-            first_note = cal_notes[0]
+            first_note = player_note_name(cal_notes[0])
             self._toner_capture_label.configure(
                 text=_("Play {note} (1/{total})").format(note=first_note, total=len(cal_notes)))
             self._toner_capture_progress.configure(text=_("waiting..."))
@@ -3382,8 +3396,10 @@ class TonerTabMixin:
                     _("Calibration capture finished!\n{count} notes recorded.").format(count=len(cal_notes)))
                 return
 
-            # Notes are already in written pitch — display directly
+            # Notes are already in written pitch (this app's sharps: the stored
+            # written_note); shown as a player writes them
             display_note = cal_notes[self._toner_cal_index]
+            shown_note = player_note_name(display_note)
             note_num = self._toner_cal_index + 1
             total = len(cal_notes)
             has_signal = self._toner_signal_above_threshold(result)
@@ -3396,13 +3412,13 @@ class TonerTabMixin:
                     self._toner_cal_last_signal = self._toner_capture_start
                     self._toner_capture_frames = []
                     self._toner_capture_label.configure(
-                        text=_("Recording {note}... ({i}/{total})").format(note=display_note, i=note_num, total=total))
-                    self._toner_update_cal_prompt(display_note, "recording...")
+                        text=_("Recording {note}... ({i}/{total})").format(note=shown_note, i=note_num, total=total))
+                    self._toner_update_cal_prompt(shown_note, "recording...")
                 else:
                     self._toner_capture_label.configure(
-                        text=_("Play {note} ({i}/{total})").format(note=display_note, i=note_num, total=total))
+                        text=_("Play {note} ({i}/{total})").format(note=shown_note, i=note_num, total=total))
                     self._toner_capture_progress.configure(text=_("waiting..."))
-                    self._toner_update_cal_prompt(display_note, f"({note_num}/{total})")
+                    self._toner_update_cal_prompt(shown_note, f"({note_num}/{total})")
                 return
 
             # Recording this note: a frame is kept once its whole window lies inside
@@ -3432,10 +3448,10 @@ class TonerTabMixin:
             remaining = CALIBRATION_DURATION_S - elapsed
             n_frames = len(self._toner_capture_frames)
             self._toner_capture_label.configure(
-                text=_("Recording {note}... {seconds:.1f}s ({i}/{total})").format(note=display_note, seconds=remaining, i=note_num, total=total))
+                text=_("Recording {note}... {seconds:.1f}s ({i}/{total})").format(note=shown_note, seconds=remaining, i=note_num, total=total))
             self._toner_capture_progress.configure(
                 text=_("({count} frames)").format(count=n_frames))
-            self._toner_update_cal_prompt(display_note, f"recording {remaining:.0f}s")
+            self._toner_update_cal_prompt(shown_note, f"recording {remaining:.0f}s")
 
             if remaining <= 0:
                 # The note stopped inside the recording: the frames whose window
@@ -3452,7 +3468,7 @@ class TonerTabMixin:
 
                     from collections import Counter
                     detected = Counter(
-                        self._toner_transpose_note(f['detected_note'])
+                        self._toner_transpose_note(f['detected_note'], player=False)
                         for f in self._toner_capture_frames)
                     top_detected = detected.most_common(1)[0][0] if detected else "?"
 
@@ -3489,7 +3505,7 @@ class TonerTabMixin:
                 self._toner_capture_frames = []
                 self._toner_capture_state = 'cal_pause'
                 self._toner_capture_label.configure(
-                    text=_("Captured {note} ✓  stop playing...").format(note=display_note))
+                    text=_("Captured {note} ✓  stop playing...").format(note=shown_note))
                 self._toner_capture_progress.configure(text="")
                 self._toner_update_cal_prompt("\u2713", "stop playing...")
             return
@@ -3504,7 +3520,7 @@ class TonerTabMixin:
 
                 cal_notes = self._toner_cal_notes
                 if self._toner_cal_index < len(cal_notes):
-                    next_note = cal_notes[self._toner_cal_index]
+                    next_note = player_note_name(cal_notes[self._toner_cal_index])
                     note_num = self._toner_cal_index + 1
                     total = len(cal_notes)
                     self._toner_capture_label.configure(
@@ -6269,6 +6285,7 @@ class TonerTabMixin:
             "scale_mode": self._toner_scale_var.get() if hasattr(self, '_toner_scale_var') else "linear",
             "sax_type": self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else "Alto",
             "concert_pitch": self._toner_concert_pitch.get() if hasattr(self, '_toner_concert_pitch') else False,
+            "harmonics_on": self._toner_harmonics_on(),
         })
         # Flush any in-flight capture data so exiting mid-capture doesn't
         # lose the most recent micro-captures (deferred saves batch 10s).

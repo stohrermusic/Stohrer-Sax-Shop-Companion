@@ -26,7 +26,7 @@ import statistics
 from dataclasses import dataclass, field
 
 from toner_engine import (
-    SAX_TRANSPOSITIONS, _capture_is_plausible, note_name_to_midi, transpose_note,
+    SAX_TRANSPOSITIONS, _capture_is_plausible, note_name_to_midi, player_note_name, transpose_note,
 )
 
 A4_HZ = 440.0
@@ -84,7 +84,7 @@ class Take:
 @dataclass
 class NoteReading:
     """One written note and its takes."""
-    note: str                           # written name, this app's spelling (sharps)
+    note: str                           # written name as a player writes it (Bb, Eb; C#, F#, G#)
     written_midi: int
     concert_midi: int
     register: int                       # 1 low, 2 octave key (palm keys are register 2)
@@ -184,7 +184,8 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
                         frames=frames, seconds=frames * FRAME_SECONDS, method=str(cap.get("method", "")),
                         level_dbfs=cap.get("level_dbfs"), session_date=str(s.get("date", "")))
             if wm not in readings:
-                readings[wm] = NoteReading(note=transpose_note(cap["note"], sax_type), written_midi=wm,
+                readings[wm] = NoteReading(note=player_note_name(transpose_note(cap["note"], sax_type)),
+                                           written_midi=wm,
                                            concert_midi=concert, register=register_of_written(wm))
             readings[wm].takes.append(take)
             used += 1
