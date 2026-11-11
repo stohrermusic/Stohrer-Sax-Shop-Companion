@@ -3065,7 +3065,7 @@ msgstr ""
 "rápidamente."
 
 #: toner_tab.py:3063
-msgid "Create && Start Capturing"
+msgid "Create & Start Capturing"
 msgstr "Crear e iniciar captura"
 
 #: toner_tab.py:3137
@@ -3786,7 +3786,7 @@ msgid "Select a preset from the list."
 msgstr "Seleccione un preajuste de la lista."
 
 #: toner_tab.py:6491
-msgid "Import && Analyze"
+msgid "Import & Analyze"
 msgstr "Importar y analizar"
 
 #: toner_tab.py:6535
@@ -3798,7 +3798,7 @@ msgid "Describe the horn and setup heard in the recording."
 msgstr "Describa el saxofón y la configuración que se escucha en la grabación."
 
 #: toner_tab.py:6581
-msgid "Create && Import"
+msgid "Create & Import"
 msgstr "Crear e importar"
 
 #: toner_tab.py:6593

@@ -3059,7 +3059,7 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_row, text=_("Create && Start Capturing"),
+        tk.Button(btn_row, text=_("Create & Start Capturing"),
                   command=save_and_start).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
@@ -6487,7 +6487,7 @@ class TonerTabMixin:
 
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(5, 0))
-        tk.Button(btn_row, text=_("Import && Analyze"),
+        tk.Button(btn_row, text=_("Import & Analyze"),
                   command=do_import).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
@@ -6577,7 +6577,7 @@ class TonerTabMixin:
                 self._toner_do_file_import(filepath, source_notes)
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_row, text=_("Create && Import"),
+        tk.Button(btn_row, text=_("Create & Import"),
                   command=save_and_import).pack(side="left", padx=(0, 5))
         tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")

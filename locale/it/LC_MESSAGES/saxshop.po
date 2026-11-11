@@ -3050,8 +3050,8 @@ msgstr ""
 "l'acquisizione."
 
 #: toner_tab.py:3063
-msgid "Create && Start Capturing"
-msgstr "Crea && inizia acquisizione"
+msgid "Create & Start Capturing"
+msgstr "Crea e inizia acquisizione"
 
 #: toner_tab.py:3137
 msgid "This run is not saved with a preset yet. Where should it go?"
@@ -3770,8 +3770,8 @@ msgid "Select a preset from the list."
 msgstr "Selezioni un preset dalla lista."
 
 #: toner_tab.py:6491
-msgid "Import && Analyze"
-msgstr "Importa && analizza"
+msgid "Import & Analyze"
+msgstr "Importa e analizza"
 
 #: toner_tab.py:6535
 msgid "Create Tone Preset for Audio Import"
@@ -3782,8 +3782,8 @@ msgid "Describe the horn and setup heard in the recording."
 msgstr "Descriva lo strumento e il setup sentiti nella registrazione."
 
 #: toner_tab.py:6581
-msgid "Create && Import"
-msgstr "Crea && importa"
+msgid "Create & Import"
+msgstr "Crea e importa"
 
 #: toner_tab.py:6593
 #, python-brace-format

@@ -1382,7 +1382,7 @@ def main():
             values = list(combo["values"])
             assert "[My Presets] Alto — KH" in values and "[My Presets] Tenor — Bench" in values, values
             combo.current(values.index("[My Presets] Alto — KH"))
-            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import && Analyze"].invoke()
+            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import & Analyze"].invoke()
             run(200)
             assert not dlg.winfo_exists(), "the import dialog stayed open"
             s = app._toner_presets["My Presets"]["KH"]["sessions"][-1]
@@ -1394,15 +1394,15 @@ def main():
             app._toner_import_audio_file()
             dlg = [w for w in toplevels() if w not in before][0]
             [r for r in widgets(dlg, tk.Radiobutton) if r.cget("text") == "Create new preset..."][0].invoke()
-            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import && Analyze"].invoke()
+            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import & Analyze"].invoke()
             run(100)
             assert not dlg.winfo_exists(), "the import dialog stayed open"
             form = [w for w in toplevels() if w not in before and w.winfo_exists()][0]
             assert form.title() == "New Tone Preset", form.title()
             fbuttons = {b.cget("text"): b for b in widgets(form, tk.Button)}
-            assert "Create && Import" in fbuttons, sorted(fbuttons)
+            assert "Create & Import" in fbuttons, sorted(fbuttons)
             assert any(c.get() == "(none)" for c in widgets(form, ttk.Combobox)), "no Key heights picker on the import's form"
-            fbuttons["Create && Import"].invoke()
+            fbuttons["Create & Import"].invoke()
             run(50)
             assert form.winfo_exists(), "the form accepted an empty preset"
             assert box_guard.GUARD.shown[-1][1] == "Required Field", box_guard.GUARD.shown[-1]
@@ -1410,7 +1410,7 @@ def main():
             for e, v in zip(entries, ("Imported", "Conn", "6M", "Me", "M5")):      # name, make, model, player, mouthpiece
                 e.delete(0, "end")
                 e.insert(0, v)
-            fbuttons["Create && Import"].invoke()
+            fbuttons["Create & Import"].invoke()
             run(300)
             assert not form.winfo_exists(), "the form stayed open with the required fields filled"
             p = app._toner_presets["My Presets"]["Imported"]

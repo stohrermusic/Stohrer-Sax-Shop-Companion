@@ -3077,7 +3077,7 @@ msgstr ""
 "beginnen können."
 
 #: toner_tab.py:3063
-msgid "Create && Start Capturing"
+msgid "Create & Start Capturing"
 msgstr "Anlegen und Aufnahme starten"
 
 #: toner_tab.py:3137
@@ -3809,7 +3809,7 @@ msgid "Select a preset from the list."
 msgstr "Wählen Sie eine Voreinstellung aus der Liste."
 
 #: toner_tab.py:6491
-msgid "Import && Analyze"
+msgid "Import & Analyze"
 msgstr "Importieren und Analysieren"
 
 #: toner_tab.py:6535
@@ -3823,7 +3823,7 @@ msgstr ""
 "ist."
 
 #: toner_tab.py:6581
-msgid "Create && Import"
+msgid "Create & Import"
 msgstr "Anlegen und Importieren"
 
 #: toner_tab.py:6593
