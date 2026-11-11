@@ -72,8 +72,8 @@ print("=" * 60)
 
 
 def the_frame_and_the_axis():
-    assert OV["notes"][0] == "Bb3" and OV["notes"][-1] == "E5" and len(OV["notes"]) == 19
-    assert PRIMS[0]["kind"] == "background" and PRIMS[0]["width"] == W and PRIMS[0]["height"] == H
+    assert OV["notes"][0] == "Bb3" and OV["notes"][-1] == "E5" and len(OV["notes"]) == 19, "OV[\"notes\"][0] == \"Bb3\" and OV[\"notes\"][-1] == \"E5\" and len(OV[\"notes\"]) == 19"
+    assert PRIMS[0]["kind"] == "background" and PRIMS[0]["width"] == W and PRIMS[0]["height"] == H, "PRIMS[0][\"kind\"] == \"background\" and PRIMS[0][\"width\"] == W and PRIMS[0][\"height\"] == H"
     xs = notes_x(PRIMS)
     assert set(xs) == set(OV["notes"]), set(xs) ^ set(OV["notes"])
     order = sorted(xs, key=xs.get)
@@ -85,11 +85,11 @@ def the_frame_and_the_axis():
     y_axis = [p for p in of("text") if p.get("angle") == 0 and p["anchor"] == "e"]
     ticks = [p["text"] for p in y_axis]
     lo, hi = C.y_range([p.cents for ln in OV["lines"] for p in ln["points"].values()])
-    assert (lo, hi) == (-20, 20)                                   # cents -6..+12 and 0, a 5-cent margin, 10-cent steps
+    assert (lo, hi) == (-20, 20), "(lo, hi) == (-20, 20)"                                   # cents -6..+12 and 0, a 5-cent margin, 10-cent steps
     assert ticks == [(f"{c:+.0f}" if c else "0") for c in range(lo, hi + 1, 10)], ticks
     grid = [p for p in of("line") if p["color"] in (C.GRID, C.ZERO_LINE)]
     assert len(grid) == 5 and sum(1 for p in grid if p["color"] == C.ZERO_LINE) == 1, "a line every 10 cents, the zero line solid"
-    assert any(p["text"] == "cents" and p["angle"] == 90 for p in of("text"))
+    assert any(p["text"] == "cents" and p["angle"] == 90 for p in of("text")), "any(p[\"text\"] == \"cents\" and p[\"angle\"] == 90 for p in of(\"text\"))"
     assert any(p["text"] == "Two horns" and p["bold"] for p in of("text")), "the title line"
 check("the frame: the notes along the bottom low to high, evenly spaced, turned 90 degrees; a grid every 10 cents "
       "with the zero line solid; the y labels; the title", the_frame_and_the_axis)
@@ -104,7 +104,7 @@ def the_register_change_is_dashed_between_c_sharp5_and_d5():
     assert dashed[0]["x2"] == x, "vertical"
     # a run within one register has no dashed line
     one = C.chart_primitives(I.overlay([RUN_B]), W, H)
-    assert not [p for p in of("line", one) if p.get("dash")]
+    assert not [p for p in of("line", one) if p.get("dash")], "not [p for p in of(\"line\", one) if p.get(\"dash\")]"
 check("the register change is one dashed vertical line, halfway between written C#5 and D5",
       the_register_change_is_dashed_between_c_sharp5_and_d5)
 
@@ -112,10 +112,10 @@ check("the register change is one dashed vertical line, halfway between written 
 def flipped_puts_the_low_notes_on_the_right():
     prims = C.chart_primitives(OV, W, H, low_left=False)
     xs = notes_x(prims)
-    assert sorted(xs, key=xs.get) == list(reversed(OV["notes"]))
-    assert xs["Bb3"] > xs["E5"]
+    assert sorted(xs, key=xs.get) == list(reversed(OV["notes"])), "sorted(xs, key=xs.get) == list(reversed(OV[\"notes\"]))"
+    assert xs["Bb3"] > xs["E5"], "xs[\"Bb3\"] > xs[\"E5\"]"
     dashed = [p for p in of("line", prims) if p.get("dash")]
-    assert xs["D5"] < dashed[0]["x1"] < xs["C#5"]
+    assert xs["D5"] < dashed[0]["x1"] < xs["C#5"], "xs[\"D5\"] < dashed[0][\"x1\"] < xs[\"C#5\"]"
 check("the preference flips it: low notes on the right, the register line between the same two notes",
       flipped_puts_the_low_notes_on_the_right)
 
@@ -123,20 +123,20 @@ check("the preference flips it: low notes on the right, the register line betwee
 def one_colour_and_marker_per_run():
     markers = of("marker")
     polys = of("polyline")
-    assert len(polys) == 2 and polys[0]["color"] == C.LINE_STYLES[0][0] and polys[1]["color"] == C.LINE_STYLES[1][0]
+    assert len(polys) == 2 and polys[0]["color"] == C.LINE_STYLES[0][0] and polys[1]["color"] == C.LINE_STYLES[1][0], "len(polys) == 2 and polys[0][\"color\"] == C.LINE_STYLES[0][0] and polys[1][\"color\"] == C.LINE_STYLES[1][0]"
     a = [m for m in markers if m["color"] == C.LINE_STYLES[0][0]]
     b = [m for m in markers if m["color"] == C.LINE_STYLES[1][0]]
-    assert {m["shape"] for m in a} == {"circle"} and {m["shape"] for m in b} == {"square"}
+    assert {m["shape"] for m in a} == {"circle"} and {m["shape"] for m in b} == {"square"}, "{m[\"shape\"] for m in a} == {\"circle\"} and {m[\"shape\"] for m in b} == {\"square\"}"
     assert len(a) == 19 + 1 and len(b) == 8 + 1, (len(a), len(b))        # the notes plus the legend's marker
-    assert len(polys[0]["points"]) == 19 and len(polys[1]["points"]) == 8
+    assert len(polys[0]["points"]) == 19 and len(polys[1]["points"]) == 8, "len(polys[0][\"points\"]) == 19 and len(polys[1][\"points\"]) == 8"
     xs = notes_x(PRIMS)
     assert [round(x) for x, _y in polys[1]["points"]] == [round(xs[n]) for n in RUN_B.notes], "B's points sit on its notes"
     # the spread bar: Bb3 has two takes (4 and -6 cents): a vertical bar in A's colour, none for single takes
     bars = [p for p in of("line") if p["color"] == C.LINE_STYLES[0][0] and p["x1"] == p["x2"] and not p.get("dash")]
     assert len(bars) == 1 and abs(bars[0]["x1"] - xs["Bb3"]) < 1e-6, bars
-    assert not [p for p in of("line") if p["color"] == C.LINE_STYLES[1][0] and p["x1"] == p["x2"] and p["y1"] != p["y2"]]
+    assert not [p for p in of("line") if p["color"] == C.LINE_STYLES[1][0] and p["x1"] == p["x2"] and p["y1"] != p["y2"]], "not [p for p in of(\"line\") if p[\"color\"] == C.LINE_STYLES[1][0] and p[\"x1\"] == p[\"x2\"] and p[\"y1\"] != p[\"y2\"]]"
     # seven styles, then they cycle; five marker shapes
-    assert len(C.LINE_STYLES) == 7 and C.style_for(7) == C.LINE_STYLES[0] and set(C.MARKERS) >= {s for _c, s in C.LINE_STYLES}
+    assert len(C.LINE_STYLES) == 7 and C.style_for(7) == C.LINE_STYLES[0] and set(C.MARKERS) >= {s for _c, s in C.LINE_STYLES}, "len(C.LINE_STYLES) == 7 and C.style_for(7) == C.LINE_STYLES[0] and set(C.MARKERS) >= {s for _c, s in C.LINE..."
 check("one colour and one marker per run, the medians joined, a bar where a note has several takes",
       one_colour_and_marker_per_run)
 
@@ -161,11 +161,11 @@ check("the legend names each run with its marker, above the plot and below the t
 
 
 def the_y_range_rule():
-    assert C.y_range([]) == (-10, 10)
-    assert C.y_range([3.0, -4.0]) == (-10, 10)
-    assert C.y_range([12.0]) == (-10, 20)
-    assert C.y_range([-37.0, 2.0]) == (-50, 10)
-    assert C.y_range([55.0, 60.0]) == (-10, 70)      # 0 is always inside
+    assert C.y_range([]) == (-10, 10), "C.y_range([]) == (-10, 10)"
+    assert C.y_range([3.0, -4.0]) == (-10, 10), "C.y_range([3.0, -4.0]) == (-10, 10)"
+    assert C.y_range([12.0]) == (-10, 20), "C.y_range([12.0]) == (-10, 20)"
+    assert C.y_range([-37.0, 2.0]) == (-50, 10), "C.y_range([-37.0, 2.0]) == (-50, 10)"
+    assert C.y_range([55.0, 60.0]) == (-10, 70), "C.y_range([55.0, 60.0]) == (-10, 70)"      # 0 is always inside
 check("the y range: every value and 0 inside, a 5-cent margin, 10-cent steps, never narrower than -10..10",
       the_y_range_rule)
 
@@ -185,24 +185,24 @@ def the_png_is_the_same_picture():
     m = [p for p in of("marker") if p["color"] == C.LINE_STYLES[0][0]][1]
     assert px[int(m["x"] * 2), int(m["y"] * 2)] == (0, 114, 178), px[int(m["x"] * 2), int(m["y"] * 2)]
     # and a corner is background
-    assert px[2, 2] == (255, 255, 255)
+    assert px[2, 2] == (255, 255, 255), "px[2, 2] == (255, 255, 255)"
 check("the PNG opens at the expected size and has the zero line and a marker where the primitives put them",
       the_png_is_the_same_picture)
 
 
 def the_pdf_is_one_page_with_the_title():
     data = C.render_pdf(PRIMS, W, H, title="Two horns")
-    assert data.startswith(b"%PDF-1.4") and data.rstrip().endswith(b"%%EOF")
+    assert data.startswith(b"%PDF-1.4") and data.rstrip().endswith(b"%%EOF"), "data.startswith(b\"%PDF-1.4\") and data.rstrip().endswith(b\"%%EOF\")"
     start = int(re.search(rb"startxref\n(\d+)", data).group(1))
-    assert data[start:start + 4] == b"xref"
+    assert data[start:start + 4] == b"xref", "data[start:start + 4] == b\"xref\""
     rows = re.findall(rb"(\d{10}) (\d{5}) ([nf])", data[start:])
     offsets = [int(r[0]) for r in rows if r[2] == b"n"]
     for i, off in enumerate(offsets, start=1):
         assert data[off:].startswith(f"{i} 0 obj".encode()), (i, data[off:off + 12])
-    assert data.count(b"/Type /Page ") == 1 and b"/Count 1" in data
-    assert b"/Title (Two horns)" in data and b"/BaseFont /Helvetica" in data
+    assert data.count(b"/Type /Page ") == 1 and b"/Count 1" in data, "data.count(b\"/Type /Page \") == 1 and b\"/Count 1\" in data"
+    assert b"/Title (Two horns)" in data and b"/BaseFont /Helvetica" in data, "b\"/Title (Two horns)\" in data and b\"/BaseFont /Helvetica\" in data"
     content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", data, re.S).group(1)).decode("latin-1")
-    assert "(Two horns) Tj" in content and "(Mark VI, Link 7*) Tj" in content
+    assert "(Two horns) Tj" in content and "(Mark VI, Link 7*) Tj" in content, "\"(Two horns) Tj\" in content and \"(Mark VI, Link 7*) Tj\" in content"
     assert content.count("0 1 -1 0") == 19 + 1, "every note label and the axis label are turned 90 degrees"
     assert "[4 3] 0 d" in content, "the register line is dashed"
     assert "re f" in content and content.count(" c f Q") >= 20, "a background and the circle markers"
@@ -211,16 +211,16 @@ def the_pdf_is_one_page_with_the_title():
     ov["lines"][0]["name"] = "Link (7*)"
     data = C.render_pdf(C.chart_primitives(ov, W, H), W, H)
     content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", data, re.S).group(1)).decode("latin-1")
-    assert "(Link \\(7*\\)) Tj" in content
+    assert "(Link \\(7*\\)) Tj" in content, "\"(Link \\\\(7*\\\\)) Tj\" in content"
 check("the PDF is one page, every object at its xref offset, Helvetica, the title and the run names as text, "
       "the notes turned 90 degrees, the register line dashed", the_pdf_is_one_page_with_the_title)
 
 
 def an_empty_chart_still_draws():
     prims = C.chart_primitives(I.overlay([]), W, H)
-    assert prims[0]["kind"] == "background" and not of("marker", prims) and not of("polyline", prims)
-    assert [p["text"] for p in of("text", prims) if p["anchor"] == "e" and p["angle"] == 0] == ["-10", "0", "+10"]
-    assert len(C.render_pdf(prims, W, H)) > 200 and len(C.render_png(prims, W, H)) > 200
+    assert prims[0]["kind"] == "background" and not of("marker", prims) and not of("polyline", prims), "prims[0][\"kind\"] == \"background\" and not of(\"marker\", prims) and not of(\"polyline\", prims)"
+    assert [p["text"] for p in of("text", prims) if p["anchor"] == "e" and p["angle"] == 0] == ["-10", "0", "+10"], "[p[\"text\"] for p in of(\"text\", prims) if p[\"anchor\"] == \"e\" and p[\"angle\"] == 0] == [\"-10\", \"0\", \"+10\"]"
+    assert len(C.render_pdf(prims, W, H)) > 200 and len(C.render_png(prims, W, H)) > 200, "len(C.render_pdf(prims, W, H)) > 200 and len(C.render_png(prims, W, H)) > 200"
 check("an empty chart still draws its frame, and renders", an_empty_chart_still_draws)
 
 
@@ -235,7 +235,7 @@ def the_footnote_is_one_line_under_the_notes():
     label_y_with = max(p["y"] for p in of("text", with_note) if p.get("angle") == 90)
     assert label_y_with < label_y - 10, (label_y_with, label_y)
     assert not [p for p in of("text", PRIMS) if p["anchor"] == "sw"], "a footnote with none asked for"
-    assert len(C.render_png(with_note, W, H)) > 200
+    assert len(C.render_png(with_note, W, H)) > 200, "len(C.render_png(with_note, W, H)) > 200"
     pdf = C.render_pdf(with_note, W, H)
     content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf, re.S).group(1)).decode("latin-1")
     assert f"({line}) Tj" in content, "the footnote is not in the PDF"

@@ -156,21 +156,21 @@ def migration_from_each_state():
     from config import migrate_analyzer_tab
     # never unlocked: the old startup rule had forced the tab hidden; it comes back
     s = {"toner_unlocked": False, "visible_tabs": {"Toner": False, "Tuner": True}}
-    assert migrate_analyzer_tab(s) is True
-    assert s["visible_tabs"]["Toner"] is True and s["visible_tabs"]["Tuner"] is True and s["analyzer_tab_shown_v3"] is True
+    assert migrate_analyzer_tab(s) is True, "migrate_analyzer_tab(s) is True"
+    assert s["visible_tabs"]["Toner"] is True and s["visible_tabs"]["Tuner"] is True and s["analyzer_tab_shown_v3"] is True, "s[\"visible_tabs\"][\"Toner\"] is True and s[\"visible_tabs\"][\"Tuner\"] is True and s[\"analyzer_tab_shown_v3\"] is..."
     # unlocked and visible: nothing to change but the flag
     s = {"toner_unlocked": True, "visible_tabs": {"Toner": True}}
-    assert migrate_analyzer_tab(s) is True and s["visible_tabs"]["Toner"] is True and s["analyzer_tab_shown_v3"]
+    assert migrate_analyzer_tab(s) is True and s["visible_tabs"]["Toner"] is True and s["analyzer_tab_shown_v3"], "migrate_analyzer_tab(s) is True and s[\"visible_tabs\"][\"Toner\"] is True and s[\"analyzer_tab_shown_v3\"]"
     # unlocked and hidden: the user hid it on purpose, and that stands
     s = {"toner_unlocked": True, "visible_tabs": {"Toner": False}}
-    assert migrate_analyzer_tab(s) is True and s["visible_tabs"]["Toner"] is False and s["analyzer_tab_shown_v3"]
+    assert migrate_analyzer_tab(s) is True and s["visible_tabs"]["Toner"] is False and s["analyzer_tab_shown_v3"], "migrate_analyzer_tab(s) is True and s[\"visible_tabs\"][\"Toner\"] is False and s[\"analyzer_tab_shown_v3\"]"
     # a fresh profile: the default (visible) applies; the flag is set
     s = {}
-    assert migrate_analyzer_tab(s) is True and "Toner" not in s["visible_tabs"] and s["analyzer_tab_shown_v3"]
+    assert migrate_analyzer_tab(s) is True and "Toner" not in s["visible_tabs"] and s["analyzer_tab_shown_v3"], "migrate_analyzer_tab(s) is True and \"Toner\" not in s[\"visible_tabs\"] and s[\"analyzer_tab_shown_v3\"]"
     # once only: a second run changes nothing and says so
     s = {"toner_unlocked": False, "visible_tabs": {"Toner": False}, "analyzer_tab_shown_v3": True}
     before = json.dumps(s, sort_keys=True)
-    assert migrate_analyzer_tab(s) is False and json.dumps(s, sort_keys=True) == before
+    assert migrate_analyzer_tab(s) is False and json.dumps(s, sort_keys=True) == before, "migrate_analyzer_tab(s) is False and json.dumps(s, sort_keys=True) == before"
 
 
 def main():
@@ -220,6 +220,16 @@ def main():
 
     W = {}      # the window's sizes as the checks find them
 
+    def chart_now():
+        """Draw the chart now, as the tab's debounced redraw would 100 ms later: a check that only
+        wants the chart's current state reads it after this, never after a wait (on a fast runner the
+        geometry settles in one mainloop slice and the pending redraw has not fired yet)."""
+        root.update_idletasks()
+        if app._toner_chart_redraw_id is not None:
+            root.after_cancel(app._toner_chart_redraw_id)
+            app._toner_chart_redraw_id = None
+        app._toner_draw_chart()
+
     def toplevels():
         return [w for w in root.winfo_children() if isinstance(w, tk.Toplevel)]
 
@@ -244,43 +254,49 @@ def main():
 
     # ---------------------------------------------------------------- the tab as built
     def the_tab_as_built():
-        assert app.notebook.tab(app.toner_tab_frame, "text") == "Analyzer"
-        assert str(app.toner_tab_frame) in app.notebook.tabs()
+        assert app.notebook.tab(app.toner_tab_frame, "text") == "Analyzer", "app.notebook.tab(app.toner_tab_frame, \"text\") == \"Analyzer\""
+        assert str(app.toner_tab_frame) in app.notebook.tabs(), "str(app.toner_tab_frame) in app.notebook.tabs()"
         assert app.notebook.tab(app.toner_tab_frame, "state") == "normal", "the tab is hidden on a fresh profile"
-        assert app.settings.get("toner_unlocked") in (None, False)
+        assert app.settings.get("toner_unlocked") in (None, False), "app.settings.get(\"toner_unlocked\") in (None, False)"
         # the migration ran in memory; building the app writes nothing (the flag goes to
         # disk with the next regular save: the terms' accept below is one)
         assert app.settings.get("analyzer_tab_shown_v3") is True, "the build did not run the migration"
         assert "analyzer_tab_shown_v3" not in settings_on_disk(), "building the app wrote the settings file"
-        assert app._toner_harmonics_var.get() == "off" and app._toner_mode_var.get() == "free"
+        assert app._toner_harmonics_var.get() == "off" and app._toner_mode_var.get() == "free", "app._toner_harmonics_var.get() == \"off\" and app._toner_mode_var.get() == \"free\""
         # the start-up width is the old rule's, not the strip's: the window is narrower than the
         # strip needs (the Pad Maker is the first tab; nothing has selected the Analyzer yet)
         root.update_idletasks()
         W["start"] = (root.winfo_width(), root.winfo_height())
         W["need"] = app._analyzer_strip_need_px()
-        assert W["start"][0] < W["need"], f"the window opened {W['start'][0]} px wide, the strip's {W['need']}"
-        assert getattr(app, "_analyzer_widened", None) is None
+        assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
         app.notebook.select(app.toner_tab_frame)
-        # selecting the tab widens the window to the strip, height unchanged, never past the screen
-        want_w = min(W["need"], root.winfo_screenwidth())
-        settle(lambda: root.winfo_width() == want_w, what="the widening on select")
+        # selecting the tab: a window narrower than the strip needs is widened to it (never past the
+        # screen), one already wide enough is left as it is; either way the height is unchanged. Under
+        # xvfb's fonts some languages open wider than the strip already, so both branches are the rule.
+        want_w = max(W["start"][0], min(W["need"], root.winfo_screenwidth()))
+        settle(lambda: root.winfo_width() == want_w, what="the window on select")
         W["widened"] = root.winfo_width()
         assert root.winfo_height() == W["start"][1], (root.winfo_height(), W["start"][1])
-        assert app._analyzer_widened == (W["start"][0], want_w), app._analyzer_widened
-        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()
-        assert app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget("bg") == "#FFFFFF"
+        if W["start"][0] < W["need"]:
+            assert app._analyzer_widened == (W["start"][0], want_w), app._analyzer_widened
+        else:
+            print(f"        (the window opened {W['start'][0]} px wide, already past the strip's {W['need']}: nothing to widen)")
+            assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
+        assert app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget("bg") == "#FFFFFF", "app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget(\"bg\") == \"#FFFFFF\""
         # the whole control strip is on the page: the Capture button, packed last and rightmost
         strip, btn = app._toner_ctrl_frame, app._toner_capture_btn
         settle(lambda: strip.winfo_reqwidth() <= app._toner_main_frame.winfo_width(), what="the page's width")
         assert btn.winfo_ismapped(), "the Capture button is off the page"
-        assert btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width()
+        assert btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), "btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width()"
         texts = [w.cget("text") for w in widgets(app._toner_main_frame, tk.Label)]
         for label in ("HARMONICS", "off", "on", "MODE", "free", "guided"):
             assert label in texts, f"{label!r} not on the control strip: {texts}"
-        assert "cal" not in texts
+        assert "cal" not in texts, "\"cal\" not in texts"
         btns = [w.cget("text") for w in widgets(app._toner_chart_frame, tk.Button)]
         assert btns == ["Compare...", "Export..."], btns
         # nothing loaded: the chart says what to do
+        chart_now()
         assert any("Load a preset" in t for t in chart_texts()), chart_texts()
         app._toner_stop()
     check("the tab is called Analyzer, shows on a never-unlocked profile (the migration recorded on disk), opens on "
@@ -304,7 +320,7 @@ def main():
         start_w, start_h = W["start"]
         app.notebook.select(app.pad_tab)
         settle(width_is(start_w), what="the width going back on leaving")
-        assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None
+        assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None, "root.winfo_height() == start_h and getattr(app, \"_analyzer_widened\", None) is None"
         # and again: select widens, leave restores
         app.notebook.select(app.toner_tab_frame)
         settle(width_is(W["widened"]), what="the second widening")
@@ -322,7 +338,7 @@ def main():
         app.notebook.select(app.pad_tab)
         run(400)
         assert root.winfo_width() == chosen, f"the app took back a width the user chose: {root.winfo_width()}"
-        assert getattr(app, "_analyzer_widened", None) is None
+        assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
         root.geometry(f"{start_w}x{start_h}")
         settle(width_is(start_w), what="the reset for the next check")
     check("a size the user chose while on the tab is left alone on leaving", a_size_the_user_chose_stays)
@@ -334,8 +350,8 @@ def main():
         settle(width_is(wide), what="the wide window")
         app.notebook.select(app.toner_tab_frame)
         run(400)
-        assert root.winfo_width() == wide and getattr(app, "_analyzer_widened", None) is None
-        assert app._toner_capture_btn.winfo_ismapped()
+        assert root.winfo_width() == wide and getattr(app, "_analyzer_widened", None) is None, "root.winfo_width() == wide and getattr(app, \"_analyzer_widened\", None) is None"
+        assert app._toner_capture_btn.winfo_ismapped(), "app._toner_capture_btn.winfo_ismapped()"
         app.notebook.select(app.pad_tab)
         run(400)
         assert root.winfo_width() == wide, root.winfo_width()
@@ -352,10 +368,10 @@ def main():
             app.notebook.select(app.toner_tab_frame)
             run(400)
             assert root.winfo_width() == start_w, f"a zoomed window was widened to {root.winfo_width()}"
-            assert getattr(app, "_analyzer_widened", None) is None
+            assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
             app.notebook.select(app.pad_tab)
             run(400)
-            assert root.winfo_width() == start_w
+            assert root.winfo_width() == start_w, "root.winfo_width() == start_w"
         finally:
             del root.state
         # and a really maximized window, where the window manager has one
@@ -373,10 +389,10 @@ def main():
         app.notebook.select(app.toner_tab_frame)
         run(400)
         assert root.state() == "zoomed" and root.winfo_width() == w, (root.state(), root.winfo_width(), w)
-        assert getattr(app, "_analyzer_widened", None) is None
+        assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
         app.notebook.select(app.pad_tab)
         run(400)
-        assert root.state() == "zoomed" and root.winfo_width() == w
+        assert root.state() == "zoomed" and root.winfo_width() == w, "root.state() == \"zoomed\" and root.winfo_width() == w"
         root.state("normal")
         settle(width_is(start_w), what="the window back from maximized")
     check("a maximized window is left alone, on select and on leave", a_maximized_window_is_left_alone)
@@ -384,17 +400,24 @@ def main():
     def never_wider_than_the_screen():
         start_w, start_h = W["start"]
         narrow = W["need"] - 100                              # a screen narrower than the strip needs
+        base = min(start_w, W["need"] - 200)                  # a window narrower still (the start, or made so)
+        if base != start_w:
+            root.geometry(f"{base}x{start_h}")
+            settle(width_is(base), what="the narrow window for the screen-cap check")
         root.winfo_screenwidth = lambda: narrow
         try:
             app.notebook.select(app.toner_tab_frame)
             settle(width_is(narrow), what="the widening capped at the screen")
-            assert app._analyzer_widened == (start_w, narrow)
+            assert app._analyzer_widened == (base, narrow), "app._analyzer_widened == (base, narrow)"
             # what happens then: the strip still overflows and pack drops its last column
-            assert app._toner_ctrl_frame.winfo_reqwidth() > app._toner_main_frame.winfo_width()
+            assert app._toner_ctrl_frame.winfo_reqwidth() > app._toner_main_frame.winfo_width(), "app._toner_ctrl_frame.winfo_reqwidth() > app._toner_main_frame.winfo_width()"
             app.notebook.select(app.pad_tab)
-            settle(width_is(start_w), what="the restore from the capped width")
+            settle(width_is(base), what="the restore from the capped width")
         finally:
             del root.winfo_screenwidth
+            if base != start_w:
+                root.geometry(f"{start_w}x{start_h}")
+                settle(width_is(start_w), what="the start width back")
     check("the widening never goes past the screen (on a screen too narrow the strip still overflows)",
           never_wider_than_the_screen)
     app.notebook.select(app.toner_tab_frame)
@@ -412,16 +435,16 @@ def main():
         app._toner_harmonics_var.set("on")
         run(300)
         assert asked == ["declined"], asked
-        assert app._toner_harmonics_var.get() == "off" and app._toner_harmonics_int.get() == 0
-        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()
-        assert not app.settings.get("toner_unlocked") and not settings_on_disk().get("toner_unlocked")
+        assert app._toner_harmonics_var.get() == "off" and app._toner_harmonics_int.get() == 0, "app._toner_harmonics_var.get() == \"off\" and app._toner_harmonics_int.get() == 0"
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
+        assert not app.settings.get("toner_unlocked") and not settings_on_disk().get("toner_unlocked"), "not app.settings.get(\"toner_unlocked\") and not settings_on_disk().get(\"toner_unlocked\")"
 
         app._toner_show_harmonics_terms = lambda: asked.append("accepted") or True
         app._toner_harmonics_var.set("on")
         run(300)
         assert asked == ["declined", "accepted"], asked
-        assert app._toner_harmonics_frame.winfo_ismapped() and not app._toner_chart_frame.winfo_ismapped()
-        assert app.settings["toner_unlocked"] is True and settings_on_disk()["toner_unlocked"] is True
+        assert app._toner_harmonics_frame.winfo_ismapped() and not app._toner_chart_frame.winfo_ismapped(), "app._toner_harmonics_frame.winfo_ismapped() and not app._toner_chart_frame.winfo_ismapped()"
+        assert app.settings["toner_unlocked"] is True and settings_on_disk()["toner_unlocked"] is True, "app.settings[\"toner_unlocked\"] is True and settings_on_disk()[\"toner_unlocked\"] is True"
         assert settings_on_disk().get("analyzer_tab_shown_v3") is True, "the save did not carry the migration's flag"
         cv = app._toner_spectrum_canvas
         texts = [cv.itemcget(i, "text") for i in cv.find_all() if cv.type(i) == "text"]
@@ -429,21 +452,21 @@ def main():
 
         app._toner_harmonics_var.set("off")
         run(200)
-        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
 
         def never():
             raise AssertionError("the terms were asked again after unlocking")
         app._toner_show_harmonics_terms = never
         app._toner_harmonics_var.set("on")
         run(200)
-        assert app._toner_harmonics_frame.winfo_ismapped()
+        assert app._toner_harmonics_frame.winfo_ismapped(), "app._toner_harmonics_frame.winfo_ismapped()"
         # the position is remembered in the settings (written with the next regular save)
-        assert app.settings["toner_settings"]["harmonics_on"] is True
+        assert app.settings["toner_settings"]["harmonics_on"] is True, "app.settings[\"toner_settings\"][\"harmonics_on\"] is True"
         app._toner_save_settings()
-        assert app.settings["toner_settings"]["harmonics_on"] is True
+        assert app.settings["toner_settings"]["harmonics_on"] is True, "app.settings[\"toner_settings\"][\"harmonics_on\"] is True"
         app._toner_harmonics_var.set("off")
         run(200)
-        assert app.settings["toner_settings"]["harmonics_on"] is False
+        assert app.settings["toner_settings"]["harmonics_on"] is False, "app.settings[\"toner_settings\"][\"harmonics_on\"] is False"
     check("HARMONICS: declined terms put the switch back and unlock nothing; accepted terms unlock (saved) and show "
           "the spectrum view, marked experimental; off again shows the chart; unlocked, the terms are not asked again; "
           "the position is remembered in the settings", the_switch_and_the_terms)
@@ -456,13 +479,13 @@ def main():
         full = dict(name="P", horn_type="Alto", horn_make="Conn", horn_model="6M", player="Me", mouthpiece="M5")
         app._toner_harmonics_var.set("off")
         assert app._toner_validate_required_fields(form(**full), root) is True, "no mic is fine for intonation"
-        assert app._toner_validate_required_fields(form(**dict(full, player="")), root) is False
-        assert app._toner_validate_required_fields(form(**dict(full, horn_type="")), root) is False
+        assert app._toner_validate_required_fields(form(**dict(full, player="")), root) is False, "app._toner_validate_required_fields(form(**dict(full, player=\"\")), root) is False"
+        assert app._toner_validate_required_fields(form(**dict(full, horn_type="")), root) is False, "app._toner_validate_required_fields(form(**dict(full, horn_type=\"\")), root) is False"
         app._toner_harmonics_var.set("on")
         run(150)
         assert app._toner_validate_required_fields(form(**full), root) is False, "harmonics on: the mic is required"
         assert app._toner_validate_required_fields(form(**dict(full, mic_type="condenser", mic_model="AT2020")),
-                                                   root) is True
+                                                   root) is True, "app._toner_validate_required_fields(form(**dict(full, mic_type=\"condenser\", mic_model=\"AT2020\")), root) is ..."
         app._toner_harmonics_var.set("off")
         run(150)
         # the same rule at Capture on a preset with no mic type
@@ -477,7 +500,7 @@ def main():
         app._toner_harmonics_var.set("off")
         run(150)
         app._toner_toggle_capture()
-        assert app._toner_active_session is not None and app._toner_capture_state == "free_listening"
+        assert app._toner_active_session is not None and app._toner_capture_state == "free_listening", "app._toner_active_session is not None and app._toner_capture_state == \"free_listening\""
         app._toner_stop_capture()
         app._toner_unload_preset()
     check("required fields both ways: horn type, make, model, player, mouthpiece for a run; the mic fields and the "
@@ -505,8 +528,8 @@ def main():
         app._toner_start()
         app._toner_mode_var.set("free")
         app._toner_toggle_capture()
-        assert app._toner_capture_state == "free_listening"
-        run(300)
+        assert app._toner_capture_state == "free_listening", "app._toner_capture_state == \"free_listening\""
+        chart_now()
         assert "E5" not in chart_texts(), "the seeded chart already shows the note about to be played"
         # D4 held: the synthetic source hands over 1024 samples a frame, at whatever rate the
         # loop manages here, so wait for the readout to turn green rather than a fixed time
@@ -523,14 +546,14 @@ def main():
         # the first note was saved when the second began, and the chart drew it while the run goes on
         # (nothing resized: the redraw comes from the capture itself)
         assert len(app._toner_active_session["captures"]) == 1, app._toner_active_session["captures"]
-        assert "E5" in chart_texts(), ("the chart did not draw the captured note during the run", chart_texts())
+        settle(lambda: "E5" in chart_texts(), what="the chart drawing the captured note during the run")
         app._toner_toggle_capture()     # Stop: the last note is saved
         app._toner_stop()
         notes = [c["note"] for c in app._toner_active_session["captures"]]
         assert notes == ["D4", "A#3"], notes
         for c in app._toner_active_session["captures"]:
             assert c["method"] == "free" and c["n_frames"] >= FREE_MIN_FRAMES, c
-        run(300)
+        chart_now()
         texts = chart_texts()
         # Tenor: concert A#3 is written C5, D4 is written E5; the seeded C4 is written D5
         for written in ("C5", "E5", "D5"):
@@ -538,7 +561,7 @@ def main():
         assert "Bench" in texts, texts                     # the title
         assert len(chart_markers()) >= 3, chart_markers()
         disk = load_tone_presets(TONER_DATA_FILE)["My Presets"]["Bench"]
-        assert len(disk["sessions"]) == 2 and [c["note"] for c in disk["sessions"][1]["captures"]] == ["D4", "A#3"]
+        assert len(disk["sessions"]) == 2 and [c["note"] for c in disk["sessions"][1]["captures"]] == ["D4", "A#3"], "len(disk[\"sessions\"]) == 2 and [c[\"note\"] for c in disk[\"sessions\"][1][\"captures\"]] == [\"D4\", \"A#3\"]"
     check("a free run on the synthetic source: two notes held, each kept, the readout green on a held note, the "
           "chart with the written notes and the preset's name, the session on disk", free_run_on_the_synthetic_source)
 
@@ -553,7 +576,7 @@ def main():
             app._toner_start()
             app._toner_mode_var.set("calibration")
             app._toner_toggle_capture()
-            assert app._toner_capture_state == "cal_countdown"
+            assert app._toner_capture_state == "cal_countdown", "app._toner_capture_state == \"cal_countdown\""
             # the loop's frame rate is whatever this machine manages: wait for each state, bounded
             settle(lambda: app._toner_capture_state == "calibration", timeout=15.0, what="the countdown")
             prompt = [app._toner_chart_canvas.itemcget(i, "text")
@@ -568,13 +591,13 @@ def main():
             caps = app._toner_active_session["captures"]
             assert len(caps) == 1 and caps[0]["method"] == "calibration", caps
             assert caps[0]["written_note"] == "A#3" and caps[0]["note"] == "C#3", caps[0]
-            assert caps[0]["n_frames"] >= FREE_MIN_FRAMES
+            assert caps[0]["n_frames"] >= FREE_MIN_FRAMES, "caps[0][\"n_frames\"] >= FREE_MIN_FRAMES"
             app._toner_toggle_capture()
             app._toner_stop()
-            run(300)
+            chart_now()
             texts = chart_texts()
             assert "Bb3" in texts and "A#3" not in texts and "Other" in texts, texts
-            assert len(chart_markers()) >= 1
+            assert len(chart_markers()) >= 1, "len(chart_markers()) >= 1"
         finally:
             toner_tab.CAL_COUNTDOWN_S, toner_tab.CALIBRATION_DURATION_S = old
     check("a guided run on the synthetic source: countdown, the note asked for (shown large on the chart canvas), "
@@ -608,19 +631,19 @@ def main():
         feed(SHORTEST - 1)
         assert label.cget("fg") == "#FFCC00" and label.cget("text") == f"Free: C5 ({kept_of(SHORTEST - 1)} frames)", \
             (label.cget("text"), label.cget("fg"))
-        assert kept_of(SHORTEST - 1) < FREE_MIN_FRAMES
+        assert kept_of(SHORTEST - 1) < FREE_MIN_FRAMES, "kept_of(SHORTEST - 1) < FREE_MIN_FRAMES"
         feed(1)
         assert label.cget("fg") == "#00CC00" and label.cget("text") == f"Free: C5 ({FREE_MIN_FRAMES} frames)", \
             (label.cget("text"), label.cget("fg"))
         app._toner_process_capture_frame(silence())
-        assert label.cget("fg") == "#FFCC00"
-        assert len(app._toner_active_session["captures"]) == 1
-        assert "too short" not in app._toner_capture_progress.cget("text")
+        assert label.cget("fg") == "#FFCC00", "label.cget(\"fg\") == \"#FFCC00\""
+        assert len(app._toner_active_session["captures"]) == 1, "len(app._toner_active_session[\"captures\"]) == 1"
+        assert "too short" not in app._toner_capture_progress.cget("text"), "\"too short\" not in app._toner_capture_progress.cget(\"text\")"
         # a note let go before green
         feed(20, f0=293.66, note="D4")
-        assert label.cget("fg") == "#FFCC00"
+        assert label.cget("fg") == "#FFCC00", "label.cget(\"fg\") == \"#FFCC00\""
         app._toner_process_capture_frame(silence())
-        assert len(app._toner_active_session["captures"]) == 1
+        assert len(app._toner_active_session["captures"]) == 1, "len(app._toner_active_session[\"captures\"]) == 1"
         assert app._toner_capture_progress.cget("text").endswith("E5 too short to keep"), \
             app._toner_capture_progress.cget("text")
         feed(SHORTEST)
@@ -645,9 +668,9 @@ def main():
         boxes["2026-10-02 10:00:00"].invoke()
         buttons = {b.cget("text"): b for b in widgets(dlg, tk.Button)}
         buttons["Compare"].invoke()
-        assert not dlg.winfo_exists()
-        assert app._toner_compare_runs == [("My Presets", "Bench", None), ("My Presets", "Other", "2026-10-02 10:00:00")]
-        run(300)
+        assert not dlg.winfo_exists(), "not dlg.winfo_exists()"
+        assert app._toner_compare_runs == [("My Presets", "Bench", None), ("My Presets", "Other", "2026-10-02 10:00:00")], "app._toner_compare_runs == [(\"My Presets\", \"Bench\", None), (\"My Presets\", \"Other\", \"2026-10-02 10:00:00\")]"
+        chart_now()
         texts = chart_texts()
         assert "Bench" in texts and "Other — 2026-10-02 10:00:00" in texts, texts
         kinds = chart_markers()
@@ -660,15 +683,15 @@ def main():
         app._toner_open_compare_dialog()
         dlg = [w for w in toplevels() if w not in before][0]
         {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Clear"].invoke()
-        assert app._toner_compare_runs == []
-        run(300)
-        assert "B4" not in chart_texts() and "Bench" in chart_texts()
+        assert app._toner_compare_runs == [], "app._toner_compare_runs == []"
+        chart_now()
+        assert "B4" not in chart_texts() and "Bench" in chart_texts(), "\"B4\" not in chart_texts() and \"Bench\" in chart_texts()"
     check("Compare...: a preset and one session of another drawn together, each with its name and marker; Clear "
           "returns to the loaded preset", compare_two_presets)
 
     def march_labels_corrected_and_the_rest_left_out_and_said():
         load("Old")
-        run(300)
+        chart_now()
         texts = chart_texts()
         # the four March labels are corrected on read and drawn under the notes they are (D3, E3, F#3 and A3
         # sounding, written E4, F#4, G#4 and B4 on a tenor); the semitone slip is left out; both are said
@@ -676,7 +699,7 @@ def main():
         assert len(foot) == 1, foot
         assert foot[0].startswith("4 takes corrected: their labels were two transpositions low.") and \
             "1 take left out: its pitch did not match its note." in foot[0], foot
-        assert "No take matched its note." not in texts
+        assert "No take matched its note." not in texts, "\"No take matched its note.\" not in texts"
         for written in ("E4", "F#4", "G#4", "B4"):
             assert written in texts, (written, texts)
         assert not any(t in ("C2", "D2", "E2", "G2", "C#5") for t in texts), texts     # neither the bogus labels nor the slip
@@ -685,12 +708,12 @@ def main():
         assert len(in_plot) == 4, f"{len(in_plot)} points in the plot, wanted the four corrected takes"
         # the export carries the same line
         runs, prims = app._toner_chart_prims(toner_tab.CHART_W, toner_tab.CHART_H)
-        assert runs[0].corrected == 4 and runs[0].left_out["off_note"] == 1 and len(runs[0].readings) == 4
+        assert runs[0].corrected == 4 and runs[0].left_out["off_note"] == 1 and len(runs[0].readings) == 4, "runs[0].corrected == 4 and runs[0].left_out[\"off_note\"] == 1 and len(runs[0].readings) == 4"
         exported = [p["text"] for p in prims if p["kind"] == "text" and p.get("anchor") == "sw"]
         assert exported == foot, (exported, foot)
         # a good preset says nothing of the kind
         load("Bench")
-        run(300)
+        chart_now()
         assert not any("left out" in t or "corrected" in t for t in chart_texts()), chart_texts()
     check("a preset from March 2026 (labels two transpositions low) is charted under the notes it is, the chart "
           "saying how many takes were corrected and how many left out, on screen and in the export; a good preset "
@@ -738,7 +761,7 @@ def main():
     # ---------------------------------------------------------------- the Settings tick
     def low_notes_left_setting():
         load("Bench")
-        run(300)
+        chart_now()
 
         def x_of(text):
             cv = app._toner_chart_canvas
@@ -753,15 +776,14 @@ def main():
         assert "Low notes on the left" in boxes, sorted(boxes)
         boxes["Low notes on the left"].invoke()
         {b.cget("text"): b for b in widgets(dlg, tk.Button)}["OK"].invoke()
-        assert not dlg.winfo_exists()
-        assert app.settings["toner_settings"]["chart_low_notes_left"] is False
-        assert settings_on_disk()["toner_settings"]["chart_low_notes_left"] is False
-        run(300)
+        assert not dlg.winfo_exists(), "not dlg.winfo_exists()"
+        assert app.settings["toner_settings"]["chart_low_notes_left"] is False, "app.settings[\"toner_settings\"][\"chart_low_notes_left\"] is False"
+        assert settings_on_disk()["toner_settings"]["chart_low_notes_left"] is False, "settings_on_disk()[\"toner_settings\"][\"chart_low_notes_left\"] is False"
+        chart_now()
         assert x_of("C5") > x_of("D5"), "the axis did not flip"
         app.settings["toner_settings"]["chart_low_notes_left"] = True
-        app._toner_chart_changed()
-        run(300)
-        assert x_of("C5") < x_of("D5")
+        chart_now()
+        assert x_of("C5") < x_of("D5"), "x_of(\"C5\") < x_of(\"D5\")"
     check("Settings > General: 'Low notes on the left' is saved and flips the axis", low_notes_left_setting)
 
     toner_tab.time = time
@@ -776,7 +798,7 @@ def main():
         assert "toner" in log, log
         assert not errors, "\n".join(errors)
         # unlocked by the terms check above: the tour showed the spectrum on the tone
-        assert app._toner_harmonics_var.get() == "on" and app._toner_harmonics_frame.winfo_ismapped()
+        assert app._toner_harmonics_var.get() == "on" and app._toner_harmonics_frame.winfo_ismapped(), "app._toner_harmonics_var.get() == \"on\" and app._toner_harmonics_frame.winfo_ismapped()"
         app._toner_stop()
     check("the tour's stop for the tab raises nothing and, unlocked, shows the spectrum", the_tours_stop)
 
@@ -875,7 +897,8 @@ print("REPORT " + json.dumps(out))
             start_w, start_h = r["start"]
             # the start-up width is the old rule's: at least its measure, and never the strip's
             assert start_w >= r["formula_w"], f"{case}: opened {start_w} px, the tab/Tooling rule asks {r['formula_w']}"
-            assert start_w < r["need"], f"{case}: the start-up window ({start_w} px) is already the strip's ({r['need']})"
+            # the start-up width is whatever the tab-row and Tooling rules make it (under xvfb's fonts some
+            # languages already open wider than the strip, in which case the select has nothing to widen)
             want = max(start_w, min(r["need"], r["screen_w"]))
             assert r["settled"] and r["after_select"] == [want, start_h], (case, r["after_select"], want, start_h)
             assert r["capture_mapped"] or r["need"] > r["screen_w"], f"{case}: Capture off the page at {r['after_select']}"

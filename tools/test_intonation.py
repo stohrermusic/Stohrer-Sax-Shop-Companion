@@ -60,15 +60,15 @@ print("=" * 60)
 def written_names_follow_the_saxophone():
     # A tenor's concert G#2 (MIDI 44) is its written Bb3 (58), low register; concert C4 (60) is
     # written D5 (74), the octave key.
-    assert I.written_midi(44, "Tenor") == 58 and I.written_midi(60, "Tenor") == 74
-    assert I.register_of_written(58) == 1 and I.register_of_written(73) == 1 and I.register_of_written(74) == 2
-    assert I.written_band(58) == "low" and I.written_band(74) == "octave_key" and I.written_band(86) == "palm_keys"
+    assert I.written_midi(44, "Tenor") == 58 and I.written_midi(60, "Tenor") == 74, "I.written_midi(44, \"Tenor\") == 58 and I.written_midi(60, \"Tenor\") == 74"
+    assert I.register_of_written(58) == 1 and I.register_of_written(73) == 1 and I.register_of_written(74) == 2, "I.register_of_written(58) == 1 and I.register_of_written(73) == 1 and I.register_of_written(74) == 2"
+    assert I.written_band(58) == "low" and I.written_band(74) == "octave_key" and I.written_band(86) == "palm_keys", "I.written_band(58) == \"low\" and I.written_band(74) == \"octave_key\" and I.written_band(86) == \"palm_keys\""
     # An alto's concert A4 (69) is its written F#5 (78).
-    assert I.written_midi(69, "Alto") == 78
+    assert I.written_midi(69, "Alto") == 78, "I.written_midi(69, \"Alto\") == 78"
     try:
         I.written_midi(60, "Ocarina")
     except I.IntonationError as e:
-        assert "Ocarina" in str(e)
+        assert "Ocarina" in str(e), "\"Ocarina\" in str(e)"
     else:
         raise AssertionError("an unknown saxophone type must be refused")
 check("written names, as a player writes them, and registers follow the saxophone (tenor G#2 -> Bb3 low, "
@@ -82,17 +82,17 @@ def a_preset_is_a_run_in_written_names_against_equal_temperament():
             cap("C1", 32.7),                                  # outside the tenor's range
             cap("C4", hz(60), harm=(0.0, 25.0))]              # an impossible harmonic
     run = I.run_from_captures([{"captures": caps, "date": "2026-11-10"}], "Tenor", name="Bench / Mark VI")
-    assert run.sax_type == "Tenor" and run.name == "Bench / Mark VI" and run.reference_hz == 440.0
+    assert run.sax_type == "Tenor" and run.name == "Bench / Mark VI" and run.reference_hz == 440.0, "run.sax_type == \"Tenor\" and run.name == \"Bench / Mark VI\" and run.reference_hz == 440.0"
     assert run.notes == ["Bb3", "D5"], run.notes
     played = run.played()
     approx(played["Bb3"][0], 8.0)                             # the median of 6 and 10
-    assert played["Bb3"][1] == 1 and played["D5"][1] == 2
+    assert played["Bb3"][1] == 1 and played["D5"][1] == 2, "played[\"Bb3\"][1] == 1 and played[\"D5\"][1] == 2"
     approx(played["D5"][0], -4.0)
     a = run.reading("Bb3")
-    assert len(a.takes) == 2 and a.wobble_cents is None and approx(a.take_spread_cents, 4.0) is None
-    assert a.takes[0].seconds == 30 * I.FRAME_SECONDS and a.takes[0].session_date == "2026-11-10"
+    assert len(a.takes) == 2 and a.wobble_cents is None and approx(a.take_spread_cents, 4.0) is None, "len(a.takes) == 2 and a.wobble_cents is None and approx(a.take_spread_cents, 4.0) is None"
+    assert a.takes[0].seconds == 30 * I.FRAME_SECONDS and a.takes[0].session_date == "2026-11-10", "a.takes[0].seconds == 30 * I.FRAME_SECONDS and a.takes[0].session_date == \"2026-11-10\""
     assert run.left_out == {"implausible": 2, "unlabelled": 0, "off_note": 0}, run.left_out
-    assert run.sessions_used == 1 and run.captures_used == 3
+    assert run.sessions_used == 1 and run.captures_used == 3, "run.sessions_used == 1 and run.captures_used == 3"
 check("a preset's captures are a run in written names against equal temperament; the median of takes; "
       "the fingerprint's filter applies and is counted", a_preset_is_a_run_in_written_names_against_equal_temperament)
 
@@ -105,7 +105,7 @@ def the_median_resists_one_bad_take():
     approx(r.high, 40.0)
     approx(r.take_spread_cents, 45.0)
     one = I.run_from_captures([{"captures": [cap("G#2", detuned(44, -3))]}], "Tenor").reading("Bb3")
-    assert one.take_spread_cents is None and approx(one.cents, -3.0) is None
+    assert one.take_spread_cents is None and approx(one.cents, -3.0) is None, "one.take_spread_cents is None and approx(one.cents, -3.0) is None"
 check("a note's cents are the median of its takes (one bad take cannot drag it); the spread is max - min, "
       "None under two takes", the_median_resists_one_bad_take)
 
@@ -126,10 +126,10 @@ def unlabelled_and_broken_captures_are_counted_not_crashed():
     run = I.run_from_captures([{"captures": caps}], "Tenor")
     # "" has no MIDI number, 0.0, "x" and the missing fundamental no pitch: all four unlabelled
     assert run.left_out == {"implausible": 0, "unlabelled": 4, "off_note": 0}, run.left_out
-    assert run.notes == ["B4"] and run.reading("B4").takes[0].frames == 0
+    assert run.notes == ["B4"] and run.reading("B4").takes[0].frames == 0, "run.notes == [\"B4\"] and run.reading(\"B4\").takes[0].frames == 0"
     empty = I.run_from_captures([], "Tenor")
-    assert empty.notes == [] and empty.played() == {} and I.note_spreads(empty) == []
-    assert I.offset_and_shape(empty)["offset"] is None and I.low_register_offset(empty) is None
+    assert empty.notes == [] and empty.played() == {} and I.note_spreads(empty) == [], "empty.notes == [] and empty.played() == {} and I.note_spreads(empty) == []"
+    assert I.offset_and_shape(empty)["offset"] is None and I.low_register_offset(empty) is None, "I.offset_and_shape(empty)[\"offset\"] is None and I.low_register_offset(empty) is None"
 check("captures with no note, no fundamental or broken fields are counted and skipped; an empty run is empty",
       unlabelled_and_broken_captures_are_counted_not_crashed)
 
@@ -140,14 +140,14 @@ def a_preset_and_its_chosen_sessions():
                            {"date": "d2", "captures": [cap("G#2", detuned(44, 10)), cap("C4", detuned(60, -4))]},
                            {"date": "d3", "captures": [cap("C4", detuned(60, 20))]}]}
     whole = I.run_from_preset(preset)
-    assert whole.name == "Mark VI" and whole.sessions_used == 3 and whole.captures_used == 4
+    assert whole.name == "Mark VI" and whole.sessions_used == 3 and whole.captures_used == 4, "whole.name == \"Mark VI\" and whole.sessions_used == 3 and whole.captures_used == 4"
     approx(whole.played()["Bb3"][0], 8.0)
     approx(whole.played()["D5"][0], 8.0)                     # the median of -4 and 20
     some = I.run_from_preset(preset, session_indices=[1], name="d2 only")
-    assert some.name == "d2 only" and some.sessions_used == 1 and some.captures_used == 2
+    assert some.name == "d2 only" and some.sessions_used == 1 and some.captures_used == 2, "some.name == \"d2 only\" and some.sessions_used == 1 and some.captures_used == 2"
     approx(some.played()["Bb3"][0], 10.0)
     approx(some.played()["D5"][0], -4.0)
-    assert I.run_from_preset(preset, session_indices=[7]).captures_used == 0
+    assert I.run_from_preset(preset, session_indices=[7]).captures_used == 0, "I.run_from_preset(preset, session_indices=[7]).captures_used == 0"
 check("a run from a preset takes all its sessions or the chosen ones; the name is the preset's or the caller's",
       a_preset_and_its_chosen_sessions)
 
@@ -159,17 +159,17 @@ def the_charts_points_and_overlay():
     r2 = I.run_from_captures([{"captures": [cap("G#2", detuned(44, -2)), cap("D4", detuned(62, 12))]}],
                              "Tenor", name="horn B")
     spreads = I.note_spreads(r1)
-    assert [s.note for s in spreads] == ["Bb3", "B3", "D5"]      # low to high
+    assert [s.note for s in spreads] == ["Bb3", "B3", "D5"], "[s.note for s in spreads] == [\"Bb3\", \"B3\", \"D5\"]"      # low to high
     assert spreads[0] == I.NoteSpread("Bb3", 1, 8.0, 6.0, 10.0, 2) or (
         spreads[0].note == "Bb3" and approx(spreads[0].cents, 8.0) is None and approx(spreads[0].low, 6.0) is None
-        and approx(spreads[0].high, 10.0) is None and spreads[0].takes == 2 and spreads[0].register == 1)
+        and approx(spreads[0].high, 10.0) is None and spreads[0].takes == 2 and spreads[0].register == 1), "spreads[0] == I.NoteSpread(\"Bb3\", 1, 8.0, 6.0, 10.0, 2) or ( spreads[0].note == \"Bb3\" and approx(spreads[0]..."
     ov = I.overlay([r1, r2])
     assert ov["notes"] == ["Bb3", "B3", "D5", "E5"], ov["notes"]          # the union, low to high
-    assert ov["registers"] == {"Bb3": 1, "B3": 1, "D5": 2, "E5": 2}
-    assert [ln["name"] for ln in ov["lines"]] == ["horn A", "horn B"]
-    assert set(ov["lines"][1]["points"]) == {"Bb3", "E5"}               # a line skips the notes it lacks
-    assert I.register_changes(ov["notes"], ov["registers"]) == [2]       # the dashed line sits before D5
-    assert I.register_changes(["Bb3", "B3"], {"Bb3": 1, "B3": 1}) == []
+    assert ov["registers"] == {"Bb3": 1, "B3": 1, "D5": 2, "E5": 2}, "ov[\"registers\"] == {\"Bb3\": 1, \"B3\": 1, \"D5\": 2, \"E5\": 2}"
+    assert [ln["name"] for ln in ov["lines"]] == ["horn A", "horn B"], "[ln[\"name\"] for ln in ov[\"lines\"]] == [\"horn A\", \"horn B\"]"
+    assert set(ov["lines"][1]["points"]) == {"Bb3", "E5"}, "set(ov[\"lines\"][1][\"points\"]) == {\"Bb3\", \"E5\"}"               # a line skips the notes it lacks
+    assert I.register_changes(ov["notes"], ov["registers"]) == [2], "I.register_changes(ov[\"notes\"], ov[\"registers\"]) == [2]"       # the dashed line sits before D5
+    assert I.register_changes(["Bb3", "B3"], {"Bb3": 1, "B3": 1}) == [], "I.register_changes([\"Bb3\", \"B3\"], {\"Bb3\": 1, \"B3\": 1}) == []"
 check("the chart's points are each note's median with its takes' range, low to high; the overlay is the union "
       "of the runs' notes with one register change", the_charts_points_and_overlay)
 
@@ -185,10 +185,10 @@ def the_offset_and_the_shape_per_register():
     approx(by["Bb3"]["shape"], -5.0)
     approx(by["C4"]["shape"], -15.0)
     r1, r2 = res["registers"][1], res["registers"][2]
-    assert r1["n"] == 2 and approx(r1["mean_shape"], -10.0) is None
+    assert r1["n"] == 2 and approx(r1["mean_shape"], -10.0) is None, "r1[\"n\"] == 2 and approx(r1[\"mean_shape\"], -10.0) is None"
     approx(r1["rms_shape"], math.sqrt((25 + 225) / 2))
-    assert r1["worst_note"] == "C4" and approx(r1["worst_shape"], -15.0) is None
-    assert r2["n"] == 2 and approx(r2["mean_shape"], 10.0) is None and r2["worst_note"] == "E5"
+    assert r1["worst_note"] == "C4" and approx(r1["worst_shape"], -15.0) is None, "r1[\"worst_note\"] == \"C4\" and approx(r1[\"worst_shape\"], -15.0) is None"
+    assert r2["n"] == 2 and approx(r2["mean_shape"], 10.0) is None and r2["worst_note"] == "E5", "r2[\"n\"] == 2 and approx(r2[\"mean_shape\"], 10.0) is None and r2[\"worst_note\"] == \"E5\""
     approx(res["overall"]["rms_shape"], math.sqrt((25 + 225 + 25 + 225) / 4))
     # 10 and -10 give offset 0, rms 10
     run = I.run_from_captures([{"captures": [cap("G#2", detuned(44, 10)), cap("A#2", detuned(46, -10))]}], "Tenor")
@@ -197,7 +197,7 @@ def the_offset_and_the_shape_per_register():
     approx(res["registers"][1]["rms_shape"], 10.0)
     approx(I.low_register_offset(run), 0.0)
     approx(I.low_register_offset(I.run_from_captures([{"captures": caps}], "Tenor")), 5.0)   # the median of 10 and 0
-    assert I.low_register_offset(I.run_from_captures([{"captures": [cap("C4", hz(60))]}], "Tenor")) is None
+    assert I.low_register_offset(I.run_from_captures([{"captures": [cap("C4", hz(60))]}], "Tenor")) is None, "I.low_register_offset(I.run_from_captures([{\"captures\": [cap(\"C4\", hz(60))]}], \"Tenor\")) is None"
 check("the offset is the mean of the notes' cents, the shape each note less it, with per-register mean, rms and "
       "worst note; the low-register offset is that register's median", the_offset_and_the_shape_per_register)
 
@@ -235,20 +235,20 @@ def a_take_that_is_not_its_note_is_left_out():
     run = I.run_from_captures([{"captures": caps}], "Tenor")
     # the first is the March label and is corrected (below); the other five are not their note
     assert run.left_out == {"implausible": 0, "unlabelled": 0, "off_note": 5}, run.left_out
-    assert run.corrected == 1 and run.captures_used == 3
+    assert run.corrected == 1 and run.captures_used == 3, "run.corrected == 1 and run.captures_used == 3"
     assert run.notes == ["E4", "D5"] and len(run.reading("D5").takes) == 2, run.notes     # D3 is written E4 on a tenor
-    assert sorted(round(t.cents) for t in run.reading("D5").takes) == [-49, 49]
+    assert sorted(round(t.cents) for t in run.reading("D5").takes) == [-49, 49], "sorted(round(t.cents) for t in run.reading(\"D5\").takes) == [-49, 49]"
     # a detector slip on the chart's own neighbour is not corrected either way
-    assert I.run_from_captures([{"captures": [cap("C4", detuned(60, 100))]}], "Tenor").corrected == 0
+    assert I.run_from_captures([{"captures": [cap("C4", detuned(60, 100))]}], "Tenor").corrected == 0, "I.run_from_captures([{\"captures\": [cap(\"C4\", detuned(60, 100))]}], \"Tenor\").corrected == 0"
     # the line is drawn at the run's reference pitch: 55 cents sharp of A=440 is 47 cents sharp of A=442
     at_440 = I.run_from_captures([{"captures": [cap("C4", detuned(60, 55))]}], "Tenor", 440.0)
     at_442 = I.run_from_captures([{"captures": [cap("C4", detuned(60, 55))]}], "Tenor", 442.0)
-    assert at_440.left_out["off_note"] == 1 and at_442.left_out["off_note"] == 0 and at_442.notes == ["D5"]
+    assert at_440.left_out["off_note"] == 1 and at_442.left_out["off_note"] == 0 and at_442.notes == ["D5"], "at_440.left_out[\"off_note\"] == 1 and at_442.left_out[\"off_note\"] == 0 and at_442.notes == [\"D5\"]"
     # a wrong-note take whose wrong label is also out of the horn's range counts as off note, not as out of range
     # (the A#0 one is the March label and is corrected now, not counted off note; C1 in tune is out of range)
     both = I.run_from_captures([{"captures": [cap("A#0", hz(22 + 28)), cap("C1", 32.7)]}], "Tenor")
     assert both.left_out == {"implausible": 1, "unlabelled": 0, "off_note": 0} and both.corrected == 1, both.left_out
-    assert I.OFF_NOTE_CENTS == 50.0
+    assert I.OFF_NOTE_CENTS == 50.0, "I.OFF_NOTE_CENTS == 50.0"
 check("a take further than half a semitone from its labelled note is left out and counted (the library's "
       "two-transpositions labels, an octave, a semitone slip; 49 c kept, 51 c out; at the reference pitch; "
       "off note before out of range)", a_take_that_is_not_its_note_is_left_out)
@@ -262,28 +262,28 @@ def the_march_labels_are_corrected_on_read():
     run = I.run_from_captures([{"captures": [cap("A#0", detuned(22 + 28, 7))]}], "Tenor")
     assert run.corrected == 1 and run.left_out["off_note"] == 0 and run.notes == ["E4"], (run.corrected, run.notes)
     approx(run.reading("E4").cents, 7.0, 1e-6)
-    assert run.reading("E4").concert_midi == 50
+    assert run.reading("E4").concert_midi == 50, "run.reading(\"E4\").concert_midi == 50"
     # alto (+18) and soprano (+4), the same mistake at their own transpositions
-    assert I.run_from_captures([{"captures": [cap("A2", hz(45 + 18))]}], "Alto").corrected == 1
-    assert I.run_from_captures([{"captures": [cap("A#4", hz(70 + 4))]}], "Soprano").corrected == 1
+    assert I.run_from_captures([{"captures": [cap("A2", hz(45 + 18))]}], "Alto").corrected == 1, "I.run_from_captures([{\"captures\": [cap(\"A2\", hz(45 + 18))]}], \"Alto\").corrected == 1"
+    assert I.run_from_captures([{"captures": [cap("A#4", hz(70 + 4))]}], "Soprano").corrected == 1, "I.run_from_captures([{\"captures\": [cap(\"A#4\", hz(70 + 4))]}], \"Soprano\").corrected == 1"
     # the guard: the corrected note must lie in the horn's range (a tenor's A#4 + 28 = F#7 does not)
     out = I.run_from_captures([{"captures": [cap("A#4", hz(70 + 28))]}], "Tenor")
-    assert out.corrected == 0 and out.left_out["off_note"] == 1
+    assert out.corrected == 0 and out.left_out["off_note"] == 1, "out.corrected == 0 and out.left_out[\"off_note\"] == 1"
     # the guard: only exactly 2T, within the bound (2T + 51 cents is not it; 2T + 49 is)
-    assert I.run_from_captures([{"captures": [cap("A#0", detuned(50, 51))]}], "Tenor").left_out["off_note"] == 1
-    assert I.run_from_captures([{"captures": [cap("A#0", detuned(50, 49))]}], "Tenor").corrected == 1
+    assert I.run_from_captures([{"captures": [cap("A#0", detuned(50, 51))]}], "Tenor").left_out["off_note"] == 1, "I.run_from_captures([{\"captures\": [cap(\"A#0\", detuned(50, 51))]}], \"Tenor\").left_out[\"off_note\"] == 1"
+    assert I.run_from_captures([{"captures": [cap("A#0", detuned(50, 49))]}], "Tenor").corrected == 1, "I.run_from_captures([{\"captures\": [cap(\"A#0\", detuned(50, 49))]}], \"Tenor\").corrected == 1"
     # an octave above that again is the detector's slip, not the label's: left out
-    assert I.run_from_captures([{"captures": [cap("A#0", hz(22 + 28 + 12))]}], "Tenor").left_out["off_note"] == 1
+    assert I.run_from_captures([{"captures": [cap("A#0", hz(22 + 28 + 12))]}], "Tenor").left_out["off_note"] == 1, "I.run_from_captures([{\"captures\": [cap(\"A#0\", hz(22 + 28 + 12))]}], \"Tenor\").left_out[\"off_note\"] == 1"
     # the corrected take still goes through the fingerprint's filter (an impossible harmonic stays out)
     bad = I.run_from_captures([{"captures": [cap("A#0", hz(50), harm=(0.0, 25.0))]}], "Tenor")
-    assert bad.corrected == 1 and bad.left_out["implausible"] == 1 and bad.notes == []
+    assert bad.corrected == 1 and bad.left_out["implausible"] == 1 and bad.notes == [], "bad.corrected == 1 and bad.left_out[\"implausible\"] == 1 and bad.notes == []"
     # a take within the bound of its own label is never touched, on any horn
     for sax in ("Tenor", "Alto", "Soprano", "Baritone", "C Melody", "Sopranino"):
         ok = I.run_from_captures([{"captures": [cap("D4", detuned(62, 20))]}], sax)     # D4 is in every range
         assert ok.corrected == 0 and ok.captures_used == 1, sax
     # the chart's overlay sees the corrected note like any other
     ov = I.overlay([run])
-    assert ov["notes"] == ["E4"] and ov["registers"] == {"E4": 1}
+    assert ov["notes"] == ["E4"] and ov["registers"] == {"E4": 1}, "ov[\"notes\"] == [\"E4\"] and ov[\"registers\"] == {\"E4\": 1}"
 check("the March 2026 labels (exactly two transpositions low, corrected note in the horn's range) are corrected "
       "on read and counted; the guards: in range, within the bound, not an octave above; the fingerprint's filter "
       "still applies; a good take is never touched", the_march_labels_are_corrected_on_read)

@@ -34,6 +34,8 @@ All test suites (88 files): `test_adhesive_ring`, `test_adhesive_ring_fuzz`, `te
 
 **What CI runs**: `lint` (ruff), `test` (every suite via `run_tests.py` on Windows, macOS Apple Silicon, macOS Intel with the Intel build's dependency set and `--allow-missing sounddevice`, and Linux under `xvfb-run`), and `build`, which `needs: [lint, test]` and runs `--selftest` on every frozen bundle. The macOS test job is the only place the macOS code paths run: nobody on the project owns a Mac.
 
+**Run the suites as CI does before reporting them green**: `python tools/run_tests_as_ci.py [filters]` builds `<repo>/.venv/ci-py3.11` from a Python 3.11 (the `py` launcher, PATH, or uv's managed interpreters; `--install` fetches one with uv) with `locks/full.txt` installed `--require-hashes` as the workflow does, and runs `run_tests.py` in it; its first lines name the interpreter and numpy, which every report states. Why: five Analyzer commits passed here on Python 3.14 and failed on all four CI platforms on 3.11 (CI's locked numpy 2.4.6 against this machine's unlocked 2.4.2: a float one last place off a golden literal; a chart read that raced a 100 ms debounce; a window that opened wider than a check assumed), 2026-11-11, `docs/decisions/testing-and-ci.md`. A computed float is never compared exactly in a suite (`near`, `near_list`); a check never reads the canvas after a plain wait (draw it, or wait for the drawing, bounded).
+
 **Standing rules for tests** (why: `docs/decisions/testing-and-ci.md`):
 
 - **Never touch the real settings folder.** Every suite that can reach it sets `SAXSHOP_CONFIG_DIR` to a temp folder at module level, before any project module is imported. `run_tests.py` gives each suite its own. Gated by `test_config_isolation`.

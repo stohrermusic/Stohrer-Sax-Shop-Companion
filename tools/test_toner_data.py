@@ -58,6 +58,14 @@ def near_dict(d, golden):
         else:
             near(d[k], v)
 
+def near_list(got, exp, tol=1e-6):
+    """Element by element within tol: an average or a rounding can differ in the last place between
+    numpy versions (CI's locked 2.4.6 on Python 3.11 against an unlocked 2.4.2 here, 2026-11-11), so no computed float
+    is compared exactly."""
+    assert len(got) == len(exp), f"got {got!r}, expected {exp!r}"
+    for g, e in zip(got, exp):
+        near(g, e, tol)
+
 
 TMP = tempfile.mkdtemp(prefix="ssc-toner-data-files-")
 
@@ -103,9 +111,9 @@ LIB = {
 
 def t_round_trip():
     p = os.path.join(TMP, "round.json")
-    assert te.save_tone_presets(LIB, p) is True
-    assert not os.path.exists(p + ".tmp")
-    assert te.load_tone_presets(p) == LIB
+    assert te.save_tone_presets(LIB, p) is True, "te.save_tone_presets(LIB, p) is True"
+    assert not os.path.exists(p + ".tmp"), "not os.path.exists(p + \".tmp\")"
+    assert te.load_tone_presets(p) == LIB, "te.load_tone_presets(p) == LIB"
 check("nested library with 2 sessions, free/calibration/file captures and optional keys round-trips", t_round_trip)
 
 def t_flat_migrates():
@@ -113,7 +121,7 @@ def t_flat_migrates():
     flat = {"Old Tenor": {"horn_type": "Tenor", "sessions": [{"captures": [cap("A3", STD, 220.0)]}]}}
     with open(p, "w") as f:
         json.dump(flat, f)
-    assert te.load_tone_presets(p) == {"My Presets": flat}
+    assert te.load_tone_presets(p) == {"My Presets": flat}, "te.load_tone_presets(p) == {\"My Presets\": flat}"
     with open(p) as f:
         assert json.load(f) == {"My Presets": flat}, "flat file was not rewritten as nested"
 check("flat file migrates to {'My Presets': ...} and is rewritten nested on disk", t_flat_migrates)
@@ -123,7 +131,7 @@ def t_preset_named_sessions():
     data = {"Lib": {"sessions": {"horn_type": "Alto", "sessions": []}}}
     with open(p, "w") as f:
         json.dump(data, f)
-    assert te.load_tone_presets(p) == data
+    assert te.load_tone_presets(p) == data, "te.load_tone_presets(p) == data"
 check("a preset literally named 'sessions' does not trigger the flat migration", t_preset_named_sessions)
 
 check("missing file -> {'My Presets': {}}",
@@ -133,20 +141,20 @@ def t_top_list():
     p = os.path.join(TMP, "list.json")
     with open(p, "w") as f:
         json.dump([1, 2], f)
-    assert te.load_tone_presets(p) == {"My Presets": {}}
-    assert not os.path.exists(p + ".corrupt.bak")
+    assert te.load_tone_presets(p) == {"My Presets": {}}, "te.load_tone_presets(p) == {\"My Presets\": {}}"
+    assert not os.path.exists(p + ".corrupt.bak"), "not os.path.exists(p + \".corrupt.bak\")"
 check("top-level JSON list -> default, no .corrupt.bak", t_top_list)
 
 def t_corrupt():
     p = os.path.join(TMP, "corrupt.json")
     with open(p, "w") as f:
         f.write('{"My Presets": {"A": ')
-    assert te.load_tone_presets(p) == {"My Presets": {}}
+    assert te.load_tone_presets(p) == {"My Presets": {}}, "te.load_tone_presets(p) == {\"My Presets\": {}}"
     with open(p + ".corrupt.bak") as f:
-        assert f.read() == '{"My Presets": {"A": '
+        assert f.read() == '{"My Presets": {"A": ', "f.read() == '{\"My Presets\": {\"A\": '"
     with open(p, "w") as f:
         f.write("second garbage")
-    assert te.load_tone_presets(p) == {"My Presets": {}}
+    assert te.load_tone_presets(p) == {"My Presets": {}}, "te.load_tone_presets(p) == {\"My Presets\": {}}"
     with open(p + ".corrupt.bak") as f:
         assert f.read() == '{"My Presets": {"A": ', "backup was overwritten"
 check("corrupt JSON -> default and .corrupt.bak written once (second corruption keeps the first)", t_corrupt)
@@ -154,26 +162,26 @@ check("corrupt JSON -> default and .corrupt.bak written once (second corruption 
 def t_dir_path():
     d = os.path.join(TMP, "a_dir.json")
     os.mkdir(d)
-    assert te.load_tone_presets(d) == {"My Presets": {}}
+    assert te.load_tone_presets(d) == {"My Presets": {}}, "te.load_tone_presets(d) == {\"My Presets\": {}}"
 check("a path that is a directory loads as the default", t_dir_path)
 
 def t_unwritable():
     p = os.path.join(TMP, "no_such_dir", "x.json")
-    assert te.save_tone_presets(LIB, p) is False
-    assert not os.path.exists(p + ".tmp")
+    assert te.save_tone_presets(LIB, p) is False, "te.save_tone_presets(LIB, p) is False"
+    assert not os.path.exists(p + ".tmp"), "not os.path.exists(p + \".tmp\")"
 check("save to a path in a missing folder -> False, no .tmp", t_unwritable)
 
 def t_save_onto_dir():
     d = os.path.join(TMP, "save_dir")
     os.mkdir(d)
-    assert te.save_tone_presets(LIB, d) is False
+    assert te.save_tone_presets(LIB, d) is False, "te.save_tone_presets(LIB, d) is False"
     assert os.path.exists(d + ".tmp"), "today the .tmp is left behind (see report)"
 check("save onto a directory -> False and a stale .tmp is LEFT (pinned as-is)", t_save_onto_dir)
 
 def t_save_unserializable():
     p = os.path.join(TMP, "badval.json")
-    assert te.save_tone_presets({"L": {"P": {1, 2}}}, p) is False
-    assert not os.path.exists(p) and os.path.exists(p + ".tmp")
+    assert te.save_tone_presets({"L": {"P": {1, 2}}}, p) is False, "te.save_tone_presets({\"L\": {\"P\": {1, 2}}}, p) is False"
+    assert not os.path.exists(p) and os.path.exists(p + ".tmp"), "not os.path.exists(p) and os.path.exists(p + \".tmp\")"
 check("save of unserializable data -> False, target untouched, partial .tmp LEFT (pinned as-is)",
       t_save_unserializable)
 
@@ -207,30 +215,30 @@ OLD = '{"My Presets": {"Old": {"sessions": []}}}'
 def t_rename():
     cfg, _cwd = run_config_import({"tone_profiles.json": OLD}, {})
     with open(os.path.join(cfg, "toner_data.json")) as f:
-        assert f.read() == OLD
+        assert f.read() == OLD, "f.read() == OLD"
     assert not os.path.exists(os.path.join(cfg, "tone_profiles.json")), "expected os.rename (old file gone)"
 check("config import renames tone_profiles.json -> toner_data.json (os.rename: old file gone)", t_rename)
 
 def t_rename_skipped():
     cfg, _cwd = run_config_import({"tone_profiles.json": OLD, "toner_data.json": "{}"}, {})
     with open(os.path.join(cfg, "toner_data.json")) as f:
-        assert f.read() == "{}"
-    assert os.path.exists(os.path.join(cfg, "tone_profiles.json"))
+        assert f.read() == "{}", "f.read() == \"{}\""
+    assert os.path.exists(os.path.join(cfg, "tone_profiles.json")), "os.path.exists(os.path.join(cfg, \"tone_profiles.json\"))"
 check("no rename when toner_data.json already exists (both files kept)", t_rename_skipped)
 
 def t_legacy_cwd():
     cfg, cwd = run_config_import({}, {"tone_profiles.json": OLD})
     with open(os.path.join(cfg, "toner_data.json")) as f:
-        assert f.read() == OLD
-    assert not os.path.exists(os.path.join(cfg, "tone_profiles.json"))
+        assert f.read() == OLD, "f.read() == OLD"
+    assert not os.path.exists(os.path.join(cfg, "tone_profiles.json")), "not os.path.exists(os.path.join(cfg, \"tone_profiles.json\"))"
     assert os.path.exists(os.path.join(cwd, "tone_profiles.json")), "legacy copy uses copy2"
 check("legacy cwd tone_profiles.json: copy2 into config dir, then renamed; cwd file kept", t_legacy_cwd)
 
 def t_legacy_cwd_new_name():
     cfg, cwd = run_config_import({}, {"toner_data.json": OLD})
     with open(os.path.join(cfg, "toner_data.json")) as f:
-        assert f.read() == OLD
-    assert os.path.exists(os.path.join(cwd, "toner_data.json"))
+        assert f.read() == OLD, "f.read() == OLD"
+    assert os.path.exists(os.path.join(cwd, "toner_data.json")), "os.path.exists(os.path.join(cwd, \"toner_data.json\"))"
 check("legacy cwd toner_data.json is copied into the config dir", t_legacy_cwd_new_name)
 
 
@@ -267,8 +275,8 @@ def t_rolloff():
     near(te.compute_rolloff_rate(STD), 3.875)
     near(te.compute_rolloff_rate(WARM), 2.875)
     near(te.compute_rolloff_rate(STD + [-38.0, -42.0, -46.0]), 3.9)  # stops at H12
-    assert te.compute_rolloff_rate(THIN) is None
-    assert te.compute_rolloff_rate([0, -1, -2, -3, -4, -5, -6]) is None
+    assert te.compute_rolloff_rate(THIN) is None, "te.compute_rolloff_rate(THIN) is None"
+    assert te.compute_rolloff_rate([0, -1, -2, -3, -4, -5, -6]) is None, "te.compute_rolloff_rate([0, -1, -2, -3, -4, -5, -6]) is None"
     near(te.compute_rolloff_rate([0, -1, -2, -3, -4, -5, -6, -8]), 7 / 6)
 check("rolloff_rate: STD 3.875, WARM 2.875, 13 entries 3.9 (H2..H12), <8 entries None", t_rolloff)
 
@@ -277,18 +285,18 @@ S1 = {"date": "2026-11-01", "mic_type": "condenser",
 
 def t_fp_per_note_first():
     fp = te.compute_fingerprint([S1], "Alto")
-    assert fp["note_count"] == 2 and fp["capture_count"] == 3
-    assert sorted(fp["per_note"]) == ["A3", "D4"]
-    assert fp["per_note"]["A3"]["harmonics_db"] == [0.0, -2.0, -5.0, -8.0, -11.5, -15.0, -18.5, -22.0, -25.5, -29.0]
+    assert fp["note_count"] == 2 and fp["capture_count"] == 3, "fp[\"note_count\"] == 2 and fp[\"capture_count\"] == 3"
+    assert sorted(fp["per_note"]) == ["A3", "D4"], "sorted(fp[\"per_note\"]) == [\"A3\", \"D4\"]"
+    near_list(fp["per_note"]["A3"]["harmonics_db"], [0.0, -2.0, -5.0, -8.0, -11.5, -15.0, -18.5, -22.0, -25.5, -29.0])
     near(fp["per_note"]["A3"]["descriptors"]["richness"], 0.29259972374826704)
     # Equal weight per note: mean of A3 (0.2926) and D4 (0.05), not of 3 captures
     near(fp["descriptors"]["richness"], (0.29259972374826704 + 0.05) / 2)
     near_dict(fp["descriptors"], {"richness": 0.1712998618741335, "warmth": 0.4166666666666667,
                                   "even_odd": 0.8423270852756358, "rolloff_shape": 0.0, "evenness": 0.5})
     # Horn-level harmonics are the mean of all CAPTURES (H2: (-3-1-20)/3 = -8)
-    assert fp["harmonics_db"] == [0.0, -8.0, -15.0, -22.0, -11.5, -15.0, -18.5, -22.0, -25.5, -29.0]
+    near_list(fp["harmonics_db"], [0.0, -8.0, -15.0, -22.0, -11.5, -15.0, -18.5, -22.0, -25.5, -29.0])
     near(fp["rolloff_rate"], 2.625)
-    assert fp["mic_type"] == "condenser"
+    assert fp["mic_type"] == "condenser", "fp[\"mic_type\"] == \"condenser\""
 check("fingerprint: per-note mean first (richness 0.171299862 = mean of A3 0.292599724 and D4 0.05), "
       "warmth 0.416666667, even_odd 0.842327085, rolloff_rate 2.625", t_fp_per_note_first)
 
@@ -297,7 +305,7 @@ def t_fp_filter_and_mic():
                                               cap("F4", [0.0, 25.0, -5.0], 349.23)]}
     s3 = {"mic_type": "dynamic", "captures": []}
     fp = te.compute_fingerprint([S1, s2, s3], "Alto")
-    assert fp["note_count"] == 3 and fp["capture_count"] == 4  # C7 out of range, +25 dB dropped
+    assert fp["note_count"] == 3 and fp["capture_count"] == 4, "fp[\"note_count\"] == 3 and fp[\"capture_count\"] == 4"  # C7 out of range, +25 dB dropped
     assert fp["mic_type"] == "dynamic", "majority over sessions, empty sessions included"
     near_dict(fp["descriptors"], {"richness": 0.27287715275175883, "warmth": 0.5833333333333334,
                                   "even_odd": 0.7825195175489693, "evenness": 0.5})
@@ -315,13 +323,13 @@ check("fingerprint with 5 notes: evenness 0.525662436, richness 0.245330778, rol
                near(te.compute_fingerprint([S5], "Alto")["rolloff_rate"], 2.925)))
 
 def t_plausible():
-    assert te._capture_is_plausible(cap("C3", STD, 130.81), "Alto") is True
-    assert te._capture_is_plausible(cap("B2", STD, 123.47), "Alto") is False
-    assert te._capture_is_plausible(cap("A4", [0.0, 20.0], 440.0), "Alto") is True
-    assert te._capture_is_plausible(cap("A4", [0.0, 20.5], 440.0), "Alto") is False
-    assert te._capture_is_plausible(cap("A4", [0.0, float("-inf")], 440.0), "Alto") is False
-    assert te._capture_is_plausible(cap("", STD, 440.0), "Alto") is False
-    assert te._capture_is_plausible(cap("", STD, 440.0), "Kazoo") is True  # unknown type: no range check
+    assert te._capture_is_plausible(cap("C3", STD, 130.81), "Alto") is True, "te._capture_is_plausible(cap(\"C3\", STD, 130.81), \"Alto\") is True"
+    assert te._capture_is_plausible(cap("B2", STD, 123.47), "Alto") is False, "te._capture_is_plausible(cap(\"B2\", STD, 123.47), \"Alto\") is False"
+    assert te._capture_is_plausible(cap("A4", [0.0, 20.0], 440.0), "Alto") is True, "te._capture_is_plausible(cap(\"A4\", [0.0, 20.0], 440.0), \"Alto\") is True"
+    assert te._capture_is_plausible(cap("A4", [0.0, 20.5], 440.0), "Alto") is False, "te._capture_is_plausible(cap(\"A4\", [0.0, 20.5], 440.0), \"Alto\") is False"
+    assert te._capture_is_plausible(cap("A4", [0.0, float("-inf")], 440.0), "Alto") is False, "te._capture_is_plausible(cap(\"A4\", [0.0, float(\"-inf\")], 440.0), \"Alto\") is False"
+    assert te._capture_is_plausible(cap("", STD, 440.0), "Alto") is False, "te._capture_is_plausible(cap(\"\", STD, 440.0), \"Alto\") is False"
+    assert te._capture_is_plausible(cap("", STD, 440.0), "Kazoo") is True, "te._capture_is_plausible(cap(\"\", STD, 440.0), \"Kazoo\") is True"  # unknown type: no range check
 check("_capture_is_plausible: range edges, +20 dB kept, +20.5 and -inf dropped, unknown type skips range",
       t_plausible)
 
@@ -329,8 +337,8 @@ def t_average():
     a = te.average_captures([{"harmonics_db": [0, -4, -8], "harmonic_cents": [0, 2], "fundamental_freq": 220},
                              {"harmonics_db": [0, -6], "freq": 222},
                              {"harmonics_db": [0, -2, -10, -20], "fundamental_freq": 0}])
-    assert a == {"harmonics_db": [0.0, -4.0, -9.0, -20.0], "fundamental_freq": 221.0, "harmonic_cents": [0.0, 2.0]}
-    assert te.average_captures([]) is None
+    assert a == {"harmonics_db": [0.0, -4.0, -9.0, -20.0], "fundamental_freq": 221.0, "harmonic_cents": [0.0, 2.0]}, "a == {\"harmonics_db\": [0.0, -4.0, -9.0, -20.0], \"fundamental_freq\": 221.0, \"harmonic_cents\": [0.0, 2.0]}"
+    assert te.average_captures([]) is None, "te.average_captures([]) is None"
 check("average_captures: per-index mean over mixed lengths, 'freq' fallback, 0 Hz ignored, cents averaged",
       t_average)
 
@@ -341,20 +349,21 @@ check("find_out_of_range_notes Alto: ['B2', 'A#5', 'C7'] (C3, A5, A4 in; unparse
 EMPTY = {"date": "2026-11-03", "captures": []}
 
 def t_session_fp():
-    assert te.compute_session_fingerprint(EMPTY) is None and te.compute_session_fingerprint({}) is None
-    assert te.compute_session_fingerprint(S1, "Alto") == te.compute_fingerprint([S1], "Alto")
+    assert te.compute_session_fingerprint(EMPTY) is None and te.compute_session_fingerprint({}) is None, "te.compute_session_fingerprint(EMPTY) is None and te.compute_session_fingerprint({}) is None"
+    assert te.compute_session_fingerprint(S1, "Alto") == te.compute_fingerprint([S1], "Alto"), "te.compute_session_fingerprint(S1, \"Alto\") == te.compute_fingerprint([S1], \"Alto\")"
 check("compute_session_fingerprint: None without captures, else compute_fingerprint([s])", t_session_fp)
 
 def t_variation():
-    assert te.compute_session_variation([S1, EMPTY], "Alto") is None
+    assert te.compute_session_variation([S1, EMPTY], "Alto") is None, "te.compute_session_variation([S1, EMPTY], \"Alto\") is None"
     v = te.compute_session_variation([S1, S5, EMPTY], "Alto")
-    assert v["session_count"] == 2 and [d for d, _ in v["session_fingerprints"]] == ["2026-11-01", "2026-11-05"]
+    assert v["session_count"] == 2 and [d for d, _ in v["session_fingerprints"]] == ["2026-11-01", "2026-11-05"], "v[\"session_count\"] == 2 and [d for d, _ in v[\"session_fingerprints\"]] == [\"2026-11-01\", \"2026-11-05\"]"
     st = v["descriptor_stats"]
     near_dict(st["richness"], {"mean": 0.20831532003192355, "stdev": 0.037015458157790046,
                                "min": 0.1712998618741335, "max": 0.2453307781897136})
     near_dict(st["warmth"], {"mean": 0.5416666666666666, "stdev": 0.125})
     near_dict(st["even_odd"], {"mean": 0.794356376423119, "stdev": 0.04797070885251686})
-    assert st["richness"]["n"] == 2 and st["rolloff_shape"]["stdev"] == 0.0
+    assert st["richness"]["n"] == 2, st["richness"]
+    near(st["rolloff_shape"]["stdev"], 0.0)
 check("session variation: 1 session -> None; 2 -> richness mean 0.208315320 stdev 0.037015458 (population)",
       t_variation)
 
@@ -362,17 +371,17 @@ def t_group():
     g = te.compute_group_fingerprint([("P1", {"horn_type": "Alto", "sessions": [S1]}),
                                       ("P5", {"horn_type": "Alto", "sessions": [S5]}),
                                       ("E", {"sessions": [EMPTY]})])
-    assert g["preset_count"] == 2 and g["total_captures"] == 8 and g["note_count"] == 5
-    assert [n for n, _ in g["per_preset"]] == ["P1", "P5"]
+    assert g["preset_count"] == 2 and g["total_captures"] == 8 and g["note_count"] == 5, "g[\"preset_count\"] == 2 and g[\"total_captures\"] == 8 and g[\"note_count\"] == 5"
+    assert [n for n, _ in g["per_preset"]] == ["P1", "P5"], "[n for n, _ in g[\"per_preset\"]] == [\"P1\", \"P5\"]"
     near_dict(g["descriptors"], {"richness": 0.20831532003192355, "warmth": 0.5416666666666666,
                                  "even_odd": 0.794356376423119, "rolloff_shape": 0.0})
-    assert "evenness" not in g["descriptors"]
+    assert "evenness" not in g["descriptors"], "\"evenness\" not in g[\"descriptors\"]"
     for got, exp in zip(g["harmonics_db"], [0.0, -6.8, -13.0, -19.2, -11.5, -15.0, -18.5, -22.0, -25.5, -29.0]):
         near(got, exp)
     assert g["per_note"]["A3"] == {"harmonics_db": [0.0, -2.5, -5.5, -9.0, -12.75, -16.5, -20.25, -24.0,
-                                                    -27.75, -31.5], "fundamental_freq": 220.0}
+                                                    -27.75, -31.5], "fundamental_freq": 220.0}, "g[\"per_note\"][\"A3\"] == {\"harmonics_db\": [0.0, -2.5, -5.5, -9.0, -12.75, -16.5, -20.25, -24.0, -27.75, -31.5..."
     e = te.compute_group_fingerprint([])
-    assert e["preset_count"] == 0 and e["descriptors"] == {"richness": 0.0, "warmth": 0.0}
+    assert e["preset_count"] == 0 and e["descriptors"] == {"richness": 0.0, "warmth": 0.0}, "e[\"preset_count\"] == 0 and e[\"descriptors\"] == {\"richness\": 0.0, \"warmth\": 0.0}"
     assert "per_note" not in e and "note_count" not in e, "empty result lacks per_note/note_count today"
 check("group fingerprint: equal weight per preset (richness 0.208315320), H2 -6.8, empty group shape", t_group)
 
@@ -383,15 +392,17 @@ def t_population():
          ("L", "T", {"horn_type": "Tenor", "sessions": [S5]}),
          ("L", "E", {"horn_type": "Alto", "sessions": [EMPTY]}),
          ("L", "W", {"horn_type": "Alto", "sessions": [{"captures": [cap("E4", WARM, 329.63)]}]})], "Alto")
-    assert pop["count"] == 3 and pop["sax_type"] == "Alto"
+    assert pop["count"] == 3 and pop["sax_type"] == "Alto", (pop["count"], pop["sax_type"])
     dv = pop["descriptor_values"]
     for got, exp in zip(dv["richness"], [0.1712998618741335, 0.2453307781897136, 0.4760317345070095]):
         near(got, exp)
-    assert dv["evenness"][:2] == [0.5, 0.5]
-    near(dv["evenness"][2], 0.5256624360067756)
-    assert pop["rolloff_values"] == [2.625, 2.875, 2.925]
-    assert te.percentile_rank(0.2453307781897136, dv["richness"]) == 33
-    assert te.percentile_rank(0.5, dv["richness"]) == 100
+    near_list(dv["evenness"], [0.5, 0.5, 0.5256624360067756])
+    near_list(pop["rolloff_values"], [2.625, 2.875, 2.925])
+    # the rank of a value that IS in the population: asked with the population's own value, not a
+    # 17-digit literal of it (under numpy 2.4.6 on Python 3.11, CI's, the middle richness is
+    # 0.24533077818971352, one last place off the literal, and bisect_left put the literal after it: 67)
+    assert te.percentile_rank(dv["richness"][1], dv["richness"]) == 33, (dv["richness"], te.percentile_rank(dv["richness"][1], dv["richness"]))
+    assert te.percentile_rank(0.5, dv["richness"]) == 100, dv["richness"]
 check("population stats Alto: 3 presets (Tenor and empty skipped), sorted lists, rolloff [2.625, 2.875, 2.925]",
       t_population)
 
@@ -455,11 +466,11 @@ _p2, _n2 = write_wav("two.wav", TWO)
 CAPS = te.analyze_audio_file(_p2, te.TonerEngine())
 
 def t_two_notes():
-    assert [c["note"] for c in CAPS] == ["A3", "D4"]
+    assert [c["note"] for c in CAPS] == ["A3", "D4"], "[c[\"note\"] for c in CAPS] == [\"A3\", \"D4\"]"
     for c in CAPS:
         assert set(c) == {"note", "fundamental_freq", "harmonics_db", "harmonic_cents", "timestamp",
                           "n_frames", "method", "spectral_centroid", "level_dbfs"}, sorted(c)
-        assert c["method"] == "file" and c["timestamp"] == ""
+        assert c["method"] == "file" and c["timestamp"] == "", "c[\"method\"] == \"file\" and c[\"timestamp\"] == \"\""
         # the level against full scale (2026-11-10): the generated
         # tones sit well under full scale (measured -16.7 dBFS here), and are not silence
         assert isinstance(c["level_dbfs"], float) and -25.0 < c["level_dbfs"] < -5.0, c["level_dbfs"]
@@ -475,23 +486,23 @@ def t_cents_and_h2():
     # the release were averaged in (the attack was skipped, the release was not).
     cents = [1200 * math.log2(c["fundamental_freq"] / f) for c, f in zip(CAPS, (220.0, 293.66))]
     assert abs(cents[0]) < 0.05 and abs(cents[1]) < 0.05, cents
-    assert CAPS[0]["harmonics_db"][1] == -3.34 and CAPS[1]["harmonics_db"][1] == -3.09
-    assert all(abs(c["harmonics_db"][1] + 3.0) <= 1.0 for c in CAPS)
+    assert CAPS[0]["harmonics_db"][1] == -3.34 and CAPS[1]["harmonics_db"][1] == -3.09, "CAPS[0][\"harmonics_db\"][1] == -3.34 and CAPS[1][\"harmonics_db\"][1] == -3.09"
+    assert all(abs(c["harmonics_db"][1] + 3.0) <= 1.0 for c in CAPS), "all(abs(c[\"harmonics_db\"][1] + 3.0) <= 1.0 for c in CAPS)"
 check("fundamental: A3 and D4 within 0.05 cents (were -1.09 and +0.35 with the release averaged in); "
       "H2 -3.34 / -3.09 dB", t_cents_and_h2)
 
 def t_n_frames():
     exp = expected_segments(TWO)
     assert exp == [("A3", 32), ("D4", 32)], exp
-    assert [(c["note"], c["n_frames"]) for c in CAPS] == exp
-    assert (_n2 - te.FFT_SIZE) // te.FILE_HOP_SAMPLES + 1 == 135
+    assert [(c["note"], c["n_frames"]) for c in CAPS] == exp, "[(c[\"note\"], c[\"n_frames\"]) for c in CAPS] == exp"
+    assert (_n2 - te.FFT_SIZE) // te.FILE_HOP_SAMPLES + 1 == 135, "(_n2 - te.FFT_SIZE) // te.FILE_HOP_SAMPLES + 1 == 135"
     assert te.FFT_SIZE // te.FILE_HOP_SAMPLES == 16, "a window is 16 hops: 16 frames go at each end of a run"
 check("n_frames 32 / 32 = detected run (64 hops of 1024) less the 16 hops of a window at either end "
       "(was 61: minus 3 attack frames); 135 windows", t_n_frames)
 
 def t_short():
     p, _n = write_wav("short.wav", [(220.0, 0.5)])
-    assert te.analyze_audio_file(p, te.TonerEngine()) == []
+    assert te.analyze_audio_file(p, te.TonerEngine()) == [], "te.analyze_audio_file(p, te.TonerEngine()) == []"
     p, _n = write_wav("one_second.wav", [(220.0, 1.0)])
     assert te.analyze_audio_file(p, te.TonerEngine()) == [], "a 1 s note has fewer than 10 whole-window frames"
     # the shortest note the file analyzer keeps: 10 frames plus a window (16 hops) at either end, 42 hops,
@@ -504,9 +515,9 @@ check("a note held 0.5 s or 1.0 s gives no capture (fewer than 10 whole-window f
 def t_stereo_48k():
     sig = [(c["note"], c["n_frames"], c["fundamental_freq"]) for c in CAPS]
     p, _n = write_wav("stereo.wav", TWO, channels=2)
-    assert [(c["note"], c["n_frames"], c["fundamental_freq"]) for c in te.analyze_audio_file(p, te.TonerEngine())] == sig
+    assert [(c["note"], c["n_frames"], c["fundamental_freq"]) for c in te.analyze_audio_file(p, te.TonerEngine())] == sig, "[(c[\"note\"], c[\"n_frames\"], c[\"fundamental_freq\"]) for c in te.analyze_audio_file(p, te.TonerEngine())] == sig"
     p, _n = write_wav("48k.wav", TWO, sr=48000)
-    assert [(c["note"], c["n_frames"], c["fundamental_freq"]) for c in te.analyze_audio_file(p, te.TonerEngine())] == sig
+    assert [(c["note"], c["n_frames"], c["fundamental_freq"]) for c in te.analyze_audio_file(p, te.TonerEngine())] == sig, "[(c[\"note\"], c[\"n_frames\"], c[\"fundamental_freq\"]) for c in te.analyze_audio_file(p, te.TonerEngine())] == sig"
 check("stereo and 48 kHz files give the same notes, n_frames and f0", t_stereo_48k)
 
 def t_progress():
@@ -514,11 +525,11 @@ def t_progress():
     calls = []
     caps = te.analyze_audio_file(p, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t)))
     windows = (n - te.FFT_SIZE) // te.FILE_HOP_SAMPLES + 1
-    assert windows == 415
+    assert windows == 415, "windows == 415"
     # every 200 windows and once at the end, with the exact total (fixed 2026-11-10: the total was one
     # short, nothing reported completion, and a file under 200 windows never called)
     assert calls == [(200, 415), (400, 415), (415, 415)], calls
-    assert [(c["note"], c["n_frames"]) for c in caps] == [("A3", 383)]   # 415 windows less 16 at either end
+    assert [(c["note"], c["n_frames"]) for c in caps] == [("A3", 383)], "[(c[\"note\"], c[\"n_frames\"]) for c in caps] == [(\"A3\", 383)]"   # 415 windows less 16 at either end
     calls.clear()
     te.analyze_audio_file(_p2, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t)))
     _samples, _rate, _ch = te._read_wav_file(_p2)
@@ -553,7 +564,7 @@ def t_scale_known_pitches():
     assert [c["note"] for c in caps] == [te.PITCH_CLASSES[m % 12] + str(m // 12 - 1) for m in midis], [c["note"] for c in caps]
     for c, m in zip(caps, midis):
         assert abs(cents_off(c["fundamental_freq"], m)) < 2.0, (c["note"], c["fundamental_freq"])
-        assert c["n_frames"] >= te.FREE_MIN_FRAMES
+        assert c["n_frames"] >= te.FREE_MIN_FRAMES, "c[\"n_frames\"] >= te.FREE_MIN_FRAMES"
 check("a chromatic scale of known pitches: every note found in order, each within 2 cents", t_scale_known_pitches)
 
 def t_asked_notes():
@@ -570,15 +581,15 @@ def t_asked_notes():
     got = te.analyze_asked_notes(p, te.TonerEngine(), asked)
     assert len(got) == 4 and got[2] is None and got[3] is None, got
     a, d = got[0], got[1]
-    assert a["note"] == "A3" and a["written_note"] == "B4" and a["method"] == "calibration" and a["detected_note"] == "G#3"
+    assert a["note"] == "A3" and a["written_note"] == "B4" and a["method"] == "calibration" and a["detected_note"] == "G#3", "a[\"note\"] == \"A3\" and a[\"written_note\"] == \"B4\" and a[\"method\"] == \"calibration\" and a[\"detected_note\"] == ..."
     assert -62.0 < cents_off(a["fundamental_freq"], 57) < -58.0, a["fundamental_freq"]
-    assert d["note"] == "D4" and d["detected_note"] == "D4" and abs(cents_off(d["fundamental_freq"], 62)) < 2.0
-    assert a["wav_start_s"] == 0.0 and a["wav_end_s"] == 1.5 and d["wav_start_s"] == 2.0
+    assert d["note"] == "D4" and d["detected_note"] == "D4" and abs(cents_off(d["fundamental_freq"], 62)) < 2.0, "d[\"note\"] == \"D4\" and d[\"detected_note\"] == \"D4\" and abs(cents_off(d[\"fundamental_freq\"], 62)) < 2.0"
+    assert a["wav_start_s"] == 0.0 and a["wav_end_s"] == 1.5 and d["wav_start_s"] == 2.0, "a[\"wav_start_s\"] == 0.0 and a[\"wav_end_s\"] == 1.5 and d[\"wav_start_s\"] == 2.0"
     # only the windows wholly inside the stretch count (the rule the live capture keeps its frames by)
     assert a["n_frames"] == len([t for t in (k * te.FILE_HOP_SAMPLES / te.SAMPLE_RATE + te.WINDOW_S
                                              for k in range(0, 200)) if te.WINDOW_S <= t <= 1.5]), a["n_frames"]
-    assert isinstance(a["level_dbfs"], float) and a["signal_level"] > 0 and "harmonic_cents" in a
-    assert set(a) >= {"spectral_centroid", "harmonics_db", "timestamp"}
+    assert isinstance(a["level_dbfs"], float) and a["signal_level"] > 0 and "harmonic_cents" in a, "isinstance(a[\"level_dbfs\"], float) and a[\"signal_level\"] > 0 and \"harmonic_cents\" in a"
+    assert set(a) >= {"spectral_centroid", "harmonics_db", "timestamp"}, "set(a) >= {\"spectral_centroid\", \"harmonics_db\", \"timestamp\"}"
 check("analyze_asked_notes: a note played 60 cents flat lands on its neighbour by ear but keeps the asked name "
       "and its pitch when read under the stretch it was played in; nothing from silence or without a stretch",
       t_asked_notes)
@@ -597,25 +608,25 @@ def t_octave_prone():
         w.writeframes(pcm.tobytes())
     caps = te.analyze_audio_file(p, te.TonerEngine())
     assert [c["note"] for c in caps] == ["A3"], [c["note"] for c in caps]
-    assert abs(cents_off(caps[0]["fundamental_freq"], 57)) < 2.0
+    assert abs(cents_off(caps[0]["fundamental_freq"], 57)) < 2.0, "abs(cents_off(caps[0][\"fundamental_freq\"], 57)) < 2.0"
     asked = te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "A3", "wav_start_s": 0.0, "wav_end_s": 2.0}])
-    assert asked[0] and asked[0]["detected_note"] == "A3"
+    assert asked[0] and asked[0]["detected_note"] == "A3", "asked[0] and asked[0][\"detected_note\"] == \"A3\""
 check("an octave-prone timbre (H2 louder than H1) is read at its fundamental, by ear and asked", t_octave_prone)
 
 def t_short_and_silence():
     p, _n = write_wav("short.wav", [(hz(60), 0.5)])                 # shorter than the whole-window minimum
-    assert te.analyze_audio_file(p, te.TonerEngine()) == []
+    assert te.analyze_audio_file(p, te.TonerEngine()) == [], "te.analyze_audio_file(p, te.TonerEngine()) == []"
     # asked for, a short answer is still an answer (as the live guided capture keeps whatever it heard):
     # the six windows wholly inside the half second, no minimum
     short = te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 0.5}])
     assert short[0]["note"] == "C4" and short[0]["n_frames"] == 6, short
-    assert te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 0.3}]) == [None]
+    assert te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 0.3}]) == [None], "te.analyze_asked_notes(p, te.TonerEngine(), [{\"note\": \"C4\", \"wav_start_s\": 0.0, \"wav_end_s\": 0.3}]) == [None]"
     p, n = write_wav("silence.wav", [(None, 2.0)])
     calls = []
-    assert te.analyze_audio_file(p, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t))) == []
+    assert te.analyze_audio_file(p, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t))) == [], "te.analyze_audio_file(p, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t))) == []"
     windows = len(range(0, n - te.FFT_SIZE, te.FILE_HOP_SAMPLES))
     assert calls == [(windows, windows)], calls
-    assert te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 2.0}]) == [None]
+    assert te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 2.0}]) == [None], "te.analyze_asked_notes(p, te.TonerEngine(), [{\"note\": \"C4\", \"wav_start_s\": 0.0, \"wav_end_s\": 2.0}]) == [None]"
 check("a note too short gives no capture; silence gives none and still reports its progress once", t_short_and_silence)
 
 def _write_pcm(path, x, sampwidth, sr=44100, float_fmt=False):
@@ -654,10 +665,10 @@ check("16-, 24- and 32-bit PCM and float32 WAVs of the same sound give the same 
 def t_gap():
     p, _n = write_wav("gap_d4.wav", [(293.66, 1.5), (None, 0.5), (293.66, 1.5)])
     caps = te.analyze_audio_file(p, te.TonerEngine())
-    assert [(c["note"], c["n_frames"]) for c in caps] == [("D4", 97)]
+    assert [(c["note"], c["n_frames"]) for c in caps] == [("D4", 97)], "[(c[\"note\"], c[\"n_frames\"]) for c in caps] == [(\"D4\", 97)]"
     p, _n = write_wav("gap_a3.wav", [(220.0, 1.5), (None, 0.5), (220.0, 1.5)])
     caps = te.analyze_audio_file(p, te.TonerEngine())
-    assert [(c["note"], c["n_frames"]) for c in caps] == [("A3", 32), ("A3", 31)]
+    assert [(c["note"], c["n_frames"]) for c in caps] == [("A3", 32), ("A3", 31)], "[(c[\"note\"], c[\"n_frames\"]) for c in caps] == [(\"A3\", 32), (\"A3\", 31)]"
 check("same note across a silence gap: D4 joins into ONE capture (97 frames: the silent windows are not "
       "frames); A3 splits in two (a release window reads G3/G#3)", t_gap)
 
@@ -679,8 +690,8 @@ def t_freq_midi():
     near(te.note_to_freq("A4"), 440.0)
     near(te.note_to_freq("C4"), 261.6255653005986)
     near(te.note_to_freq("A4", 442.0), 442.0)
-    assert te.note_to_freq("H4") == 0.0 and te.note_to_freq("") == 0.0
-    assert te.note_name_to_midi("C#4") == 61 and te.note_name_to_midi("C-1") is None
+    assert te.note_to_freq("H4") == 0.0 and te.note_to_freq("") == 0.0, "te.note_to_freq(\"H4\") == 0.0 and te.note_to_freq(\"\") == 0.0"
+    assert te.note_name_to_midi("C#4") == 61 and te.note_name_to_midi("C-1") is None, "te.note_name_to_midi(\"C#4\") == 61 and te.note_name_to_midi(\"C-1\") is None"
     assert te.note_name_to_midi("Bb3") is None, "flats are not parsed"
     assert te.note_name_to_midi("A#10") is None, "two-digit octaves are not parsed"
 check("note_to_freq A4 440 / C4 261.625565301 / ref 442; midi C#4 61; flats and 2-digit octaves -> None",
@@ -690,7 +701,7 @@ def t_cal_counts():
     counts = {s: len([n for n in te.CALIBRATION_NOTES
                       if te.note_to_freq(te.reverse_transpose_note(n, s)) >= te.MIN_FUNDAMENTAL_HZ])
               for s in te.SAX_TYPES}
-    assert len(te.CALIBRATION_NOTES) == 32
+    assert len(te.CALIBRATION_NOTES) == 32, "len(te.CALIBRATION_NOTES) == 32"
     assert counts == {"Bass": 28, "Baritone": 32, "Tenor": 32, "C Melody": 32, "Alto": 32,
                       "F Mezzo": 32, "Soprano": 32, "Sopranino": 32}, counts
 check("CALIBRATION_NOTES >= MIN_FUNDAMENTAL_HZ (65 Hz): Bass 28, every other type 32", t_cal_counts)
