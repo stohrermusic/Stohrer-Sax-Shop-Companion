@@ -212,8 +212,12 @@ def main():
 
     def settle(pred, timeout=6.0, what="the window"):
         """Run the mainloop in slices until pred() holds (a geometry change applied by the
-        window manager, late on Aqua) or the bound passes; never a fixed wait."""
+        window manager, late on Aqua) or the bound passes; never a fixed wait. Always at least
+        one slice: a predicate that is already true must not let a check read layout state
+        nobody has laid out yet (a page is 1 x 1 and nothing on it mapped until an idle pass
+        runs after the tab is selected; CI, Spanish on Linux and Aqua, 2026-11-11)."""
         deadline = time.time() + timeout
+        run(100)
         while not pred() and time.time() < deadline:
             run(100)
         assert pred(), f"{what} did not settle within {timeout:.0f} s"
@@ -287,7 +291,17 @@ def main():
         # the whole control strip is on the page: the Capture button, packed last and rightmost
         strip, btn = app._toner_ctrl_frame, app._toner_capture_btn
         settle(lambda: strip.winfo_reqwidth() <= app._toner_main_frame.winfo_width(), what="the page's width")
-        assert btn.winfo_ismapped(), "the Capture button is off the page"
+
+        def strip_report():
+            cols = []
+            for col in strip.winfo_children():
+                cols.append((col.winfo_reqwidth(), col.winfo_width(), col.winfo_x(), col.winfo_ismapped(),
+                             [((c.cget("text") if "text" in c.keys() else c.winfo_class()), c.winfo_reqwidth(),
+                               c.winfo_width(), c.winfo_x(), c.winfo_ismapped()) for c in col.winfo_children()]))
+            return (f"window {root.winfo_width()}x{root.winfo_height()}, page {app._toner_main_frame.winfo_width()}x"
+                    f"{app._toner_main_frame.winfo_height()}, strip req {strip.winfo_reqwidth()} w {strip.winfo_width()} "
+                    f"h {strip.winfo_height()} y {strip.winfo_y()}, need {W['need']}, columns {cols}")
+        assert btn.winfo_ismapped(), f"the Capture button is off the page: {strip_report()}"
         assert btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), "btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width()"
         texts = [w.cget("text") for w in widgets(app._toner_main_frame, tk.Label)]
         for label in ("HARMONICS", "off", "on", "MODE", "free", "guided"):
@@ -826,6 +840,7 @@ def run(ms):
 
 def settle(pred, timeout=6.0):
     deadline = time.time() + timeout
+    run(100)                          # at least one slice: layout state is read only after an idle pass
     while not pred() and time.time() < deadline:
         run(100)
     return pred()
@@ -843,6 +858,8 @@ start_w, start_h = root.winfo_width(), root.winfo_height()
 need = app._analyzer_strip_need_px()
 screen_w = root.winfo_screenwidth()
 app.notebook.select(app.toner_tab_frame)
+root.update()                         # the select's layout (the page is 1 x 1 until this)
+run(200)
 want = max(start_w, min(need, screen_w))
 settled = settle(lambda: root.winfo_width() == want)
 after_select = (root.winfo_width(), root.winfo_height())
@@ -850,6 +867,15 @@ harm_mapped = app._toner_harmonics_frame.winfo_ismapped()
 chart_mapped = app._toner_chart_frame.winfo_ismapped()
 capture_mapped = app._toner_capture_btn.winfo_ismapped()
 page_w = app._toner_main_frame.winfo_width()
+page_h = app._toner_main_frame.winfo_height()
+strip = app._toner_ctrl_frame
+strip_evidence = {"req": strip.winfo_reqwidth(), "w": strip.winfo_width(), "h": strip.winfo_height(),
+                  "y": strip.winfo_y(), "mapped": strip.winfo_ismapped(), "columns": []}
+for col in strip.winfo_children():
+    strip_evidence["columns"].append({
+        "req": col.winfo_reqwidth(), "w": col.winfo_width(), "x": col.winfo_x(), "mapped": col.winfo_ismapped(),
+        "children": [((c.cget("text") if "text" in c.keys() else c.winfo_class()), c.winfo_reqwidth(), c.winfo_width(),
+                      c.winfo_x(), c.winfo_ismapped()) for c in col.winfo_children()]})
 labels = []
 def walk(w):
     for c in w.winfo_children():
@@ -863,7 +889,8 @@ settled_back = settle(lambda: root.winfo_width() == start_w)
 after_leave = (root.winfo_width(), root.winfo_height())
 out = {"tab": app.notebook.tab(app.toner_tab_frame, "text"), "labels": labels, "buttons": buttons,
        "formula_w": formula, "start": [start_w, start_h], "need": need, "screen_w": screen_w,
-       "settled": settled, "after_select": list(after_select), "page_w": page_w,
+       "settled": settled, "after_select": list(after_select), "page_w": page_w, "page_h": page_h,
+       "chrome": app._notebook_page_chrome_px(), "strip": strip_evidence,
        "harm_mapped": harm_mapped, "chart_mapped": chart_mapped, "capture_mapped": capture_mapped,
        "settled_back": settled_back, "after_leave": list(after_leave),
        "harmonics_var": app._toner_harmonics_var.get()}
@@ -901,7 +928,11 @@ print("REPORT " + json.dumps(out))
             # languages already open wider than the strip, in which case the select has nothing to widen)
             want = max(start_w, min(r["need"], r["screen_w"]))
             assert r["settled"] and r["after_select"] == [want, start_h], (case, r["after_select"], want, start_h)
-            assert r["capture_mapped"] or r["need"] > r["screen_w"], f"{case}: Capture off the page at {r['after_select']}"
+            # the evidence, as the section-button check gives it: each column's children (text, request,
+            # width, x, mapped), the page, the strip, the need and the chrome
+            assert r["capture_mapped"] or r["need"] > r["screen_w"], (
+                f"{case}: Capture off the page at window {r['after_select']}, page {r['page_w']}x{r['page_h']}, "
+                f"need {r['need']} (chrome {r['chrome']}), strip {json.dumps(r['strip'])}")
             assert r["settled_back"] and r["after_leave"] == [start_w, start_h], (case, r["after_leave"], r["start"])
             assert len(r["buttons"]) == 2, (case, r["buttons"])
         plain = {c: r for c, r in reports.items() if "-" not in c}
