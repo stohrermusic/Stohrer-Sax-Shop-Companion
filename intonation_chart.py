@@ -65,9 +65,10 @@ def style_for(index):
     return LINE_STYLES[index % len(LINE_STYLES)]
 
 
-def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px=FONT_PX):
+def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px=FONT_PX, footnote=""):
     """The chart for `overlay` (intonation.overlay(runs): notes low to high, registers,
-    lines of points) as primitives in a width x height pixel frame."""
+    lines of points) as primitives in a width x height pixel frame. `footnote` is one
+    plain line under the notes (what was left out, and why)."""
     notes = list(overlay.get("notes", []))
     registers = overlay.get("registers", {})
     lines = overlay.get("lines", [])
@@ -77,16 +78,20 @@ def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px
     rows = math.ceil(len(lines) / LEGEND_COLUMNS) if lines else 0
     legend_h = rows * (font_px + 8) + (6 if rows else 0)
     label_h = max((len(n) for n in notes), default=2) * font_px * 0.62 + 10     # the notes turned 90 degrees
+    foot_h = font_px + 8 if footnote else 0
     left = int(font_px * 4.2)
     right = 12
     top = 8 + title_h + legend_h
-    bottom = int(label_h) + 6
+    bottom = int(label_h) + 6 + foot_h
     plot_x0, plot_x1 = left, max(left + 1, width - right)
     plot_y0, plot_y1 = top, max(top + 1, height - bottom)
     plot_w, plot_h = plot_x1 - plot_x0, plot_y1 - plot_y0
     if title:
         prims.append({"kind": "text", "x": width / 2, "y": 8, "text": title, "color": TEXT,
                       "size": int(font_px * 1.2), "anchor": "n", "angle": 0, "bold": True})
+    if footnote:
+        prims.append({"kind": "text", "x": plot_x0, "y": height - 4, "text": footnote, "color": AXIS,
+                      "size": font_px, "anchor": "sw", "angle": 0, "bold": False})
     # ---- the legend, above the plot, in columns ---------------------------------------------
     if lines:
         cols = min(LEGEND_COLUMNS, len(lines))

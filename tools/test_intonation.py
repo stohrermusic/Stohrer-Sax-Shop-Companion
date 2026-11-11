@@ -91,7 +91,7 @@ def a_preset_is_a_run_in_written_names_against_equal_temperament():
     a = run.reading("Bb3")
     assert len(a.takes) == 2 and a.wobble_cents is None and approx(a.take_spread_cents, 4.0) is None
     assert a.takes[0].seconds == 30 * I.FRAME_SECONDS and a.takes[0].session_date == "2026-11-10"
-    assert run.left_out == {"implausible": 2, "unlabelled": 0}, run.left_out
+    assert run.left_out == {"implausible": 2, "unlabelled": 0, "off_note": 0}, run.left_out
     assert run.sessions_used == 1 and run.captures_used == 3
 check("a preset's captures are a run in written names against equal temperament; the median of takes; "
       "the fingerprint's filter applies and is counted", a_preset_is_a_run_in_written_names_against_equal_temperament)
@@ -124,8 +124,8 @@ check("cents follow the reference pitch (A4 at 442 is 0 c at A=442, +7.85 c at A
 def unlabelled_and_broken_captures_are_counted_not_crashed():
     caps = [cap("", 220.0), cap("A3", 0.0), cap("A3", "x"), {"note": "A3"}, cap("A3", 220.0, frames="many")]
     run = I.run_from_captures([{"captures": caps}], "Tenor")
-    # "" has no MIDI number: implausible (outside any range); 0.0, "x" and the missing fundamental: unlabelled
-    assert run.left_out == {"implausible": 1, "unlabelled": 3}, run.left_out
+    # "" has no MIDI number, 0.0, "x" and the missing fundamental no pitch: all four unlabelled
+    assert run.left_out == {"implausible": 0, "unlabelled": 4, "off_note": 0}, run.left_out
     assert run.notes == ["B4"] and run.reading("B4").takes[0].frames == 0
     empty = I.run_from_captures([], "Tenor")
     assert empty.notes == [] and empty.played() == {} and I.note_spreads(empty) == []
@@ -215,6 +215,41 @@ def nothing_in_here_touches_tkinter():
 check("the module is pure: it imports the maths and the engine's note helpers, no tkinter, no tab",
       nothing_in_here_touches_tkinter)
 
+
+
+def a_take_that_is_not_its_note_is_left_out():
+    """The causes found in Matt's library (2026-11-10), fabricated: labels two transpositions
+    below the sounding pitch (six presets from 2026-03-23/25: tenor +28 semitones, alto +18,
+    soprano +4), an octave on top of that, and a semitone slip of the detector; and the line
+    itself, half a semitone either side, at the run's reference pitch."""
+    caps = [
+        cap("A#0", hz(22 + 28)),                 # tenor, the early storage mistake: the pitch is D3, the label two transpositions low
+        cap("C2", hz(36 + 28 + 12)),             # the same, an octave higher still
+        cap("C4", hz(60 + 12)),                  # an octave: the detector's sub-octave / partial slip
+        cap("C4", detuned(60, 100)),             # a semitone: the label is the note next door
+        cap("C4", detuned(60, 49)),              # kept: within half a semitone
+        cap("C4", detuned(60, -49)),             # kept
+        cap("C4", detuned(60, 51)),              # not that note any more
+        cap("C4", detuned(60, -51)),             # not that note
+    ]
+    run = I.run_from_captures([{"captures": caps}], "Tenor")
+    assert run.left_out == {"implausible": 0, "unlabelled": 0, "off_note": 6}, run.left_out
+    assert run.notes == ["D5"] and len(run.reading("D5").takes) == 2 and run.captures_used == 2
+    assert sorted(round(t.cents) for t in run.reading("D5").takes) == [-49, 49]
+    # alto and soprano: the same mistake at their own transpositions (+18 and +4 semitones)
+    assert I.run_from_captures([{"captures": [cap("A2", hz(45 + 18))]}], "Alto").left_out["off_note"] == 1
+    assert I.run_from_captures([{"captures": [cap("A#4", hz(70 + 4))]}], "Soprano").left_out["off_note"] == 1
+    # the line is drawn at the run's reference pitch: 55 cents sharp of A=440 is 47 cents sharp of A=442
+    at_440 = I.run_from_captures([{"captures": [cap("C4", detuned(60, 55))]}], "Tenor", 440.0)
+    at_442 = I.run_from_captures([{"captures": [cap("C4", detuned(60, 55))]}], "Tenor", 442.0)
+    assert at_440.left_out["off_note"] == 1 and at_442.left_out["off_note"] == 0 and at_442.notes == ["D5"]
+    # a wrong-note take whose wrong label is also out of the horn's range counts as off note, not as out of range
+    both = I.run_from_captures([{"captures": [cap("A#0", hz(22 + 28)), cap("C1", 32.7)]}], "Tenor")
+    assert both.left_out == {"implausible": 1, "unlabelled": 0, "off_note": 1}, both.left_out
+    assert I.OFF_NOTE_CENTS == 50.0
+check("a take further than half a semitone from its labelled note is left out and counted (the library's "
+      "two-transpositions labels, an octave, a semitone slip; 49 c kept, 51 c out; at the reference pitch; "
+      "off note before out of range)", a_take_that_is_not_its_note_is_left_out)
 
 print("=" * 60)
 print(f"{sum(results)}/{len(results)} passed")

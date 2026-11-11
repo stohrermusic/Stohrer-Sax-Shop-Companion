@@ -224,6 +224,25 @@ def an_empty_chart_still_draws():
 check("an empty chart still draws its frame, and renders", an_empty_chart_still_draws)
 
 
+def the_footnote_is_one_line_under_the_notes():
+    line = "3 takes left out: their pitch did not match their note."
+    with_note = C.chart_primitives(OV, W, H, title="Two horns", footnote=line)
+    foot = [p for p in of("text", with_note) if p["text"] == line]
+    assert len(foot) == 1 and foot[0]["anchor"] == "sw" and foot[0]["angle"] == 0, foot
+    assert foot[0]["y"] == H - 4 and foot[0]["x"] < W / 4, foot[0]
+    # the notes move up to make room; nothing else changes shape
+    label_y = max(p["y"] for p in of("text", PRIMS) if p.get("angle") == 90)
+    label_y_with = max(p["y"] for p in of("text", with_note) if p.get("angle") == 90)
+    assert label_y_with < label_y - 10, (label_y_with, label_y)
+    assert not [p for p in of("text", PRIMS) if p["anchor"] == "sw"], "a footnote with none asked for"
+    assert len(C.render_png(with_note, W, H)) > 200
+    pdf = C.render_pdf(with_note, W, H)
+    content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf, re.S).group(1)).decode("latin-1")
+    assert f"({line}) Tj" in content, "the footnote is not in the PDF"
+check("the footnote (what was left out) is one plain line under the notes, in every renderer, only when asked for",
+      the_footnote_is_one_line_under_the_notes)
+
+
 print("=" * 60)
 print(f"{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

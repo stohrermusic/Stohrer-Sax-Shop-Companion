@@ -151,22 +151,30 @@ class IntonationRun:
         return [r.note for r in self.readings]
 
 
+OFF_NOTE_CENTS = 50.0
+"""How far a take's pitch may lie from its labelled note and still be that note: half a
+semitone, beyond which it is nearer another note. The line is clean in practice: in Matt's
+library (8,114 captures, 2026-11-10) the furthest kept take is 49.7 cents off and the nearest
+left-out one 112 cents; the 551 left out are six presets from 2026-03-23/25 whose labels sit
+two transpositions below the sounding pitch (an early storage mistake), plus detector slips."""
+
+
 def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     """The sessions' captures (each a dict with "captures") as an IntonationRun.
 
     One Take a capture. A capture the fingerprint would leave out is left out and
     counted under "implausible"; one with no note name or no fundamental under
-    "unlabelled". Takes of the same written note are one reading."""
+    "unlabelled"; one whose pitch is further than OFF_NOTE_CENTS from its labelled
+    note (at the reference pitch) under "off_note": it is not that note, and the
+    chart must never draw a point that is not its note. Read-side only: nothing on
+    disk changes. Takes of the same written note are one reading."""
     if sax_type not in SAX_TRANSPOSITIONS:
         raise IntonationError(f"unknown saxophone type {sax_type!r}")
     readings = {}
-    implausible = unlabelled = used = 0
+    implausible = unlabelled = off_note = used = 0
     for s in sessions:
         caps = s.get("captures", []) or []
         for cap in caps:
-            if not _capture_is_plausible(cap, sax_type):
-                implausible += 1
-                continue
             concert = note_name_to_midi(cap.get("note", ""))
             try:
                 f0 = float(cap.get("fundamental_freq") or 0.0)
@@ -175,12 +183,21 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
             if concert is None or f0 <= 0:
                 unlabelled += 1
                 continue
+            # the pitch against the label first: a take that is not its note is counted as
+            # that, even when its (wrong) label is also outside the horn's range
+            cents = cents_from_equal_temperament(f0, concert, reference_hz)
+            if abs(cents) > OFF_NOTE_CENTS:
+                off_note += 1
+                continue
+            if not _capture_is_plausible(cap, sax_type):
+                implausible += 1
+                continue
             wm = written_midi(concert, sax_type)
             try:
                 frames = int(cap.get("n_frames") or 0)
             except (TypeError, ValueError):
                 frames = 0
-            take = Take(cents=cents_from_equal_temperament(f0, concert, reference_hz), f0_hz=f0,
+            take = Take(cents=cents, f0_hz=f0,
                         frames=frames, seconds=frames * FRAME_SECONDS, method=str(cap.get("method", "")),
                         level_dbfs=cap.get("level_dbfs"), session_date=str(s.get("date", "")))
             if wm not in readings:
@@ -191,7 +208,7 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
             used += 1
     return IntonationRun(name=name, sax_type=sax_type, reference_hz=float(reference_hz),
                          readings=[readings[k] for k in sorted(readings)],
-                         left_out={"implausible": implausible, "unlabelled": unlabelled},
+                         left_out={"implausible": implausible, "unlabelled": unlabelled, "off_note": off_note},
                          sessions_used=len(sessions), captures_used=used)
 
 

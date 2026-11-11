@@ -84,6 +84,13 @@ SEEDED = {
                   "notes": "", "created": "2026-10-01",
                   "sessions": [{"date": "2026-10-01 10:00:00", "captures": [_capture("A#3", 232.5)]},
                                {"date": "2026-10-02 10:00:00", "captures": [_capture("D4", 294.5), _capture("E4", 329.0)]}]},
+        # a preset from the Toner's first weeks: its labels sit two transpositions (28 semitones on a
+        # tenor) below the sounding pitch, the storage mistake found in Matt's library (2026-11-10)
+        "Old": {"horn_type": "Tenor", "horn_make": "Selmer", "horn_model": "SBA", "player": "Matt", "mouthpiece": "Link",
+                "notes": "", "created": "2026-03-23",
+                "sessions": [{"date": "2026-03-23 11:56:47", "captures": [
+                    _capture("A#0", 146.83, method="calibration"), _capture("C1", 164.81, method="calibration"),
+                    _capture("D1", 185.0, method="calibration"), _capture("F1", 220.0, method="calibration")]}]},
     }
 }
 with open(os.path.join(_PROFILE, "toner_data.json"), "w", encoding="utf-8") as _f:
@@ -656,6 +663,30 @@ def main():
         assert "B4" not in chart_texts() and "Bench" in chart_texts()
     check("Compare...: a preset and one session of another drawn together, each with its name and marker; Clear "
           "returns to the loaded preset", compare_two_presets)
+
+    def takes_that_are_not_their_note_are_left_out_and_said():
+        load("Old")
+        run(300)
+        texts = chart_texts()
+        assert "4 takes left out: their pitch did not match their note." in texts, texts
+        assert "No take matched its note." in texts, texts
+        # no point in the plot (the legend's own marker, up by the title, is not a point)
+        cv = app._toner_chart_canvas
+        in_plot = [i for i in cv.find_withtag("chart") if cv.type(i) in ("oval", "polygon") and cv.coords(i)[1] > 60]
+        assert not in_plot, "a point drawn for a take that is not its note"
+        # none of the bogus labels, as written names, reach the axis
+        assert not any(t in ("C2", "D2", "E2", "G2") for t in texts), texts
+        # the export carries the same line
+        runs, prims = app._toner_chart_prims(toner_tab.CHART_W, toner_tab.CHART_H)
+        assert runs[0].left_out["off_note"] == 4 and runs[0].readings == []
+        assert any(p["kind"] == "text" and p["text"].startswith("4 takes left out") for p in prims)
+        # a good preset says nothing of the kind
+        load("Bench")
+        run(300)
+        assert not any("left out" in t for t in chart_texts()), chart_texts()
+    check("a preset whose takes are not their notes (labels two transpositions low) draws no point; the chart says "
+          "how many were left out and why, on screen and in the export; a good preset says nothing",
+          takes_that_are_not_their_note_are_left_out_and_said)
 
     def export_png_and_pdf():
         import tkinter.filedialog as fd

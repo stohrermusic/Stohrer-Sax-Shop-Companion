@@ -1894,8 +1894,22 @@ class TonerTabMixin:
         low_left = bool(self.settings.get("toner_settings", {}).get("chart_low_notes_left", True))
         title = runs[0].name if len(runs) == 1 and not self._toner_compare_runs else ""
         prims = intonation_chart.chart_primitives(intonation_overlay(runs), width, height,
-                                                  title=title, low_left=low_left)
+                                                  title=title, low_left=low_left,
+                                                  footnote=self._toner_chart_footnote(runs))
         return runs, prims
+
+    def _toner_chart_footnote(self, runs):
+        """One plain line for the takes the chart left out, or nothing."""
+        off = sum(r.left_out.get("off_note", 0) for r in runs)
+        other = sum(r.left_out.get("implausible", 0) + r.left_out.get("unlabelled", 0) for r in runs)
+        parts = []
+        if off:
+            parts.append(ngettext("{n} take left out: its pitch did not match its note.",
+                                  "{n} takes left out: their pitch did not match their note.", off).format(n=off))
+        if other:
+            parts.append(ngettext("{n} take left out: out of range or unreadable.",
+                                  "{n} takes left out: out of range or unreadable.", other).format(n=other))
+        return "  ".join(parts)
 
     def _toner_draw_chart(self):
         self._toner_chart_redraw_id = None
@@ -1908,7 +1922,9 @@ class TonerTabMixin:
         runs, prims = self._toner_chart_prims(w, h)
         intonation_chart.draw_on_canvas(cv, prims, tag="chart")
         if not any(r.readings for r in runs):
-            if self._toner_active_preset or self._toner_compare_runs:
+            if any(sum(r.left_out.values()) for r in runs):
+                text = _("No take matched its note.")
+            elif self._toner_active_preset or self._toner_compare_runs:
                 text = _("No captures yet.")
             else:
                 text = _("Load a preset and capture to chart its intonation.")
