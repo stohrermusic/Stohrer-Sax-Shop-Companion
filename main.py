@@ -3459,6 +3459,33 @@ TOOLING_CONTENT_MARGIN_PX = 24
 PAGE_CHROME_MAX_PX = 200
 
 
+TOUR_LIBRARY = "Tour"            # the in-memory library the tour's comparison stop draws from
+AUDIO_TOUR_STOPS = ("tuner-no-mic", "tuner", "analyzer-chart", "analyzer-compare", "analyzer-preset-form",
+                    "analyzer-harmonics")       # the stops of the audio tabs (skipped where the build has none)
+
+
+def tour_analyzer_presets():
+    """Two fabricated tenor presets with a run each, for the tour's comparison stop: enough
+    notes for a chart with both registers, cents patterns that differ, and one capture
+    that is not its note so the footnote shows. In memory only: the tour never saves."""
+    names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+    def cap(midi, cents):
+        hz = 440.0 * 2 ** ((midi - 69) / 12) * 2 ** (cents / 1200)
+        return {"note": f"{names[midi % 12]}{midi // 12 - 1}", "fundamental_freq": round(hz, 3),
+                "harmonics_db": [0.0, -3.0, -6.0, -10.0, -14.0], "n_frames": 30, "method": "free"}
+
+    def preset(model, caps):
+        return {"horn_type": "Tenor", "horn_make": "Tour", "horn_model": model, "player": "Tour",
+                "mouthpiece": "Tour", "notes": "", "created": "2026-11-11",
+                "sessions": [{"date": "2026-11-11 10:00:00", "horn_type": "Tenor", "captures": caps}]}
+
+    low_to_high = range(44, 64)                     # concert G#2 .. D#4: written Bb3 .. F5 on a tenor
+    a = [cap(m, -8 + 0.9 * (m - 44)) for m in low_to_high]              # flat low, sharp high
+    b = [cap(m, 6 - 0.6 * (m - 44)) for m in low_to_high] + [cap(50, 300)]   # the reverse; one off its note
+    return {"Tenor A": preset("A", a), "Tenor B": preset("B", b)}
+
+
 def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=None):
     """Walk every tab and dialog, optionally screenshotting each.
 
@@ -3567,16 +3594,45 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         placed, zones = nest_pads_with_zones(pads, 'felt', 200.0, 150.0, s)
         NestingPreviewWindow(root, {'felt': placed}, 200.0, 150.0, zones=zones)
 
-    def open_toner():
+    def analyzer_tab():
+        # the Analyzer shown and selected, its engine on the synthetic tone (no mic needed)
         engine = getattr(app, '_toner_engine', None)
         if engine is not None:
             engine.synthetic_hz = 233.08
         app._toner_mic_checked = True
-        if app.settings.get("toner_unlocked") and hasattr(app, '_toner_harmonics_var'):
-            app._toner_harmonics_var.set("on")      # the spectrum on the tone; the chart otherwise
-        app.notebook.add(app.toner_tab_frame)
+        app.notebook.add(app.toner_tab_frame)       # re-adding un-hides a tab a profile hid
         app._fit_window_to_tabs()
         app.notebook.select(app.toner_tab_frame)
+
+    def open_analyzer_chart():
+        # as users meet it: the chart, HARMONICS off, nothing loaded
+        if hasattr(app, '_toner_harmonics_var'):
+            app._toner_harmonics_var.set("off")
+        app._toner_compare_runs = []
+        analyzer_tab()
+
+    def open_analyzer_compare():
+        # two fabricated runs overlaid, from an in-memory library: the legend (the heading of
+        # a comparison; no title line, Matt 2026-11-11) and the footnote show. Nothing is
+        # saved; close_analyzer_compare removes it.
+        app._toner_presets[TOUR_LIBRARY] = tour_analyzer_presets()
+        app._toner_compare_runs = [(TOUR_LIBRARY, "Tenor A", None), (TOUR_LIBRARY, "Tenor B", None)]
+        analyzer_tab()
+        app._toner_chart_changed()
+
+    def close_analyzer_compare():
+        app._toner_compare_runs = []
+        app._toner_presets.pop(TOUR_LIBRARY, None)
+        app._toner_chart_changed()
+
+    def open_analyzer_preset_form():
+        analyzer_tab()
+        app._toner_new_preset_flow()                # the form, with the Key heights picker
+
+    def open_analyzer_harmonics():
+        analyzer_tab()
+        if app.settings.get("toner_unlocked") and hasattr(app, '_toner_harmonics_var'):
+            app._toner_harmonics_var.set("on")      # the spectrum on the tone; else the chart stays
 
     def open_tuner_no_mic():
         # What a user with no (or a denied) microphone sees: the real
@@ -3622,11 +3678,14 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("tooling", lambda: app.notebook.select(app.tooling_tab_frame), None),
         ("tuner-no-mic", open_tuner_no_mic, None),
         ("tuner", open_tuner, None),
-        ("toner", open_toner, None),
+        ("analyzer-chart", open_analyzer_chart, None),
+        ("analyzer-compare", open_analyzer_compare, close_analyzer_compare),
+        ("analyzer-preset-form", open_analyzer_preset_form, destroy_new),
+        ("analyzer-harmonics", open_analyzer_harmonics, None),
     ]
     if not audio_supported():
         # Hidden on this build; selecting a hidden ttk tab would show it.
-        steps = [s for s in steps if s[0] not in ("tuner-no-mic", "tuner", "toner")]
+        steps = [s for s in steps if s[0] not in AUDIO_TOUR_STOPS]
 
     def run_step(i):
         if i >= len(steps):
@@ -3668,7 +3727,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
             root.after(150, lambda: run_step(i + 1))
 
         # Audio tabs need a couple of seconds of frames before they look alive.
-        wait = step_ms * (2 if name in ("tuner-no-mic", "tuner", "toner") else 1)
+        wait = step_ms * (2 if name in ("tuner-no-mic", "tuner", "analyzer-harmonics") else 1)
         root.after(wait, finish)
         try:
             open_fn()

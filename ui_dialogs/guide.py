@@ -640,7 +640,7 @@ class UserGuideWindow(tk.Toplevel):
                     cv.create_line(x + box_w + 4, y + box_h / 2, x + box_w + gap - 4, y + box_h / 2,
                                    fill=self.FIGURE_INK, width=2, arrow="last")
         cv.create_text(W / 2, H - 6, anchor="s", width=W - 16, justify="center",
-                       text=_("Three ways to the laser. Do not mix them."),
+                       text=_("Three ways to the laser."),
                        fill=self.FIGURE_INK, font=("Helvetica", 9))
 
     # ---- the content -----------------------------------------------------------
@@ -1054,10 +1054,16 @@ class UserGuideWindow(tk.Toplevel):
                     "lowest to the highest."))
         self._bullet(_("The dashed line marks the register change. The SAX selector sets the written "
                     "names and is saved with the preset."))
+        self._bullet(_("Key heights: a preset can link to a set in the Key Heights library, or enter "
+                    "the horn's heights from the preset form (saved there as a new set). Each run "
+                    "keeps a copy of the heights it was recorded with. The chart shows nothing of "
+                    "them: name the preset so you know which horn it is."))
 
         self._sub(_("Compare and export"))
         self._bullet(_("Compare... draws other presets, or single sessions of them, with yours: each "
                     "run in its own colour and marker."))
+        self._bullet(_("Click a run's line, a point or its legend entry to bring it to the front; the "
+                    "others go grey. Click it again, or an empty spot, to let it go."))
         self._bullet(_("Export... writes the chart as a PNG or a PDF."))
         self._bullet(_("Low notes on the left or on the right: Options > Settings... > General."))
 
@@ -1250,8 +1256,6 @@ class QuickStartWindow(tk.Toplevel):
             page.append(('p', _("Frame & Cut: laser on USB, jog to the corner, frame, cut. "
                                 "Switch it on in File > Feature Set.")))
         page += [
-            ('h', _("Do not mix them")),
-            ('p', _("G-code is not for LightBurn. SVG is not for the SD card.")),
             ('h', _("Before you cut")),
             ('p', _("Speeds and powers are in Options > G-code Settings (Pad Maker) and "
                     "Options > Settings (Tooling).")),

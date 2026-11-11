@@ -291,7 +291,7 @@ def main():
         def tour_skips():
             assert not errors, errors
             assert log and log[0] == "pad-maker", log
-            assert not {"tuner", "tuner-no-mic", "toner"} & set(log), log
+            assert not set(main_mod.AUDIO_TOUR_STOPS) & set(log), log
             assert hidden(app.tuner_tab_frame) and hidden(app.toner_tab_frame), \
                 "the tour un-hid an audio tab"
         check("tour skips the hidden tabs and leaves them hidden", tour_skips)

@@ -53,7 +53,14 @@ jobs:
           python-version: '3.11'
       - name: Install system libraries (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev libgl1 xvfb
+        # Retried: the runner's package mirror failed to resolve three times in
+        # a row on 2026-11-11 and each time failed the job before any test ran.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev libgl1 xvfb && exit 0
+            echo "apt attempt $attempt failed; waiting 30 s"; sleep 30
+          done
+          exit 1
       - name: Install dependencies
         if: matrix.os != 'macos-15-intel'
         run: |
@@ -123,7 +130,12 @@ jobs:
 
       - name: Install system audio libraries (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev
+        run: |
+          for attempt in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev && exit 0
+            echo "apt attempt $attempt failed; waiting 30 s"; sleep 30
+          done
+          exit 1
 
       - name: Install dependencies (full)
         if: matrix.full_build

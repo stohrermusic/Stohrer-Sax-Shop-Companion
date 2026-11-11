@@ -21,7 +21,9 @@ migration and the switch's terms run as a new user sees them):
   - the free readout: the frame count a capture would keep, turning green at the
     34th frame (the shortest note kept), and a note let go sooner named too short
   - Compare...: sessions picked from two presets draw together, legend and markers;
-    Clear goes back to the loaded preset
+    a click on a run's legend entry highlights it (the other grey), survives a redraw,
+    moves, clears on the same again or on empty area; Clear goes back to the loaded
+    preset and drops it; a single run ignores clicks
   - Export...: a PNG (opens, twice the chart's size) and a one-page PDF with the title
   - the Settings dialog's "Low notes on the left" tick, saved and flipping the axis
   - the tour's stop for the tab
@@ -38,6 +40,12 @@ migration and the switch's terms run as a new user sees them):
     that never unlocked counts as off
   - in every language, in a child process each: the tab builds, the start-up width is
     not the strip's, the select widens and the leave restores; German labels translated
+  - the Key heights link (Matt, 2026-11-11): picked on the preset form, never required,
+    saved and reloaded with the preset, carried by Mutate; Enter heights... saves a new set
+    into the Key Heights library through its store and the tab sees it; a link whose entry
+    is gone reads as missing and breaks nothing; a session keeps a copy of the heights
+  - the tour's four Analyzer stops (chart, comparison, preset form, harmonics) raise
+    nothing and write nothing; the HARMONICS slider is drawn at "on" with the spectrum
 Nothing waits a fixed time for the window manager: each geometry change is awaited
 with a bounded poll under the mainloop (settle), so Aqua's late geometry cannot fail a
 check. Frames run under a real mainloop with a quit timer (see test_tuner_canvas for
@@ -800,9 +808,10 @@ def main():
         dlg = [w for w in toplevels() if w not in before][0]
         boxes = {c.cget("text"): c for c in widgets(dlg, tk.Checkbutton)}
         # the two presets and the sessions of each (the runs above added sessions of their own)
-        assert {"[My Presets] Bench", "[My Presets] Other", "2026-10-01 10:00:00", "2026-10-02 10:00:00"} <= set(boxes), \
-            sorted(boxes)
-        boxes["[My Presets] Bench"].invoke()
+        # each preset with its horn type, as the Load list shows it (Matt, 2026-11-11)
+        assert {"[My Presets] Tenor — Bench", "[My Presets] Alto — Other", "2026-10-01 10:00:00",
+                "2026-10-02 10:00:00"} <= set(boxes), sorted(boxes)
+        boxes["[My Presets] Tenor — Bench"].invoke()
         boxes["2026-10-02 10:00:00"].invoke()
         buttons = {b.cget("text"): b for b in widgets(dlg, tk.Button)}
         buttons["Compare"].invoke()
@@ -811,13 +820,52 @@ def main():
         chart_now()
         texts = chart_texts()
         assert "Bench" in texts and "Other — 2026-10-02 10:00:00" in texts, texts
-        # the title line above the legend names what is compared (Matt, 2026-11-11), on the canvas too
-        assert "Bench · Other — 2026-10-02 10:00:00" in texts, texts
+        # no title on a comparison (Matt, 2026-11-11: "no title, just list the presets involved"): the
+        # legend is the heading
+        assert "Bench · Other — 2026-10-02 10:00:00" not in texts, texts
+        assert not [p for p in app._toner_chart_last_prims if p["kind"] == "text" and p["y"] == 8 and p["anchor"] == "n"], \
+            "a title primitive on a comparison"
         kinds = chart_markers()
         assert "oval" in kinds and "polygon" in kinds, kinds        # a circle for the first run, squares for the second
         # Other's second session, an alto: D4 and E4 sound, written B4 and C#5
         for written in ("B4", "C#5", "C5", "D5", "E5"):
             assert written in texts, (written, texts)
+        # a click on a run's legend entry highlights that run (Matt, 2026-11-11): the other goes grey;
+        # a redraw keeps it; a click on the other moves it; the same again, or empty area, clears it
+        cv = app._toner_chart_canvas
+
+        def legend_of(i):
+            return [p for p in app._toner_chart_last_prims if p["kind"] == "text" and p.get("run") == i][0]
+
+        def line_colours():
+            return {p["run"]: p["color"] for p in app._toner_chart_last_prims if p["kind"] == "polyline"}
+
+        def order():
+            return [p["run"] for p in app._toner_chart_last_prims if p["kind"] == "polyline"]
+
+        def click(x, y):
+            cv.event_generate("<Button-1>", x=int(x), y=int(y))
+            run(50)
+        t0, t1 = legend_of(0), legend_of(1)
+        click(t1["x"] + 8, t1["y"])
+        assert app._toner_chart_highlight and app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
+        assert line_colours()[0] == intonation_chart.DIM and line_colours()[1] != intonation_chart.DIM, line_colours()
+        greys = [i for i in cv.find_withtag("chart") if cv.type(i) == "line" and cv.itemcget(i, "fill") == intonation_chart.DIM]
+        assert greys, "the canvas shows no grey line"
+        app._toner_chart_changed()
+        run(250)                                             # the debounced redraw keeps it
+        assert app._toner_chart_highlight[1] == 1 and line_colours()[0] == intonation_chart.DIM, "a redraw lost the highlight"
+        click(t0["x"] + 8, t0["y"])                          # the other run: the highlight moves
+        assert app._toner_chart_highlight[1] == 0 and line_colours()[1] == intonation_chart.DIM and order() == [1, 0], \
+            (app._toner_chart_highlight, line_colours(), order())
+        click(t0["x"] + 8, t0["y"])                          # the same again: cleared
+        assert app._toner_chart_highlight is None and intonation_chart.DIM not in line_colours().values(), line_colours()
+        click(t1["x"] + 8, t1["y"])
+        assert app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
+        click(cv.winfo_width() - 3, cv.winfo_height() - 3)   # empty area: cleared
+        assert app._toner_chart_highlight is None, app._toner_chart_highlight
+        click(t1["x"] + 8, t1["y"])                          # held into Clear below
+        assert app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
         # Clear goes back to the loaded preset alone
         before = set(toplevels())
         app._toner_open_compare_dialog()
@@ -826,6 +874,11 @@ def main():
         assert app._toner_compare_runs == [], "app._toner_compare_runs == []"
         chart_now()
         assert "B4" not in chart_texts() and "Bench" in chart_texts(), "\"B4\" not in chart_texts() and \"Bench\" in chart_texts()"
+        # a new set of runs dropped the highlight, and a single run ignores clicks
+        assert app._toner_chart_highlight is None, app._toner_chart_highlight
+        t = legend_of(0)
+        click(t["x"] + 8, t["y"])
+        assert app._toner_chart_highlight is None and intonation_chart.DIM not in line_colours().values(), "a single run took a highlight"
     check("Compare...: a preset and one session of another drawn together, each with its name and marker; Clear "
           "returns to the loaded preset", compare_two_presets)
 
@@ -929,18 +982,277 @@ def main():
     toner_tab.time = time
     app._toner_unload_preset()
 
-    # ---------------------------------------------------------------- the tour's stop
-    def the_tours_stop():
+    # ---------------------------------------------------------------- the Key heights link (round 11)
+    def the_key_heights_link():
+        """Matt, 2026-11-11: a preset links to one Key Heights library entry, picked on the form, with
+        a button to enter the heights without leaving it; the link belongs to the preset; each session
+        keeps a copy of the heights; a link whose entry is gone reads as missing and breaks nothing."""
+        from config import KEY_PRESET_FILE, load_presets
+        from tkinter import ttk
+        from toner_engine import key_heights_link
+        # the library as the Key Heights tab holds it, one set to start with
+        app.key_presets = {"My Presets": {"Mark VI 145xxx": {"make": "Selmer", "model": "Mark VI", "size": "Alto",
+                                                              "serial": "", "notes": "", "units": "mm",
+                                                              "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}}}
+        app.update_key_library_dropdown()
+        top = tk.Toplevel(root)
+        frame = tk.Frame(top)
+        frame.pack()
+        # 1. the form: the picker at "(none)", the set listed; a link is never required
+        fields, lib_var, notes_text, sandbox_var = app._toner_build_preset_fields(frame, "#F0EAD6", "black")
+        kh = fields["key_heights"]
+        assert kh.get() == "(none)" and "Mark VI 145xxx (My Presets)" in kh.kh_choices, (kh.get(), list(kh.kh_choices))
+        assert app._toner_kh_link_from(fields) is None, app._toner_kh_link_from(fields)
+        for k, v in dict(name="KH", horn_type="Alto", horn_make="Selmer", horn_model="Mark VI", player="Me",
+                         mouthpiece="M5").items():
+            fields[k].set(v)
+        assert app._toner_validate_required_fields(fields, top) is True, "the link must never be required"
+        kh.set("Mark VI 145xxx (My Presets)")
+        data = app._toner_collect_preset_data(fields, notes_text)
+        assert data["key_heights"] == {"library": "My Presets", "set": "Mark VI 145xxx"}, data["key_heights"]
+        # 2. saved and reloaded with the preset
+        app._toner_presets.setdefault("My Presets", {})["KH"] = data
+        toner_tab.save_tone_presets(app._toner_presets, TONER_DATA_FILE)
+        on_disk = load_tone_presets(TONER_DATA_FILE)
+        assert key_heights_link(on_disk["My Presets"]["KH"]) == data["key_heights"], on_disk["My Presets"]["KH"]
+        # 3. Mutate pre-fills the link like every other field (the builder reads it from defaults)
+        fields2 = app._toner_build_preset_fields(frame, "#F0EAD6", "black",
+                                                 defaults=dict(on_disk["My Presets"]["KH"], name=""))[0]
+        assert fields2["key_heights"].get() == "Mark VI 145xxx (My Presets)", fields2["key_heights"].get()
+        # 4. Enter heights...: a NEW set into the Key Heights library through its store, the tab sees
+        #    it without a restart, the picker selects it; the units convert as on the tab
+        fields["horn_model"].set("Mark VII")
+        combo = [w for w in widgets(frame, ttk.Combobox) if str(w.cget("textvariable")) == str(kh)][0]
+        app._toner_enter_key_heights(top, fields, combo, kh)
+        dlg = app._toner_kh_dialog
+        entries = [e for e in widgets(dlg, tk.Entry) if not isinstance(e, ttk.Combobox)]   # a Combobox is an Entry too
+        assert entries[0].get() == "Selmer Mark VII", entries[0].get()        # the set name, from make and model
+        heights = entries[3:]                                                 # B, F, Low C: the layout's fields
+        assert len(heights) == 3, [e.get() for e in entries]
+        heights[0].delete(0, "end")
+        heights[0].insert(0, "2.6")
+        radios = widgets(dlg, tk.Radiobutton)
+        radios[1].invoke()                                                    # inches
+        assert heights[0].get() == "0.1024", heights[0].get()
+        radios[0].invoke()                                                    # and back to mm
+        assert heights[0].get() == "2.60", heights[0].get()
+        [b for b in widgets(dlg, tk.Button) if b.cget("text") == "Save"][0].invoke()
+        assert not dlg.winfo_exists(), "the dialog stayed open"
+        saved = app.key_presets["My Presets"]["Selmer Mark VII"]
+        assert saved["heights"] == {"B": "2.60", "F": "", "Low C": ""} and saved["units"] == "mm", saved
+        assert saved["make"] == "Selmer" and saved["model"] == "Mark VII" and saved["size"] == "Alto", saved
+        assert load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")["My Presets"]["Selmer Mark VII"] == saved, \
+            "the set is not in key_height_library.json"
+        assert "Selmer Mark VII" in app.key_preset_menu["values"], app.key_preset_menu["values"]   # the tab's list
+        assert kh.get() == "Selmer Mark VII (My Presets)", kh.get()
+        assert app._toner_collect_preset_data(fields, notes_text)["key_heights"] == {"library": "My Presets",
+                                                                                     "set": "Selmer Mark VII"}
+        # 5. a link whose entry is gone: shown as missing, kept, nothing raised
+        del app.key_presets["My Presets"]["Mark VI 145xxx"]
+        fields3 = app._toner_build_preset_fields(frame, "#F0EAD6", "black", defaults=on_disk["My Presets"]["KH"])[0]
+        assert fields3["key_heights"].get() == "Mark VI 145xxx (My Presets) \u2014 missing", fields3["key_heights"].get()
+        assert app._toner_kh_link_from(fields3) == {"library": "My Presets", "set": "Mark VI 145xxx"}
+        info = toner_tab._format_preset_info(on_disk["My Presets"]["KH"], app.key_presets)
+        assert "Key heights: Mark VI 145xxx (My Presets) \u2014 missing" in info, info
+        app.key_presets["My Presets"]["Mark VI 145xxx"] = {"make": "Selmer", "model": "Mark VI", "size": "Alto",
+                                                           "serial": "", "notes": "", "units": "mm",
+                                                           "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}
+        top.destroy()
+        # 6. a session snapshots the link and a copy of the heights; an edit of the entry later
+        #    changes nothing in the run
+        load("KH")
+        app._toner_toggle_capture()
+        s = app._toner_active_session
+        assert s is not None and s["key_heights"] == {"library": "My Presets", "set": "Mark VI 145xxx", "units": "mm",
+                                                      "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}, s
+        app.key_presets["My Presets"]["Mark VI 145xxx"]["heights"]["B"] = "9.9"
+        assert s["key_heights"]["heights"]["B"] == "2.5", "the session's copy followed the library"
+        # a session is kept at Stop only with a capture whose rolloff rate can be computed (8+ harmonics)
+        s["captures"].append(_capture("A3", 220.0, harmonics_db=[0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0, -26.0, -30.0]))
+        app._toner_stop_capture()
+        kept = load_tone_presets(TONER_DATA_FILE)["My Presets"]["KH"]
+        assert kept["key_heights"] == {"library": "My Presets", "set": "Mark VI 145xxx"}, kept["key_heights"]
+        assert kept["sessions"] and kept["sessions"][-1]["key_heights"]["heights"]["B"] == "2.5", kept["sessions"][-1]
+        app._toner_unload_preset()
+    check("the Key heights link: picked on the form (never required), saved and reloaded, pre-filled by Mutate; Enter "
+          "heights... saves a new set into the Key Heights library (units converting as on the tab), the tab lists "
+          "it and the picker selects it; a gone entry reads as missing; a session keeps a copy of the heights that "
+          "a later edit of the entry does not touch", the_key_heights_link)
+
+    # ---------------------------------------------------------------- the Load dialog (round 12)
+    def the_load_dialog():
+        """Matt, 2026-11-11: "when I click load, this screen should also have the option to create new
+        preset"; "none of those presets are titled as alto, tenor etc."; a long name was cut off. The Load
+        dialog lists every preset as "[library] Horn type — name" (display only, the choice by index), as
+        wide as its longest entry up to the cap and scrolling past it, resizable; Load, New Preset...,
+        Cancel; New Preset... closes it and opens the one new-preset form, Key heights picker and all; with
+        no preset at all it still opens, the list empty, Load disabled, New Preset... offered."""
+        from tkinter import ttk
+
+        def open_load():
+            before = set(toplevels())
+            app._toner_load_preset_quick()
+            dlg = [w for w in toplevels() if w not in before][0]
+            run(50)
+            return dlg, app._toner_load_listbox, {b.cget("text"): b for b in widgets(dlg, tk.Button)}
+        dlg, lb, buttons = open_load()
+        entries = list(lb.get(0, "end"))
+        assert "[My Presets] Tenor — Bench" in entries and "[My Presets] Alto — Other" in entries, entries
+        assert int(lb.cget("width")) >= max(len(e) for e in entries), (lb.cget("width"), max(len(e) for e in entries))
+        assert all(dlg.resizable()), dlg.resizable()
+        assert {"Load", "New Preset...", "Cancel"} <= set(buttons), sorted(buttons)
+        i = entries.index("[My Presets] Alto — Other")
+        lb.selection_set(i)
+        buttons["Load"].invoke()
+        assert not dlg.winfo_exists() and app._toner_active_preset == "Other" and app._toner_sax_var.get() == "Alto", \
+            (dlg.winfo_exists(), app._toner_active_preset, app._toner_sax_var.get())
+        app._toner_unload_preset()
+        # New Preset... closes the Load dialog and opens the one form, with the Key heights picker
+        before = set(toplevels())
+        dlg, lb, buttons = open_load()
+        buttons["New Preset..."].invoke()
+        run(50)
+        assert not dlg.winfo_exists(), "the Load dialog stayed open"
+        forms = [w for w in toplevels() if w not in before and w.winfo_exists()]
+        assert len(forms) == 1 and forms[0].title() == "New Tone Preset", [f.title() for f in forms]
+        assert any(c.get() == "(none)" for c in widgets(forms[0], ttk.Combobox)), "no Key heights picker on the form"
+        forms[0].destroy()
+        # the longest entry is not cut: the list grows to it; past the cap it scrolls sideways instead
+        mid = "Conn New Wonder II Virtuoso Deluxe, the second"                 # 46 characters
+        long = "Conn New Wonder II Virtuoso Deluxe, the one with the long engraving and the gold plate, second of the pair"
+        try:
+            app._toner_presets["My Presets"][mid] = {"horn_type": "Alto", "sessions": []}
+            dlg, lb, buttons = open_load()
+            entries = list(lb.get(0, "end"))
+            assert int(lb.cget("width")) == max(len(e) for e in entries) and max(len(e) for e in entries) > 40, \
+                (lb.cget("width"), max(len(e) for e in entries))
+            assert not [s for s in widgets(dlg, tk.Scrollbar) if str(s.cget("orient")) == "horizontal"], "a scrollbar under the cap"
+            dlg.destroy()
+            app._toner_presets["My Presets"][long] = {"horn_type": "Tenor", "sessions": []}
+            dlg, lb, buttons = open_load()
+            assert int(lb.cget("width")) == app.LOAD_LIST_MAX_CHARS, lb.cget("width")
+            assert [s for s in widgets(dlg, tk.Scrollbar) if str(s.cget("orient")) == "horizontal"], "no horizontal scrollbar past the cap"
+            assert f"[My Presets] Tenor — {long}" in lb.get(0, "end"), "the long entry is not whole"
+            dlg.destroy()
+        finally:
+            app._toner_presets["My Presets"].pop(mid, None)
+            app._toner_presets["My Presets"].pop(long, None)
+        # no preset at all: the dialog still opens and offers New Preset...
+        saved = app._toner_presets
+        app._toner_presets = {}
+        try:
+            dlg, lb, buttons = open_load()
+            assert lb.size() == 0 and str(buttons["Load"].cget("state")) == "disabled" and "New Preset..." in buttons, \
+                (lb.size(), buttons["Load"].cget("state"), sorted(buttons))
+            dlg.destroy()
+        finally:
+            app._toner_presets = saved
+    check("Load...: every preset as '[library] Horn type — name', the choice by index, the list as wide as its "
+          "longest entry up to the cap (then a horizontal scrollbar), resizable; New Preset... closes it and opens the "
+          "one form with the Key heights picker; an empty library still opens it", the_load_dialog)
+
+    # ---------------------------------------------------------------- the audio import (round 12)
+    def the_audio_import_dialog():
+        """File > Presets > Import Audio File: the existing-preset list shows the horn type and maps by
+        index; the new-preset path is the one preset form (the required fields as everywhere, the Key
+        heights picker there), the import following the save. A generated WAV stands in for the file
+        dialog; no native dialog opens."""
+        import tkinter.filedialog as fd
+        import wave
+        from tkinter import ttk
+        import numpy as np
+        path = os.path.join(_PROFILE, "import.wav")
+        sr, f0 = 44100, 233.08
+        t = np.arange(int(sr * 3.0)) / sr
+        sig = sum(np.sin(2 * np.pi * f0 * k * t) * (0.5 / k) for k in range(1, 6)) * 0.6
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            w.writeframes((np.clip(sig, -1, 1) * 32767).astype("<i2").tobytes())
+        app._toner_harmonics_var.set("off")
+        run(150)
+        guard_open = fd.askopenfilename
+        fd.askopenfilename = lambda **kw: path
+        try:
+            # path 1: an existing preset, picked by index from a list that shows the horn type
+            before = set(toplevels())
+            app._toner_import_audio_file()
+            dlg = [w for w in toplevels() if w not in before][0]
+            combo = app._toner_import_preset_combo
+            values = list(combo["values"])
+            assert "[My Presets] Alto — KH" in values and "[My Presets] Tenor — Bench" in values, values
+            combo.current(values.index("[My Presets] Alto — KH"))
+            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import && Analyze"].invoke()
+            run(200)
+            assert not dlg.winfo_exists(), "the import dialog stayed open"
+            s = app._toner_presets["My Presets"]["KH"]["sessions"][-1]
+            assert s["method"] == "file" and s["captures"] and s["horn_type"] == "Alto", s
+            assert s["key_heights"]["set"] == "Mark VI 145xxx" and s["key_heights"]["heights"], s.get("key_heights")
+            app._toner_unload_preset()
+            # path 2: a new preset through the one form, required fields enforced, the import after
+            before = set(toplevels())
+            app._toner_import_audio_file()
+            dlg = [w for w in toplevels() if w not in before][0]
+            [r for r in widgets(dlg, tk.Radiobutton) if r.cget("text") == "Create new preset..."][0].invoke()
+            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import && Analyze"].invoke()
+            run(100)
+            assert not dlg.winfo_exists(), "the import dialog stayed open"
+            form = [w for w in toplevels() if w not in before and w.winfo_exists()][0]
+            assert form.title() == "New Tone Preset", form.title()
+            fbuttons = {b.cget("text"): b for b in widgets(form, tk.Button)}
+            assert "Create && Import" in fbuttons, sorted(fbuttons)
+            assert any(c.get() == "(none)" for c in widgets(form, ttk.Combobox)), "no Key heights picker on the import's form"
+            fbuttons["Create && Import"].invoke()
+            run(50)
+            assert form.winfo_exists(), "the form accepted an empty preset"
+            assert box_guard.GUARD.shown[-1][1] == "Required Field", box_guard.GUARD.shown[-1]
+            entries = [e for e in widgets(form, tk.Entry) if not isinstance(e, ttk.Combobox)]
+            for e, v in zip(entries, ("Imported", "Conn", "6M", "Me", "M5")):      # name, make, model, player, mouthpiece
+                e.delete(0, "end")
+                e.insert(0, v)
+            fbuttons["Create && Import"].invoke()
+            run(300)
+            assert not form.winfo_exists(), "the form stayed open with the required fields filled"
+            p = app._toner_presets["My Presets"]["Imported"]
+            assert p["horn_type"] == "Alto" and p["mic_type"] == "" and p["key_heights"] is None and "notes" in p, p
+            assert p["sessions"] and p["sessions"][-1]["method"] == "file" and p["sessions"][-1]["captures"], p["sessions"]
+            assert load_tone_presets(TONER_DATA_FILE)["My Presets"]["Imported"]["sessions"], "the import was not saved"
+        finally:
+            fd.askopenfilename = guard_open
+            app._toner_unload_preset()
+    check("Import Audio File: the existing-preset list shows the horn type and maps by index (the session carries the "
+          "setup and the Key heights snapshot); the new-preset path is the one form, required fields enforced, Key "
+          "heights picker present, the import following the save; no native dialog", the_audio_import_dialog)
+
+    # ---------------------------------------------------------------- the tour's stops
+    def the_tours_stops():
         import main as main_mod
+        files = ("toner_data.json", "key_height_library.json")
+
+        def stamps():
+            return {f: (os.path.getmtime(os.path.join(_PROFILE, f)) if os.path.exists(os.path.join(_PROFILE, f))
+                        else None) for f in files}
+        before = stamps()
         log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=150, on_done=root.quit)
         root.after(90000, root.quit)
         root.mainloop()
-        assert "toner" in log, log
+        for stop in ("analyzer-chart", "analyzer-compare", "analyzer-preset-form", "analyzer-harmonics"):
+            assert stop in log, (stop, log)
+        assert "toner" not in log, log
         assert not errors, "\n".join(errors)
-        # unlocked by the terms check above: the tour showed the spectrum on the tone
-        assert app._toner_harmonics_var.get() == "on" and app._toner_harmonics_frame.winfo_ismapped(), "app._toner_harmonics_var.get() == \"on\" and app._toner_harmonics_frame.winfo_ismapped()"
+        # unlocked by the terms check above: the last stop showed the spectrum, and the switch's slider
+        # is drawn at "on" with it (before 2026-11-11 the var moved and the slider stayed at "off")
+        assert app._toner_harmonics_var.get() == "on" and app._toner_harmonics_frame.winfo_ismapped(), \
+            (app._toner_harmonics_var.get(), app._toner_harmonics_frame.winfo_ismapped())
+        assert app._toner_harmonics_int.get() == 1, "the HARMONICS slider is drawn at off while the spectrum shows"
+        # side-effect free: the comparison's library is gone from memory, nothing picked, nothing written
+        assert main_mod.TOUR_LIBRARY not in app._toner_presets and app._toner_compare_runs == [], \
+            (sorted(app._toner_presets), app._toner_compare_runs)
+        assert stamps() == before, (before, stamps())
         app._toner_stop()
-    check("the tour's stop for the tab raises nothing and, unlocked, shows the spectrum", the_tours_stop)
+    check("the tour's four Analyzer stops (chart, comparison, preset form, harmonics) raise nothing and write "
+          "nothing; unlocked, the last shows the spectrum with the slider drawn at on", the_tours_stops)
 
     root.destroy()
 

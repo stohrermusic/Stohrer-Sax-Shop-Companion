@@ -521,9 +521,10 @@ def main():
     expected = ["pad-maker", "sizing-rules-with-preview", "layer-colors", "gcode-settings", "nesting-preview",
                 "polygon-draw", "job-history", "feature-set", "user-guide", "about", "welcome",
                 "quick-start", "key-heights",
-                "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner", "toner"]
+                "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner",
+                "analyzer-chart", "analyzer-compare", "analyzer-preset-form", "analyzer-harmonics"]
     if not main_mod.audio_supported():
-        expected = [s for s in expected if s not in ("tuner-no-mic", "tuner", "toner")]
+        expected = [s for s in expected if s not in main_mod.AUDIO_TOUR_STOPS]
 
     def tour(enabled):
         app.settings["adhesive_ring_enabled"] = enabled

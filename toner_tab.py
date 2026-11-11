@@ -50,6 +50,7 @@ try:
         compute_population_stats, percentile_rank,
         find_out_of_range_notes, note_name_to_midi,
         unwrap_tone_import, TonePresetsImportError,
+        key_heights_link, key_heights_entry, key_heights_snapshot,
     )
     from intonation import IntonationError, run_from_captures, overlay as intonation_overlay
     import intonation_chart
@@ -130,8 +131,9 @@ def _note_sort_key(note_name):
         return 0
 
 
-def _format_preset_info(p):
-    """Format a preset dict into a readable info string."""
+def _format_preset_info(p, key_presets=None):
+    """Format a preset dict into a readable info string. With the Key Heights library
+    given, a link whose entry is not in it is said to be missing."""
     info = f"{p.get('horn_make', '')} {p.get('horn_model', '')}".strip()
     if p.get('serial'):
         info += f"  (s/n {p['serial']})"
@@ -153,6 +155,12 @@ def _format_preset_info(p):
         mic_parts.append(p['mic_model'])
     if mic_parts:
         info += f"\nMic: {' — '.join(mic_parts)}"
+    link = key_heights_link(p)
+    if link:
+        where = f"{link['set']} ({link['library']})"
+        if key_presets is not None and key_heights_entry(link, key_presets) is None:
+            where += " \u2014 " + _("missing")
+        info += f"\n{_('Key heights')}: {where}"
     sessions = p.get('sessions', [])
     total_caps = 0
     notes = set()
@@ -300,6 +308,15 @@ class TonerTabMixin:
         self._toner_chart_canvas._skip_theme = True
         self._toner_chart_canvas.pack(fill="both", expand=True)
         self._toner_chart_canvas.bind("<Configure>", self._toner_on_chart_resize)
+        # a click on a run's line, marker or legend entry highlights that run (Matt, 2026-11-11);
+        # the hit test and the drawing both go through the chart's primitives
+        self._toner_chart_canvas.bind("<Button-1>", self._toner_chart_click)
+        self._toner_chart_canvas.bind("<Motion>", self._toner_chart_motion)
+        self._toner_chart_highlight = None        # (the runs' names, the index) while a run is highlighted
+        self._toner_chart_last_prims = []         # what the canvas shows, for the hit test
+        self._toner_chart_last_runs = 0
+        self._toner_chart_last_key = ()
+        self._toner_chart_cursor = ""
         chart_row = tk.Frame(self._toner_chart_frame, bg=bg)
         chart_row._skip_theme = True
         chart_row.pack(fill="x", pady=(4, 0))
@@ -1694,6 +1711,12 @@ class TonerTabMixin:
             shown.pack(fill="both", expand=True, padx=5, pady=(5, 0), **kw)
         if not on:
             self._toner_chart_changed()
+        # the slider follows a position set from code (the tour, a remembered "on"): its own
+        # trace then puts the var back to the same value, which lands here with nothing to
+        # move. Before 2026-11-11 the tour's harmonics shot had the switch drawn at "off".
+        slider = getattr(self, '_toner_harmonics_int', None)
+        if slider is not None and slider.get() != (1 if on else 0):
+            slider.set(1 if on else 0)
 
     def _toner_on_harmonics_switched(self, *args):
         on = self._toner_harmonics_var.get() == "on"
@@ -1917,11 +1940,19 @@ class TonerTabMixin:
             logging.getLogger(__name__).exception("the intonation chart could not be built")
             runs = []
         low_left = bool(self.settings.get("toner_settings", {}).get("chart_low_notes_left", True))
+        # the highlighted run, while the chart still shows the runs it was picked on: a new
+        # comparison, a load or an unload changes the names and drops it; a single run has none
+        key = tuple(r.name for r in runs)
+        held = getattr(self, '_toner_chart_highlight', None)
+        if held is not None and (held[0] != key or len(runs) < 2):
+            self._toner_chart_highlight = held = None
+        self._toner_chart_last_key, self._toner_chart_last_runs = key, len(runs)
         # the title is the runs' own: the loaded preset's name, or the compared runs' names joined
         # (Matt, 2026-11-11), made in the primitives so the canvas, the PNG and the PDF agree
         prims = intonation_chart.chart_primitives(intonation_overlay(runs), width, height,
                                                   title=None, low_left=low_left,
-                                                  footnote=self._toner_chart_footnote(runs))
+                                                  footnote=self._toner_chart_footnote(runs),
+                                                  highlight=held[1] if held else None)
         return runs, prims
 
     def _toner_chart_footnote(self, runs):
@@ -1950,6 +1981,7 @@ class TonerTabMixin:
         if w < 50 or h < 50:
             return
         runs, prims = self._toner_chart_prims(w, h)
+        self._toner_chart_last_prims = prims
         intonation_chart.draw_on_canvas(cv, prims, tag="chart")
         if not any(r.readings for r in runs):
             if any(sum(r.left_out.values()) for r in runs):
@@ -1961,6 +1993,39 @@ class TonerTabMixin:
             cv.create_text(w / 2, h / 2, text=text, fill="#666666",
                            font=("Helvetica", 11), tags="chart")
         cv.tag_raise("calprompt")
+
+    def _toner_chart_click(self, event):
+        """A click on the chart: the nearest run (line, marker, spread bar or legend entry, within
+        intonation_chart.HIT_TOLERANCE_PX) is highlighted; a click on the highlighted run again, or
+        on empty area, clears it; a click on another run moves it. Only with two or more runs."""
+        if getattr(self, '_toner_chart_last_runs', 0) < 2:
+            return
+        hit = intonation_chart.run_at(self._toner_chart_last_prims, event.x, event.y)
+        held = self._toner_chart_highlight
+        current = held[1] if held else None
+        new = None if hit is None or hit == current else hit
+        if new == current:
+            return
+        self._toner_chart_highlight = (self._toner_chart_last_key, new) if new is not None else None
+        if self._toner_chart_redraw_id is not None:
+            try:
+                self.root.after_cancel(self._toner_chart_redraw_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._toner_chart_redraw_id = None
+        self._toner_draw_chart()
+
+    def _toner_chart_motion(self, event):
+        """A hand cursor over a run's line, marker or legend entry while a click would do something."""
+        over = (getattr(self, '_toner_chart_last_runs', 0) >= 2
+                and intonation_chart.run_at(self._toner_chart_last_prims, event.x, event.y) is not None)
+        cursor = "hand2" if over else ""
+        if cursor != self._toner_chart_cursor:
+            self._toner_chart_cursor = cursor
+            try:
+                self._toner_chart_canvas.configure(cursor=cursor)
+            except tk.TclError:
+                pass
 
     def _toner_free_kept_frames(self):
         """How many frames of the note being held a capture would keep if it ended now."""
@@ -1982,7 +2047,7 @@ class TonerTabMixin:
                 with_caps = [s for s in preset.get('sessions', []) or [] if s.get('captures')]
                 if not with_caps:
                     continue
-                items.append((f"[{lib}] {name}", 0, lib, name, None))
+                items.append((self._toner_preset_entry_text(lib, name, preset), 0, lib, name, None))
                 if len(with_caps) > 1:
                     for s in with_caps:
                         items.append((s.get('date', ''), 1, lib, name, s.get('date')))
@@ -2206,7 +2271,7 @@ class TonerTabMixin:
         preset = self._toner_presets[lib_name][preset_name]
         self._preset_info_text.configure(state="normal")
         self._preset_info_text.delete("1.0", tk.END)
-        self._preset_info_text.insert("1.0", _format_preset_info(preset))
+        self._preset_info_text.insert("1.0", _format_preset_info(preset, getattr(self, 'key_presets', None)))
         self._preset_info_text.configure(state="disabled")
         for btn in self._preset_selection_btns:
             btn.configure(state="normal")
@@ -2363,6 +2428,31 @@ class TonerTabMixin:
         add_field(_("Room") + ":", "room", optional_key="room")
         add_field(_("Preamp") + ":", "preamp", optional_key="preamp")
 
+        # Key heights: an optional link to one entry of the Key Heights library (Matt,
+        # 2026-11-11: "link a horn to an entry in the key heights library"; the link belongs
+        # to the preset), never required, and a button to enter this horn's heights now,
+        # saved to that library and linked here. The picker's choices map to links on the
+        # StringVar itself (kh_choices), read back by _toner_kh_link_from.
+        from ui_dialogs import add_tooltip, add_tooltips
+        kh_row = tk.Frame(frame, bg=bg)
+        kh_row.pack(fill="x", pady=2)
+        kh_label = tk.Label(kh_row, text=_("Key heights") + ":", bg=bg, fg=fg, width=label_w,
+                            anchor="e", font=("Helvetica", 10))
+        kh_label.pack(side="left", padx=(0, 8))
+        kh_var = tk.StringVar()
+        kh_combo = ttk.Combobox(kh_row, textvariable=kh_var, state="readonly", width=20)
+        kh_combo.pack(side="left", fill="x", expand=True)
+        fields["key_heights"] = kh_var
+        self._toner_kh_fill_picker(kh_combo, kh_var, key_heights_link(d))
+        kh_btn = tk.Button(kh_row, text=_("Enter heights..."),
+                           command=lambda: self._toner_enter_key_heights(frame.winfo_toplevel(), fields,
+                                                                         kh_combo, kh_var))
+        kh_btn.pack(side="left", padx=(6, 0))
+        add_tooltips(_("Link this preset to a set in the Key Heights library. Optional. Each run keeps a "
+                       "copy of the heights it was recorded with."), kh_label, kh_combo)
+        add_tooltip(kh_btn, _("Enter this horn's key heights now: the set is saved to the Key Heights "
+                              "library and linked here."))
+
         # Sandbox checkbox (only when enabled in settings)
         sandbox_var = None
         if self.settings.get("toner_sandbox_enabled"):
@@ -2443,11 +2533,148 @@ class TonerTabMixin:
             'preamp': fields.get("preamp", tk.StringVar()).get().strip() if "preamp" in fields else "",
             'mic_type': fields.get("mic_type", tk.StringVar()).get().lower(),
             'mic_model': fields.get("mic_model", tk.StringVar()).get().strip(),
+            'key_heights': self._toner_kh_link_from(fields),
             'notes': notes_text.get("1.0", tk.END).strip() if notes_text else "",
             'created': time.strftime("%Y-%m-%d"),
             'sessions': [],
         }
         return data
+
+    def _toner_kh_choices(self, link=None):
+        """The picker's texts in order with the link each stands for: "(none)" first, then every
+        set of every Key Heights library as "set (library)"; a `link` whose entry is not in the
+        library is listed too, marked missing, so the form shows it and keeps it."""
+        choices = {_("(none)"): None}
+        key_presets = getattr(self, 'key_presets', None) or {}
+        for lib_name in sorted(key_presets):
+            sets = key_presets[lib_name]
+            if not isinstance(sets, dict):
+                continue
+            for set_name in sorted(sets):
+                choices[f"{set_name} ({lib_name})"] = {"library": lib_name, "set": set_name}
+        if link and key_heights_entry(link, key_presets) is None:
+            choices[f"{link['set']} ({link['library']}) \u2014 {_('missing')}"] = dict(link)
+        return choices
+
+    def _toner_kh_fill_picker(self, combo, var, link):
+        """Fill the Key heights picker and select `link` (None selects "(none)")."""
+        choices = self._toner_kh_choices(link)
+        var.kh_choices = choices
+        combo['values'] = list(choices)
+        wanted = next((text for text, l in choices.items() if l == link), None) if link else None
+        var.set(wanted if wanted is not None else next(iter(choices)))
+
+    def _toner_kh_link_from(self, fields):
+        """The link the form's Key heights picker stands at, or None (also for a form without
+        the picker)."""
+        var = fields.get("key_heights") if isinstance(fields, dict) else None
+        choices = getattr(var, "kh_choices", None)
+        if var is None or not choices:
+            return None
+        link = choices.get(var.get())
+        return dict(link) if link else None
+
+    def _toner_enter_key_heights(self, parent, fields, combo, var):
+        """Enter this horn's key heights without leaving the preset form: the Key Heights tab's
+        own fields (ALL_KEY_HEIGHT_FIELDS as the Key Layout shows them, mm or inches with the
+        tab's conversion), saved as a NEW set into the Key Heights library through its store
+        (key_height_library.json), the tab refreshed, the set picked here. New sets only: a
+        horn whose heights change gets a new set and a mutated preset (Matt, 2026-11-11);
+        editing a set stays on the Key Heights tab."""
+        from library_features import convert_height, key_height_fields_shown
+        from config import KEY_PRESET_FILE, save_presets
+        dlg = tk.Toplevel(parent)
+        dlg.title(_("Enter Key Heights"))
+        dlg.resizable(False, False)
+        dlg.transient(parent)
+        dlg.grab_set()
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        body = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        body.pack(fill="both", expand=True)
+
+        def row(label):
+            r = tk.Frame(body, bg=bg)
+            r.pack(fill="x", pady=2)
+            tk.Label(r, text=label, bg=bg, fg=fg, width=12, anchor="e", font=("Helvetica", 10)).pack(
+                side="left", padx=(0, 8))
+            return r
+
+        key_presets = getattr(self, 'key_presets', None)
+        if key_presets is None:
+            key_presets = self.key_presets = {}
+        libs = sorted(k for k, v in key_presets.items() if isinstance(v, dict)) or ["My Presets"]
+        lib_var = tk.StringVar(value="My Presets" if "My Presets" in libs else libs[0])
+        ttk.Combobox(row(_("Library:")), textvariable=lib_var, values=libs, width=24).pack(side="left", fill="x",
+                                                                                            expand=True)
+        make = fields.get("horn_make", tk.StringVar()).get().strip()
+        model = fields.get("horn_model", tk.StringVar()).get().strip()
+        name_var = tk.StringVar(value=f"{make} {model}".strip())
+        tk.Entry(row(_("Set name:")), textvariable=name_var, width=26).pack(side="left", fill="x", expand=True)
+        make_var = tk.StringVar(value=make)
+        tk.Entry(row(_("Make") + ":"), textvariable=make_var, width=26).pack(side="left", fill="x", expand=True)
+        model_var = tk.StringVar(value=model)
+        tk.Entry(row(_("Model") + ":"), textvariable=model_var, width=26).pack(side="left", fill="x", expand=True)
+        size_var = tk.StringVar(value=fields.get("horn_type", tk.StringVar()).get())
+        ttk.Combobox(row(_("Horn Type") + ":"), textvariable=size_var, values=SAX_TYPES, state="readonly",
+                     width=24).pack(side="left", fill="x", expand=True)
+
+        unit_row = row(_("Units:"))
+        unit_var = tk.StringVar(value="mm")
+        shown_unit = {"unit": "mm"}
+        height_vars = {key: tk.StringVar() for key in key_height_fields_shown(self.settings)}
+
+        def on_unit():
+            for v in height_vars.values():
+                v.set(convert_height(v.get(), shown_unit["unit"], unit_var.get()))
+            shown_unit["unit"] = unit_var.get()
+        tk.Radiobutton(unit_row, text=_("mm"), variable=unit_var, value="mm", bg=bg, command=on_unit).pack(side="left")
+        tk.Radiobutton(unit_row, text=_("inches"), variable=unit_var, value="in", bg=bg,
+                       command=on_unit).pack(side="left", padx=(8, 0))
+
+        grid = tk.Frame(body, bg=bg)
+        grid.pack(fill="x", pady=(6, 2))
+        for i, (key, v) in enumerate(height_vars.items()):
+            r, c = divmod(i, 2)
+            tk.Label(grid, text=f"{key}:", bg=bg, fg=fg, anchor="e", width=9).grid(row=r, column=c * 2, sticky="e",
+                                                                                      padx=(0, 4), pady=2)
+            tk.Entry(grid, textvariable=v, width=8).grid(row=r, column=c * 2 + 1, sticky="w", padx=(0, 12))
+
+        def save():
+            lib = lib_var.get().strip()
+            name = name_var.get().strip()
+            if not name or not lib:
+                messagebox.showwarning(_("Required Field"), _("Please enter {label}.").format(label=_("Set name:")),
+                                       parent=dlg)
+                return
+            if not all([make_var.get().strip(), model_var.get().strip(), size_var.get().strip()]):
+                messagebox.showwarning(_("Missing Info"),
+                                       _("Please fill in at least Make, Model, and Size before saving."), parent=dlg)
+                return
+            sets = key_presets.setdefault(lib, {})
+            if name in sets:
+                messagebox.showwarning(_("Duplicate Name"),
+                                       _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
+                return
+            sets[name] = {"make": make_var.get().strip(), "model": model_var.get().strip(),
+                          "size": size_var.get().strip(), "serial": "", "notes": "",
+                          "units": unit_var.get(), "heights": {k: v.get() for k, v in height_vars.items()}}
+            save_presets(key_presets, KEY_PRESET_FILE)
+            # the Key Heights tab sees it now: a new library goes into its dropdown, a new set
+            # into the list of the library it shows
+            if hasattr(self, 'key_library_dropdown'):
+                if lib not in self.key_library_dropdown['values']:
+                    self.update_key_library_dropdown()
+                else:
+                    self.on_key_library_selected()
+            self._toner_kh_fill_picker(combo, var, {"library": lib, "set": name})
+            dlg.destroy()
+
+        btn_row = tk.Frame(body, bg=bg)
+        btn_row.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_row, text=_("Save"), command=save).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy).pack(side="left")
+        self._toner_kh_dialog = dlg
 
     def _toner_new_preset(self, parent_dlg):
         """Create a new horn preset via guided dialog."""
@@ -2774,8 +3001,28 @@ class TonerTabMixin:
             else:
                 self._toner_load_unload_btn.configure(text=_("Load..."))
 
+    @staticmethod
+    def _toner_preset_entry_text(lib, name, preset):
+        """One line for a preset in a list: "[library] Horn type \u2014 name", the type as the
+        form stores it (Matt, 2026-11-11: "none of those presets are titled as alto, tenor
+        etc."); "[library] name" for a sandbox preset or one with no type. Display only: a
+        selection maps back by index, never by this text. Used by Load..., Compare... and
+        the audio import's preset list."""
+        horn = ""
+        if isinstance(preset, dict) and not preset.get("sandbox"):
+            horn = str(preset.get("horn_type", "") or "")
+        return f"[{lib}] {horn} \u2014 {name}" if horn else f"[{lib}] {name}"
+
+    LOAD_LIST_MAX_CHARS = 80      # the Load list grows to its longest entry up to this; past it, it scrolls
+
     def _toner_load_preset_quick(self):
-        """Quick preset loader — shows list, loads selected."""
+        """The strip's Load...: every preset in a list (library, horn type, name), Load, New
+        Preset... and Cancel. The list is as wide as its longest entry needs, up to
+        LOAD_LIST_MAX_CHARS, with a horizontal scrollbar only past that, and the dialog
+        resizes with the list filling it (Matt, 2026-11-11: a name was cut off). With no
+        preset at all the dialog still opens, the list empty and Load disabled, and offers
+        New Preset... (until then Load... showed a box saying to use File > Presets).
+        New Preset... closes this dialog and runs the one new-preset flow."""
         all_presets = []
         for lib_name, lib_presets in self._toner_presets.items():
             if not isinstance(lib_presets, dict):
@@ -2783,14 +3030,9 @@ class TonerTabMixin:
             for preset_name, preset_data in lib_presets.items():
                 all_presets.append((lib_name, preset_name, preset_data))
 
-        if not all_presets:
-            messagebox.showinfo(_("No Presets"),
-                _("No presets yet. Create one in File > Presets."))
-            return
-
         dlg = tk.Toplevel(self.root)
         dlg.title(_("Load Preset"))
-        dlg.resizable(False, False)
+        dlg.resizable(True, True)
         dlg.transient(self.root)
         dlg.grab_set()
 
@@ -2798,12 +3040,23 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
         frame.pack(fill="both", expand=True)
 
-        listbox = tk.Listbox(frame, width=40, height=min(10, len(all_presets)),
-                              font=("Helvetica", 10))
-        listbox.pack(fill="both", expand=True, pady=(0, 8))
-
-        for lib_name, preset_name, _data in all_presets:
-            listbox.insert(tk.END, f"[{lib_name}] {preset_name}")
+        texts = [self._toner_preset_entry_text(lib_name, preset_name, data) for lib_name, preset_name, data in all_presets]
+        longest = max((len(t) for t in texts), default=0)
+        list_frame = tk.Frame(frame, bg=bg)
+        list_frame.pack(fill="both", expand=True, pady=(0, 8))
+        listbox = tk.Listbox(list_frame, width=max(40, min(longest, self.LOAD_LIST_MAX_CHARS)),
+                             height=max(3, min(10, len(all_presets))), font=("Helvetica", 10))
+        yscroll = tk.Scrollbar(list_frame, orient="vertical", command=listbox.yview)
+        listbox.configure(yscrollcommand=yscroll.set)
+        if longest > self.LOAD_LIST_MAX_CHARS:
+            xscroll = tk.Scrollbar(list_frame, orient="horizontal", command=listbox.xview)
+            listbox.configure(xscrollcommand=xscroll.set)
+            xscroll.pack(side="bottom", fill="x")
+        yscroll.pack(side="right", fill="y")
+        listbox.pack(side="left", fill="both", expand=True)
+        for text in texts:
+            listbox.insert(tk.END, text)
+        self._toner_load_listbox = listbox
 
         def load():
             sel = listbox.curselection()
@@ -2828,10 +3081,16 @@ class TonerTabMixin:
             self._toner_lock_sax_selector(True)
             dlg.destroy()
 
+        def new_preset():
+            dlg.destroy()
+            self._toner_new_preset_flow()
+
         btn_frame = tk.Frame(frame, bg=bg)
         btn_frame.pack(fill="x")
-        tk.Button(btn_frame, text=_("Load"), command=load).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(side="left")
+        tk.Button(btn_frame, text=_("Load"), command=load,
+                  state="normal" if all_presets else "disabled").pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text=_("New Preset..."), command=new_preset).pack(side="left", padx=(0, 5))
+        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(side="right")
 
     def _toner_unload_preset(self):
         """Unload the active preset."""
@@ -2962,6 +3221,11 @@ class TonerTabMixin:
             'reed': preset.get('reed', ''),
             'mic_position': preset.get('mic_position', ''),
         }
+        # the horn's key heights as they are now: the link and a copy of the entry, so the
+        # run keeps them if the library entry is later edited, renamed or deleted
+        kh = key_heights_snapshot(preset.get('key_heights'), getattr(self, 'key_presets', None))
+        if kh:
+            self._toner_active_session['key_heights'] = kh
         if is_sandbox:
             self._toner_active_session['sandbox'] = True
         self._toner_rolloff_warned = False
@@ -5899,31 +6163,33 @@ class TonerTabMixin:
                  bg=bg, fg=fg, font=("Helvetica", 9),
                  justify="left").pack(pady=(0, 10))
 
-        # Profile selector
+        # Profile selector: every preset as the Load list shows it (library, horn type, name);
+        # the choice maps back by index, never by the text
         all_presets = []
         for lib_name, lib_presets in self._toner_presets.items():
             if not isinstance(lib_presets, dict):
                 continue
-            for preset_name in lib_presets:
-                all_presets.append((lib_name, preset_name))
+            for preset_name, preset_data in lib_presets.items():
+                all_presets.append((lib_name, preset_name, preset_data))
 
         preset_frame = tk.Frame(frame, bg=bg)
         preset_frame.pack(fill="x", pady=(0, 5))
 
         use_existing = tk.BooleanVar(value=bool(all_presets))
+        preset_combo = None
 
         if all_presets:
             tk.Radiobutton(preset_frame, text=_("Existing preset:"),
                            variable=use_existing, value=True,
                            bg=bg, fg=fg, font=("Helvetica", 10)).pack(
                                anchor="w")
-            preset_var = tk.StringVar(
-                value=f"[{all_presets[0][0]}] {all_presets[0][1]}" if all_presets else "")
-            preset_list = [f"[{lib}] {name}" for lib, name in all_presets]
+            preset_list = [self._toner_preset_entry_text(lib, name, data) for lib, name, data in all_presets]
+            preset_var = tk.StringVar(value=preset_list[0])
             preset_combo = ttk.Combobox(preset_frame, textvariable=preset_var,
                                       values=preset_list, state="readonly",
-                                      width=40)
+                                      width=max(40, min(max(len(t) for t in preset_list), self.LOAD_LIST_MAX_CHARS)))
             preset_combo.pack(anchor="w", padx=(20, 0), pady=(0, 5))
+            self._toner_import_preset_combo = preset_combo
 
         tk.Radiobutton(preset_frame, text=_("Create new preset..."),
                        variable=use_existing, value=False,
@@ -5940,39 +6206,23 @@ class TonerTabMixin:
             source_notes = source_notes_var.get().strip()
 
             if use_existing.get() and all_presets:
-                # Use selected preset
-                sel_text = preset_var.get()
-                selected = None
-                for lib, name in all_presets:
-                    if f"[{lib}] {name}" == sel_text:
-                        selected = (lib, name)
-                        break
-                if not selected:
+                idx = preset_combo.current() if preset_combo is not None else -1
+                if idx < 0 or idx >= len(all_presets):
                     messagebox.showinfo(_("Select Preset"),
                         _("Select a preset from the list."), parent=dlg)
                     return
-
-                self._toner_active_library = selected[0]
-                self._toner_active_preset = selected[1]
+                lib, name, preset = all_presets[idx]
+                self._toner_active_library = lib
+                self._toner_active_preset = name
 
                 # Sync sax type
-                preset = self._toner_presets[selected[0]][selected[1]]
                 sax_type = preset.get('horn_type', '')
                 if sax_type and self._toner_engine:
                     self._toner_engine.set_sax_type(sax_type)
                     if hasattr(self, '_toner_sax_var'):
                         self._toner_sax_var.set(sax_type)
 
-                # Create a file import session
-                self._toner_active_session = {
-                    'date': time.strftime("%Y-%m-%d %H:%M:%S"),
-                    'captures': [],
-                    'source_notes': source_notes,
-                    'method': 'file',
-                    'mic_type': preset.get('mic_type', ''),
-                    'mic_model': preset.get('mic_model', ''),
-                }
-
+                self._toner_active_session = self._toner_file_import_session(preset, source_notes)
                 dlg.destroy()
                 self._toner_do_file_import(filepath, source_notes)
             else:
@@ -5989,9 +6239,34 @@ class TonerTabMixin:
         tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
 
+    def _toner_file_import_session(self, preset, source_notes):
+        """A session for the captures read from a file: dated now, method "file", with the
+        preset's setup copied in as a live session copies it (mic, horn, player, mouthpiece,
+        reed, mic position, the Key heights snapshot). Both import paths make it here; until
+        2026-11-11 the existing-preset path copied the mic alone and the new-preset path nothing."""
+        session = {
+            'date': time.strftime("%Y-%m-%d %H:%M:%S"),
+            'captures': [],
+            'source_notes': source_notes,
+            'method': 'file',
+        }
+        for key in ('mic_type', 'mic_model', 'horn_type', 'horn_make', 'horn_model', 'serial', 'player',
+                    'mouthpiece', 'reed', 'mic_position'):
+            session[key] = preset.get(key, '')
+        kh = key_heights_snapshot(preset.get('key_heights'), getattr(self, 'key_presets', None))
+        if kh:
+            session['key_heights'] = kh
+        if preset.get('sandbox'):
+            session['sandbox'] = True
+        return session
+
     def _toner_new_preset_flow_then_import(self):
-        """Create a new preset, then import the pending file."""
-        # Reuse the existing new preset flow but override the callback
+        """Create a new preset on the one preset form, then import the pending file: the same
+        fields, required-field rule and collector as every other way of making a preset (the
+        mic fields required only while HARMONICS is on, the Key heights picker, notes, sandbox
+        where enabled); the import is the continuation after Create, as capture is after
+        "Create & Start Capturing". Until 2026-11-11 this path had a form of its own: name,
+        horn type, make, model, serial, player, mouthpiece, reed, notes, only the name required."""
         dlg = tk.Toplevel(self.root)
         dlg.title(_("New Tone Preset"))
         dlg.resizable(False, False)
@@ -6008,92 +6283,32 @@ class TonerTabMixin:
         tk.Label(frame, text=_("Describe the horn and setup heard in the recording."),
                  bg=bg, fg=fg, font=("Helvetica", 9)).pack(pady=(0, 10))
 
-        fields = {}
-
-        def add_field(label, key, default="", widget_type="entry"):
-            row = tk.Frame(frame, bg=bg)
-            row.pack(fill="x", pady=2)
-            tk.Label(row, text=label, bg=bg, fg=fg, width=label_w,
-                     anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-            if widget_type == "combo":
-                var = tk.StringVar(value=default)
-                ttk.Combobox(row, textvariable=var, values=SAX_TYPES,
-                             state="readonly", width=20).pack(
-                    side="left", fill="x", expand=True)
-                fields[key] = var
-            else:
-                var = tk.StringVar(value=default)
-                tk.Entry(row, textvariable=var, width=25).pack(
-                    side="left", fill="x", expand=True)
-                fields[key] = var
-
-        # Library selector
-        lib_row = tk.Frame(frame, bg=bg)
-        lib_row.pack(fill="x", pady=2)
-        tk.Label(lib_row, text=_("Library:"), bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8))
-        existing_libs = [k for k in self._toner_presets.keys()
-                        if isinstance(self._toner_presets[k], dict)]
-        if not existing_libs:
-            existing_libs = [DEFAULT_LIBRARY]
-        lib_var = tk.StringVar(value=existing_libs[0])
-        ttk.Combobox(lib_row, textvariable=lib_var,
-                      values=existing_libs, width=20).pack(
-            side="left", fill="x", expand=True)
-
-        label_w = max(14, max(len(t) for t in (_("Preset Name"), _("Horn Type"), _("Make"), _("Model"), _("Player"), _("Mouthpiece"), _("Mic Type"), _("Mic Model"), _("Serial #"), _("Reed"), _("Ligature"), _("Mic Position"), _("Room"), _("Preamp"))) + 1)
-        add_field(_("Preset Name") + ":", "name")
-        add_field(_("Horn Type") + ":", "horn_type", "Alto", widget_type="combo")
-        add_field(_("Make") + ":", "horn_make")
-        add_field(_("Model") + ":", "horn_model")
-        add_field(_("Serial #") + ":", "serial")
-        add_field(_("Player") + ":", "player")
-        add_field(_("Mouthpiece") + ":", "mouthpiece")
-        add_field(_("Reed") + ":", "reed")
-
-        # Notes — multi-line
-        notes_row = tk.Frame(frame, bg=bg)
-        notes_row.pack(fill="x", pady=2)
-        tk.Label(notes_row, text=_("Notes:"), bg=bg, fg=fg, width=14,
-                 anchor="e", font=("Helvetica", 10)).pack(side="left", padx=(0, 8), anchor="n")
-        notes_text = tk.Text(notes_row, height=3, width=25, font=("Helvetica", 10), wrap="word")
-        notes_text.pack(side="left", fill="x", expand=True)
+        fields, lib_var, notes_text, sandbox_var = self._toner_build_preset_fields(frame, bg, fg)
 
         def save_and_import():
+            is_sandbox = sandbox_var and sandbox_var.get()
+            if not self._toner_validate_required_fields(fields, dlg, sandbox=is_sandbox):
+                return
             name = fields["name"].get().strip()
             lib = lib_var.get().strip() or DEFAULT_LIBRARY
-            if not name:
-                messagebox.showwarning(_("Name Required"),
-                    _("Please enter a preset name."), parent=dlg)
-                return
-
             if lib not in self._toner_presets:
                 self._toner_presets[lib] = {}
             if name in self._toner_presets[lib]:
-                messagebox.showwarning(_("Duplicate"),
+                messagebox.showwarning(_("Duplicate Name"),
                     _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
                 return
 
-            self._toner_presets[lib][name] = {
-                'horn_type': fields["horn_type"].get(),
-                'horn_make': fields["horn_make"].get().strip(),
-                'horn_model': fields["horn_model"].get().strip(),
-                'serial': fields["serial"].get().strip(),
-                'player': fields["player"].get().strip(),
-                'mouthpiece': fields["mouthpiece"].get().strip(),
-                'reed': fields["reed"].get().strip(),
-                'notes': notes_text.get("1.0", tk.END).strip(),
-                'created': time.strftime("%Y-%m-%d"),
-                'sessions': [],
-            }
+            data = self._toner_collect_preset_data(fields, notes_text)
+            if is_sandbox:
+                data['sandbox'] = True
+            self._toner_presets[lib][name] = data
             save_tone_presets(self._toner_presets, TONER_DATA_FILE)
             self._toner_active_library = lib
             self._toner_active_preset = name
-            self._toner_active_session = None  # Clear old session
+            self._toner_active_session = None
             self._toner_update_preset_label()
 
-            # Set sax type
-            sax_type = fields["horn_type"].get()
+            sax_type = data.get('horn_type', '')
             if self._toner_engine and sax_type:
                 self._toner_engine.set_sax_type(sax_type)
                 if hasattr(self, '_toner_sax_var'):
@@ -6101,18 +6316,12 @@ class TonerTabMixin:
 
             dlg.destroy()
 
-            # Now do the file import
-            if hasattr(self, '_toner_pending_file_import'):
-                filepath, source_notes = self._toner_pending_file_import
+            pending = getattr(self, '_toner_pending_file_import', None)
+            if pending:
                 del self._toner_pending_file_import
-                self._toner_active_session = {
-                    'date': time.strftime("%Y-%m-%d %H:%M:%S"),
-                    'captures': [],
-                    'source_notes': source_notes,
-                    'method': 'file',
-                }
+                filepath, source_notes = pending
+                self._toner_active_session = self._toner_file_import_session(data, source_notes)
                 self._toner_do_file_import(filepath, source_notes)
-
         btn_row = tk.Frame(frame, bg=bg)
         btn_row.pack(fill="x", pady=(10, 0))
         tk.Button(btn_row, text=_("Create && Import"),

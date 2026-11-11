@@ -170,9 +170,16 @@ def suite_env(base_env, name):
 
 
 def main(argv):
+    # On Windows, outside CI, the whole run moves to a private desktop first (Matt,
+    # 2026-11-11: "I can't use my pc for a while when they are running"): this process
+    # re-runs itself there and every suite inherits it. --visible keeps it here.
+    import hidden_desktop
+    if hidden_desktop.wanted(argv):
+        return hidden_desktop.rerun_hidden([sys.executable] + list(argv))
+    print(hidden_desktop.where(argv), flush=True)
     allow_missing = []
     skip_names = []
-    args = list(argv[1:])
+    args = [a for a in argv[1:] if a != "--visible"]
     while "--allow-missing" in args:
         i = args.index("--allow-missing")
         allow_missing.append(args[i + 1])

@@ -216,11 +216,12 @@ check("the PDF is one page, every object at its xref offset, Helvetica, the titl
       "the notes turned 90 degrees, the register line dashed", the_pdf_is_one_page_with_the_title)
 
 
-def a_multi_run_chart_carries_a_title_line():
-    """Matt, 2026-11-11 ("yes"): a title line above the legend on a multi-run chart, made in the
-    primitives so the canvas, the PNG and the PDF carry it alike: the runs' names joined with a
-    middle dot; one run's chart is titled with its name; "" stays none; a long list is cut with
-    three dots to what the width holds."""
+def a_single_run_is_titled_with_its_name_and_a_comparison_has_no_title():
+    """Matt, 2026-11-11: "no title, just list the presets involved". One run's chart is titled with its
+    name (cut to the width with three dots); two or more carry no title line and the legend, which lists
+    them, sits where the title would; the canvas, the PNG and the PDF agree since the primitives are the
+    same. `title=""` is none and a given string is drawn as given. (Between round 10 and this decision
+    the names were joined above a legend that listed them again.)"""
     size = int(C.FONT_PX * 1.2)
 
     def title_of(prims):
@@ -229,34 +230,102 @@ def a_multi_run_chart_carries_a_title_line():
     def legend_y(prims):
         return min(p["y1"] for p in of("line", prims) if p["dash"] is None and p["x2"] - p["x1"] == 22)
 
-    prims = C.chart_primitives(OV, W, H, title=None)
-    t = title_of(prims)
-    assert len(t) == 1 and t[0]["text"] == "Mark VI, Link 7* \u00b7 Conn 10M" and t[0]["bold"] and t[0]["size"] == size, t
-    assert legend_y(prims) > 8 + int(C.FONT_PX * 1.4), f"the legend is not below the title: {legend_y(prims)}"
-    none = C.chart_primitives(OV, W, H, title="")
-    assert not title_of(none), "an explicit empty title still drew one"
-    assert legend_y(none) < legend_y(prims), "the legend did not move up without a title"
     one = C.chart_primitives(I.overlay([RUN_B]), W, H, title=None)
-    assert [p["text"] for p in title_of(one)] == ["Conn 10M"], title_of(one)
+    t = title_of(one)
+    assert len(t) == 1 and t[0]["text"] == "Conn 10M" and t[0]["bold"] and t[0]["size"] == size, t
+    two = C.chart_primitives(OV, W, H, title=None)
+    assert not title_of(two), f"a comparison drew a title: {title_of(two)}"
+    assert legend_y(two) == 8 + (C.FONT_PX + 8) / 2, f"the legend did not move up into the title's place: {legend_y(two)}"
+    assert legend_y(C.chart_primitives(OV, W, H, title="Two horns")) > legend_y(two), "a given title no longer pushes the legend down"
+    assert not title_of(C.chart_primitives(OV, W, H, title="")), "an explicit empty title drew one"
     assert not title_of(C.chart_primitives(I.overlay([]), W, H, title=None)), "an empty chart has no title"
-    # a long list is cut to what the width holds, ending in three dots
     many = I.overlay([RUN_A, RUN_B] * 3)
-    for i, line in enumerate(many["lines"]):
-        line["name"] = f"A long preset name number {i} on a tenor"
-    long = title_of(C.chart_primitives(many, W, H, title=None))[0]["text"]
-    assert long.endswith("...") and long.startswith("A long preset name number 0") and len(long) <= (W - 24) / (0.6 * size), long
-    assert C.runs_title(many["lines"], 4000, size).count(C.TITLE_SEPARATOR) == 5, "a wide chart holds all six names"
-    # the renderers carry it: the PDF's text, the PNG's title band has ink
-    pdf = C.render_pdf(prims, W, H)
+    assert not title_of(C.chart_primitives(many, W, H, title=None)), "six runs drew a title"
+    long_one = I.overlay([RUN_A])
+    long_one["lines"][0]["name"] = "A long preset name on a tenor, " * 5
+    cut = title_of(C.chart_primitives(long_one, W, H, title=None))[0]["text"]
+    assert cut.endswith("...") and len(cut) <= (W - 24) / (0.6 * size), cut
+    assert C.runs_title(OV["lines"], 4000, size) == "" and C.runs_title(OV["lines"][:1], 4000, size) == "Mark VI, Link 7*", \
+        "runs_title's rule"
+    # the renderers follow: the comparison's PDF has the names once each (the legend) and no joined title;
+    # the single run's PDF has its name twice (title and legend)
+    pdf = C.render_pdf(two, W, H)
     content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf, re.S).group(1)).decode("latin-1")
-    assert "(Mark VI, Link 7* \xb7 Conn 10M) Tj" in content, "the title is not in the PDF's text"
+    assert "\xb7" not in content and content.count("(Mark VI, Link 7*) Tj") == 1 and content.count("(Conn 10M) Tj") == 1, \
+        "the comparison's PDF carries a title"
+    pdf1 = C.render_pdf(one, W, H)
+    content1 = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf1, re.S).group(1)).decode("latin-1")
+    assert content1.count("(Conn 10M) Tj") == 2, "the single run's PDF lacks its title"
     from PIL import Image
     import io
-    band = Image.open(io.BytesIO(C.render_png(prims, W, H))).convert("L").crop((0, 8, W, 8 + int(C.FONT_PX * 1.4)))
-    assert min(band.getdata()) < 128, "no ink in the PNG's title band"
-check("a multi-run chart carries a title line above the legend: the runs' names joined, one run's own name, none "
-      "when asked for none, a long list cut with three dots; the PDF's text and the PNG carry it",
-      a_multi_run_chart_carries_a_title_line)
+    band = Image.open(io.BytesIO(C.render_png(two, W, H))).convert("L").crop((0, 8, W, 8 + C.FONT_PX + 8))
+    assert min(band.getdata()) < 128, "no ink where the legend should now sit in the PNG"
+check("a single-run chart is titled with its name (cut to the width); a comparison carries no title and its legend "
+      "moves up into the title's place; a given title is drawn as given; the PDF and PNG follow",
+      a_single_run_is_titled_with_its_name_and_a_comparison_has_no_title)
+
+
+def a_highlighted_run_in_the_primitives_and_the_hit_test():
+    """Matt, 2026-11-11: "click a spot in the comparison chart and have that line highlighted". In the
+    primitives: the highlighted run is drawn last, heavier, in its own colour; every other run's line,
+    markers, spread bars and legend entry are DIM; without a highlight the picture is as before, only
+    every run primitive carries its run index. run_at reads the run from the primitives: a line
+    segment, a marker, a legend entry, within HIT_TOLERANCE_PX; beyond it, or on empty area, None."""
+    def runs(prims):
+        return [p["run"] for p in of("polyline", prims)]
+
+    def strip(prims):
+        return [{k: v for k, v in p.items() if k != "run"} for p in prims]
+    plain = C.chart_primitives(OV, W, H, title="Two horns")
+    assert runs(plain) == [0, 1] and all(p["width"] == C.LINE_WIDTH for p in of("polyline", plain)), runs(plain)
+    assert all("run" in p for p in plain if p["kind"] in ("polyline", "marker")), "a run primitive without its index"
+    assert strip(plain) == strip(PRIMS), "no highlight must give the same picture as before"
+    hi = C.chart_primitives(OV, W, H, title="Two horns", highlight=0)
+    assert runs(hi) == [1, 0], f"the highlighted run is not drawn last: {runs(hi)}"
+    polys = {p["run"]: p for p in of("polyline", hi)}
+    assert polys[0]["width"] == C.HIGHLIGHT_WIDTH and polys[0]["color"] == C.LINE_STYLES[0][0], polys[0]
+    assert polys[1]["width"] == C.LINE_WIDTH and polys[1]["color"] == C.DIM, polys[1]
+    assert {p["color"] for p in of("marker", hi) if p["run"] == 1} == {C.DIM}, "the other run's markers are not dim"
+    assert {p["color"] for p in of("marker", hi) if p["run"] == 0} == {C.LINE_STYLES[0][0]}, "the highlighted run's markers changed"
+    bars = [p for p in of("line", hi) if p.get("run") == 0 and p["x1"] == p["x2"]]
+    assert len(bars) == 1 and bars[0]["color"] == C.LINE_STYLES[0][0], bars
+    legend = {p["run"]: p for p in of("text", hi) if p.get("run") is not None}
+    assert legend[0]["color"] == C.TEXT and legend[1]["color"] == C.DIM, {k: v["color"] for k, v in legend.items()}
+    legend_lines = {p["run"]: p for p in of("line", hi) if p.get("run") is not None and p["y1"] == p["y2"]}
+    assert legend_lines[1]["color"] == C.DIM and legend_lines[0]["color"] == C.LINE_STYLES[0][0], legend_lines
+    # the same set of primitives, only reordered and recoloured: nothing added, nothing lost
+    assert len(hi) == len(plain), (len(hi), len(plain))
+    # the other way round, and nonsense indexes mean none
+    assert runs(C.chart_primitives(OV, W, H, highlight=1)) == [0, 1] and of("polyline", C.chart_primitives(OV, W, H, highlight=1))[1]["width"] == C.HIGHLIGHT_WIDTH
+    for bad in (5, -1, "0", 1.0, None):
+        assert runs(C.chart_primitives(OV, W, H, highlight=bad)) == [0, 1] and C.DIM not in {p["color"] for p in C.chart_primitives(OV, W, H, highlight=bad)}, bad
+    # the renderers carry it: the PDF's content has the dim grey, the PNG renders
+    pdf = C.render_pdf(hi, W, H)
+    content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf, re.S).group(1)).decode("latin-1")
+    assert "0.816 0.816 0.816" in content, "the dim grey is not in the PDF"
+    assert len(C.render_png(hi, W, H)) > 200, "the PNG did not render"
+    # the hit test, on the plain primitives
+    seg = of("polyline", plain)[1]["points"]
+    (x1, y1), (x2, y2) = seg[0], seg[1]
+    mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+    length = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+    nx, ny = -(y2 - y1) / length, (x2 - x1) / length                 # the segment's unit normal
+    assert C.run_at(plain, mx, my) == 1, "a point on B's line"
+    near, far = C.HIT_TOLERANCE_PX - 1, C.HIT_TOLERANCE_PX + 1.5
+    assert C.run_at(plain, mx + nx * near, my + ny * near) == 1, "inside the tolerance"
+    assert C.run_at(plain, mx + nx * far, my + ny * far) is None, "outside the tolerance"
+    marker = [p for p in of("marker", plain) if p["run"] == 0 and p["y"] > 60][5]
+    assert C.run_at(plain, marker["x"], marker["y"]) == 0, "a marker's centre"
+    assert C.run_at(plain, marker["x"] + marker["size"] + near, marker["y"]) == 0, "the marker's rim plus a little"
+    name = [p for p in of("text", plain) if p.get("run") == 1][0]
+    assert C.run_at(plain, name["x"] + 10, name["y"]) == 1, "the legend's name"
+    lm = [p for p in of("marker", plain) if p["run"] == 1 and p["y"] < 60][0]
+    assert C.run_at(plain, lm["x"], lm["y"]) == 1, "the legend's marker"
+    assert C.run_at(plain, W / 2, 10) is None and C.run_at(plain, W - 2, H - 2) is None, "empty area must be None"
+    assert C.run_at(C.chart_primitives(I.overlay([]), W, H), 100, 100) is None, "an empty chart has no run"
+check("a highlighted run: drawn last, heavier, its own colour, every other run and its legend entry dim, the same "
+      "picture otherwise, the PDF and PNG carrying it; the hit test finds a run on its line (within the tolerance), "
+      "its markers and its legend entry, and nothing on empty area", a_highlighted_run_in_the_primitives_and_the_hit_test)
 
 
 def an_empty_chart_still_draws():

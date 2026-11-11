@@ -116,6 +116,41 @@ def t_round_trip():
     assert te.load_tone_presets(p) == LIB, "te.load_tone_presets(p) == LIB"
 check("nested library with 2 sessions, free/calibration/file captures and optional keys round-trips", t_round_trip)
 
+def t_key_heights_link():
+    """Round 11 (Matt, 2026-11-11): a preset may link to one Key Heights library entry; a session
+    snapshots the link and a copy of the heights at its creation; nothing on disk is migrated."""
+    key_lib = {"Shop": {"Mark VI 145xxx": {"make": "Selmer", "model": "Mark VI", "size": "Alto", "serial": "",
+                                           "notes": "", "units": "mm",
+                                           "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}}}
+    link = {"library": "Shop", "set": "Mark VI 145xxx"}
+    assert te.key_heights_link({"key_heights": link}) == link, te.key_heights_link({"key_heights": link})
+    assert te.key_heights_link({"key_heights": link}) is not link, "a copy, not the preset's own dict"
+    for bad in ({}, {"key_heights": None}, {"key_heights": "Shop/Mark VI"}, {"key_heights": {"library": "Shop"}},
+                {"key_heights": {"library": "", "set": "x"}}, {"key_heights": {"library": 1, "set": "x"}}, "not a dict"):
+        assert te.key_heights_link(bad) is None, bad
+    assert te.key_heights_entry(link, key_lib) == key_lib["Shop"]["Mark VI 145xxx"], "the entry is not found"
+    assert te.key_heights_entry({"library": "Shop", "set": "gone"}, key_lib) is None, "a gone set must read as None"
+    assert te.key_heights_entry(link, {}) is None and te.key_heights_entry(None, key_lib) is None, "empty cases"
+    snap = te.key_heights_snapshot(link, key_lib)
+    assert snap == {"library": "Shop", "set": "Mark VI 145xxx", "units": "mm",
+                    "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}, snap
+    assert snap["heights"] is not key_lib["Shop"]["Mark VI 145xxx"]["heights"], "the snapshot must copy the heights"
+    assert te.key_heights_snapshot({"library": "Shop", "set": "gone"}, key_lib) == {"library": "Shop", "set": "gone"}, \
+        "a missing entry snapshots the link alone"
+    assert te.key_heights_snapshot(None, key_lib) is None, "no link, no snapshot"
+    # storage: the link travels as any other preset field, and so does a session's snapshot
+    lib = {"L": {"P": {"horn_type": "Alto", "key_heights": link,
+                       "sessions": [{"date": "2026-11-11 10:00:00", "key_heights": snap, "captures": []}]}}}
+    p = os.path.join(TMP, "kh.json")
+    assert te.save_tone_presets(lib, p) is True and te.load_tone_presets(p) == lib, "the link did not round-trip"
+    # the import unwrapper does not know the field and does not need to
+    assert te.unwrap_tone_import(lib) == lib, "unwrap changed a plain library"
+    assert te.unwrap_tone_import({"format": "wrapped-tone-presets", "format_version": 1, "libraries": lib}) == lib, \
+        "unwrap changed a wrapped library"
+check("the Key heights link: read from a preset (anything unreadable is none), its entry looked up, a session's "
+      "snapshot with a copy of the heights (the link alone when the entry is gone); the link and the snapshot travel "
+      "through save/load and the import unwrapper untouched", t_key_heights_link)
+
 def t_flat_migrates():
     p = os.path.join(TMP, "flat.json")
     flat = {"Old Tenor": {"horn_type": "Tenor", "sessions": [{"captures": [cap("A3", STD, 220.0)]}]}}

@@ -2027,6 +2027,54 @@ def unwrap_tone_import(data):
     return data
 
 
+# ---------------------------------------------------------------------------
+# The Key Heights link (2026-11-11). Matt: "analyzer should have an option to enter in
+# key heights, and to link a horn to an entry in the key heights library"; "that link
+# belongs to the preset". A preset may carry `key_heights`, a link to one entry of the
+# Key Heights library (key_height_library.json, {library: {set: {..., units, heights}}});
+# a session snapshots the link and a copy of the heights at its creation, as it does
+# the mic. Nothing here reads or writes a file.
+
+def key_heights_link(preset):
+    """The preset's link to a Key Heights library entry, `{"library": L, "set": S}`,
+    or None: a preset from before the field, an explicit None, or an unreadable value
+    all read as no link. Never raises."""
+    link = preset.get("key_heights") if isinstance(preset, dict) else None
+    if not isinstance(link, dict):
+        return None
+    lib, name = link.get("library"), link.get("set")
+    if not isinstance(lib, str) or not isinstance(name, str) or not lib or not name:
+        return None
+    return {"library": lib, "set": name}
+
+
+def key_heights_entry(link, key_presets):
+    """The Key Heights library entry a link points at, or None when it is not there
+    (renamed, deleted, or another machine's library)."""
+    link = key_heights_link({"key_heights": link})
+    if link is None or not isinstance(key_presets, dict):
+        return None
+    library = key_presets.get(link["library"])
+    entry = library.get(link["set"]) if isinstance(library, dict) else None
+    return entry if isinstance(entry, dict) else None
+
+
+def key_heights_snapshot(link, key_presets):
+    """What a session keeps of the horn's key heights at its creation: the link, and a
+    copy of the entry's units and heights while the entry exists, so a run keeps what the
+    horn was set to if the entry is later edited, renamed or deleted. None without a link;
+    the link alone when its entry is already missing."""
+    link = key_heights_link({"key_heights": link})
+    if link is None:
+        return None
+    snapshot = dict(link)
+    entry = key_heights_entry(link, key_presets)
+    if entry is not None:
+        snapshot["units"] = entry.get("units", "mm")
+        snapshot["heights"] = dict(entry.get("heights") or {})
+    return snapshot
+
+
 def load_tone_presets(filepath):
     """Load tone presets from JSON file.
 

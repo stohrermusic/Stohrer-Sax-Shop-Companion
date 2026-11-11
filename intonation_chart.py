@@ -46,6 +46,10 @@ FONT_PX = 11          # the labels; the title is a little larger
 LEGEND_COLUMNS = 4
 MARKER_PX = 5         # half-size
 Y_STEP = 10           # the grid, in cents
+LINE_WIDTH = 2        # a run's line
+HIGHLIGHT_WIDTH = 4   # the highlighted run's line (Matt, 2026-11-11: click a spot, the line is highlighted)
+DIM = "#D0D0D0"       # every other run while one is highlighted: lines, markers, spread bars, legend
+HIT_TOLERANCE_PX = 6  # how near a click must come to a run's line, marker or legend entry
 
 
 def y_range(values):
@@ -69,32 +73,44 @@ TITLE_SEPARATOR = " \u00b7 "     # between the runs' names in the chart's own ti
 
 
 def runs_title(lines, width, size):
-    """The chart's own title line: one run's name, or the names of several joined with
-    TITLE_SEPARATOR, cut to what the width holds (0.6 px a character at `size`) with
-    three dots; "" with no run. Matt, 2026-11-11 ("yes"): a title line above the legend
-    on a multi-run chart, so an exported picture says what it compares."""
+    """The chart's own title line: one run's name, cut to what the width holds (0.6 px a
+    character at `size`) with three dots; "" with no run, and "" with two or more (Matt,
+    2026-11-11: "no title, just list the presets involved": the legend, which lists them,
+    is the whole heading and sits where the title would). Until then the names were
+    joined with TITLE_SEPARATOR above the legend that listed them again."""
     names = [str(line.get("name", "")) for line in lines]
     names = [n for n in names if n]
-    if not names:
+    if len(names) != 1:
         return ""
-    text = TITLE_SEPARATOR.join(names)
+    text = names[0]
     room = max(8, int((width - 24) / (0.6 * size)))
     if len(text) > room:
         text = text[:room - 3].rstrip() + "..."
     return text
 
 
-def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px=FONT_PX, footnote=""):
+def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px=FONT_PX, footnote="",
+                     highlight=None):
     """The chart for `overlay` (intonation.overlay(runs): notes low to high, registers,
     lines of points) as primitives in a width x height pixel frame. `title` is the line
     above the legend: a string as given, "" for none, None for the runs' own
     (`runs_title`: one run's name, or the names of several joined). `footnote` is one
-    plain line under the notes (what was left out, and why)."""
+    plain line under the notes (what was left out, and why). `highlight` is the index of
+    the run to bring to the front, or None: that run is drawn last, in its own colour with
+    a heavier line, and every other run (lines, markers, spread bars, legend entry) in
+    DIM. Every run primitive carries its run index as "run", which is what run_at reads;
+    the same primitives go to the canvas, the PNG and the PDF, so an export shows the
+    highlight as the screen does."""
     notes = list(overlay.get("notes", []))
     registers = overlay.get("registers", {})
     lines = overlay.get("lines", [])
     if title is None:
         title = runs_title(lines, width, int(font_px * 1.2))
+    if highlight is not None and not (isinstance(highlight, int) and 0 <= highlight < len(lines)):
+        highlight = None
+
+    def run_color(i, color):
+        return DIM if highlight is not None and i != highlight else color
     prims = [{"kind": "background", "color": BACKGROUND, "width": width, "height": height}]
     # ---- the frame ------------------------------------------------------------------------
     title_h = int(font_px * 1.4) + 6 if title else 0
@@ -121,14 +137,17 @@ def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px
         col_w = plot_w / cols
         for i, line in enumerate(lines):
             color, marker = style_for(i)
+            color = run_color(i, color)
             r, c = divmod(i, cols)
             x = plot_x0 + c * col_w + 4
             y = 8 + title_h + r * (font_px + 8) + (font_px + 8) / 2
             prims.append({"kind": "line", "x1": x, "y1": y, "x2": x + 22, "y2": y, "color": color, "width": 2,
-                          "dash": None})
-            prims.append({"kind": "marker", "shape": marker, "x": x + 11, "y": y, "size": MARKER_PX, "color": color})
-            prims.append({"kind": "text", "x": x + 28, "y": y, "text": str(line.get("name", "")), "color": TEXT,
-                          "size": font_px, "anchor": "w", "angle": 0, "bold": False})
+                          "dash": None, "run": i})
+            prims.append({"kind": "marker", "shape": marker, "x": x + 11, "y": y, "size": MARKER_PX, "color": color,
+                          "run": i})
+            prims.append({"kind": "text", "x": x + 28, "y": y, "text": str(line.get("name", "")),
+                          "color": run_color(i, TEXT), "size": font_px, "anchor": "w", "angle": 0, "bold": False,
+                          "run": i})
     # ---- the axes ------------------------------------------------------------------------
     cents = [p.cents for line in lines for p in line["points"].values()]
     lows = [p.low for line in lines for p in line["points"].values()]
@@ -169,21 +188,65 @@ def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px
     for note in order:
         prims.append({"kind": "text", "x": x_of_note[note], "y": plot_y1 + 4, "text": note, "color": TEXT,
                       "size": font_px, "anchor": "e", "angle": 90, "bold": False})
-    # ---- the runs ------------------------------------------------------------------------
-    for i, line in enumerate(lines):
+    # ---- the runs: the highlighted one last, so it lies on top ----------------------------
+    draw_order = [i for i in range(len(lines)) if i != highlight] + ([highlight] if highlight is not None else [])
+    for i in draw_order:
+        line = lines[i]
         color, marker = style_for(i)
+        color = run_color(i, color)
         pts = sorted(((x_of_note[nm], p) for nm, p in line["points"].items() if nm in x_of_note), key=lambda t: t[0])
         for x, p in pts:
             if p.takes >= 2 and p.high > p.low:
                 prims.append({"kind": "line", "x1": x, "y1": y_of(p.low), "x2": x, "y2": y_of(p.high), "color": color,
-                              "width": 1, "dash": None})
+                              "width": 1, "dash": None, "run": i})
         if len(pts) >= 2:
             prims.append({"kind": "polyline", "points": [(x, y_of(p.cents)) for x, p in pts], "color": color,
-                          "width": 2})
+                          "width": HIGHLIGHT_WIDTH if i == highlight else LINE_WIDTH, "run": i})
         for x, p in pts:
             prims.append({"kind": "marker", "shape": marker, "x": x, "y": y_of(p.cents), "size": MARKER_PX,
-                          "color": color})
+                          "color": color, "run": i})
     return prims
+
+
+def _segment_distance(x, y, x1, y1, x2, y2):
+    """The distance from (x, y) to the segment (x1, y1)-(x2, y2)."""
+    dx, dy = x2 - x1, y2 - y1
+    if dx == 0 and dy == 0:
+        return math.hypot(x - x1, y - y1)
+    t = max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(x - (x1 + t * dx), y - (y1 + t * dy))
+
+
+def run_at(prims, x, y, tolerance=HIT_TOLERANCE_PX):
+    """The index of the run whose line, marker, spread bar or legend entry (its line,
+    marker or name) lies nearest to the pixel (x, y), within `tolerance`; None when
+    nothing is that near, so a click there counts as empty chart area. Reads the "run"
+    the primitives carry: what the chart shows is what can be hit."""
+    best_run, best_d = None, float(tolerance)
+    for p in prims:
+        run = p.get("run")
+        if run is None:
+            continue
+        k = p["kind"]
+        if k == "polyline":
+            pts = p["points"]
+            d = min((_segment_distance(x, y, a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:])), default=None)
+            if d is None:
+                continue
+        elif k == "line":
+            d = _segment_distance(x, y, p["x1"], p["y1"], p["x2"], p["y2"])
+        elif k == "marker":
+            d = max(0.0, math.hypot(x - p["x"], y - p["y"]) - p["size"])
+        elif k == "text":
+            # a legend name, anchored west: its box as the renderers size text, 0.6 px a character
+            x0, x1 = p["x"], p["x"] + len(p["text"]) * 0.6 * p["size"]
+            y0, y1 = p["y"] - p["size"] / 2, p["y"] + p["size"] / 2
+            d = max(0.0, x0 - x, x - x1, y0 - y, y - y1)
+        else:
+            continue
+        if d <= best_d and (best_run is None or d < best_d):
+            best_run, best_d = run, d
+    return best_run
 
 
 def marker_polygon(shape, x, y, size):

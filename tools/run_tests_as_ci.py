@@ -102,6 +102,8 @@ def main():
     ap.add_argument("--fresh", action="store_true", help="rebuild the environment")
     ap.add_argument("--install", action="store_true", help="fetch the interpreter with uv if none is found")
     ap.add_argument("filters", nargs="*", help="suite name filters, as for run_tests.py")
+    ap.add_argument("--visible", action="store_true",
+                    help="run the suites on your own desktop (by default run_tests.py moves them to a private one on Windows)")
     args = ap.parse_args()
 
     base = find_python(args.python, args.install)
@@ -136,7 +138,8 @@ def main():
     r = subprocess.run([vpy, "-c", "import sys, numpy; print(f'Python {sys.version.split()[0]} ({sys.executable}), "
                                    "numpy {numpy.__version__}')"], capture_output=True, text=True)
     print("suites run under:", r.stdout.strip() or r.stderr.strip())
-    return subprocess.run([vpy, os.path.join(REPO, "tools", "run_tests.py")] + args.filters, cwd=REPO).returncode
+    return subprocess.run([vpy, os.path.join(REPO, "tools", "run_tests.py")] + (["--visible"] if args.visible else [])
+                          + args.filters, cwd=REPO).returncode
 
 
 if __name__ == "__main__":
