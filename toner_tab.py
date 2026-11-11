@@ -418,6 +418,16 @@ class TonerTabMixin:
         ctrl_frame.pack(fill="x", padx=5, pady=(0, 4))
         self._toner_ctrl_frame = ctrl_frame
 
+        # The strip's first row holds the switches and the sax selector; the right column
+        # (session, preset, Load, MODE, Capture) is packed INTO this row while one row fits the
+        # screen and below it when it cannot (_toner_strip_two_rows), so Capture is never the
+        # thing that falls off the page (2026-11-11: German on a 1024 px screen).
+        row1 = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        row1._skip_theme = True
+        row1.pack(side="top", fill="x")
+        self._toner_strip_row1 = row1
+        self._toner_strip_rows = 1
+
         eq_lbl_font = ("Helvetica", 8)
 
         def _make_vswitch(parent, label, var, val_top, val_bottom,
@@ -448,7 +458,7 @@ class TonerTabMixin:
             return int_var
 
         # ========== LEFT COLUMN: display switches ==========
-        left_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        left_col = tk.Frame(row1, bg=ctrl_bg)
         left_col._skip_theme = True
         left_col.pack(side="left", padx=(0, 12))
 
@@ -486,7 +496,7 @@ class TonerTabMixin:
 
         # ========== CENTER COLUMN: sax selector ==========
         # Center column expands to push left/right apart and center the selector
-        center_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
+        center_col = tk.Frame(row1, bg=ctrl_bg)
         center_col._skip_theme = True
         center_col.pack(side="left", fill="x", expand=True)
 
@@ -573,7 +583,8 @@ class TonerTabMixin:
         # ========== RIGHT COLUMN: all controls in a horizontal row ==========
         right_col = tk.Frame(ctrl_frame, bg=ctrl_bg)
         right_col._skip_theme = True
-        right_col.pack(side="right", padx=(12, 0))
+        right_col.pack(in_=row1, side="right", padx=(12, 0))
+        self._toner_strip_right = right_col
 
         # Session lamp
         self._toner_session_canvas = tk.Canvas(
@@ -1650,6 +1661,20 @@ class TonerTabMixin:
     # ------------------------------------------------------------------
     # THE TOP AREA: INTONATION CHART / HARMONICS SWITCH (2026-11-10)
     # ------------------------------------------------------------------
+
+    def _toner_strip_two_rows(self, on):
+        """Lay the control strip out on two rows (the right column, Load / MODE / Capture,
+        under the switches and the sax selector) or on one. Two rows are for a screen
+        narrower than one row needs: nothing else may push Capture off the page."""
+        right = getattr(self, '_toner_strip_right', None)
+        if right is None or self._toner_strip_rows == (2 if on else 1):
+            return
+        right.pack_forget()
+        if on:
+            right.pack(in_=self._toner_ctrl_frame, side="top", anchor="e", pady=(6, 0))
+        else:
+            right.pack(in_=self._toner_strip_row1, side="right", padx=(12, 0))
+        self._toner_strip_rows = 2 if on else 1
 
     def _toner_harmonics_on(self):
         """Whether the HARMONICS switch stands at on (the harmonic analyzer is the view)."""

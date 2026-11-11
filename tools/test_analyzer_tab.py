@@ -335,6 +335,12 @@ def main():
         app.notebook.select(app.pad_tab)
         settle(width_is(start_w), what="the width going back on leaving")
         assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None, "root.winfo_height() == start_h and getattr(app, \"_analyzer_widened\", None) is None"
+        # the restore is asked for, checked after idle and recorded (retried on Aqua if it applies late)
+        if W["start"][0] < W["need"]:
+            settle(lambda: app._analyzer_restore["outcome"] != "pending", what="the restore's record")
+            rec = app._analyzer_restore
+            assert rec["outcome"] == "restored" and rec["before"] == start_w and rec["widened_to"] == W["widened"], rec
+            assert rec["attempts"] >= 1 and rec["state"] == "normal", rec
         # and again: select widens, leave restores
         app.notebook.select(app.toner_tab_frame)
         settle(width_is(W["widened"]), what="the second widening")
@@ -411,29 +417,55 @@ def main():
         settle(width_is(start_w), what="the window back from maximized")
     check("a maximized window is left alone, on select and on leave", a_maximized_window_is_left_alone)
 
-    def never_wider_than_the_screen():
+    def a_screen_too_narrow_for_one_row():
+        """A screen narrower than one row of the strip needs (German on CI's 1024 px Mac, 2026-11-11):
+        the strip goes to two rows, the right column (Load / MODE / Capture) under the rest, Capture
+        is on the page, the window is never wider than the screen, and the real screen gets one row
+        again. With the window narrower than even two rows need, it widens to that and goes back."""
         start_w, start_h = W["start"]
-        narrow = W["need"] - 100                              # a screen narrower than the strip needs
-        base = min(start_w, W["need"] - 200)                  # a window narrower still (the start, or made so)
-        if base != start_w:
-            root.geometry(f"{base}x{start_h}")
-            settle(width_is(base), what="the narrow window for the screen-cap check")
+        narrow = W["need"] - 40                               # a screen narrower than one row needs
+        right, row1 = app._toner_strip_right, app._toner_strip_row1
+        btn = app._toner_capture_btn
         root.winfo_screenwidth = lambda: narrow
         try:
             app.notebook.select(app.toner_tab_frame)
-            settle(width_is(narrow), what="the widening capped at the screen")
-            assert app._analyzer_widened == (base, narrow), "app._analyzer_widened == (base, narrow)"
-            # what happens then: the strip still overflows and pack drops its last column
-            assert app._toner_ctrl_frame.winfo_reqwidth() > app._toner_main_frame.winfo_width(), "app._toner_ctrl_frame.winfo_reqwidth() > app._toner_main_frame.winfo_width()"
+            settle(lambda: app._toner_strip_rows == 2, what="the strip going to two rows")
+            root.update_idletasks()
+            two_row_need = app._analyzer_strip_need_px()
+            assert two_row_need < narrow and two_row_need < W["need"] - 200, (two_row_need, narrow, W["need"])
+            assert root.winfo_width() <= narrow, root.winfo_width()
+            assert right.winfo_ismapped() and right.winfo_y() >= row1.winfo_y() + row1.winfo_height(), \
+                (right.winfo_y(), row1.winfo_y(), row1.winfo_height())
+            assert btn.winfo_ismapped() and btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), \
+                "Capture off the page on two rows"
+            assert all(c.winfo_ismapped() for c in right.winfo_children()), "a right-column control unmapped"
             app.notebook.select(app.pad_tab)
-            settle(width_is(base), what="the restore from the capped width")
+            settle(width_is(start_w), what="the width after leaving (two rows needed no widening)")
+            # narrower than two rows need: the window widens to exactly that, then goes back
+            root.geometry(f"{two_row_need - 80}x{start_h}")
+            settle(width_is(two_row_need - 80), what="the narrow window")
+            app.notebook.select(app.toner_tab_frame)
+            settle(width_is(two_row_need), what="the widening to two rows' need")
+            assert app._analyzer_widened == (two_row_need - 80, two_row_need) and app._toner_strip_rows == 2, \
+                (app._analyzer_widened, app._toner_strip_rows)
+            assert btn.winfo_ismapped(), "Capture off the page after the two-row widening"
+            app.notebook.select(app.pad_tab)
+            settle(width_is(two_row_need - 80), what="the restore from two rows' need")
+            settle(lambda: app._analyzer_restore["outcome"] != "pending", what="the restore's record")
+            assert app._analyzer_restore["outcome"] == "restored", app._analyzer_restore
+            root.geometry(f"{start_w}x{start_h}")
+            settle(width_is(start_w), what="the start width back")
         finally:
             del root.winfo_screenwidth
-            if base != start_w:
-                root.geometry(f"{start_w}x{start_h}")
-                settle(width_is(start_w), what="the start width back")
-    check("the widening never goes past the screen (on a screen too narrow the strip still overflows)",
-          never_wider_than_the_screen)
+        # the real screen: one row again, the right column back on the first row
+        app.notebook.select(app.toner_tab_frame)
+        settle(lambda: app._toner_strip_rows == 1 and right.winfo_y() == row1.winfo_y(), what="one row on the real screen")
+        assert app._analyzer_strip_need_px() == W["need"], (app._analyzer_strip_need_px(), W["need"])
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width after leaving")
+    check("a screen too narrow for one row: the strip goes to two rows with Capture on the page, the window never "
+          "wider than the screen; narrower than two rows need, it widens to that and goes back; the real screen "
+          "gets one row again", a_screen_too_narrow_for_one_row)
     app.notebook.select(app.toner_tab_frame)
     settle(width_is(W["widened"]), what="the tab back for the rest")
 
@@ -860,8 +892,11 @@ screen_w = root.winfo_screenwidth()
 app.notebook.select(app.toner_tab_frame)
 root.update()                         # the select's layout (the page is 1 x 1 until this)
 run(200)
-want = max(start_w, min(need, screen_w))
+# what the app did: widened to a width it recorded, or nothing (already wide, or two rows made it fit)
+widened = app._analyzer_widened
+want = widened[1] if widened else start_w
 settled = settle(lambda: root.winfo_width() == want)
+need_after = app._analyzer_strip_need_px()        # one row's need, or two rows' where the screen is too narrow
 after_select = (root.winfo_width(), root.winfo_height())
 harm_mapped = app._toner_harmonics_frame.winfo_ismapped()
 chart_mapped = app._toner_chart_frame.winfo_ismapped()
@@ -886,6 +921,7 @@ walk(app._toner_ctrl_frame)
 buttons = [b.cget("text") for b in app._toner_chart_frame.winfo_children()[1].winfo_children()]
 app.notebook.select(app.pad_tab)
 settled_back = settle(lambda: root.winfo_width() == start_w)
+settle(lambda: getattr(app, "_analyzer_restore", None) is None or app._analyzer_restore["outcome"] != "pending")
 after_leave = (root.winfo_width(), root.winfo_height())
 out = {"tab": app.notebook.tab(app.toner_tab_frame, "text"), "labels": labels, "buttons": buttons,
        "formula_w": formula, "start": [start_w, start_h], "need": need, "screen_w": screen_w,
@@ -893,6 +929,9 @@ out = {"tab": app.notebook.tab(app.toner_tab_frame, "text"), "labels": labels, "
        "chrome": app._notebook_page_chrome_px(), "strip": strip_evidence,
        "harm_mapped": harm_mapped, "chart_mapped": chart_mapped, "capture_mapped": capture_mapped,
        "settled_back": settled_back, "after_leave": list(after_leave),
+       "widened": list(widened) if widened else None, "need_after": need_after,
+       "restore": getattr(app, "_analyzer_restore", None), "state_after_leave": root.state(),
+       "strip_rows": app._toner_strip_rows, "maxsize": list(root.wm_maxsize()),
        "harmonics_var": app._toner_harmonics_var.get()}
 app._toner_stop()
 root.destroy()
@@ -926,14 +965,27 @@ print("REPORT " + json.dumps(out))
             assert start_w >= r["formula_w"], f"{case}: opened {start_w} px, the tab/Tooling rule asks {r['formula_w']}"
             # the start-up width is whatever the tab-row and Tooling rules make it (under xvfb's fonts some
             # languages already open wider than the strip, in which case the select has nothing to widen)
-            want = max(start_w, min(r["need"], r["screen_w"]))
-            assert r["settled"] and r["after_select"] == [want, start_h], (case, r["after_select"], want, start_h)
+            # after the select: widened to what the app recorded (never past the screen), or left as it was
+            want = r["widened"][1] if r["widened"] else start_w
+            assert want <= max(start_w, r["screen_w"]), (case, want, r["screen_w"])
+            assert r["settled"] and r["after_select"] == [want, start_h], (case, r["after_select"], want, start_h, r["widened"])
+            if r["strip_rows"] == 2:
+                # two rows only where one row cannot fit the screen, and then two rows do
+                assert r["need"] > r["screen_w"] and r["need_after"] <= r["screen_w"], (case, r["need"], r["need_after"], r["screen_w"])
+            else:
+                assert r["need"] <= r["screen_w"] and r["need_after"] == r["need"], (case, r["need"], r["need_after"], r["screen_w"])
+            assert r["after_select"][0] >= min(r["need_after"], r["screen_w"]), (case, r["after_select"], r["need_after"])
             # the evidence, as the section-button check gives it: each column's children (text, request,
             # width, x, mapped), the page, the strip, the need and the chrome
-            assert r["capture_mapped"] or r["need"] > r["screen_w"], (
+            # Capture is on the page whatever the screen: one row where it fits, two rows where it does not
+            assert r["capture_mapped"], (
                 f"{case}: Capture off the page at window {r['after_select']}, page {r['page_w']}x{r['page_h']}, "
                 f"need {r['need']} (chrome {r['chrome']}), strip {json.dumps(r['strip'])}")
-            assert r["settled_back"] and r["after_leave"] == [start_w, start_h], (case, r["after_leave"], r["start"])
+            # leaving: back to the start width (the restore asked, checked and retried; its record says what happened)
+            assert r["settled_back"] and r["after_leave"] == [start_w, start_h], (
+                f"{case}: after leaving {r['after_leave']}, started {r['start']}, settled back {r['settled_back']}, "
+                f"widened {r['widened']}, restore {r['restore']}, state {r['state_after_leave']}, screen {r['screen_w']}, "
+                f"wm maxsize {r['maxsize']}, strip rows {r['strip_rows']}")
             assert len(r["buttons"]) == 2, (case, r["buttons"])
         plain = {c: r for c, r in reports.items() if "-" not in c}
         for case, r in plain.items():

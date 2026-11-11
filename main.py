@@ -597,18 +597,28 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def _widen_for_analyzer(self):
         """On selecting the Analyzer tab: a window narrower than its control
         strip (pack would drop the Capture button off the page) is widened
-        to fit, never past the screen, height and position unchanged. A
-        maximized window is left alone, and so is one already wide enough.
-        What was widened is remembered for _unwiden_after_analyzer."""
+        to fit, never past the screen, height and position unchanged. When
+        even the screen cannot take one row of the strip, the strip goes to
+        two rows first (the right column under the rest) and the window is
+        widened to what two rows need. A maximized window is left alone,
+        and so is one already wide enough. What was widened is remembered
+        for _unwiden_after_analyzer."""
         try:
             if self.root.state() == 'zoomed' or getattr(self, '_analyzer_widened', None):
                 return
+            screen_w = self.root.winfo_screenwidth()
+            # the decision is by what ONE row needs, whatever the strip stands at now
+            self._toner_strip_two_rows(False)
             self.root.update_idletasks()
+            one_row_need = self._analyzer_strip_need_px()
+            if one_row_need > screen_w:
+                self._toner_strip_two_rows(True)
+                self.root.update_idletasks()
             need = self._analyzer_strip_need_px()
             cur_w, h = self.root.winfo_width(), self.root.winfo_height()
             if cur_w <= 1 or h <= 1 or need <= cur_w:
                 return
-            new_w = min(need, self.root.winfo_screenwidth())
+            new_w = min(need, screen_w)
             if new_w <= cur_w:
                 return
             self.root.geometry(f"{new_w}x{h}")
@@ -620,19 +630,60 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """On leaving the Analyzer tab: the width goes back to what it was
         before _widen_for_analyzer, but only if the app did the widening and
         the window is still exactly that wide (a size the user chose since,
-        or a maximize, is theirs and stays). Height and position unchanged."""
+        or a maximize, is theirs and stays). Height and position unchanged.
+        The geometry is asked for, checked after idle and asked again while
+        the window still reads the widened width (Aqua applies a geometry
+        late, or drops one); what happened is kept in `_analyzer_restore`."""
         record = getattr(self, '_analyzer_widened', None)
         self._analyzer_widened = None
         if not record:
             return
         before, widened_to = record
         try:
-            if self.root.state() == 'zoomed':
-                return
+            state = self.root.state()
             self.root.update_idletasks()
-            if self.root.winfo_width() != widened_to:
+            cur = self.root.winfo_width()
+            self._analyzer_restore = {"before": before, "widened_to": widened_to, "found": cur, "state": state,
+                                      "screen": (self.root.winfo_screenwidth(), self.root.winfo_screenheight()),
+                                      "attempts": 0, "outcome": "pending"}
+            if state == 'zoomed':
+                self._analyzer_restore["outcome"] = "left alone: maximized"
                 return
-            self.root.geometry(f"{before}x{self.root.winfo_height()}")
+            if cur != widened_to:
+                self._analyzer_restore["outcome"] = "left alone: resized by the user"
+                return
+            self._restore_width(before, widened_to, tries=8)
+        except tk.TclError:
+            pass
+
+    def _restore_width(self, width, from_width, tries):
+        """geometry(width) now, then after idle: done if the window reads
+        `width`; left alone if it reads something else (the user's); asked
+        again, up to `tries` times 100 ms apart, while it still reads
+        `from_width` (the geometry not yet applied, or dropped)."""
+        info = self._analyzer_restore
+        try:
+            info["attempts"] += 1
+            self.root.geometry(f"{width}x{self.root.winfo_height()}")
+        except tk.TclError:
+            return
+
+        def check():
+            try:
+                self.root.update_idletasks()
+                w = self.root.winfo_width()
+            except tk.TclError:
+                return
+            if w == width:
+                info["outcome"] = "restored"
+            elif w != from_width:
+                info["outcome"] = f"left at {w}: not the widened width any more"
+            elif tries > 1:
+                self._restore_width(width, from_width, tries - 1)
+            else:
+                info["outcome"] = f"gave up at {w} after {info['attempts']} attempts"
+        try:
+            self.root.after(100, check)
         except tk.TclError:
             pass
 
