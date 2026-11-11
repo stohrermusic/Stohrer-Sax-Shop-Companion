@@ -57,6 +57,10 @@ PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
 # Minimum fundamental frequency. Bari sax written Bb3 = concert Db2 (~69 Hz),
 # so 65 Hz covers all standard saxophone types including baritone.
 MIN_FUNDAMENTAL_HZ = 65.0
+# Bass alone goes lower: its four lowest notes (G#1 51.9 Hz to B1 61.7 Hz) lie under
+# 65 Hz and read an octave up even clean. 50 Hz reads every bass note right under every
+# condition of the generated sweep; 45 Hz let a noise bump in (2026-11-11).
+MIN_FUNDAMENTAL_HZ_BASS = 50.0
 # Maximum fundamental frequency (altissimo range ~ 1500 Hz)
 MAX_FUNDAMENTAL_HZ = 2000.0
 
@@ -71,6 +75,14 @@ SUBHARM_PROMINENCE_STRICT = 1.5
 SUBHARM_PROMINENCE_RELAXED = 1.3
 # Noise floor multiplier for harmonic series verification peaks
 HARMONIC_VERIFY_NOISE_MULT = 3.0
+# A sub-harmonic candidate's own peak must also be within this many dB of the
+# strongest peak in the fundamental range. The thresholds above are set against the
+# window's noise median, which a quiet room or a clean tone puts so low that spectral
+# leakage at a third or a fifth of a note passes for its fundamental: measured
+# 2026-11-11, spurious candidates sat 44 to 71 dB under the strongest peak, real
+# fundamentals 8 dB under at worst in generated tones and 22 dB at the 99th
+# percentile of Matt's library (8,114 captures).
+SUBHARM_MIN_REL_DB = -36.0
 # Required harmonic matches for low divisors (2-3), counting the sub-harmonic's
 # own peak; the rest must come from multiples coprime to the divisor
 HARMONIC_MATCHES_LOW = 2
@@ -78,6 +90,13 @@ HARMONIC_MATCHES_LOW = 2
 HARMONIC_MATCHES_HIGH = 3
 # Octave jump hysteresis: new peak must be this much stronger to override previous
 OCTAVE_HYSTERESIS_FACTOR = 1.5
+# An octave jump that is not the clearly stronger peak is held at the previous octave
+# for at most this many windows in a row (6 x 23 ms = 0.14 s); after that the window's
+# own reading wins (see _settle_octave). Measured 2026-11-11 on generated tones and the
+# recordings corpus: 3 to 12 all read every generated note right (16 reaches into a
+# capture's kept frames); 6 corrects every wrong capture the old hold made and halves
+# the flicker of no hold; 8 and above leave some of them wrong.
+OCTAVE_LATCH_WINDOWS = 6
 
 # --- Signal level and sensitivity ---
 # RMS display scaling factor (maps raw RMS to 0-1 signal level indicator)
@@ -304,6 +323,9 @@ class TonerEngine:
         self._running = False
         self._window = None
         self._last_fundamental = 0.0  # For temporal smoothing
+        self._octave_pending = 0      # (direction, windows in a row) of an octave jump being held, or 0
+        self._latch_windows = OCTAVE_LATCH_WINDOWS
+        self._min_fundamental_hz = min_fundamental_hz_for(None)
         # Synthetic source (see audio_utils.synthetic_tone): when set (Hz),
         # start() opens no microphone and analyze() feeds a harmonic-rich
         # tone into the ring buffer itself. Test/CI hook, never set in use.
@@ -343,6 +365,7 @@ class TonerEngine:
         # which sax the engine is configured for.
         self.sax_type = sax_type
         self._break_freq = BREAK_FREQUENCIES.get(sax_type, DEFAULT_BREAK_FREQ)
+        self._min_fundamental_hz = min_fundamental_hz_for(sax_type)
 
     @property
     def reference_pitch(self):
@@ -637,23 +660,41 @@ class TonerEngine:
         return result
 
     def _detect_fundamental(self, mags, bin_freq):
-        """Detect fundamental frequency using peak-picking with harmonic
-        series verification.
+        """The fundamental of this window in Hz, 0.0 for none.
 
-        Strategy:
+        Two steps: `_fundamental_candidate` picks the window's own candidate
+        (the strongest peak, or the lowest sub-harmonic of it whose own
+        harmonic series verifies it) and `_settle_octave` weighs an octave
+        jump against the previous window's reading. The number returned is
+        always a measurement of THIS window (the Hann closed form at the
+        chosen peak), never one carried over from an earlier window.
+        """
+        candidate_bin, verified = self._fundamental_candidate(mags, bin_freq)
+        if candidate_bin <= 0:
+            return 0.0
+        new_freq = hann_peak_freq(mags, candidate_bin, bin_freq)
+        new_freq = self._settle_octave(new_freq, candidate_bin, verified, mags, bin_freq)
+        self._last_fundamental = new_freq
+        return new_freq
+
+    def _fundamental_candidate(self, mags, bin_freq):
+        """This window's own candidate for the fundamental: (bin, verified).
+
         1. Find the strongest spectral peak in the valid range
         2. Check if sub-harmonics (f/2, f/3, f/4, f/5) could be the real
            fundamental by verifying they have their OWN harmonic series
         3. A sub-harmonic is only accepted if multiple of its harmonics
            also have peaks — not just the sub-harmonic alone
         4. Pick the lowest verified sub-harmonic (deepest fundamental)
-        5. Apply temporal hysteresis for stability
+
+        `verified` is True when a sub-harmonic passed that check; (0, False)
+        when the window has no peak to read.
         """
-        min_bin = max(1, int(MIN_FUNDAMENTAL_HZ / bin_freq))
+        min_bin = max(1, int(self._min_fundamental_hz / bin_freq))
         max_bin = min(len(mags) - 2, int(MAX_FUNDAMENTAL_HZ / bin_freq))
 
         if max_bin <= min_bin:
-            return 0.0
+            return 0, False
 
         # Find the strongest peak in the fundamental range
         search_range = mags[min_bin:max_bin + 1]
@@ -661,7 +702,7 @@ class TonerEngine:
         strongest_mag = float(mags[strongest_bin])
 
         if strongest_mag <= 0:
-            return 0.0
+            return 0, False
 
         # Noise floor for peak detection
         noise_floor = float(np.median(mags[min_bin:max_bin])) if max_bin > min_bin else 0.0
@@ -694,6 +735,8 @@ class TonerEngine:
             noise_thresh = noise_floor * (SUBHARM_NOISE_MULT_STRICT if divisor <= 3 else SUBHARM_NOISE_MULT_RELAXED)
             if local_mag < noise_thresh:
                 continue
+            if local_mag < strongest_mag * 10 ** (SUBHARM_MIN_REL_DB / 20.0):
+                continue                    # leakage or a noise bump, not a fundamental (SUBHARM_MIN_REL_DB)
             left_mag = float(mags[max(0, local_peak - 4)])
             right_mag = float(mags[min(len(mags) - 1, local_peak + 4)])
             prominence = SUBHARM_PROMINENCE_STRICT if divisor <= 3 else SUBHARM_PROMINENCE_RELAXED
@@ -733,33 +776,59 @@ class TonerEngine:
                     best_candidate = local_peak
 
         if best_candidate is not None:
-            candidate_bin = best_candidate
+            return best_candidate, True
+        return candidate_bin, False
 
-        # Candidate's frequency from the Hann peak estimator
-        if 0 < candidate_bin < len(mags) - 1:
-            new_freq = hann_peak_freq(mags, candidate_bin, bin_freq)
-        else:
-            new_freq = candidate_bin * bin_freq
+    def _settle_octave(self, new_freq, candidate_bin, verified, mags, bin_freq):
+        """Weigh an octave jump against the previous window's reading.
 
-        # Temporal hysteresis: if the previous detection was stable and the
-        # new one is an octave jump (ratio near 2.0 or 0.5), require the
-        # new frequency to be the stronger peak. This prevents flickering.
+        A reading an octave from the previous one (within 10 % of 2x or 0.5x)
+        whose peak is not clearly the stronger (OCTAVE_HYSTERESIS_FACTOR) is
+        held at the previous octave, so a marginal harmonic cannot flicker a
+        note between octaves. The hold is a fresh measurement of THIS window
+        at the previous octave's peak, never the previous number, and it
+        cannot outlive the evidence: a reading that keeps coming back wins
+        after OCTAVE_LATCH_WINDOWS windows in a row, whether or not it
+        verified its own harmonic series (letting a verified candidate win at
+        once was measured and rejected: under noise a bump at half the note
+        verifies for a window or two and the reading followed it, 23 cents off
+        the averaged note). Until 2026-11-11 the hold returned the previous
+        number and never ended: a note starting from silence with its second
+        harmonic the louder read an octave high for its whole length, at a
+        frequency frozen from a partly filled window. `verified` is kept in
+        the signature for the record and for tests.
+        """
         prev = self._last_fundamental
-        if prev > 0 and new_freq > 0:
-            ratio = new_freq / prev
-            # Check for octave-ish jumps (within 10% of 2x or 0.5x)
-            if 0.45 < ratio < 0.55 or 1.8 < ratio < 2.2:
-                # Is the previous frequency's bin still strong?
-                prev_bin = int(round(prev / bin_freq))
-                if 0 < prev_bin < len(mags) - 1:
-                    prev_mag = float(mags[prev_bin])
-                    new_mag = float(mags[candidate_bin])
-                    # Stick with previous unless new is clearly stronger
-                    if new_mag < prev_mag * OCTAVE_HYSTERESIS_FACTOR:
-                        new_freq = prev
-
-        self._last_fundamental = new_freq
-        return new_freq
+        if prev <= 0 or new_freq <= 0:
+            self._octave_pending = 0
+            return new_freq
+        ratio = new_freq / prev
+        if 0.45 < ratio < 0.55:
+            direction = -1
+        elif 1.8 < ratio < 2.2:
+            direction = 1
+        else:
+            self._octave_pending = 0
+            return new_freq
+        # The previous octave's peak in this window (the previous reading's bin, or a
+        # neighbour: the Hann estimate sits between bins)
+        prev_bin = int(round(prev / bin_freq))
+        lo = max(1, prev_bin - 2)
+        hi = min(len(mags) - 2, prev_bin + 2)
+        if hi < lo:
+            self._octave_pending = 0
+            return new_freq
+        prev_peak = lo + int(np.argmax(mags[lo:hi + 1]))
+        if float(mags[candidate_bin]) >= float(mags[prev_peak]) * OCTAVE_HYSTERESIS_FACTOR:
+            self._octave_pending = 0          # clearly the stronger peak: the jump is real
+            return new_freq
+        pend = self._octave_pending
+        count = pend[1] + 1 if pend and pend[0] == direction else 1
+        if count >= self._latch_windows:
+            self._octave_pending = 0          # held long enough: the window's own reading wins
+            return new_freq
+        self._octave_pending = (direction, count)
+        return hann_peak_freq(mags, prev_peak, bin_freq)   # held: this window, at the previous octave
 
     def _freq_to_note(self, freq):
         """Convert frequency to note name and cents deviation."""
@@ -1136,6 +1205,13 @@ SAX_NOTE_RANGES = {
     "Baritone":  (36, 69),   # C2  – A4  concert  (low A  – high F#5 written)
     "Bass":      (32, 64),   # Ab1 – E4  concert  (low Bb – high F#5 written)
 }
+
+
+def min_fundamental_hz_for(sax_type):
+    """The detector's floor for a horn type: MIN_FUNDAMENTAL_HZ_BASS for Bass, MIN_FUNDAMENTAL_HZ
+    for every other type and for none. The engine reads it in set_sax_type; the guided run's
+    note list and its "low notes skipped" count use it too."""
+    return MIN_FUNDAMENTAL_HZ_BASS if sax_type == "Bass" else MIN_FUNDAMENTAL_HZ
 
 
 def find_out_of_range_notes(per_note_keys, sax_type):

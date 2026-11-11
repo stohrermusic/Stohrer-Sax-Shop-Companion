@@ -34,8 +34,11 @@ Tests: `test_analyzer_tab` (guarded), `test_intonation_chart`, `test_toner_live`
 
 - Frequencies come from `audio_utils.hann_peak_freq`; levels (`peak_mag` with its parabolic amplitude correction) are deliberately unchanged, so `harmonics_db` and every descriptor stay comparable with stored captures.
 - Sub-harmonic verification counts only multiples coprime to the divisor (`gcd(mult, divisor) == 1`), with the requirement one lower. **Don't "simplify" it to skipping only `mult == divisor`**: measured, that reads octaves high.
+- **The detector is two steps** (2026-11-11): `_fundamental_candidate` is the window's own reading (the strongest in-range peak, or the lowest sub-harmonic of it that verifies its own series; a sub-harmonic's own peak must also be within `SUBHARM_MIN_REL_DB` (36 dB) of the strongest peak, since the noise-median thresholds let leakage pass on a quiet signal) and `_settle_octave` weighs an octave jump against the previous window. **The number returned is always a measurement of this window**, never one carried over. An octave jump that is not the clearly stronger peak (`OCTAVE_HYSTERESIS_FACTOR`) is held at the previous octave, measured fresh at that octave's peak, for at most `OCTAVE_LATCH_WINDOWS` (6) windows in a row; then the window's own reading wins, verified or not. Never let a hold outlive its evidence again, and never let a verified candidate end a hold at once (measured and rejected: under noise a bump at half the note verifies for a window or two). Why 6: `docs/decisions/toner.md`, round 14.
+- **The floor is per horn type** (`min_fundamental_hz_for`: 50 Hz for Bass, whose four lowest notes lie under 65 Hz; 65 for the rest), read by the engine in `set_sax_type` and by the guided run's note list.
+- **The live `_harmonic_history` is never cleared on a note change**: `analyze()` compares the result with `_last_fundamental` after `analyze_buffer` has already set it to the same value. Found 2026-11-11, not changed (descriptors average across a note change for a few frames); fix it as its own change with a gate.
 
-Gated by Tests 20 and 21 in `test_toner_engine`. Measurements: `docs/decisions/toner.md`.
+Gated by Tests 20 and 21 in `test_toner_engine` and by `test_pitch_octaves` (every note of five horns from silence at four fundamental levels through the file path, the bass floor, the frozen-frequency case, the hold's bound, vibrato / drift / noise bounds; generated tones over a -60 dBFS floor, no recording). Measurements: `docs/decisions/toner.md`, round 14.
 
 ## Capture rules (2026-11-10)
 
@@ -76,7 +79,7 @@ During free-mode capture, JSON saves are deferred to every 10 seconds (`_toner_s
 
 ## Capture Modes
 
-Two selectable capture modes, the MODE switch's free / guided (the values stay "free" and "calibration"): "free" (continuous micro-captures while playing naturally, one per held note; the default) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). Which frames of a note count, and the clock: "Capture rules" above. A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
+Two selectable capture modes, the MODE switch's free / guided (the values stay "free" and "calibration"): a free run on Bass carries one line on the progress label (`_toner_bass_free_note`: "Bass: note detection is less reliable. Use guided mode."; Matt, 2026-11-11), nothing else changes. "free" (continuous micro-captures while playing naturally, one per held note; the default) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). Which frames of a note count, and the clock: "Capture rules" above. A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
 
 ## Auto-Transposition
 

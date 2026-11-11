@@ -545,6 +545,7 @@ def main():
         app._toner_stop_capture()
     check("pause freezes the state machine and resume restores it", pause_freezes_either_mode)
 
+
     def the_exit_path_keeps_a_note_in_progress():
         session = start_capture("free")
         feed(40)
@@ -588,6 +589,50 @@ def main():
         items = c.find_withtag("error")
         assert items, "audio-error message gone after the spectrum rebuild"
         assert "no microphone" in c.itemcget(items[0], "text"), "\"no microphone\" in c.itemcget(items[0], \"text\")"
+    BASS_LINE = "Bass: note detection is less reliable. Use guided mode."
+
+    def bass_free_run_carries_the_note():
+        """Matt (2026-11-11): "let's make bass have a note for free runs that detection is not great on bass
+        and they should do calibrated runs": one plain line on the progress label, from the first frame,
+        kept in front of the counts; not on Tenor, not in guided mode. The Bass runs are record-first ones:
+        a loaded preset sets the selector back to its own horn type."""
+        start_capture("free")                          # Tenor (load_bench sets the selector)
+        assert app._toner_capture_progress.cget("text") == "", app._toner_capture_progress.cget("text")
+        feed(40)
+        app._toner_process_capture_frame(silence())
+        assert "Bass" not in app._toner_capture_progress.cget("text"), app._toner_capture_progress.cget("text")
+        app._toner_free_accumulator = []
+        app._toner_stop_capture()
+        asked = []
+        app._toner_ask_unsaved_run = lambda reason: asked.append(reason) or "keep"    # the run is dropped below
+        clock.t += 60.0
+        app._toner_sax_var.set("Bass")
+        app._toner_mode_var.set("free")
+        app._toner_record_first()
+        assert app._toner_capture_progress.cget("text") == BASS_LINE, (
+            app._toner_capture_progress.cget("text"), app._toner_capture_state, app._toner_sax_var.get(),
+            app._toner_mode_var.get(), app._toner_active_preset)
+        feed(40, f0=61.74, note="B1")
+        app._toner_process_capture_frame(silence())
+        text = app._toner_capture_progress.cget("text")
+        assert text.startswith(BASS_LINE + "   (") and "notes captured)" in text, text
+        app._toner_free_accumulator = []
+        app._toner_stop_capture()
+        assert asked == ["stop"], asked
+        app._toner_active_session = None               # the kept run, dropped
+        app._toner_update_preset_label()
+        clock.t += 60.0
+        app._toner_sax_var.set("Bass")
+        app._toner_mode_var.set("calibration")
+        app._toner_record_first()                      # guided: no line (each note is read under the name asked for)
+        assert app._toner_capture_progress.cget("text") == "", app._toner_capture_progress.cget("text")
+        app._toner_stop_capture()
+        app._toner_active_session = None
+        del app._toner_ask_unsaved_run
+        app._toner_sax_var.set("Tenor")
+    check("a free run on Bass carries one line on the progress label (from the first frame, in front of the "
+          "counts); Tenor and guided mode carry none", bass_free_run_carries_the_note)
+
     check("no-mic: 'Audio error' stays on the spectrum canvas after a rebuild", no_mic_error_survives_rebuild)
     root.destroy()
 

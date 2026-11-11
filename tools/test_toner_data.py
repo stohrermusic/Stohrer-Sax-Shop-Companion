@@ -785,13 +785,19 @@ check("note_to_freq A4 440 / C4 261.625565301 / ref 442; midi C#4 61; flats and 
       t_freq_midi)
 
 def t_cal_counts():
+    # the floor is per type since 2026-11-11: 50 Hz for Bass (its four lowest notes lie under 65 Hz and
+    # read an octave up even clean at that floor), 65 Hz for every other type; a guided run on Bass
+    # asks for all 32 notes and skips none
     counts = {s: len([n for n in te.CALIBRATION_NOTES
-                      if te.note_to_freq(te.reverse_transpose_note(n, s)) >= te.MIN_FUNDAMENTAL_HZ])
+                      if te.note_to_freq(te.reverse_transpose_note(n, s)) >= te.min_fundamental_hz_for(s)])
               for s in te.SAX_TYPES}
     assert len(te.CALIBRATION_NOTES) == 32, "len(te.CALIBRATION_NOTES) == 32"
-    assert counts == {"Bass": 28, "Baritone": 32, "Tenor": 32, "C Melody": 32, "Alto": 32,
+    assert counts == {"Bass": 32, "Baritone": 32, "Tenor": 32, "C Melody": 32, "Alto": 32,
                       "F Mezzo": 32, "Soprano": 32, "Sopranino": 32}, counts
-check("CALIBRATION_NOTES >= MIN_FUNDAMENTAL_HZ (65 Hz): Bass 28, every other type 32", t_cal_counts)
+    at_65 = len([n for n in te.CALIBRATION_NOTES
+                 if te.note_to_freq(te.reverse_transpose_note(n, "Bass")) >= te.MIN_FUNDAMENTAL_HZ])
+    assert at_65 == 28, at_65                 # what the 65 Hz floor left of the bass run
+check("CALIBRATION_NOTES >= the type's floor: every type 32 (Bass had 28 under the 65 Hz floor)", t_cal_counts)
 
 
 print(f"\n{passed}/{passed + failed} passed  ({time.time() - _t0:.1f} s)")

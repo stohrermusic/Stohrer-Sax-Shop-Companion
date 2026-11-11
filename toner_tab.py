@@ -35,7 +35,7 @@ IS_MACOS = sys.platform == 'darwin'
 try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
-        MIN_PRESET_NOTES, SAX_TYPES, MIN_FUNDAMENTAL_HZ,
+        MIN_PRESET_NOTES, SAX_TYPES, min_fundamental_hz_for,
         FREE_STABLE_FRAMES, FREE_MIN_FRAMES, WINDOW_S, whole_window,
         CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
@@ -2967,9 +2967,10 @@ class TonerTabMixin:
 
             # Build calibration note list, filtering out notes whose
             # concert frequency is below the engine's detection floor
+            floor_hz = min_fundamental_hz_for(self._toner_sax_var.get())     # 50 Hz for Bass, 65 for the rest
             self._toner_cal_notes = [
                 n for n in CALIBRATION_NOTES
-                if note_to_freq(reverse_transpose_note(n, self._toner_sax_var.get())) >= MIN_FUNDAMENTAL_HZ
+                if note_to_freq(reverse_transpose_note(n, self._toner_sax_var.get())) >= floor_hz
             ]
             skipped = len(CALIBRATION_NOTES) - len(self._toner_cal_notes)
             if skipped > 0:
@@ -2997,7 +2998,16 @@ class TonerTabMixin:
 
         self._toner_capture_frame.pack(fill="x", padx=5, before=self._toner_ctrl_frame)
         self._toner_capture_label.configure(text=label_text, fg=CAPTURE_FG)
-        self._toner_capture_progress.configure(text="")
+        self._toner_capture_progress.configure(text=self._toner_bass_free_note())
+
+    def _toner_bass_free_note(self):
+        """The one line a free run on Bass carries on the progress label, else "" (Matt, 2026-11-11:
+        "let's make bass have a note for free runs that detection is not great on bass and they should do
+        calibrated runs"). Guided runs read each note from its own stretch under the name asked for, so
+        the detector's octave does not name the note there."""
+        if self._toner_sax_var.get() == "Bass" and self._toner_mode_var.get() == "free":
+            return _("Bass: note detection is less reliable. Use guided mode.")
+        return ""
 
 
     def _toner_new_preset_flow(self):
@@ -3926,6 +3936,9 @@ class TonerTabMixin:
             if self._toner_too_short:
                 progress += "   " + _("{note} too short to keep").format(
                     note=self._toner_transpose_note(self._toner_too_short[0]))
+            bass_note = self._toner_bass_free_note()
+            if bass_note:
+                progress = bass_note + "   " + progress
             self._toner_capture_progress.configure(text=progress)
             return
 

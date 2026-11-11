@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion 2.21\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-11 12:52-0500\n"
+"POT-Creation-Date: 2026-11-11 13:56-0500\n"
 "PO-Revision-Date: 2026-05-13 11:30-0400\n"
 "Last-Translator: Draft (machine-assisted) <stohrermusic@gmail.com>\n"
 "Language: es\n"
@@ -294,7 +294,7 @@ msgid "All files"
 msgstr "Todos los archivos"
 
 #: library_features.py:477 library_features.py:1003 main.py:2859 main.py:2942
-#: toner_tab.py:6594 toner_tab.py:6749 ui_dialogs/presets_io.py:332
+#: toner_tab.py:6607 toner_tab.py:6762 ui_dialogs/presets_io.py:332
 #: ui_dialogs/presets_io.py:445 ui_dialogs/sizing.py:2117
 #: ui_dialogs/sizing.py:2120
 msgid "Import Error"
@@ -341,7 +341,7 @@ msgstr ""
 
 #: library_features.py:501 library_features.py:514 library_features.py:539
 #: library_features.py:846 library_features.py:888 main.py:2885
-#: toner_tab.py:5926 toner_tab.py:6600
+#: toner_tab.py:5939 toner_tab.py:6613
 msgid "No Data"
 msgstr "Sin datos"
 
@@ -369,7 +369,7 @@ msgstr ""
 "¿Sobrescribir con la última versión de la web?"
 
 #: library_features.py:536 library_features.py:885 main.py:2938
-#: toner_tab.py:6793 ui_dialogs/presets_io.py:334 ui_dialogs/presets_io.py:442
+#: toner_tab.py:6806 ui_dialogs/presets_io.py:334 ui_dialogs/presets_io.py:442
 #: ui_dialogs/presets_io.py:447
 msgid "Import Complete"
 msgstr "Importación completada"
@@ -830,7 +830,7 @@ msgstr "{mat}: la potencia de encuadre debe ser un número de 0 a {max}%."
 msgid "Save Failed"
 msgstr "Error al guardar"
 
-#: machine_control.py:1019 toner_tab.py:1591 toner_tab.py:4237
+#: machine_control.py:1019 toner_tab.py:1591 toner_tab.py:4250
 #: tooling_tab.py:1926 ui_dialogs/guide.py:1465
 msgid "OK"
 msgstr "Aceptar"
@@ -838,8 +838,8 @@ msgstr "Aceptar"
 #: machine_control.py:1021 machine_control.py:1083 main.py:3057 main.py:3152
 #: main.py:3293 toner_tab.py:1593 toner_tab.py:1866 toner_tab.py:2380
 #: toner_tab.py:2444 toner_tab.py:2777 toner_tab.py:2828 toner_tab.py:2891
-#: toner_tab.py:3055 toner_tab.py:3139 toner_tab.py:3199 toner_tab.py:3287
-#: toner_tab.py:4657 toner_tab.py:6480 toner_tab.py:6570 toner_tab.py:6730
+#: toner_tab.py:3065 toner_tab.py:3149 toner_tab.py:3209 toner_tab.py:3297
+#: toner_tab.py:4670 toner_tab.py:6493 toner_tab.py:6583 toner_tab.py:6743
 #: ui_dialogs/gcode_settings.py:196 ui_dialogs/machine.py:204
 #: ui_dialogs/machine.py:1077 ui_dialogs/machine.py:2775
 #: ui_dialogs/machine.py:3342 ui_dialogs/presets_io.py:36
@@ -877,7 +877,7 @@ msgid "Inset must be a number 0-50."
 msgstr "El margen debe ser un número de 0 a 50."
 
 #: machine_control.py:1080 toner_tab.py:2442 toner_tab.py:2776
-#: toner_tab.py:3198 ui_dialogs/gcode_settings.py:603
+#: toner_tab.py:3208 ui_dialogs/gcode_settings.py:603
 #: ui_dialogs/presets_io.py:34 ui_dialogs/presets_io.py:543
 #: ui_dialogs/sizing.py:2695 ui_dialogs/sizing.py:2823
 msgid "Save"
@@ -1216,7 +1216,7 @@ msgstr "Materiales"
 msgid "Center Hole"
 msgstr "Orificio central"
 
-#: main.py:994 toner_tab.py:6686
+#: main.py:994 toner_tab.py:6699
 msgid "None"
 msgstr "Ninguno"
 
@@ -1268,7 +1268,7 @@ msgstr "Dibujar / Capturar forma..."
 msgid "Draw Shape..."
 msgstr "Dibujar forma..."
 
-#: main.py:1125 toner_tab.py:631 toner_tab.py:3078
+#: main.py:1125 toner_tab.py:631 toner_tab.py:3088
 msgid "Unload"
 msgstr "Descargar"
 
@@ -1484,7 +1484,7 @@ msgid "On this scrap"
 msgstr "En este retal"
 
 #: main.py:1747 main.py:2293 main.py:2506 main.py:2509 main.py:2512
-#: toner_tab.py:3847 tooling_tab.py:1205 tooling_tab.py:1265
+#: toner_tab.py:3857 tooling_tab.py:1205 tooling_tab.py:1265
 #: tooling_tab.py:1719 tooling_tab.py:2033 tooling_tab.py:2589
 #: tooling_tab.py:2673 tooling_tab.py:2702 tooling_tab.py:2810
 #: tooling_tab.py:2867 tooling_tab.py:3059 tooling_tab.py:3131
@@ -1492,7 +1492,7 @@ msgstr "En este retal"
 msgid "Done"
 msgstr "Hecho"
 
-#: main.py:1758 toner_tab.py:2211 toner_tab.py:5911 toner_tab.py:6219
+#: main.py:1758 toner_tab.py:2211 toner_tab.py:5924 toner_tab.py:6232
 #: tooling_tab.py:1728 tuner_tab.py:1368 ui_dialogs/guide.py:189
 #: ui_dialogs/guide.py:1308 ui_dialogs/guide.py:1360 ui_dialogs/history.py:116
 #: ui_dialogs/machine.py:934 ui_dialogs/machine.py:2683
@@ -1546,7 +1546,7 @@ msgstr "El tamaño del orificio personalizado debe ser un número válido."
 msgid "Custom hole size must be greater than zero."
 msgstr "El tamaño del orificio personalizado debe ser mayor que cero."
 
-#: main.py:1938 main.py:1955 main.py:2014 main.py:2019 toner_tab.py:6375
+#: main.py:1938 main.py:1955 main.py:2014 main.py:2019 toner_tab.py:6388
 #: tooling_tab.py:1173 tooling_tab.py:1209 tooling_tab.py:1218
 #: tooling_tab.py:1270 tooling_tab.py:1551 tooling_tab.py:1631
 #: tooling_tab.py:1675 tooling_tab.py:1950 tooling_tab.py:2037
@@ -2180,8 +2180,8 @@ msgstr "falta"
 msgid "Key heights"
 msgstr "Alturas de llave"
 
-#: toner_tab.py:326 toner_tab.py:2143 toner_tab.py:2153 toner_tab.py:3172
-#: toner_tab.py:3175
+#: toner_tab.py:326 toner_tab.py:2143 toner_tab.py:2153 toner_tab.py:3182
+#: toner_tab.py:3185
 msgid "Preset Library"
 msgstr "Biblioteca de preajustes"
 
@@ -2189,7 +2189,7 @@ msgstr "Biblioteca de preajustes"
 msgid "IN TUNE"
 msgstr "AFINADO"
 
-#: toner_tab.py:421 toner_tab.py:3541 toner_tab.py:3861
+#: toner_tab.py:421 toner_tab.py:3551 toner_tab.py:3871
 #: ui_dialogs/machine.py:3308
 msgid "Pause"
 msgstr "Pausa"
@@ -2214,13 +2214,15 @@ msgstr "experimental (afinación de concierto)"
 msgid "SESSION"
 msgstr "SESIÓN"
 
-#: toner_tab.py:619 toner_tab.py:626 toner_tab.py:3384 toner_tab.py:3400
+#: toner_tab.py:619 toner_tab.py:626 toner_tab.py:3394 toner_tab.py:3410
 msgid "no preset"
 msgstr "sin preajuste"
 
 #: toner_tab.py:635
 msgid "Unload this preset. Capture then opens the Preset Library."
-msgstr "Descarga este preajuste. Capturar abre entonces la Biblioteca de preajustes."
+msgstr ""
+"Descarga este preajuste. Capturar abre entonces la Biblioteca de "
+"preajustes."
 
 #: toner_tab.py:643
 msgid "MODE"
@@ -2234,7 +2236,7 @@ msgstr "libre"
 msgid "guided"
 msgstr "guiado"
 
-#: toner_tab.py:666 toner_tab.py:2191 toner_tab.py:3539
+#: toner_tab.py:666 toner_tab.py:2191 toner_tab.py:3549
 msgid "Capture"
 msgstr "Capturar"
 
@@ -2323,7 +2325,7 @@ msgstr ""
 "El tipo y modelo de micrófono se establecen por preajuste\n"
 "en Archivo → Preajustes."
 
-#: toner_tab.py:1207 toner_tab.py:3583 toner_tab.py:3596
+#: toner_tab.py:1207 toner_tab.py:3593 toner_tab.py:3606
 msgid "Recording"
 msgstr "Grabación"
 
@@ -2364,7 +2366,7 @@ msgstr ""
 " de volver a analizar una sesión si los descriptores o algoritmos cambian"
 " más adelante."
 
-#: toner_tab.py:1255 toner_tab.py:3476 toner_tab.py:3481
+#: toner_tab.py:1255 toner_tab.py:3486 toner_tab.py:3491
 msgid "Choose Recording Folder"
 msgstr "Elegir carpeta de grabación"
 
@@ -2425,7 +2427,7 @@ msgstr ""
 "En qué sentido van las notas a lo largo de la base del gráfico. "
 "Desmárquelo para poner las notas graves a la derecha."
 
-#: toner_tab.py:1329 toner_tab.py:5440
+#: toner_tab.py:1329 toner_tab.py:5453
 msgid "Analysis"
 msgstr "Análisis"
 
@@ -2486,7 +2488,7 @@ msgstr "Elija qué descriptores aparecen en la herramienta Analizar."
 msgid "Harmonic Complexity"
 msgstr "Complejidad armónica"
 
-#: toner_tab.py:1445 toner_tab.py:5413 toner_tab.py:6002
+#: toner_tab.py:1445 toner_tab.py:5426 toner_tab.py:6015
 msgid "Warmth"
 msgstr "Calidez"
 
@@ -2494,11 +2496,11 @@ msgstr "Calidez"
 msgid "Even/Odd Harmonic Balance"
 msgstr "Relación pares/impares"
 
-#: toner_tab.py:1458 toner_tab.py:5415
+#: toner_tab.py:1458 toner_tab.py:5428
 msgid "Rolloff Shape"
 msgstr "Forma de caída"
 
-#: toner_tab.py:1465 toner_tab.py:5416
+#: toner_tab.py:1465 toner_tab.py:5429
 msgid "Evenness"
 msgstr "Uniformidad"
 
@@ -2693,7 +2695,7 @@ msgstr ""
 msgid "I Understand — Enable Harmonics"
 msgstr "Entiendo — Habilitar armónicos"
 
-#: toner_tab.py:1927 toner_tab.py:3120 toner_tab.py:3382
+#: toner_tab.py:1927 toner_tab.py:3130 toner_tab.py:3392
 msgid "Unsaved run"
 msgstr "Tanda sin guardar"
 
@@ -2732,7 +2734,7 @@ msgstr "Aún no hay capturas."
 msgid "Load a preset and capture to chart its intonation."
 msgstr "Cargue un preajuste y capture para graficar su afinación."
 
-#: toner_tab.py:2047 toner_tab.py:2068 toner_tab.py:2071 toner_tab.py:6728
+#: toner_tab.py:2047 toner_tab.py:2068 toner_tab.py:2071 toner_tab.py:6741
 msgid "Export"
 msgstr "Exportar"
 
@@ -2817,13 +2819,17 @@ msgstr "Exportar preajustes..."
 msgid ""
 "Start capturing with no preset. When you stop, you choose the preset the "
 "run goes to, or make one."
-msgstr "Empieza a capturar sin preajuste. Al parar, elige el preajuste al que va la tanda, o crea uno."
+msgstr ""
+"Empieza a capturar sin preajuste. Al parar, elige el preajuste al que va "
+"la tanda, o crea uno."
 
 #: toner_tab.py:2272
+#, python-brace-format
 msgid "Session {date}"
 msgstr "Sesión {date}"
 
 #: toner_tab.py:2274
+#, python-brace-format
 msgid "{n} selected"
 msgstr "{n} seleccionados"
 
@@ -2854,12 +2860,12 @@ msgid "Preset Name"
 msgstr "Nombre del preajuste"
 
 #: toner_tab.py:2363 toner_tab.py:2757 toner_tab.py:2809 toner_tab.py:2872
-#: toner_tab.py:3037 toner_tab.py:3273 toner_tab.py:6538
+#: toner_tab.py:3047 toner_tab.py:3283 toner_tab.py:6551
 msgid "Duplicate Name"
 msgstr "Nombre duplicado"
 
 #: toner_tab.py:2364 toner_tab.py:2758 toner_tab.py:2810 toner_tab.py:2873
-#: toner_tab.py:3038 toner_tab.py:3274 toner_tab.py:6539
+#: toner_tab.py:3048 toner_tab.py:3284 toner_tab.py:6552
 #, python-brace-format
 msgid "'{name}' already exists in '{lib}'."
 msgstr "'{name}' ya existe en '{lib}'."
@@ -2899,7 +2905,7 @@ msgstr "Intérprete"
 msgid "Mouthpiece"
 msgstr "Boquilla"
 
-#: toner_tab.py:2514 toner_tab.py:2521 toner_tab.py:2611 toner_tab.py:5567
+#: toner_tab.py:2514 toner_tab.py:2521 toner_tab.py:2611 toner_tab.py:5580
 #: ui_dialogs/guide.py:1095
 msgid "Mic Type"
 msgstr "Tipo de micrófono"
@@ -2958,15 +2964,15 @@ msgstr "Introducir alturas de llave"
 msgid "Set name:"
 msgstr "Nombre del conjunto:"
 
-#: toner_tab.py:2783 toner_tab.py:3007 toner_tab.py:3250 toner_tab.py:6512
+#: toner_tab.py:2783 toner_tab.py:3017 toner_tab.py:3260 toner_tab.py:6525
 msgid "New Tone Preset"
 msgstr "Nuevo preajuste de timbre"
 
-#: toner_tab.py:2793 toner_tab.py:3017 toner_tab.py:3258
+#: toner_tab.py:2793 toner_tab.py:3027 toner_tab.py:3268
 msgid "Create Tone Preset"
 msgstr "Crear preajuste de timbre"
 
-#: toner_tab.py:2827 toner_tab.py:3286
+#: toner_tab.py:2827 toner_tab.py:3296
 msgid "Create"
 msgstr "Crear"
 
@@ -3026,11 +3032,11 @@ msgstr ""
 "  • Si la aplicación se activa con el ruido de la silla, suba el\n"
 "    umbral de captura en Opciones > Umbral de captura"
 
-#: toner_tab.py:2977
+#: toner_tab.py:2978
 msgid "Note Range"
 msgstr "Rango de notas"
 
-#: toner_tab.py:2978
+#: toner_tab.py:2979
 #, python-brace-format
 msgid ""
 "{skipped} low notes skipped — below detection range for {sax}.\n"
@@ -3040,11 +3046,15 @@ msgstr ""
 "{sax}.\n"
 "La calibración cubrirá {total} notas."
 
-#: toner_tab.py:2997 ui_dialogs/machine.py:3323
+#: toner_tab.py:2998 ui_dialogs/machine.py:3323
 msgid "Stop"
 msgstr "Detener"
 
-#: toner_tab.py:3019
+#: toner_tab.py:3010
+msgid "Bass: note detection is less reliable. Use guided mode."
+msgstr "Bass: la detección de notas es menos fiable. Use el modo guiado."
+
+#: toner_tab.py:3029
 msgid ""
 "A preset saves your setup details: horn + player + mouthpiece.\n"
 "It pre-fills session metadata for quick capture start."
@@ -3054,43 +3064,43 @@ msgstr ""
 "Rellena previamente los metadatos de sesión para iniciar la captura "
 "rápidamente."
 
-#: toner_tab.py:3053
+#: toner_tab.py:3063
 msgid "Create && Start Capturing"
 msgstr "Crear e iniciar captura"
 
-#: toner_tab.py:3127
+#: toner_tab.py:3137
 msgid "This run is not saved with a preset yet. Where should it go?"
 msgstr "Esta tanda aún no está guardada con un preajuste. ¿Adónde debe ir?"
 
-#: toner_tab.py:3136
+#: toner_tab.py:3146
 msgid "Existing preset..."
 msgstr "Preajuste existente..."
 
-#: toner_tab.py:3137
+#: toner_tab.py:3147
 msgid "New preset..."
 msgstr "Nuevo preajuste..."
 
-#: toner_tab.py:3138
+#: toner_tab.py:3148
 msgid "Discard"
 msgstr "Descartar"
 
-#: toner_tab.py:3139
+#: toner_tab.py:3149
 msgid "Keep for now"
 msgstr "Conservar por ahora"
 
-#: toner_tab.py:3172
+#: toner_tab.py:3182
 msgid "No presets yet."
 msgstr "Todavía no hay preajustes."
 
-#: toner_tab.py:3181
+#: toner_tab.py:3191
 msgid "Pick the preset this run belongs to."
 msgstr "Elija el preajuste al que pertenece esta tanda."
 
-#: toner_tab.py:3214 toner_tab.py:3420
+#: toner_tab.py:3224 toner_tab.py:3430
 msgid "Mic Type Required"
 msgstr "Tipo de micrófono obligatorio"
 
-#: toner_tab.py:3215 toner_tab.py:3421
+#: toner_tab.py:3225 toner_tab.py:3431
 msgid ""
 "This preset has no mic type set.\n"
 "\n"
@@ -3102,7 +3112,7 @@ msgstr ""
 "Use Mutar en Archivo → Preajustes para añadir información del micrófono,\n"
 "o cree un nuevo preajuste especificando el tipo de micrófono."
 
-#: toner_tab.py:3299
+#: toner_tab.py:3309
 #, python-brace-format
 msgid ""
 "Discard this run's {n} capture and delete its recording? It cannot be "
@@ -3110,29 +3120,33 @@ msgid ""
 msgid_plural ""
 "Discard this run's {n} captures and delete its recording? They cannot be "
 "recovered."
-msgstr[0] "¿Descartar esta tanda con {n} captura y borrar su grabación? No se puede recuperar."
-msgstr[1] "¿Descartar esta tanda con {n} capturas y borrar su grabación? No se pueden recuperar."
+msgstr[0] ""
+"¿Descartar esta tanda con {n} captura y borrar su grabación? No se puede "
+"recuperar."
+msgstr[1] ""
+"¿Descartar esta tanda con {n} capturas y borrar su grabación? No se "
+"pueden recuperar."
 
-#: toner_tab.py:3302
+#: toner_tab.py:3312
 #, python-brace-format
 msgid "Discard this run's {n} capture? It cannot be recovered."
 msgid_plural "Discard this run's {n} captures? They cannot be recovered."
 msgstr[0] "¿Descartar esta tanda con {n} captura? No se puede recuperar."
 msgstr[1] "¿Descartar esta tanda con {n} capturas? No se pueden recuperar."
 
-#: toner_tab.py:3304
+#: toner_tab.py:3314
 msgid "Discard run"
 msgstr "Descartar tanda"
 
-#: toner_tab.py:3396
+#: toner_tab.py:3406
 msgid "sandbox"
 msgstr "experimental"
 
-#: toner_tab.py:3398
+#: toner_tab.py:3408
 msgid "mic not set"
 msgstr "micrófono no configurado"
 
-#: toner_tab.py:3477
+#: toner_tab.py:3487
 msgid ""
 "WAV recording is enabled but no folder has been chosen.\n"
 "\n"
@@ -3142,15 +3156,15 @@ msgstr ""
 "\n"
 "Seleccione una carpeta donde se guardarán las grabaciones."
 
-#: toner_tab.py:3584
+#: toner_tab.py:3594
 msgid "WAV recording failed — file was not created."
 msgstr "La grabación WAV falló — no se creó el archivo."
 
-#: toner_tab.py:3592
+#: toner_tab.py:3602
 msgid "Recording Saved"
 msgstr "Grabación guardada"
 
-#: toner_tab.py:3593
+#: toner_tab.py:3603
 #, python-brace-format
 msgid ""
 "WAV saved to:\n"
@@ -3159,7 +3173,7 @@ msgstr ""
 "WAV guardado en:\n"
 "{path}"
 
-#: toner_tab.py:3597
+#: toner_tab.py:3607
 #, python-brace-format
 msgid ""
 "Could not save WAV recording:\n"
@@ -3168,15 +3182,15 @@ msgstr ""
 "No se pudo guardar la grabación WAV:\n"
 "{e}"
 
-#: toner_tab.py:3607
+#: toner_tab.py:3617
 msgid "Performing WAV analysis..."
 msgstr "Realizando análisis del WAV..."
 
-#: toner_tab.py:3632 toner_tab.py:3637
+#: toner_tab.py:3642 toner_tab.py:3647
 msgid "WAV Analysis"
 msgstr "Análisis del WAV"
 
-#: toner_tab.py:3633
+#: toner_tab.py:3643
 #, python-brace-format
 msgid ""
 "WAV analysis failed, keeping live captures:\n"
@@ -3185,7 +3199,7 @@ msgstr ""
 "Falló el análisis del WAV, conservando las capturas en vivo:\n"
 "{e}"
 
-#: toner_tab.py:3638
+#: toner_tab.py:3648
 msgid ""
 "WAV analysis found no stable segments.\n"
 "Keeping live captures."
@@ -3193,33 +3207,33 @@ msgstr ""
 "El análisis del WAV no encontró segmentos estables.\n"
 "Conservando las capturas en vivo."
 
-#: toner_tab.py:3666
+#: toner_tab.py:3676
 msgid "WAV Analysis Complete"
 msgstr "Análisis del WAV completado"
 
-#: toner_tab.py:3685
+#: toner_tab.py:3695
 msgid "Capture Summary"
 msgstr "Resumen de captura"
 
-#: toner_tab.py:3695
+#: toner_tab.py:3705
 #, python-brace-format
 msgid "Session: {name}"
 msgstr "Sesión: {name}"
 
-#: toner_tab.py:3704
+#: toner_tab.py:3714
 #, python-brace-format
 msgid "{total} captures across {unique} unique notes"
 msgstr "{total} capturas en {unique} notas únicas"
 
-#: toner_tab.py:3798
+#: toner_tab.py:3808
 msgid "Good coverage across registers!"
 msgstr "¡Buena cobertura entre registros!"
 
-#: toner_tab.py:3828 toner_tab.py:3851
+#: toner_tab.py:3838 toner_tab.py:3861
 msgid "Discard Session"
 msgstr "Descartar sesión"
 
-#: toner_tab.py:3829
+#: toner_tab.py:3839
 msgid ""
 "Discard all captures from this session?\n"
 "\n"
@@ -3229,60 +3243,60 @@ msgstr ""
 "\n"
 "Esta acción no se puede deshacer."
 
-#: toner_tab.py:3845
+#: toner_tab.py:3855
 msgid "Resume Capturing"
 msgstr "Reanudar captura"
 
-#: toner_tab.py:3862
+#: toner_tab.py:3872
 msgid "Resumed..."
 msgstr "Reanudado..."
 
-#: toner_tab.py:3868 ui_dialogs/machine.py:3311
+#: toner_tab.py:3878 ui_dialogs/machine.py:3311
 msgid "Resume"
 msgstr "Reanudar"
 
-#: toner_tab.py:3869
+#: toner_tab.py:3879
 msgid "Paused"
 msgstr "En pausa"
 
-#: toner_tab.py:3921
+#: toner_tab.py:3931
 #, python-brace-format
 msgid "Free: {note} ({count} frames)"
 msgstr "Libre: {note} ({count} cuadros)"
 
-#: toner_tab.py:3925
+#: toner_tab.py:3935
 msgid "Free mode — play anything..."
 msgstr "Modo libre — toque lo que quiera..."
 
-#: toner_tab.py:3926
+#: toner_tab.py:3936
 #, python-brace-format
 msgid "({count} notes captured)"
 msgstr "({count} notas capturadas)"
 
-#: toner_tab.py:3928
+#: toner_tab.py:3938
 #, python-brace-format
 msgid "{note} too short to keep"
 msgstr "{note} demasiado corta para guardarla"
 
-#: toner_tab.py:3939
+#: toner_tab.py:3952
 #, python-brace-format
 msgid "Calibration starting in {seconds:.0f}s... get ready"
 msgstr "Calibración comenzando en {seconds:.0f}s... prepárese"
 
-#: toner_tab.py:3947
+#: toner_tab.py:3960
 #, python-brace-format
 msgid "Play {note} (1/{total})"
 msgstr "Toque {note} (1/{total})"
 
-#: toner_tab.py:3948 toner_tab.py:3985 toner_tab.py:4103
+#: toner_tab.py:3961 toner_tab.py:3998 toner_tab.py:4116
 msgid "waiting..."
 msgstr "esperando..."
 
-#: toner_tab.py:3958
+#: toner_tab.py:3971
 msgid "Calibration Complete"
 msgstr "Calibración completada"
 
-#: toner_tab.py:3959
+#: toner_tab.py:3972
 #, python-brace-format
 msgid ""
 "Calibration capture finished!\n"
@@ -3291,40 +3305,40 @@ msgstr ""
 "¡Captura de calibración finalizada!\n"
 "{count} notas grabadas."
 
-#: toner_tab.py:3980
+#: toner_tab.py:3993
 #, python-brace-format
 msgid "Recording {note}... ({i}/{total})"
 msgstr "Grabando {note}... ({i}/{total})"
 
-#: toner_tab.py:3984 toner_tab.py:4102
+#: toner_tab.py:3997 toner_tab.py:4115
 #, python-brace-format
 msgid "Play {note} ({i}/{total})"
 msgstr "Toque {note} ({i}/{total})"
 
-#: toner_tab.py:4017
+#: toner_tab.py:4030
 #, python-brace-format
 msgid "Recording {note}... {seconds:.1f}s ({i}/{total})"
 msgstr "Grabando {note}... {seconds:.1f}s ({i}/{total})"
 
-#: toner_tab.py:4019
+#: toner_tab.py:4032
 #, python-brace-format
 msgid "({count} frames)"
 msgstr "({count} cuadros)"
 
-#: toner_tab.py:4083
+#: toner_tab.py:4096
 #, python-brace-format
 msgid "Captured {note} ✓  stop playing..."
 msgstr "Capturada {note} ✓  deje de tocar..."
 
-#: toner_tab.py:4203
+#: toner_tab.py:4216
 msgid "Recording Quality"
 msgstr "Calidad de grabación"
 
-#: toner_tab.py:4213
+#: toner_tab.py:4226
 msgid "⚠ Recording Quality"
 msgstr "⚠ Calidad de grabación"
 
-#: toner_tab.py:4217
+#: toner_tab.py:4230
 #, python-brace-format
 msgid ""
 "Upper harmonics are dropping off steeply ({rate:.1f} dB/harmonic).\n"
@@ -3347,59 +3361,59 @@ msgstr ""
 "Para mejores resultados, use un micrófono de condensador externo\n"
 "a 60–90 cm de la campana."
 
-#: toner_tab.py:4223
+#: toner_tab.py:4236
 msgid "Don't show this again for this preset"
 msgstr "No volver a mostrar esto para este preajuste"
 
-#: toner_tab.py:4313
+#: toner_tab.py:4326
 msgid "No Presets"
 msgstr "Sin preajustes"
 
-#: toner_tab.py:4314
+#: toner_tab.py:4327
 msgid "No presets with captures to analyze."
 msgstr "No hay preajustes con capturas para analizar."
 
-#: toner_tab.py:4318
+#: toner_tab.py:4331
 msgid "Analyze Tone Data"
 msgstr "Analizar datos de timbre"
 
-#: toner_tab.py:4330
+#: toner_tab.py:4343
 msgid "Select one or more presets or sessions to analyze, compare, or overlay."
 msgstr ""
 "Seleccione uno o más preajustes o sesiones para analizar, comparar o "
 "superponer."
 
-#: toner_tab.py:4392 ui_dialogs/guide.py:114
+#: toner_tab.py:4405 ui_dialogs/guide.py:114
 msgid "Search:"
 msgstr "Buscar:"
 
-#: toner_tab.py:4542
+#: toner_tab.py:4555
 #, python-brace-format
 msgid "{date}  ({caps} caps, {notes} notes)"
 msgstr "{date}  ({caps} caps, {notes} notas)"
 
-#: toner_tab.py:4558 ui_dialogs/presets_io.py:126 ui_dialogs/presets_io.py:258
+#: toner_tab.py:4571 ui_dialogs/presets_io.py:126 ui_dialogs/presets_io.py:258
 #: ui_dialogs/presets_io.py:362
 msgid "Select All"
 msgstr "Seleccionar todo"
 
-#: toner_tab.py:4560
+#: toner_tab.py:4573
 msgid "Deselect All"
 msgstr "Deseleccionar todo"
 
-#: toner_tab.py:4593
+#: toner_tab.py:4606
 msgid "Select"
 msgstr "Seleccionar"
 
-#: toner_tab.py:4594
+#: toner_tab.py:4607
 msgid "Select at least one preset or session."
 msgstr "Seleccione al menos un preajuste o sesión."
 
-#: toner_tab.py:4607 toner_tab.py:4643
+#: toner_tab.py:4620 toner_tab.py:4656
 msgid "Mixed Sax Types"
 msgstr "Tipos de saxofón mezclados"
 
-#: toner_tab.py:4608
+#: toner_tab.py:4621
 #, python-brace-format
 msgid ""
 "You're comparing presets across different sax types ({types}).\n"
@@ -3426,11 +3440,11 @@ msgstr ""
 "\n"
 "¿Continuar de todos modos?"
 
-#: toner_tab.py:4631
+#: toner_tab.py:4644
 msgid "Select More"
 msgstr "Seleccionar más"
 
-#: toner_tab.py:4632
+#: toner_tab.py:4645
 msgid ""
 "Select at least 2 presets to average.\n"
 "(Individual sessions are not included in group averages.)"
@@ -3438,7 +3452,7 @@ msgstr ""
 "Seleccione al menos 2 preajustes para promediar.\n"
 "(Las sesiones individuales no se incluyen en los promedios de grupo.)"
 
-#: toner_tab.py:4644
+#: toner_tab.py:4657
 #, python-brace-format
 msgid ""
 "You're averaging presets across different sax types ({types}).\n"
@@ -3463,217 +3477,217 @@ msgstr ""
 "\n"
 "¿Continuar de todos modos?"
 
-#: toner_tab.py:4651
+#: toner_tab.py:4664
 msgid "Analyze Selected"
 msgstr "Analizar selección"
 
-#: toner_tab.py:4653
+#: toner_tab.py:4666
 msgid "Average Selected"
 msgstr "Promediar selección"
 
-#: toner_tab.py:4655
+#: toner_tab.py:4668
 msgid "Clear Overlay"
 msgstr "Quitar superposición"
 
-#: toner_tab.py:4670
+#: toner_tab.py:4683
 #, python-brace-format
 msgid "Analyze — {name}"
 msgstr "Analizar — {name}"
 
-#: toner_tab.py:4672
+#: toner_tab.py:4685
 msgid "Analyze — Comparison"
 msgstr "Analizar — Comparación"
 
-#: toner_tab.py:4750
+#: toner_tab.py:4763
 msgid "⚠ Sandbox preset — non-standard setup, compare with caution"
 msgstr ""
 "⚠ Preajuste experimental — configuración no estándar, compare con "
 "precaución"
 
-#: toner_tab.py:4761
+#: toner_tab.py:4774
 msgid "Horn Average"
 msgstr "Promedio del saxofón"
 
-#: toner_tab.py:4765
+#: toner_tab.py:4778
 msgid "Per-Note"
 msgstr "Por nota"
 
-#: toner_tab.py:4782
+#: toner_tab.py:4795
 msgid "Chart:"
 msgstr "Gráfico:"
 
-#: toner_tab.py:4784
+#: toner_tab.py:4797
 msgid "Overlay"
 msgstr "Superposición"
 
-#: toner_tab.py:4788
+#: toner_tab.py:4801
 msgid "Bars"
 msgstr "Barras"
 
-#: toner_tab.py:4793
+#: toner_tab.py:4806
 msgid "Difference"
 msgstr "Diferencia"
 
-#: toner_tab.py:4802
+#: toner_tab.py:4815
 msgid "Scale:"
 msgstr "Escala:"
 
-#: toner_tab.py:4804
+#: toner_tab.py:4817
 msgid "dB"
 msgstr "dB"
 
-#: toner_tab.py:4808
+#: toner_tab.py:4821
 msgid "Linear"
 msgstr "Lineal"
 
-#: toner_tab.py:4816
+#: toner_tab.py:4829
 msgid "Note:"
 msgstr "Nota:"
 
-#: toner_tab.py:4838 toner_tab.py:6016
+#: toner_tab.py:4851 toner_tab.py:6029
 msgid "Harmonic Data"
 msgstr "Datos armónicos"
 
-#: toner_tab.py:5014
+#: toner_tab.py:5027
 msgid "Δ dB"
 msgstr "Δ dB"
 
-#: toner_tab.py:5029
+#: toner_tab.py:5042
 msgid "amp"
 msgstr "amp"
 
-#: toner_tab.py:5046
+#: toner_tab.py:5059
 msgid "Harmonic #"
 msgstr "N.º de armónico"
 
-#: toner_tab.py:5057
+#: toner_tab.py:5070
 #, python-brace-format
 msgid "No data for {note}: {missing}"
 msgstr "Sin datos para {note}: {missing}"
 
-#: toner_tab.py:5091
+#: toner_tab.py:5104
 #, python-brace-format
 msgid "↑ {n1} stronger   ↓ {n2} stronger"
 msgstr "↑ {n1} más fuerte   ↓ {n2} más fuerte"
 
-#: toner_tab.py:5173
+#: toner_tab.py:5186
 msgid "Character Map (Warmth × Brightness)"
 msgstr "Mapa de carácter (Calidez × Brillo)"
 
-#: toner_tab.py:5181
+#: toner_tab.py:5194
 msgid "Y axis (brightness):"
 msgstr "Eje Y (brillo):"
 
-#: toner_tab.py:5191 toner_tab.py:5194 toner_tab.py:5209 toner_tab.py:5251
-#: toner_tab.py:5322
+#: toner_tab.py:5204 toner_tab.py:5207 toner_tab.py:5222 toner_tab.py:5264
+#: toner_tab.py:5335
 msgid "Complexity"
 msgstr "Complejidad"
 
-#: toner_tab.py:5194 toner_tab.py:5313 toner_tab.py:5320
+#: toner_tab.py:5207 toner_tab.py:5326 toner_tab.py:5333
 msgid "H4-H5 mean"
 msgstr "Media H4-H5"
 
-#: toner_tab.py:5194 toner_tab.py:5211 toner_tab.py:5251
+#: toner_tab.py:5207 toner_tab.py:5224 toner_tab.py:5264
 msgid "Rolloff (inverted)"
 msgstr "Caída (invertida)"
 
-#: toner_tab.py:5245
+#: toner_tab.py:5258
 msgid "No brightness data for selected measure"
 msgstr "Sin datos de brillo para la medida seleccionada"
 
-#: toner_tab.py:5283
+#: toner_tab.py:5296
 msgid "warm + bright"
 msgstr "cálido + brillante"
 
-#: toner_tab.py:5287
+#: toner_tab.py:5300
 msgid "thin + bright"
 msgstr "delgado + brillante"
 
-#: toner_tab.py:5291
+#: toner_tab.py:5304
 msgid "warm + dark"
 msgstr "cálido + oscuro"
 
-#: toner_tab.py:5295
+#: toner_tab.py:5308
 msgid "thin + dark"
 msgstr "delgado + oscuro"
 
-#: toner_tab.py:5306
+#: toner_tab.py:5319
 msgid "← thin    Warmth    warm →"
 msgstr "← delgado    Calidez    cálido →"
 
-#: toner_tab.py:5412 toner_tab.py:6001
+#: toner_tab.py:5425 toner_tab.py:6014
 msgid "H. Complexity"
 msgstr "Complej. armónica"
 
-#: toner_tab.py:5414
+#: toner_tab.py:5427
 msgid "Even H. Bal."
 msgstr "Pares/impares"
 
-#: toner_tab.py:5534
+#: toner_tab.py:5547
 #, python-brace-format
 msgid "P = percentile among {count} {sax} presets"
 msgstr "P = percentil entre {count} preajustes de {sax}"
 
-#: toner_tab.py:5542
+#: toner_tab.py:5555
 msgid "Rec. Quality"
 msgstr "Calidad de grab."
 
-#: toner_tab.py:5880
+#: toner_tab.py:5893
 msgid "Overlay on Spectrum"
 msgstr "Superponer en el espectro"
 
-#: toner_tab.py:5886 toner_tab.py:6194
+#: toner_tab.py:5899 toner_tab.py:6207
 msgid "← Back"
 msgstr "← Atrás"
 
-#: toner_tab.py:5908 toner_tab.py:6216
+#: toner_tab.py:5921 toner_tab.py:6229
 msgid "Maximize"
 msgstr "Maximizar"
 
-#: toner_tab.py:5927
+#: toner_tab.py:5940
 msgid "Selected presets have no captures."
 msgstr "Los preajustes seleccionados no tienen capturas."
 
-#: toner_tab.py:5931
+#: toner_tab.py:5944
 msgid "Group Average"
 msgstr "Promedio del grupo"
 
-#: toner_tab.py:5980
+#: toner_tab.py:5993
 #, python-brace-format
 msgid "Group Average: {count} presets"
 msgstr "Promedio del grupo: {count} preajustes"
 
-#: toner_tab.py:5987
+#: toner_tab.py:6000
 #, python-brace-format
 msgid "{count} total captures"
 msgstr "{count} capturas totales"
 
-#: toner_tab.py:5991
+#: toner_tab.py:6004
 msgid "Group Descriptors"
 msgstr "Descriptores del grupo"
 
-#: toner_tab.py:6093
+#: toner_tab.py:6106
 msgid "Average"
 msgstr "Promedio"
 
-#: toner_tab.py:6110
+#: toner_tab.py:6123
 msgid "Per-Preset Breakdown"
 msgstr "Desglose por preajuste"
 
-#: toner_tab.py:6174
+#: toner_tab.py:6187
 #, python-brace-format
 msgid "Group Average ({count} presets)"
 msgstr "Promedio del grupo ({count} preajustes)"
 
-#: toner_tab.py:6189
+#: toner_tab.py:6202
 msgid "Overlay on Spectrum..."
 msgstr "Superponer en el espectro..."
 
-#: toner_tab.py:6239
+#: toner_tab.py:6252
 msgid "Microphone Notice"
 msgstr "Aviso de micrófono"
 
-#: toner_tab.py:6240
+#: toner_tab.py:6253
 #, python-brace-format
 msgid ""
 "Your input device appears to be a built-in microphone (\"{device}\").\n"
@@ -3694,16 +3708,16 @@ msgstr ""
 "Para mejores resultados, use un micrófono de condensador como el Audio-"
 "Technica AT2020 USB."
 
-#: toner_tab.py:6263 tuner_tab.py:1394 tuner_tab.py:1415
+#: toner_tab.py:6276 tuner_tab.py:1394 tuner_tab.py:1415
 #, python-brace-format
 msgid "Audio error: {err}"
 msgstr "Error de audio: {err}"
 
-#: toner_tab.py:6302
+#: toner_tab.py:6315
 msgid "Microphone Quality"
 msgstr "Calidad del micrófono"
 
-#: toner_tab.py:6303
+#: toner_tab.py:6316
 msgid ""
 "Your microphone appears to have poor low-frequency response. Low register"
 " readings may be inaccurate.\n"
@@ -3717,33 +3731,33 @@ msgstr ""
 "Para mejores resultados, use un micrófono de condensador como el Audio-"
 "Technica AT2020 USB."
 
-#: toner_tab.py:6321
+#: toner_tab.py:6334
 #, python-brace-format
 msgid "{freq:.1f} Hz"
 msgstr "{freq:.1f} Hz"
 
-#: toner_tab.py:6350 tuner_tab.py:1733
+#: toner_tab.py:6363 tuner_tab.py:1733
 msgid "Click here to retry"
 msgstr "Haga clic aquí para reintentar"
 
-#: toner_tab.py:6375
+#: toner_tab.py:6388
 msgid "Analyzer engine not available."
 msgstr "Motor del Analizador no disponible."
 
-#: toner_tab.py:6380
+#: toner_tab.py:6393
 msgid "Select Audio File to Analyze"
 msgstr "Seleccione el archivo de audio a analizar"
 
-#: toner_tab.py:6390
+#: toner_tab.py:6403
 msgid "Import Audio File"
 msgstr "Importar archivo de audio"
 
-#: toner_tab.py:6400
+#: toner_tab.py:6413
 #, python-brace-format
 msgid "Import: {filename}"
 msgstr "Importar: {filename}"
 
-#: toner_tab.py:6402
+#: toner_tab.py:6415
 msgid ""
 "Select a preset for this recording, or create one.\n"
 "Add notes about the source (who, when, where recorded)."
@@ -3751,48 +3765,48 @@ msgstr ""
 "Seleccione un preajuste para esta grabación, o cree uno.\n"
 "Añada notas sobre la fuente (quién, cuándo, dónde se grabó)."
 
-#: toner_tab.py:6423
+#: toner_tab.py:6436
 msgid "Existing preset:"
 msgstr "Preajuste existente:"
 
-#: toner_tab.py:6435
+#: toner_tab.py:6448
 msgid "Create new preset..."
 msgstr "Crear nuevo preajuste..."
 
-#: toner_tab.py:6440
+#: toner_tab.py:6453
 msgid "Source notes:"
 msgstr "Notas de fuente:"
 
-#: toner_tab.py:6452
+#: toner_tab.py:6465
 msgid "Select Preset"
 msgstr "Seleccionar preajuste"
 
-#: toner_tab.py:6453
+#: toner_tab.py:6466
 msgid "Select a preset from the list."
 msgstr "Seleccione un preajuste de la lista."
 
-#: toner_tab.py:6478
+#: toner_tab.py:6491
 msgid "Import && Analyze"
 msgstr "Importar y analizar"
 
-#: toner_tab.py:6522
+#: toner_tab.py:6535
 msgid "Create Tone Preset for Audio Import"
 msgstr "Crear preajuste de timbre para importación de audio"
 
-#: toner_tab.py:6524
+#: toner_tab.py:6537
 msgid "Describe the horn and setup heard in the recording."
 msgstr "Describa el saxofón y la configuración que se escucha en la grabación."
 
-#: toner_tab.py:6568
+#: toner_tab.py:6581
 msgid "Create && Import"
 msgstr "Crear e importar"
 
-#: toner_tab.py:6580
+#: toner_tab.py:6593
 #, python-brace-format
 msgid "Analyzing {filename}..."
 msgstr "Analizando {filename}..."
 
-#: toner_tab.py:6594
+#: toner_tab.py:6607
 #, python-brace-format
 msgid ""
 "Could not analyze file:\n"
@@ -3801,7 +3815,7 @@ msgstr ""
 "No se pudo analizar el archivo:\n"
 "{e}"
 
-#: toner_tab.py:6601
+#: toner_tab.py:6614
 msgid ""
 "No stable note segments found in the file.\n"
 "The file may be too short, too quiet, or contain no sustained tones."
@@ -3810,11 +3824,11 @@ msgstr ""
 "El archivo puede ser demasiado corto, demasiado silencioso, o no contener"
 " tonos sostenidos."
 
-#: toner_tab.py:6631
+#: toner_tab.py:6644
 msgid "File Imported"
 msgstr "Archivo importado"
 
-#: toner_tab.py:6632
+#: toner_tab.py:6645
 #, python-brace-format
 msgid ""
 "Extracted {count} note segments from '{filename}'.\n"
@@ -3827,44 +3841,44 @@ msgstr ""
 "\n"
 "El preajuste ahora tiene {total} notas únicas en total."
 
-#: toner_tab.py:6647
+#: toner_tab.py:6660
 msgid "Nothing to Export"
 msgstr "Nada que exportar"
 
-#: toner_tab.py:6647
+#: toner_tab.py:6660
 msgid "No tone presets to export."
 msgstr "No hay preajustes de timbre para exportar."
 
-#: toner_tab.py:6652 toner_tab.py:6709
+#: toner_tab.py:6665 toner_tab.py:6722
 msgid "Export Tone Presets"
 msgstr "Exportar preajustes de timbre"
 
-#: toner_tab.py:6662
+#: toner_tab.py:6675
 msgid "Select presets to export:"
 msgstr "Seleccione los preajustes a exportar:"
 
-#: toner_tab.py:6675
+#: toner_tab.py:6688
 #, python-brace-format
 msgid "[{lib}] {name} ({caps} captures)"
 msgstr "[{lib}] {name} ({caps} capturas)"
 
-#: toner_tab.py:6683
+#: toner_tab.py:6696
 msgid "All"
 msgstr "Todos"
 
-#: toner_tab.py:6702
+#: toner_tab.py:6715
 msgid "Nothing Selected"
 msgstr "Nada seleccionado"
 
-#: toner_tab.py:6703
+#: toner_tab.py:6716
 msgid "Select at least one preset to export."
 msgstr "Seleccione al menos un preajuste para exportar."
 
-#: toner_tab.py:6721 ui_dialogs/presets_io.py:230 ui_dialogs/sizing.py:2099
+#: toner_tab.py:6734 ui_dialogs/presets_io.py:230 ui_dialogs/sizing.py:2099
 msgid "Export Successful"
 msgstr "Exportación correcta"
 
-#: toner_tab.py:6722
+#: toner_tab.py:6735
 #, python-brace-format
 msgid ""
 "Exported {count} presets to:\n"
@@ -3873,11 +3887,11 @@ msgstr ""
 "Se exportaron {count} preajustes a:\n"
 "{path}"
 
-#: toner_tab.py:6724 ui_dialogs/presets_io.py:233 ui_dialogs/sizing.py:2103
+#: toner_tab.py:6737 ui_dialogs/presets_io.py:233 ui_dialogs/sizing.py:2103
 msgid "Export Error"
 msgstr "Error al exportar"
 
-#: toner_tab.py:6724
+#: toner_tab.py:6737
 #, python-brace-format
 msgid ""
 "Could not export:\n"
@@ -3886,11 +3900,11 @@ msgstr ""
 "No se pudo exportar:\n"
 "{e}"
 
-#: toner_tab.py:6739
+#: toner_tab.py:6752
 msgid "Import Tone Presets"
 msgstr "Importar preajustes de timbre"
 
-#: toner_tab.py:6749 ui_dialogs/sizing.py:2117
+#: toner_tab.py:6762 ui_dialogs/sizing.py:2117
 #, python-brace-format
 msgid ""
 "Could not read file:\n"
@@ -3899,7 +3913,7 @@ msgstr ""
 "No se pudo leer el archivo:\n"
 "{e}"
 
-#: toner_tab.py:6758
+#: toner_tab.py:6771
 msgid ""
 "It was written by a newer version of the program. Update the app to "
 "import it."
@@ -3907,15 +3921,15 @@ msgstr ""
 "Lo escribió una versión más reciente del programa. Actualice la "
 "aplicación para importarlo."
 
-#: toner_tab.py:6760
+#: toner_tab.py:6773
 msgid "File is not a valid tone presets export."
 msgstr "El archivo no es una exportación válida de preajustes de timbre."
 
-#: toner_tab.py:6761
+#: toner_tab.py:6774
 msgid "Invalid Format"
 msgstr "Formato no válido"
 
-#: toner_tab.py:6794
+#: toner_tab.py:6807
 #, python-brace-format
 msgid "Imported {count} new presets/sessions."
 msgstr "Se importaron {count} preajustes/sesiones nuevos."
@@ -7212,7 +7226,11 @@ msgid ""
 "Open the Preset Library (the button under the chart, or File > Preset "
 "Library...): Load a preset, Capture to start on it, or Record first to "
 "play now and choose the preset when you stop. A preset needs {fields}."
-msgstr "Abra la Biblioteca de preajustes (el botón bajo el gráfico, o Archivo > Biblioteca de preajustes...): cargue un preajuste, pulse Capturar para empezar con él, o Grabar primero para tocar ahora y elegir el preajuste al parar. Un preajuste necesita {fields}."
+msgstr ""
+"Abra la Biblioteca de preajustes (el botón bajo el gráfico, o Archivo > "
+"Biblioteca de preajustes...): cargue un preajuste, pulse Capturar para "
+"empezar con él, o Grabar primero para tocar ahora y elegir el preajuste "
+"al parar. Un preajuste necesita {fields}."
 
 #: ui_dialogs/guide.py:1045
 msgid ""
@@ -7228,13 +7246,19 @@ msgid ""
 " asks where it goes: an existing preset, a new one, or discard; Keep for "
 "now holds it until you decide, and nothing leaves the tab, loads or quits"
 " without asking."
-msgstr "Pulse Detener. La tanda se guarda con el preajuste, con fecha. Una tanda grabada primero pregunta adónde va: un preajuste existente, uno nuevo, o descartar; Conservar por ahora la retiene hasta que decida, y nada sale de la pestaña, carga ni cierra sin preguntar."
+msgstr ""
+"Pulse Detener. La tanda se guarda con el preajuste, con fecha. Una tanda "
+"grabada primero pregunta adónde va: un preajuste existente, uno nuevo, o "
+"descartar; Conservar por ahora la retiene hasta que decida, y nada sale "
+"de la pestaña, carga ni cierra sin preguntar."
 
 #: ui_dialogs/guide.py:1051
 msgid ""
 "Unload on the control strip puts the preset away; Capture then opens the "
 "Preset Library."
-msgstr "Descargar en la barra de control aparta el preajuste; Capturar abre entonces la Biblioteca de preajustes."
+msgstr ""
+"Descargar en la barra de control aparta el preajuste; Capturar abre "
+"entonces la Biblioteca de preajustes."
 
 #: ui_dialogs/guide.py:1053
 msgid ""
@@ -7296,7 +7320,11 @@ msgid ""
 "presets, or single sessions of a preset with several, each run in its own"
 " colour and marker. A preset row is all its sessions together; a session "
 "row is that session alone."
-msgstr "En la Biblioteca de preajustes, seleccione dos o más filas y pulse Comparar: preajustes, o sesiones sueltas de un preajuste con varias, cada tanda con su color y su marcador. Una fila de preajuste es todas sus sesiones juntas; una fila de sesión es esa sesión sola."
+msgstr ""
+"En la Biblioteca de preajustes, seleccione dos o más filas y pulse "
+"Comparar: preajustes, o sesiones sueltas de un preajuste con varias, cada"
+" tanda con su color y su marcador. Una fila de preajuste es todas sus "
+"sesiones juntas; una fila de sesión es esa sesión sola."
 
 #: ui_dialogs/guide.py:1071
 msgid ""
@@ -7309,7 +7337,9 @@ msgstr ""
 
 #: ui_dialogs/guide.py:1073
 msgid "Export chart... in the Preset Library writes the chart as a PNG or a PDF."
-msgstr "Exportar gráfico... en la Biblioteca de preajustes guarda el gráfico como PNG o PDF."
+msgstr ""
+"Exportar gráfico... en la Biblioteca de preajustes guarda el gráfico como"
+" PNG o PDF."
 
 #: ui_dialogs/guide.py:1074
 msgid "Low notes on the left or on the right: Options > Settings... > General."
