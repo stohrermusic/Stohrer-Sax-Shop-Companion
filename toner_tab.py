@@ -31,8 +31,8 @@ try:
     from toner_engine import (
         TonerEngine, AUDIO_AVAILABLE, PITCH_CLASSES, MAX_HARMONICS,
         MIN_PRESET_NOTES, SAX_TYPES, MIN_FUNDAMENTAL_HZ,
-        FREE_STABLE_FRAMES, FREE_MIN_FRAMES,
-        ATTACK_SKIP_FRAMES, CALIBRATION_NOTES, CALIBRATION_DURATION_S,
+        FREE_STABLE_FRAMES, FREE_MIN_FRAMES, WINDOW_S, whole_window,
+        CALIBRATION_NOTES, CALIBRATION_DURATION_S,
         DEFAULT_LIBRARY, average_captures, compute_fingerprint,
         compute_session_fingerprint,
         compute_group_fingerprint, compute_rolloff_rate,
@@ -89,9 +89,11 @@ SPECTRUM_MAX_FREQ = 8000.0            # Hz — right edge of spectrum display
 SPECTRAL_CHECK_FRAME_COUNT = 25       # frames before mic quality check fires
 FRAME_DURATION_S = 0.033              # approximate duration of one frame at 30 fps
 
-# Capture state machine
+# Capture state machine. Its clock is the engine's audio time (TonerEngine.audio_time_s),
+# and a capture averages only the frames whose whole analysis window lies inside the
+# note (toner_engine.whole_window); both since 2026-11-10. Before, the clock was time.time(), free mode skipped three frames of
+# attack and kept the release, and calibration kept everything after the first 0.1 s.
 CAL_COUNTDOWN_S = 10.0                # seconds of countdown before calibration starts
-CAL_ATTACK_SETTLE_S = 0.1             # seconds of attack transient to skip in calibration
 DEFAULT_STABLE_THRESHOLD = 25         # frames — initial stable-note threshold
 PRESET_NAME_MAX_DISPLAY = 20         # characters before truncating preset name
 
@@ -214,6 +216,8 @@ class TonerTabMixin:
         self._toner_paused_state = None    # State to resume to
         self._toner_stable_threshold = DEFAULT_STABLE_THRESHOLD  # Updated per mode
         self._toner_free_accumulator = []  # For free mode: frames of current stable note
+        self._toner_too_short = None       # the last free-mode note not kept: (concert note, seconds heard, whole-window frames)
+        self._toner_cal_last_signal = 0.0  # audio time of the last frame over the threshold while recording a calibration note
         self._toner_cal_index = 0          # Current note index in calibration sequence
         self._toner_cal_notes = list(CALIBRATION_NOTES)  # Filtered at calibration start
         self._toner_cal_recording = False  # Whether we're actively recording in calibration
@@ -2139,7 +2143,7 @@ class TonerTabMixin:
             self._toner_cal_index = 0
             self._toner_cal_recording = False
             self._toner_capture_frames = []
-            self._toner_capture_start = time.time()
+            self._toner_capture_start = self._toner_clock()
             self._toner_capture_state = 'cal_countdown'
             label_text = f"Calibration starting in {CAL_COUNTDOWN_S:.0f}s... get ready"
         else:
@@ -2329,6 +2333,11 @@ class TonerTabMixin:
         threshold = self.settings.get("capture_threshold", 50) / 100.0
         return (result.fundamental_freq > 0 and result.harmonics
                 and result.signal_level > threshold)
+
+    def _toner_clock(self):
+        """The capture machine's clock: the engine's audio time, in seconds."""
+        engine = self._toner_engine
+        return engine.audio_time_s if engine is not None else 0.0
 
     def _toner_update_cal_prompt(self, text, status=""):
         """Update the large calibration prompt on the spectrum canvas."""
@@ -2829,27 +2838,26 @@ class TonerTabMixin:
 
         # --- FREE LISTENING: continuous micro-capture mode ---
         if state == 'free_listening':
-            # Accumulate frames while note is stable (skip attack transient)
+            # Accumulate every frame of the held note with its audio time; the
+            # frames whose window holds the onset or the release go at save time
+            # (whole_window), so nothing is skipped here.
             if note and result.harmonics:
-                if note == self._toner_stable_note:
-                    self._toner_stable_count += 1
-                    # Skip first few frames (attack transient ~100ms)
-                    if self._toner_stable_count > ATTACK_SKIP_FRAMES:
-                        frame = {
-                            'note': note,  # concert pitch (raw from engine)
-                            'freq': result.fundamental_freq,
-                            'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                            'harmonic_cents': [h.cents_deviation for h in result.harmonics],
-                            'signal_level': result.signal_level,
-                            'spectral_centroid': result.spectral_centroid,
-                        }
-                        self._toner_free_accumulator.append(frame)
-                else:
+                if note != self._toner_stable_note:
                     # Note changed — save accumulated if enough, start new
                     self._toner_free_save_micro_capture()
                     self._toner_stable_note = note
-                    self._toner_stable_count = 1
+                    self._toner_stable_count = 0
                     self._toner_free_accumulator = []
+                self._toner_stable_count += 1
+                self._toner_free_accumulator.append({
+                    'note': note,  # concert pitch (raw from engine)
+                    'freq': result.fundamental_freq,
+                    'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                    'harmonic_cents': [h.cents_deviation for h in result.harmonics],
+                    'signal_level': result.signal_level,
+                    'spectral_centroid': result.spectral_centroid,
+                    't': self._toner_clock(),
+                })
             else:
                 # Silence — save what we have
                 self._toner_free_save_micro_capture()
@@ -2873,7 +2881,7 @@ class TonerTabMixin:
 
         # --- CAL COUNTDOWN: 10-second prep before calibration starts ---
         if state == 'cal_countdown':
-            elapsed = time.time() - self._toner_capture_start
+            elapsed = self._toner_clock() - self._toner_capture_start
             remaining = CAL_COUNTDOWN_S - elapsed
             if remaining > 0:
                 self._toner_capture_label.configure(
@@ -2910,7 +2918,8 @@ class TonerTabMixin:
                 # Waiting for player to start this note
                 if has_signal:
                     self._toner_cal_recording = True
-                    self._toner_capture_start = time.time()
+                    self._toner_capture_start = self._toner_clock()
+                    self._toner_cal_last_signal = self._toner_capture_start
                     self._toner_capture_frames = []
                     self._toner_capture_label.configure(
                         text=_("Recording {note}... ({i}/{total})").format(note=display_note, i=note_num, total=total))
@@ -2922,23 +2931,29 @@ class TonerTabMixin:
                     self._toner_update_cal_prompt(display_note, f"({note_num}/{total})")
                 return
 
-            # Recording this note (skip attack transient ~100ms)
-            elapsed = time.time() - self._toner_capture_start
+            # Recording this note: a frame is kept once its whole window lies inside
+            # the note (elapsed >= WINDOW_S holds no onset); the frames whose window
+            # reaches past the note's end are dropped when the recording closes.
+            now = self._toner_clock()
+            elapsed = now - self._toner_capture_start
 
             # Concert note for this calibration step (written note reverse-transposed)
             concert_note = reverse_transpose_note(
                 display_note, self._toner_sax_var.get())
 
-            if has_signal and elapsed > CAL_ATTACK_SETTLE_S:
-                self._toner_capture_frames.append({
-                    'note': concert_note,
-                    'detected_note': result.fundamental_note,
-                    'freq': result.fundamental_freq,
-                    'harmonics_db': [h.magnitude_db for h in result.harmonics],
-                    'harmonic_cents': [h.cents_deviation for h in result.harmonics],
-                    'signal_level': result.signal_level,
-                    'spectral_centroid': result.spectral_centroid,
-                })
+            if has_signal:
+                self._toner_cal_last_signal = now
+                if elapsed >= WINDOW_S:
+                    self._toner_capture_frames.append({
+                        'note': concert_note,
+                        'detected_note': result.fundamental_note,
+                        'freq': result.fundamental_freq,
+                        'harmonics_db': [h.magnitude_db for h in result.harmonics],
+                        'harmonic_cents': [h.cents_deviation for h in result.harmonics],
+                        'signal_level': result.signal_level,
+                        'spectral_centroid': result.spectral_centroid,
+                        't': now,
+                    })
 
             remaining = CALIBRATION_DURATION_S - elapsed
             n_frames = len(self._toner_capture_frames)
@@ -2949,6 +2964,13 @@ class TonerTabMixin:
             self._toner_update_cal_prompt(display_note, f"recording {remaining:.0f}s")
 
             if remaining <= 0:
+                # The note stopped inside the recording: the frames whose window
+                # reaches past its last sound hold the release, and go too.
+                if not has_signal:
+                    cutoff = self._toner_cal_last_signal - WINDOW_S
+                    self._toner_capture_frames = [f for f in self._toner_capture_frames if f['t'] <= cutoff]
+                for f in self._toner_capture_frames:
+                    del f['t']
                 # Save this note's capture
                 if self._toner_capture_frames:
                     averaged = average_captures(self._toner_capture_frames)
@@ -3017,10 +3039,21 @@ class TonerTabMixin:
             return
 
     def _toner_free_save_micro_capture(self):
-        """Save accumulated free-mode frames as a micro-capture (if enough)."""
+        """Save accumulated free-mode frames as a micro-capture (if enough).
+
+        Only the frames whose whole analysis window lies inside the note count
+        (whole_window): the ones holding the onset or the release go. A note held
+        too short for FREE_MIN_FRAMES of them is not kept, and is remembered in
+        `_toner_too_short` (concert note, seconds heard, frames kept)."""
         frames = self._toner_free_accumulator
         if len(frames) < FREE_MIN_FRAMES:
             return
+        times = [f.pop('t') for f in frames]
+        frames = [f for f, keep in zip(frames, whole_window(times, times[0], times[-1])) if keep]
+        if len(frames) < FREE_MIN_FRAMES:
+            self._toner_too_short = (self._toner_free_accumulator[0]['note'], times[-1] - times[0], len(frames))
+            return
+        self._toner_too_short = None
 
         from collections import Counter
         note_counts = Counter(f['note'] for f in frames)

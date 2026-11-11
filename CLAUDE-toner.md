@@ -22,6 +22,19 @@ Real-time harmonic analyzer for saxophone. Architecture mirrors the tuner:
 
 Gated by Tests 20 and 21 in `test_toner_engine`. Measurements: `docs/decisions/toner.md`.
 
+## Capture rules (2026-11-10)
+
+- **Whole-window frames only.** A frame reads the last `WINDOW_S` (0.37 s) of sound. A capture averages only the frames whose whole window lies inside the note: `toner_engine.whole_window(times, first, last)`, `first + WINDOW_S <= t <= last - WINDOW_S`. Free mode gathers every frame of the held note with its time and filters at save; calibration keeps a frame from `WINDOW_S` after the recording started and, when the note stops inside the 5 s, drops the frames whose window reaches past its last sound; `analyze_audio_file` applies the same rule per segment. There is no attack skip any more (`ATTACK_SKIP_FRAMES` is kept for the record, nothing reads it). A free note must be held about 1.1 s (34 frames at 30 fps) to be kept; shorter is remembered in `_toner_too_short` (concert note, seconds, frames kept), shown by no UI yet.
+- **The clock is audio time.** `TonerEngine.audio_time_s` counts the samples the input handed over since `start()` (the callback's frames; 1024 per `analyze()` on the synthetic source); the capture machine's countdown, recording and frame times read it through `_toner_clock()`, never `time.time()`. On a microphone the two agree; a WAV fed faster than real time counts the same seconds. Capture `timestamp`s stay wall-clock strings.
+- **A calibration capture is filed under the note asked for** (`note` the asked note's concert name, `written_note` the asked name, `detected_as` what the detector heard most, in display pitch), as before the port.
+- Stored captures are raw data and were not touched; the read side (`compute_fingerprint`, the chart) recomputes from them. New captures average fewer frames than old ones (no onset, no release), so a capture made before 2026-11-10 is not frame-for-frame comparable with one made after; its pitch is now exact on a steady tone (A3 read -1.09 c before).
+
+Tests: `test_toner_live` (the tab's state machine on fabricated frames), `test_toner_data` (storage, migrations, fingerprint and descriptor goldens, the file analyzer). History: `docs/decisions/toner.md`.
+
+## Intonation (the Analyzer's chart data)
+
+`intonation.py` is pure: `run_from_preset(preset, reference_hz, session_indices)` / `run_from_captures(sessions, sax_type, reference_hz)` give an `IntonationRun` of `NoteReading`s (written name in this app's spelling, register 1 to written C#5 and 2 above, takes), each capture one `Take` with its cents against equal temperament at the reference pitch; a note's cents are the **median** of its takes; `note_spreads` (median, lowest, highest, count) and `overlay(runs)` (the union of notes low to high, registers, one line of points per run) are what the chart draws; `register_changes` where the dashed line goes. The fingerprint's plausibility filter applies and is counted in `left_out`. `offset_and_shape` and `low_register_offset` exist for a later ask; nothing shows them (Matt: the chart shows cents as played, nothing else). Tests: `test_intonation`.
+
 ## Recording Quality
 
 `compute_rolloff_rate()` measures harmonic rolloff (dB/harmonic). The live warning uses `get_rolloff_threshold(mic_type, sax_type)`, which depends on both (ribbon 3.5, dynamic 2.8, alto with dynamic 3.5, condenser the base `ROLLOFF_WARN_THRESHOLD`); both call sites pass sax_type. Suppressible per preset; stored per session and in fingerprints; the comparison tool warns on a mismatch. Readings per mic: `docs/decisions/toner.md`.
@@ -48,7 +61,7 @@ During free-mode capture, JSON saves are deferred to every 10 seconds (`_toner_s
 
 ## Capture Modes
 
-Two selectable capture modes: "free" (0.5s stability, continuous micro-captures while playing naturally) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
+Two selectable capture modes: "free" (continuous micro-captures while playing naturally, one per held note) and "calibration" (guided chromatic scale Bb3-F6, 5s per note, labels from guide not detector, stores `detected_as` field for detector accuracy analysis). Which frames of a note count, and the clock: "Capture rules" above. A separate "file" method (import WAV via File > Presets > Import Audio File) extracts stable note segments offline. Each capture is tagged with its method.
 
 ## Auto-Transposition
 

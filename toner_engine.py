@@ -47,6 +47,7 @@ SAMPLE_RATE = 44100
 BUFFER_SECONDS = 0.4          # 400ms for better low-frequency resolution
 BUFFER_SIZE = int(SAMPLE_RATE * BUFFER_SECONDS)
 FFT_SIZE = 16384              # ~370ms, ~2.69 Hz bin resolution
+WINDOW_S = FFT_SIZE / SAMPLE_RATE  # one analysis window: a frame reads the last WINDOW_S (0.37 s) of sound
 
 MAX_HARMONICS = 20            # Analyze up to 20th harmonic
 SPECTRUM_MAX_HZ = 8000        # Display range for spectrum
@@ -292,6 +293,7 @@ class TonerEngine:
         # tone into the ring buffer itself. Test/CI hook, never set in use.
         self.synthetic_hz = None
         self._synth_pos = 0
+        self._samples_in = 0      # samples the input has handed over since start(): the audio clock
         self._harmonic_history = deque(maxlen=DESCRIPTOR_AVG_FRAMES)
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
@@ -348,6 +350,7 @@ class TonerEngine:
         self._window = np.hanning(FFT_SIZE).astype(np.float32)
         self._last_device = device
         self._stale_count = 0
+        self._samples_in = 0
         self.last_error = None
 
         if self.synthetic_hz:
@@ -391,6 +394,15 @@ class TonerEngine:
             self._synth_pos, n, float(self.synthetic_hz), SAMPLE_RATE,
             harmonics_db=(0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0)))
         self._synth_pos += n
+        self._samples_in += n
+
+    @property
+    def audio_time_s(self):
+        """Seconds of sound the input has handed over since start(): the capture
+        machine's clock. Audio time, not the wall clock, so a WAV fed faster than
+        real time counts the same seconds; on a live microphone the two agree
+        (2026-11-10)."""
+        return self._samples_in / SAMPLE_RATE
 
     def start_recording(self):
         """Begin accumulating raw audio for WAV export."""
@@ -422,6 +434,7 @@ class TonerEngine:
         return self._running
 
     def _audio_callback(self, indata, frames, time_info, status):
+        self._samples_in += int(frames)
         if self._ring_buffer is not None:
             self._ring_buffer.write(indata[:, 0])
         chunks = self._recording_chunks
@@ -950,13 +963,13 @@ class TonerEngine:
 # Minimum unique notes to consider a preset "complete"
 MIN_PRESET_NOTES = 8
 
-# Attack transient skip — applied to ALL capture modes.
-# Saxophone attacks are 40-120ms depending on articulation. The attack
-# contains non-harmonic broadband energy that doesn't represent the
-# horn's sustained tone character. Research confirms the sustained
-# portion is the stable harmonic fingerprint we want to measure.
-# (Saldanha & Corso 1964, Caetano et al., PMC 6166322)
-ATTACK_SKIP_FRAMES = 3    # ~100ms at 30fps — skip these after note onset
+# Attack transient skip — until 2026-11-10 applied to every capture mode: the
+# first three frames of a note were dropped (saxophone attacks are 40-120 ms
+# of non-harmonic energy; Saldanha & Corso 1964, Caetano et al., PMC 6166322),
+# but the release was kept. Superseded by `whole_window`: a frame is kept only
+# when its whole analysis window lies inside the note, which drops the onset
+# AND the release. Kept for the record; nothing reads it.
+ATTACK_SKIP_FRAMES = 3    # ~100ms at 30fps
 
 # Capture timing
 CAPTURE_DELAY_S = 1.0     # Seconds settle for calibration mode
@@ -1147,6 +1160,18 @@ def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
         cents = harmonic_cents[i] if harmonic_cents and i < len(harmonic_cents) else 0.0
         harmonics.append(HarmonicInfo(i + 1, f0 * (i + 1), f0 * (i + 1), db, cents))
     return engine._compute_descriptors(harmonics, f0=f0)
+
+
+def whole_window(times, first_t, last_t):
+    """Which frames of a held note have their whole analysis window inside it.
+
+    A frame at audio time `t` reads the last WINDOW_S of sound, so its window
+    holds the note's onset when t < first_t + WINDOW_S and its release (or the
+    next note) when t > last_t - WINDOW_S. Only the frames between are averaged
+    into a capture. Since 2026-11-10; until then the live modes skipped three frames of attack and
+    kept the release, and the file analyzer did the same. One bool per time.
+    """
+    return [first_t + WINDOW_S <= t <= last_t - WINDOW_S for t in times]
 
 
 def average_captures(captures):
@@ -1700,7 +1725,7 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
 
         r = engine.analyze_buffer(chunk)
         if r.fundamental_freq > 0 and r.harmonics:
-            results.append((r.fundamental_note, r))
+            results.append((r.fundamental_note, r, (start + FFT_SIZE) / SAMPLE_RATE))   # ..., the window's end
 
         window_i += 1
         if progress_cb and window_i % 200 == 0:
@@ -1715,14 +1740,15 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     current_note = results[0][0]
 
     def _process_segment(seg, seg_note):
-        """Process a completed segment into a capture."""
-        if len(seg) > ATTACK_SKIP_FRAMES:
-            seg = seg[ATTACK_SKIP_FRAMES:]  # Skip attack
+        """Process a completed segment into a capture: its whole-window frames
+        (the windows holding the onset or the release are left out), if enough."""
+        times = [t for _n, _r, t in seg]
+        seg = [s for s, keep in zip(seg, whole_window(times, times[0], times[-1])) if keep]
         if len(seg) < FREE_MIN_FRAMES:
             return None
         # Build a capture from this segment
         frames = []
-        for _, r in seg:
+        for _, r, _t in seg:
             frames.append({
                 'note': r.fundamental_note,
                 'freq': r.fundamental_freq,

@@ -11,6 +11,7 @@ tuner_tab.py            → TunerTabMixin (Chromatic strobe tuner tab, StrobeWhe
 tuner_engine.py         → TunerEngine (FFT pitch detection, phase tracking, no tkinter)
 toner_tab.py            → TonerTabMixin (Harmonic tone analyzer tab, preset system, comparison)
 toner_engine.py         → TonerEngine (FFT harmonic analysis, descriptors, preset storage, no tkinter)
+intonation.py           → each note's cents as played from the analyzer's captures (the Analyzer's intonation chart data; pure, no tkinter)
 machine_control.py      → MachineControlMixin (Options > Machine, Frame & Cut, the laser watch, the camera plumbing: the machine half of the app, not a tab; see The machine mixin)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
 threads.py              → start_worker / GcHeldRLock / gc_held: every worker thread starts here, with the cyclic collector held off while the Tk thread waits on a worker (see Worker threads)
