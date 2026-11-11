@@ -187,7 +187,8 @@ def main():
                 "polygon-draw", "job-history", "feature-set", "user-guide", "about", "welcome",
                 "quick-start", "key-heights",
                 "key-layout", "serial-lookup", "screw-specs", "tooling", "tuner-no-mic", "tuner",
-                "analyzer-chart", "analyzer-compare", "analyzer-preset-form", "analyzer-harmonics"]
+                "analyzer-chart", "analyzer-compare", "analyzer-preset-library", "analyzer-preset-form",
+                "analyzer-harmonics"]
     if not main_mod.audio_supported():
         # Intel Mac: the Tuner and Toner tabs are hidden, so the tour skips them.
         expected = [s for s in expected if s not in main_mod.AUDIO_TOUR_STOPS]

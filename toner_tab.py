@@ -320,14 +320,11 @@ class TonerTabMixin:
         chart_row = tk.Frame(self._toner_chart_frame, bg=bg)
         chart_row._skip_theme = True
         chart_row.pack(fill="x", pady=(4, 0))
-        self._toner_compare_btn = tk.Button(
-            chart_row, text=_("Compare..."), font=("Helvetica", 9),
-            command=self._toner_open_compare_dialog)
-        self._toner_compare_btn.pack(side="left")
-        self._toner_export_btn = tk.Button(
-            chart_row, text=_("Export..."), font=("Helvetica", 9),
-            command=self._toner_export_chart)
-        self._toner_export_btn.pack(side="left", padx=(6, 0))
+        # one button under the chart: the Preset Library holds Compare and Export chart too
+        self._toner_library_btn = tk.Button(
+            chart_row, text=_("Preset Library"), font=("Helvetica", 9),
+            command=self._toner_open_preset_dialog)
+        self._toner_library_btn.pack(side="left")
 
         top_frame = tk.Frame(self._toner_main_frame, bg=bg)
         top_frame._skip_theme = True
@@ -630,16 +627,18 @@ class TonerTabMixin:
         self._toner_preset_label.pack(side="left", padx=(0, 4))
 
         self._toner_load_unload_btn = tk.Button(
-            right_col, text=_("Load..."),
+            right_col, text=_("Unload"),
             font=("Helvetica", 9),
-            command=self._toner_load_unload_toggle)
-        self._toner_load_unload_btn.pack(side="left", padx=(0, 10))
+            command=self._toner_unload_preset)       # packed only while a preset is loaded (_toner_update_load_unload_btn)
+        from ui_dialogs import add_tooltip
+        add_tooltip(self._toner_load_unload_btn, _("Unload this preset. Capture then opens the Preset Library."))
 
         # MODE switch (free/guided; the values stay "free"/"calibration")
         self._toner_mode_var = tk.StringVar(value="free")
         mode_ch = tk.Frame(right_col, bg=ctrl_bg)
         mode_ch._skip_theme = True
         mode_ch.pack(side="left", padx=(0, 8))
+        self._toner_mode_frame = mode_ch
         tk.Label(mode_ch, text=_("MODE"), bg=ctrl_bg, fg="#888888",
                  font=eq_lbl_font).pack(pady=(0, 1))
         tk.Label(mode_ch, text=_("free"), bg=ctrl_bg, fg="#AAAAAA",
@@ -1922,6 +1921,11 @@ class TonerTabMixin:
         lib, name = self._toner_active_library, self._toner_active_preset
         preset = self._toner_presets.get(lib, {}).get(name) if lib and name else None
         if not isinstance(preset, dict):
+            live = self._toner_active_session
+            if live and live.get('captures'):          # a record-first run, not saved yet
+                run = run_of({'horn_type': live.get('horn_type') or selector_sax}, [live], _("Unsaved run"))
+                if run is not None:
+                    runs.append(run)
             return runs
         sessions = list(preset.get('sessions', []) or [])
         live = self._toner_active_session
@@ -2034,79 +2038,6 @@ class TonerTabMixin:
             return 0
         return sum(1 for keep in whole_window(times, times[0], times[-1]) if keep)
 
-    def _toner_open_compare_dialog(self):
-        """Pick the runs the chart draws: presets with captures, or single sessions of them."""
-        from ui_dialogs import bind_mousewheel
-        items = []   # (label, indent, library, preset, session date or None)
-        for lib, lib_presets in self._toner_presets.items():
-            if not isinstance(lib_presets, dict):
-                continue
-            for name, preset in lib_presets.items():
-                if not isinstance(preset, dict):
-                    continue
-                with_caps = [s for s in preset.get('sessions', []) or [] if s.get('captures')]
-                if not with_caps:
-                    continue
-                items.append((self._toner_preset_entry_text(lib, name, preset), 0, lib, name, None))
-                if len(with_caps) > 1:
-                    for s in with_caps:
-                        items.append((s.get('date', ''), 1, lib, name, s.get('date')))
-        if not items:
-            messagebox.showinfo(_("Compare"), _("No presets with captures yet."), parent=self.root)
-            return
-        limit = len(intonation_chart.LINE_STYLES)
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title(_("Compare"))
-        dlg.transient(self.root)
-        dlg.grab_set()
-        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
-        frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
-        frame.pack(fill="both", expand=True)
-        tk.Label(frame, text=_("Tick the presets or sessions to draw together (up to {n}).").format(n=limit),
-                 bg=bg, font=("Helvetica", 9)).pack(anchor="w", pady=(0, 6))
-
-        list_outer = tk.Frame(frame, bg=bg)
-        list_outer.pack(fill="both", expand=True)
-        canvas = tk.Canvas(list_outer, bg=bg, highlightthickness=0, width=380,
-                           height=min(300, 26 * len(items) + 8))
-        sb = tk.Scrollbar(list_outer, orient="vertical", command=canvas.yview)
-        inner = tk.Frame(canvas, bg=bg)
-        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw")
-        canvas.configure(yscrollcommand=sb.set)
-        canvas.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        bind_mousewheel(inner, canvas)
-
-        picked = set(self._toner_compare_runs)
-        rows = []
-        for label, indent, lib, name, date in items:
-            var = tk.BooleanVar(value=(lib, name, date) in picked)
-            tk.Checkbutton(inner, text=label, variable=var, bg=bg, anchor="w",
-                           font=("Helvetica", 9)).pack(anchor="w", padx=(22 * indent, 0))
-            rows.append((var, lib, name, date))
-
-        def apply():
-            chosen = [(lib, name, date) for var, lib, name, date in rows if var.get()]
-            if len(chosen) > limit:
-                messagebox.showinfo(_("Compare"), _("Pick up to {n}.").format(n=limit), parent=dlg)
-                return
-            self._toner_compare_runs = chosen
-            self._toner_chart_changed()
-            dlg.destroy()
-
-        def clear():
-            self._toner_compare_runs = []
-            self._toner_chart_changed()
-            dlg.destroy()
-
-        btns = tk.Frame(frame, bg=bg)
-        btns.pack(fill="x", pady=(8, 0))
-        tk.Button(btns, text=_("Compare"), command=apply).pack(side="left", padx=(0, 5))
-        tk.Button(btns, text=_("Clear"), command=clear).pack(side="left", padx=(0, 5))
-        tk.Button(btns, text=_("Cancel"), command=dlg.destroy).pack(side="left")
-
     def _toner_export_chart(self):
         """Write the chart as it stands to a PNG or PDF file (told apart by the name's extension)."""
         from tkinter import filedialog
@@ -2142,12 +2073,75 @@ class TonerTabMixin:
     # PROFILE MANAGEMENT
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # THE PRESET LIBRARY (2026-11-11; Matt: "the load preset window and the file ->
+    # presets window can be the same thing. maybe its the preset library. and it also
+    # has the compare and export buttons in it ... that is also what the file menu
+    # goes to and it is also what capture points to")
+    # ------------------------------------------------------------------
+
+    LOAD_LIST_MAX_CHARS = 80      # the list grows to its longest entry up to this; past it, it scrolls
+
+    def _toner_library_rows(self):
+        """The rows of the Preset Library's list, in order: (text, key). key is None for a
+        library heading, (lib, name, None) for a preset ("Horn type \u2014 name (status)",
+        the type as the form stores it, left out for a sandbox preset or one with no type),
+        (lib, name, date) for one session of a preset that has more than one with captures
+        (Matt: a preset row is the average of all its sessions, a session row that session)."""
+        rows = []
+        for lib_name, lib_presets in self._toner_presets.items():
+            if not isinstance(lib_presets, dict) or not lib_presets:
+                continue
+            rows.append((f"\u2500\u2500 {lib_name} \u2500\u2500", None))
+            for preset_name, preset in lib_presets.items():
+                if not isinstance(preset, dict):
+                    continue
+                sessions = preset.get('sessions', []) or []
+                with_caps = [s for s in sessions if s.get('captures')]
+                notes = {c.get('note', '') for s in sessions for c in s.get('captures', [])}
+                status = f"{len(notes)} notes" if with_caps else "empty"
+                if len(notes) >= MIN_PRESET_NOTES:
+                    status += " \u2713"
+                horn = "" if preset.get('sandbox') else str(preset.get('horn_type', '') or '')
+                head = f"{horn} \u2014 {preset_name}" if horn else preset_name
+                sb_tag = "[sandbox] " if preset.get('sandbox') else ""
+                rows.append((f"  {sb_tag}{head}  ({status})", (lib_name, preset_name, None)))
+                if len(with_caps) > 1:
+                    for s in with_caps:
+                        n = len({c.get('note', '') for c in s.get('captures', [])})
+                        rows.append((f"        {s.get('date', '')}  ({n} notes)", (lib_name, preset_name, s.get('date'))))
+        return rows
+
+    def _toner_library_selected(self):
+        """The keys of the selected rows, headings left out, in list order."""
+        lb = getattr(self, '_preset_listbox', None)
+        if lb is None or not lb.winfo_exists():
+            return []
+        return [self._preset_list_keys[i] for i in lb.curselection() if self._preset_list_keys[i] is not None]
+
+    def _toner_chart_has_data(self):
+        try:
+            return any(r.readings for r in self._toner_chart_runs())
+        except Exception:
+            return False
+
     def _toner_open_preset_dialog(self):
-        """Open the preset management dialog — central hub for all preset operations."""
+        """The Preset Library: every preset (and the sessions of those with several) in one
+        list, multi-select, and everything done with presets in three rows of buttons: the
+        chart and capture (Load, Capture, Record first, Compare, Export chart...), the presets
+        (New Preset..., Mutate..., Rename, Edit Notes..., Delete, Analyze...), files (Import
+        Audio File..., Import presets..., Export presets..., Close). One window: a second
+        call lifts it. File > Preset Library..., the button under the chart and Capture
+        with nothing loaded all come here."""
+        win = getattr(self, '_toner_library_win', None)
+        if win is not None and win.winfo_exists():
+            win.lift()
+            return
         dlg = tk.Toplevel(self.root)
-        dlg.title(_("Tone Presets"))
-        dlg.geometry("550x580")
-        dlg.minsize(400, 450)
+        self._toner_library_win = dlg
+        dlg.title(_("Preset Library"))
+        dlg.geometry("640x620")
+        dlg.minsize(480, 460)
         dlg.transient(self.root)
 
         bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
@@ -2155,133 +2149,239 @@ class TonerTabMixin:
         frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
         frame.pack(fill="both", expand=True)
 
-        tk.Label(frame, text=_("Tone Presets"), bg=bg, fg=fg,
+        tk.Label(frame, text=_("Preset Library"), bg=bg, fg=fg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
 
-        # Profile list
         list_frame = tk.Frame(frame, bg=bg)
         list_frame.pack(fill="both", expand=True, pady=(0, 5))
-
-        self._preset_listbox = tk.Listbox(list_frame, width=55, height=12,
-                                         font=("Helvetica", 10))
+        self._preset_listbox = tk.Listbox(list_frame, width=55, height=12, selectmode="extended",
+                                          exportselection=False, font=("Helvetica", 10))
+        yscroll = tk.Scrollbar(list_frame, command=self._preset_listbox.yview)
+        self._preset_listbox.config(yscrollcommand=yscroll.set)
+        self._preset_xscroll = tk.Scrollbar(list_frame, orient="horizontal", command=self._preset_listbox.xview)
+        self._preset_listbox.config(xscrollcommand=self._preset_xscroll.set)
+        yscroll.pack(side="right", fill="y")
         self._preset_listbox.pack(side="left", fill="both", expand=True)
-
-        scrollbar = tk.Scrollbar(list_frame, command=self._preset_listbox.yview)
-        scrollbar.pack(side="right", fill="y")
-        self._preset_listbox.config(yscrollcommand=scrollbar.set)
-
         self._toner_refresh_preset_list()
 
-        # Info display (fixed height so long notes don't push buttons off screen)
         info_frame = tk.Frame(frame, bg=bg)
-        info_frame.pack(fill="both", expand=True, pady=(0, 10))
-        self._preset_info_text = tk.Text(info_frame, height=8, wrap="word",
-                                          font=("Helvetica", 9), bg=bg, fg=fg,
-                                          relief="flat", padx=4, pady=4,
-                                          state="disabled")
+        info_frame.pack(fill="x", pady=(0, 10))
+        self._preset_info_text = tk.Text(info_frame, height=7, wrap="word",
+                                         font=("Helvetica", 9), bg=bg, fg=fg,
+                                         relief="flat", padx=4, pady=4,
+                                         state="disabled")
         info_scroll = tk.Scrollbar(info_frame, command=self._preset_info_text.yview)
         self._preset_info_text.configure(yscrollcommand=info_scroll.set)
         info_scroll.pack(side="right", fill="y")
         self._preset_info_text.pack(side="left", fill="both", expand=True)
+        self._preset_listbox.bind("<<ListboxSelect>>", lambda e: self._toner_on_preset_selected())
 
-        self._preset_listbox.bind("<<ListboxSelect>>",
-                                lambda e: self._toner_on_preset_selected())
-
-        # --- Action buttons: two rows ---
-        # Row 1: preset operations (need selection)
+        def button(row, text, command, one=False):
+            b = tk.Button(row, text=text, command=command, state="disabled" if one else "normal")
+            b.pack(side="left", padx=(0, 5))
+            if one:
+                self._lib_one_btns.append(b)
+            return b
+        self._lib_one_btns = []
+        # row 1: the chart and capture
         row1 = tk.Frame(frame, bg=bg)
         row1.pack(fill="x", pady=(0, 5))
-
-        btn_load = tk.Button(row1, text=_("Load for Capture"), state="disabled",
-                  command=lambda: self._toner_load_from_dialog(dlg))
-        btn_load.pack(side="left", padx=(0, 5))
-        btn_analyze = tk.Button(row1, text=_("Analyze..."), state="disabled",
-                  command=lambda: [dlg.destroy(),
-                                   self._toner_open_analyze_dialog()])
-        btn_analyze.pack(side="left", padx=(0, 5))
-        btn_notes = tk.Button(row1, text=_("Edit Notes..."), state="disabled",
-                  command=self._toner_edit_preset_notes)
-        btn_notes.pack(side="left", padx=(0, 5))
-
-        # Row 2: create, import, delete, close
+        button(row1, _("Load"), lambda: self._toner_library_action("load"), one=True)
+        button(row1, _("Capture"), lambda: self._toner_library_action("capture"), one=True)
+        b_record = button(row1, _("Record first"), lambda: self._toner_library_action("record"))
+        self._lib_compare_btn = button(row1, _("Compare"), lambda: self._toner_library_action("compare"))
+        self._lib_compare_btn.configure(state="disabled")
+        self._lib_export_btn = button(row1, _("Export chart..."), self._toner_export_chart)
+        # row 2: the presets
         row2 = tk.Frame(frame, bg=bg)
-        row2.pack(fill="x")
+        row2.pack(fill="x", pady=(0, 5))
+        button(row2, _("New Preset..."), lambda: self._toner_new_preset(dlg))
+        button(row2, _("Mutate..."), self._toner_mutate_preset, one=True)
+        button(row2, _("Rename"), self._toner_rename_preset, one=True)
+        button(row2, _("Edit Notes..."), self._toner_edit_preset_notes, one=True)
+        button(row2, _("Delete"), self._toner_delete_preset, one=True)
+        button(row2, _("Analyze..."), lambda: [self._toner_library_close(), self._toner_open_analyze_dialog()], one=True)
+        # row 3: files
+        row3 = tk.Frame(frame, bg=bg)
+        row3.pack(fill="x")
+        button(row3, _("Import Audio File..."), lambda: [self._toner_library_close(), self._toner_import_audio_file()])
+        button(row3, _("Import presets..."), lambda: [self._toner_import_presets(), self._toner_refresh_preset_list()])
+        button(row3, _("Export presets..."), self._toner_export_presets)
+        tk.Button(row3, text=_("Close"), command=self._toner_library_close).pack(side="right")
+        from ui_dialogs import add_tooltip
+        add_tooltip(b_record, _("Start capturing with no preset. When you stop, you choose the preset the run goes to, or make one."))
+        dlg.protocol("WM_DELETE_WINDOW", self._toner_library_close)
+        self._toner_library_refresh_buttons()
 
-        tk.Button(row2, text=_("New Preset..."),
-                  command=lambda: self._toner_new_preset(dlg)).pack(
-                      side="left", padx=(0, 5))
-        btn_mutate = tk.Button(row2, text=_("Mutate..."), state="disabled",
-                  command=self._toner_mutate_preset)
-        btn_mutate.pack(side="left", padx=(0, 5))
-        tk.Button(row2, text=_("Import Audio File..."),
-                  command=lambda: [dlg.destroy(),
-                                   self._toner_import_audio_file()]).pack(
-                      side="left", padx=(0, 5))
-        btn_delete = tk.Button(row2, text=_("Delete"), state="disabled",
-                  command=self._toner_delete_preset)
-        btn_delete.pack(side="left", padx=(0, 5))
-        tk.Button(row2, text=_("Close"),
-                  command=dlg.destroy).pack(side="right")
+    def _toner_library_close(self):
+        win = getattr(self, '_toner_library_win', None)
+        self._toner_library_win = None
+        if win is not None and win.winfo_exists():
+            win.destroy()
 
-        self._preset_selection_btns = [btn_load, btn_analyze, btn_notes,
-                                        btn_mutate, btn_delete]
+    def _toner_library_refresh_buttons(self):
+        """Buttons by what is selected: one row for Load, Capture, Mutate, Rename, Edit Notes,
+        Delete and Analyze; two to seven for Compare; Export chart while the chart has data."""
+        if not getattr(self, '_lib_one_btns', None):
+            return
+        try:
+            keys = self._toner_library_selected()
+            one = len(keys) == 1
+            for b in self._lib_one_btns:
+                b.configure(state="normal" if one else "disabled")
+            ok = 2 <= len(keys) <= len(intonation_chart.LINE_STYLES)
+            self._lib_compare_btn.configure(state="normal" if ok else "disabled")
+            self._lib_export_btn.configure(state="normal" if self._toner_chart_has_data() else "disabled")
+        except tk.TclError:
+            pass
 
     def _toner_refresh_preset_list(self):
-        """Refresh the preset listbox (nested library structure)."""
-        if not hasattr(self, '_preset_listbox'):
+        """Fill the Preset Library's list from _toner_library_rows; the list as wide as its
+        longest row up to LOAD_LIST_MAX_CHARS, a horizontal scrollbar only past that."""
+        lb = getattr(self, '_preset_listbox', None)
+        if lb is None or not lb.winfo_exists():
             return
-        self._preset_listbox.delete(0, tk.END)
-        self._preset_list_keys = []  # Track (lib, name) for selection lookup
-        for lib_name, lib_presets in self._toner_presets.items():
-            if not isinstance(lib_presets, dict) or not lib_presets:
-                continue
-            self._preset_listbox.insert(tk.END, f"\u2500\u2500 {lib_name} \u2500\u2500")
-            self._preset_list_keys.append(None)  # Header, not selectable
-            for preset_name, preset in lib_presets.items():
-                sessions = preset.get('sessions', [])
-                total_caps = sum(len(s.get('captures', []))
-                               for s in sessions)
-                notes = set()
-                for s in sessions:
-                    for c in s.get('captures', []):
-                        notes.add(c.get('note', ''))
-                status = f"{len(notes)} notes" if total_caps > 0 else "empty"
-                if len(notes) >= MIN_PRESET_NOTES:
-                    status += " \u2713"
-                sb_tag = "[sandbox] " if preset.get('sandbox') else ""
-                horn = preset.get('horn_type', '?') or '?'
-                self._preset_listbox.insert(tk.END,
-                    f"  {sb_tag}{preset_name}  ({horn}, {status})")
-                self._preset_list_keys.append((lib_name, preset_name))
+        lb.delete(0, tk.END)
+        self._preset_list_keys = []
+        rows = self._toner_library_rows()
+        for text, key in rows:
+            lb.insert(tk.END, text)
+            self._preset_list_keys.append(key)
+        longest = max((len(t) for t, _k in rows), default=0)
+        lb.configure(width=max(55, min(longest, self.LOAD_LIST_MAX_CHARS)))
+        xs = getattr(self, '_preset_xscroll', None)
+        if xs is not None and xs.winfo_exists():
+            if longest > self.LOAD_LIST_MAX_CHARS:
+                if not xs.winfo_manager():
+                    xs.pack(side="bottom", fill="x", before=lb)
+            else:
+                xs.pack_forget()
+        self._toner_library_refresh_buttons()
 
     def _toner_on_preset_selected(self):
-        """Update info label when a preset is selected."""
-        sel = self._preset_listbox.curselection()
-        if not sel:
-            return
-        key = self._preset_list_keys[sel[0]]
-        if key is None:
-            self._preset_info_text.configure(state="normal")
-            self._preset_info_text.delete("1.0", tk.END)
-            self._preset_info_text.configure(state="disabled")
-            for btn in self._preset_selection_btns:
-                btn.configure(state="disabled")
-            return  # Library header
-        lib_name, preset_name = key
-        preset = self._toner_presets[lib_name][preset_name]
+        """The info panel for the selection: one preset's details (a session row adds its
+        date), or how many are selected; and the buttons."""
+        keys = self._toner_library_selected()
+        info = ""
+        if len(keys) == 1:
+            lib_name, preset_name, date = keys[0]
+            preset = self._toner_presets.get(lib_name, {}).get(preset_name, {})
+            info = _format_preset_info(preset, getattr(self, 'key_presets', None))
+            if date:
+                info = _("Session {date}").format(date=date) + "\n" + info
+        elif keys:
+            info = _("{n} selected").format(n=len(keys))
         self._preset_info_text.configure(state="normal")
         self._preset_info_text.delete("1.0", tk.END)
-        self._preset_info_text.insert("1.0", _format_preset_info(preset, getattr(self, 'key_presets', None)))
+        self._preset_info_text.insert("1.0", info)
         self._preset_info_text.configure(state="disabled")
-        for btn in self._preset_selection_btns:
-            btn.configure(state="normal")
+        self._toner_library_refresh_buttons()
+
+    def _toner_selected_preset_key(self):
+        """(lib, name) of the one selected row (a session row gives its preset), else None."""
+        keys = self._toner_library_selected()
+        if len(keys) != 1:
+            return None
+        return keys[0][0], keys[0][1]
+
+    def _toner_library_action(self, what):
+        """Load, Capture, Record first and Compare from the library; each first settles an
+        unsaved record-first run (the question), and goes nowhere if the user keeps it."""
+        keys = self._toner_library_selected()
+        if what in ("load", "capture"):
+            if len(keys) != 1 or not self._toner_settle_unsaved_run("load"):
+                return
+            lib, name, _date = keys[0]
+            self._toner_library_close()
+            self._toner_load_preset(lib, name)
+            if what == "capture":
+                self._toner_toggle_capture()
+        elif what == "record":
+            if not self._toner_settle_unsaved_run("capture"):
+                return
+            self._toner_library_close()
+            self._toner_record_first()
+        elif what == "compare":
+            if not 2 <= len(keys) <= len(intonation_chart.LINE_STYLES) or not self._toner_settle_unsaved_run("load"):
+                return
+            self._toner_compare_runs = [tuple(k) for k in keys]
+            self._toner_library_close()
+            self._toner_chart_changed()
+
+    def _toner_load_preset(self, lib_name, preset_name):
+        """Load a preset: the chart shows its runs (every session pooled), the sax selector
+        follows it and locks, no recording starts, the comparison is cleared."""
+        if preset_name not in self._toner_presets.get(lib_name, {}):
+            return
+        self._toner_active_library = lib_name
+        self._toner_active_preset = preset_name
+        self._toner_active_session = None
+        self._toner_compare_runs = []
+        preset = self._toner_presets[lib_name][preset_name]
+        sax_type = preset.get('horn_type', '')
+        if sax_type and hasattr(self, '_toner_sax_var'):
+            self._toner_sax_var.set(sax_type)
+            if sax_type in getattr(self, '_toner_visible_sax', []):
+                self._toner_sax_idx_var.set(self._toner_visible_sax.index(sax_type))
+            if self._toner_engine:
+                self._toner_engine.set_sax_type(sax_type)
+        self._toner_lock_sax_selector(True)
+        self._toner_update_preset_label()
+
+    def _toner_rename_preset(self):
+        """Rename the selected preset, its sessions and all, keeping its place in the library;
+        an empty or duplicate name is refused."""
+        key = self._toner_selected_preset_key()
+        if key is None:
+            return
+        lib_name, old = key
+        parent = getattr(self, '_toner_library_win', None) or self.root
+        dlg = tk.Toplevel(parent)
+        dlg.title(_("Rename Preset"))
+        dlg.resizable(False, False)
+        dlg.transient(parent)
+        dlg.grab_set()
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        body = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text=_("New name:"), bg=bg, font=("Helvetica", 10)).pack(anchor="w")
+        var = tk.StringVar(value=old)
+        entry = tk.Entry(body, textvariable=var, width=40)
+        entry.pack(fill="x", pady=(2, 10))
+        entry.selection_range(0, tk.END)
+        entry.focus_set()
+
+        def ok():
+            new = var.get().strip()
+            if not new:
+                messagebox.showwarning(_("Required Field"), _("Please enter {label}.").format(label=_("Preset Name")),
+                                       parent=dlg)
+                return
+            lib_presets = self._toner_presets[lib_name]
+            if new != old and new in lib_presets:
+                messagebox.showwarning(_("Duplicate Name"),
+                                       _("'{name}' already exists in '{lib}'.").format(name=new, lib=lib_name), parent=dlg)
+                return
+            if new != old:
+                self._toner_presets[lib_name] = {(new if k == old else k): v for k, v in lib_presets.items()}
+                save_tone_presets(self._toner_presets, TONER_DATA_FILE)
+                if self._toner_active_library == lib_name and self._toner_active_preset == old:
+                    self._toner_active_preset = new
+                    self._toner_update_preset_label()
+                self._toner_compare_runs = [(lb, (new if (lb, nm) == (lib_name, old) else nm), d)
+                                            for lb, nm, d in self._toner_compare_runs]
+                self._toner_refresh_preset_list()
+                self._toner_chart_changed()
+            dlg.destroy()
+        btns = tk.Frame(body, bg=bg)
+        btns.pack(fill="x")
+        tk.Button(btns, text=_("Rename"), command=ok).pack(side="left", padx=(0, 5))
+        tk.Button(btns, text=_("Cancel"), command=dlg.destroy).pack(side="left")
+        self._toner_rename_dialog = dlg
 
     def _toner_edit_preset_notes(self):
         """Edit the notes field of the selected preset."""
-        sel = self._preset_listbox.curselection()
-        if not sel:
-            return
-        key = self._preset_list_keys[sel[0]]
+        key = self._toner_selected_preset_key()
         if key is None:
             return
         lib_name, preset_name = key
@@ -2728,10 +2828,7 @@ class TonerTabMixin:
 
     def _toner_mutate_preset(self):
         """Duplicate selected preset with editable fields, save as new."""
-        sel = self._preset_listbox.curselection()
-        if not sel:
-            return
-        key = self._preset_list_keys[sel[0]]
+        key = self._toner_selected_preset_key()
         if key is None:
             return
         lib_name, preset_name = key
@@ -2794,12 +2891,9 @@ class TonerTabMixin:
 
     def _toner_delete_preset(self):
         """Delete the selected preset."""
-        sel = self._preset_listbox.curselection()
-        if not sel:
-            return
-        key = self._preset_list_keys[sel[0]]
+        key = self._toner_selected_preset_key()
         if key is None:
-            return  # Library header
+            return
         lib_name, preset_name = key
         if messagebox.askyesno(_("Delete Preset"),
                 _("Delete preset '{name}' from '{lib}'?").format(name=preset_name, lib=lib_name)):
@@ -2829,12 +2923,13 @@ class TonerTabMixin:
             self._toner_stop_capture()
             return
 
-        # Need a preset loaded
+        # No preset: an unsaved run kept for now goes on; else the Preset Library, where the
+        # user loads a preset, captures on one, or records first (Matt, 2026-11-11)
         if not self._toner_active_preset:
-            messagebox.showinfo(_("No Preset Loaded"),
-                _("Load a preset first to capture data.\n\n"
-                "Use Load... on the control strip, or\n"
-                "File > Presets to create and manage presets."))
+            if self._toner_active_session and self._toner_active_session.get('captures'):
+                self._toner_begin_listening()
+                self._toner_update_load_unload_btn()
+                return
             self._toner_open_preset_dialog()
             return
 
@@ -2843,6 +2938,7 @@ class TonerTabMixin:
             self._toner_start_new_session_and_listen()
         else:
             self._toner_begin_listening()
+        self._toner_update_load_unload_btn()         # Unload hides while a capture runs
 
     def _toner_begin_listening(self):
         """Enter listening mode (called after session is ready)."""
@@ -2958,139 +3054,32 @@ class TonerTabMixin:
         tk.Button(btn_row, text=_("Cancel"),
                   command=dlg.destroy).pack(side="left")
 
-    def _toner_load_from_dialog(self, dlg):
-        """Load the selected preset from the preset dialog."""
-        sel = self._preset_listbox.curselection()
-        if not sel:
-            messagebox.showinfo(_("Select Preset"), _("Select a preset first."))
-            return
-        key = self._preset_list_keys[sel[0]]
-        if key is None:
-            return
-        lib_name, preset_name = key
-        self._toner_active_library = lib_name
-        self._toner_active_preset = preset_name
-        self._toner_active_session = None
-        self._toner_update_preset_label()
-
-        # Sync sax type and lock selector
-        preset = self._toner_presets[lib_name][preset_name]
-        sax_type = preset.get('horn_type', '')
-        if sax_type:
-            self._toner_sax_var.set(sax_type)
-            if sax_type in self._toner_visible_sax:
-                self._toner_sax_idx_var.set(
-                    self._toner_visible_sax.index(sax_type))
-            if self._toner_engine:
-                self._toner_engine.set_sax_type(sax_type)
-        self._toner_lock_sax_selector(True)
-        dlg.destroy()
-
-    def _toner_load_unload_toggle(self):
-        """Toggle between Load and Unload based on current preset state."""
-        if self._toner_active_preset:
-            self._toner_unload_preset()
-        else:
-            self._toner_load_preset_quick()
-
-    def _toner_update_load_unload_btn(self):
-        """Update the Load/Unload button text based on preset state."""
-        if hasattr(self, '_toner_load_unload_btn'):
-            if self._toner_active_preset:
-                self._toner_load_unload_btn.configure(text=_("Unload"))
-            else:
-                self._toner_load_unload_btn.configure(text=_("Load..."))
-
     @staticmethod
     def _toner_preset_entry_text(lib, name, preset):
-        """One line for a preset in a list: "[library] Horn type \u2014 name", the type as the
+        """One line for a preset in a flat list: "[library] Horn type — name", the type as the
         form stores it (Matt, 2026-11-11: "none of those presets are titled as alto, tenor
         etc."); "[library] name" for a sandbox preset or one with no type. Display only: a
-        selection maps back by index, never by this text. Used by Load..., Compare... and
-        the audio import's preset list."""
+        selection maps back by index, never by this text. The audio import's preset list
+        uses it; the Preset Library lists presets under their library's heading instead."""
         horn = ""
         if isinstance(preset, dict) and not preset.get("sandbox"):
             horn = str(preset.get("horn_type", "") or "")
-        return f"[{lib}] {horn} \u2014 {name}" if horn else f"[{lib}] {name}"
+        return f"[{lib}] {horn} — {name}" if horn else f"[{lib}] {name}"
 
-    LOAD_LIST_MAX_CHARS = 80      # the Load list grows to its longest entry up to this; past it, it scrolls
-
-    def _toner_load_preset_quick(self):
-        """The strip's Load...: every preset in a list (library, horn type, name), Load, New
-        Preset... and Cancel. The list is as wide as its longest entry needs, up to
-        LOAD_LIST_MAX_CHARS, with a horizontal scrollbar only past that, and the dialog
-        resizes with the list filling it (Matt, 2026-11-11: a name was cut off). With no
-        preset at all the dialog still opens, the list empty and Load disabled, and offers
-        New Preset... (until then Load... showed a box saying to use File > Presets).
-        New Preset... closes this dialog and runs the one new-preset flow."""
-        all_presets = []
-        for lib_name, lib_presets in self._toner_presets.items():
-            if not isinstance(lib_presets, dict):
-                continue
-            for preset_name, preset_data in lib_presets.items():
-                all_presets.append((lib_name, preset_name, preset_data))
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title(_("Load Preset"))
-        dlg.resizable(True, True)
-        dlg.transient(self.root)
-        dlg.grab_set()
-
-        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
-        frame = tk.Frame(dlg, bg=bg, padx=15, pady=10)
-        frame.pack(fill="both", expand=True)
-
-        texts = [self._toner_preset_entry_text(lib_name, preset_name, data) for lib_name, preset_name, data in all_presets]
-        longest = max((len(t) for t in texts), default=0)
-        list_frame = tk.Frame(frame, bg=bg)
-        list_frame.pack(fill="both", expand=True, pady=(0, 8))
-        listbox = tk.Listbox(list_frame, width=max(40, min(longest, self.LOAD_LIST_MAX_CHARS)),
-                             height=max(3, min(10, len(all_presets))), font=("Helvetica", 10))
-        yscroll = tk.Scrollbar(list_frame, orient="vertical", command=listbox.yview)
-        listbox.configure(yscrollcommand=yscroll.set)
-        if longest > self.LOAD_LIST_MAX_CHARS:
-            xscroll = tk.Scrollbar(list_frame, orient="horizontal", command=listbox.xview)
-            listbox.configure(xscrollcommand=xscroll.set)
-            xscroll.pack(side="bottom", fill="x")
-        yscroll.pack(side="right", fill="y")
-        listbox.pack(side="left", fill="both", expand=True)
-        for text in texts:
-            listbox.insert(tk.END, text)
-        self._toner_load_listbox = listbox
-
-        def load():
-            sel = listbox.curselection()
-            if not sel:
-                return
-            lib_name, preset_name, _data = all_presets[sel[0]]
-            self._toner_active_library = lib_name
-            self._toner_active_preset = preset_name
-            self._toner_active_session = None
-            self._toner_update_preset_label()
-
-            # Sync sax type and lock selector
-            preset = self._toner_presets[lib_name][preset_name]
-            sax_type = preset.get('horn_type', '')
-            if sax_type:
-                self._toner_sax_var.set(sax_type)
-                if sax_type in self._toner_visible_sax:
-                    self._toner_sax_idx_var.set(
-                        self._toner_visible_sax.index(sax_type))
-                if self._toner_engine:
-                    self._toner_engine.set_sax_type(sax_type)
-            self._toner_lock_sax_selector(True)
-            dlg.destroy()
-
-        def new_preset():
-            dlg.destroy()
-            self._toner_new_preset_flow()
-
-        btn_frame = tk.Frame(frame, bg=bg)
-        btn_frame.pack(fill="x")
-        tk.Button(btn_frame, text=_("Load"), command=load,
-                  state="normal" if all_presets else "disabled").pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text=_("New Preset..."), command=new_preset).pack(side="left", padx=(0, 5))
-        tk.Button(btn_frame, text=_("Cancel"), command=dlg.destroy).pack(side="right")
+    def _toner_update_load_unload_btn(self):
+        """The strip's Unload button: shown only while a preset is loaded and no capture runs
+        (Matt, 2026-11-11: "the unload button comes up when a preset is loaded"); Load... is
+        gone, the Preset Library is where presets are loaded."""
+        btn = getattr(self, '_toner_load_unload_btn', None)
+        if btn is None:
+            return
+        if self._toner_active_preset and getattr(self, '_toner_capture_state', None) is None:
+            btn.configure(text=_("Unload"))
+            if not btn.winfo_manager():
+                mode = getattr(self, '_toner_mode_frame', None)
+                btn.pack(side="left", padx=(0, 10), **({"before": mode} if mode is not None else {}))
+        else:
+            btn.pack_forget()
 
     def _toner_unload_preset(self):
         """Unload the active preset."""
@@ -3099,6 +3088,250 @@ class TonerTabMixin:
         self._toner_active_session = None
         self._toner_update_preset_label()
         self._toner_lock_sax_selector(False)
+
+    # ------------------------------------------------------------------
+    # RECORD FIRST (2026-11-11; Matt: "can we allow the user to click capture and go
+    # record, and enter the preset info after if they want?"). A run with no preset
+    # lives in memory until the user says where it goes; it is never lost silently.
+    # ------------------------------------------------------------------
+
+    def _toner_has_unsaved_run(self):
+        """A record-first run in memory: a session with captures and no preset."""
+        s = self._toner_active_session
+        return bool(s and not self._toner_active_preset and s.get('captures'))
+
+    def _toner_record_first(self):
+        """Start capturing with no preset: the horn type is the sax selector's, the session is
+        held in memory, the chart shows it as "Unsaved run"; at Stop the question."""
+        if self._toner_capture_state is not None:
+            return
+        if self._toner_active_preset:
+            self._toner_unload_preset()
+        self._toner_compare_runs = []
+        self._toner_start_new_session_and_listen()
+        self._toner_update_preset_label()           # the strip says Unsaved run from the start
+
+    def _toner_ask_unsaved_run(self, reason):
+        """The one question about an unsaved run: "existing", "new", "discard" or "keep". At
+        Stop the last button reads Keep for now; on the way out (leave, quit, load, capture)
+        it reads Cancel and means stay put. Suites stand this method in."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Unsaved run"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        body = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text=_("This run is not saved with a preset yet. Where should it go?"), bg=bg,
+                 font=("Helvetica", 10), justify="left", wraplength=420).pack(anchor="w", pady=(0, 12))
+        answer = {"choice": "keep"}
+
+        def pick(choice):
+            answer["choice"] = choice
+            dlg.destroy()
+        row = tk.Frame(body, bg=bg)
+        row.pack(fill="x")
+        tk.Button(row, text=_("Existing preset..."), command=lambda: pick("existing")).pack(side="left", padx=(0, 5))
+        tk.Button(row, text=_("New preset..."), command=lambda: pick("new")).pack(side="left", padx=(0, 5))
+        tk.Button(row, text=_("Discard"), command=lambda: pick("discard")).pack(side="left", padx=(0, 5))
+        tk.Button(row, text=_("Keep for now") if reason == "stop" else _("Cancel"),
+                  command=lambda: pick("keep")).pack(side="right")
+        dlg.protocol("WM_DELETE_WINDOW", lambda: pick("keep"))
+        self._toner_unsaved_dialog = dlg
+        self.root.wait_window(dlg)
+        return answer["choice"]
+
+    def _toner_settle_unsaved_run(self, reason):
+        """Before anything that would lose an unsaved run (reason "stop", "leave", "quit",
+        "load", "capture"): the question, and what the answer entails. True when nothing
+        stands in the way (no unsaved run, or it was saved or discarded); False when the
+        user kept it, so the caller stays put."""
+        if not self._toner_has_unsaved_run():
+            return True
+        while True:
+            choice = self._toner_ask_unsaved_run(reason)
+            if choice == "existing":
+                picked = self._toner_pick_preset_for_run()
+                if picked and self._toner_attach_run_to_preset(*picked):
+                    return True
+            elif choice == "new":
+                if self._toner_new_preset_for_run():
+                    return True
+            elif choice == "discard":
+                if self._toner_discard_run():
+                    return True
+            else:
+                return False
+
+    def _toner_pick_preset_for_run(self):
+        """The Preset Library's presets, one to pick for the run: (lib, name) or None."""
+        rows = [(t, k) for t, k in self._toner_library_rows() if k is None or k[2] is None]
+        if not any(k for _t, k in rows):
+            messagebox.showinfo(_("Preset Library"), _("No presets yet."), parent=self.root)
+            return None
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("Preset Library"))
+        dlg.transient(self.root)
+        dlg.grab_set()
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        body = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        body.pack(fill="both", expand=True)
+        tk.Label(body, text=_("Pick the preset this run belongs to."), bg=bg, font=("Helvetica", 10)).pack(anchor="w", pady=(0, 6))
+        lb = tk.Listbox(body, width=max(55, min(max(len(t) for t, _k in rows), self.LOAD_LIST_MAX_CHARS)),
+                        height=min(14, len(rows)), exportselection=False, font=("Helvetica", 10))
+        lb.pack(fill="both", expand=True, pady=(0, 8))
+        keys = []
+        for t, k in rows:
+            lb.insert(tk.END, t)
+            keys.append(k)
+        picked = {"key": None}
+
+        def save():
+            sel = lb.curselection()
+            if sel and keys[sel[0]] is not None:
+                picked["key"] = keys[sel[0]][:2]
+                dlg.destroy()
+        row = tk.Frame(body, bg=bg)
+        row.pack(fill="x")
+        tk.Button(row, text=_("Save"), command=save).pack(side="left", padx=(0, 5))
+        tk.Button(row, text=_("Cancel"), command=dlg.destroy).pack(side="left")
+        self._toner_pick_dialog = dlg
+        self.root.wait_window(dlg)
+        return picked["key"]
+
+    def _toner_attach_run_to_preset(self, lib_name, preset_name):
+        """The unsaved run becomes a dated session of the preset: the preset's setup copied in
+        as any session's is (mic, horn, player, mouthpiece, reed, mic position, the Key heights
+        snapshot), the recording renamed after the preset, saved. With HARMONICS on, a preset
+        without a mic type is refused with the stop Capture gives (the mic rule at save)."""
+        preset = self._toner_presets.get(lib_name, {}).get(preset_name)
+        session = self._toner_active_session
+        if not isinstance(preset, dict) or not session:
+            return False
+        if self._toner_harmonics_on() and not preset.get('sandbox') and not preset.get('mic_type'):
+            messagebox.showinfo(_("Mic Type Required"),
+                _("This preset has no mic type set.\n\n"
+                "Use Mutate in File \u2192 Presets to add mic info,\n"
+                "or create a new preset with mic type specified."),
+                parent=self.root)
+            return False
+        for key in ('mic_type', 'mic_model', 'horn_type', 'horn_make', 'horn_model', 'serial', 'player',
+                    'mouthpiece', 'reed', 'mic_position'):
+            session[key] = preset.get(key, '')
+        kh = key_heights_snapshot(preset.get('key_heights'), getattr(self, 'key_presets', None))
+        if kh:
+            session['key_heights'] = kh
+        elif 'key_heights' in session:
+            del session['key_heights']
+        if preset.get('sandbox'):
+            session['sandbox'] = True
+        self._toner_active_library = lib_name
+        self._toner_active_preset = preset_name
+        self._toner_compare_runs = []
+        self._toner_rename_recording_for(preset_name)
+        self._toner_save_active_session()
+        save_tone_presets(self._toner_presets, TONER_DATA_FILE)
+        sax_type = preset.get('horn_type', '')
+        if sax_type and hasattr(self, '_toner_sax_var'):
+            self._toner_sax_var.set(sax_type)
+            if self._toner_engine:
+                self._toner_engine.set_sax_type(sax_type)
+        self._toner_lock_sax_selector(True)
+        self._toner_update_preset_label()
+        return True
+
+    def _toner_new_preset_for_run(self):
+        """A new preset for the unsaved run, on the one preset form (the required fields are
+        enforced here and only here for a record-first run); the run becomes its first
+        session. True when saved."""
+        dlg = tk.Toplevel(self.root)
+        dlg.title(_("New Tone Preset"))
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+        bg = "systemWindowBackgroundColor" if IS_MACOS else "#F0EAD6"
+        fg = "black"
+        frame = tk.Frame(dlg, bg=bg, padx=20, pady=15)
+        frame.pack(fill="both", expand=True)
+        tk.Label(frame, text=_("Create Tone Preset"), bg=bg, fg=fg,
+                 font=("Helvetica", 12, "bold")).pack(pady=(0, 10))
+        defaults = {"horn_type": (self._toner_active_session or {}).get('horn_type', '')}
+        fields, lib_var, notes_text, sandbox_var = self._toner_build_preset_fields(frame, bg, fg, defaults=defaults)
+        saved = {"ok": False}
+
+        def save():
+            is_sandbox = sandbox_var and sandbox_var.get()
+            if not self._toner_validate_required_fields(fields, dlg, sandbox=is_sandbox):
+                return
+            name = fields["name"].get().strip()
+            lib = lib_var.get().strip() or DEFAULT_LIBRARY
+            if lib not in self._toner_presets:
+                self._toner_presets[lib] = {}
+            if name in self._toner_presets[lib]:
+                messagebox.showwarning(_("Duplicate Name"),
+                    _("'{name}' already exists in '{lib}'.").format(name=name, lib=lib), parent=dlg)
+                return
+            data = self._toner_collect_preset_data(fields, notes_text)
+            if is_sandbox:
+                data['sandbox'] = True
+            self._toner_presets[lib][name] = data
+            if self._toner_attach_run_to_preset(lib, name):
+                saved["ok"] = True
+                self._toner_refresh_preset_list()
+                dlg.destroy()
+        btn_row = tk.Frame(frame, bg=bg)
+        btn_row.pack(fill="x", pady=(10, 0))
+        tk.Button(btn_row, text=_("Create"), command=save).pack(side="left", padx=(0, 5))
+        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy).pack(side="left")
+        self._toner_new_for_run_dialog = dlg
+        self.root.wait_window(dlg)
+        return saved["ok"]
+
+    def _toner_discard_run(self):
+        """Discard the unsaved run after a confirmation that names its captures and, when one
+        was recorded, its recording, which is deleted with it. True when discarded."""
+        session = self._toner_active_session or {}
+        n = len(session.get('captures', []))
+        rec = session.get('recording_file')
+        if rec:
+            text = ngettext("Discard this run's {n} capture and delete its recording? It cannot be recovered.",
+                            "Discard this run's {n} captures and delete its recording? They cannot be recovered.", n)
+        else:
+            text = ngettext("Discard this run's {n} capture? It cannot be recovered.",
+                            "Discard this run's {n} captures? They cannot be recovered.", n)
+        if not messagebox.askyesno(_("Discard run"), text.format(n=n), parent=self.root):
+            return False
+        if rec:
+            try:
+                path = os.path.join(self._toner_get_recording_dir(), rec)
+                if os.path.isfile(path):
+                    os.remove(path)
+            except OSError:
+                logging.getLogger(__name__).warning("could not delete the discarded run's recording %s", rec)
+        self._toner_active_session = None
+        self._toner_captured_notes = set()
+        self._toner_update_preset_label()
+        self._toner_chart_changed()
+        return True
+
+    def _toner_rename_recording_for(self, preset_name):
+        """A record-first run's recording was written as session_<time>.wav; once the run has
+        a preset the file takes the preset's name, as a recording made on a preset does."""
+        session = self._toner_active_session or {}
+        rec = session.get('recording_file')
+        if not rec or not rec.startswith("session_"):
+            return
+        safe = "".join(c if c.isalnum() or c in ' -_' else '_' for c in preset_name).strip() or 'session'
+        new_name = safe + rec[len("session"):]
+        try:
+            rec_dir = self._toner_get_recording_dir()
+            old_path, new_path = os.path.join(rec_dir, rec), os.path.join(rec_dir, new_name)
+            if os.path.isfile(old_path) and not os.path.exists(new_path):
+                os.replace(old_path, new_path)
+                session['recording_file'] = new_name
+        except OSError:
+            logging.getLogger(__name__).warning("could not rename the run's recording %s", rec)
 
     def _toner_signal_above_threshold(self, result):
         """Check if the signal level is above the capture threshold."""
@@ -3144,6 +3377,8 @@ class TonerTabMixin:
             if name:
                 display = name[:PRESET_NAME_MAX_DISPLAY] + "..." if len(name) > PRESET_NAME_MAX_DISPLAY else name
                 self._toner_preset_label.configure(text=display, fg="#AAAAAA")
+            elif self._toner_active_session:        # a record-first run, in progress or kept for now
+                self._toner_preset_label.configure(text=_("Unsaved run"), fg=CAPTURE_FG)
             else:
                 self._toner_preset_label.configure(text=_("no preset"), fg="#666666")
         if hasattr(self, '_toner_mic_label'):
@@ -3179,7 +3414,7 @@ class TonerTabMixin:
         if self._toner_active_library and self._toner_active_preset:
             lib = self._toner_presets.get(self._toner_active_library, {})
             preset_check = lib.get(self._toner_active_preset, {})
-        if (not preset_check.get('sandbox') and not preset_check.get('mic_type')
+        if (preset_check and not preset_check.get('sandbox') and not preset_check.get('mic_type')
                 and self._toner_harmonics_on()):
             messagebox.showinfo(_("Mic Type Required"),
                 _("This preset has no mic type set.\n\n"
@@ -3212,7 +3447,7 @@ class TonerTabMixin:
             'captures': [],
             'mic_type': preset.get('mic_type', ''),
             'mic_model': preset.get('mic_model', ''),
-            'horn_type': preset.get('horn_type', ''),
+            'horn_type': preset.get('horn_type', '') or (self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else ''),
             'horn_make': preset.get('horn_make', ''),
             'horn_model': preset.get('horn_model', ''),
             'serial': preset.get('serial', ''),
@@ -3304,6 +3539,9 @@ class TonerTabMixin:
         if hasattr(self, '_toner_pause_btn'):
             self._toner_pause_btn.configure(text=_("Pause"))
 
+        self._toner_update_load_unload_btn()
+        if self._toner_has_unsaved_run():
+            self._toner_settle_unsaved_run("stop")       # saved, discarded, or kept for now
         # Show coverage summary if we have captures
         if (self._toner_active_session and
                 self._toner_active_session.get('captures')):
@@ -3945,6 +4183,8 @@ class TonerTabMixin:
             return
 
         avg_rate = sum(rates) / len(rates)
+        if not session.get('mic_type') and not self._toner_active_preset:
+            return          # a record-first run: no mic type to pick a threshold by; it warns once saved
         # Mic-class- and sax-type-aware threshold: ribbon/dynamic mics
         # legitimately read higher rolloff than condensers, and higher-
         # pitched horns read higher rolloff than lower-pitched ones —

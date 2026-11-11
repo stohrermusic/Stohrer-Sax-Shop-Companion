@@ -1039,12 +1039,17 @@ class UserGuideWindow(tk.Toplevel):
         # The required fields as the preset form names them, in the user's language.
         needed = ", ".join([_("Horn Type"), _("Make"), _("Model"), _("Player"), _("Mouthpiece")])
         self._steps([
-            _("Load a preset: Load... on the control strip, or File > Presets... to create one. "
-              "{fields} are required.").format(fields=needed),
+            _("Open the Preset Library (the button under the chart, or File > Preset Library...): "
+              "Load a preset, Capture to start on it, or Record first to play now and choose the "
+              "preset when you stop. A preset needs {fields}.").format(fields=needed),
             _("Click Capture and play. Each note held long enough is kept, and the chart draws "
               "as you go."),
-            _("Click Stop. The run is saved with the preset, dated."),
+            _("Click Stop. The run is saved with the preset, dated. A run recorded first asks where "
+              "it goes: an existing preset, a new one, or discard; Keep for now holds it until you "
+              "decide, and nothing leaves the tab, loads or quits without asking."),
         ])
+        self._bullet(_("Unload on the control strip puts the preset away; Capture then opens the "
+                    "Preset Library."))
         self._bullet(_("Free mode, the default, takes the notes as you play them. Guided mode walks "
                     "you up a chromatic scale, 5 seconds a note, with a large note name to play."))
         self._bullet(_("The readout counts the frames a held note has given and turns green once "
@@ -1060,11 +1065,12 @@ class UserGuideWindow(tk.Toplevel):
                     "them: name the preset so you know which horn it is."))
 
         self._sub(_("Compare and export"))
-        self._bullet(_("Compare... draws other presets, or single sessions of them, with yours: each "
-                    "run in its own colour and marker."))
+        self._bullet(_("In the Preset Library, select two or more rows and click Compare: presets, or "
+                    "single sessions of a preset with several, each run in its own colour and marker. "
+                    "A preset row is all its sessions together; a session row is that session alone."))
         self._bullet(_("Click a run's line, a point or its legend entry to bring it to the front; the "
                     "others go grey. Click it again, or an empty spot, to let it go."))
-        self._bullet(_("Export... writes the chart as a PNG or a PDF."))
+        self._bullet(_("Export chart... in the Preset Library writes the chart as a PNG or a PDF."))
         self._bullet(_("Low notes on the left or on the right: Options > Settings... > General."))
 
         self._sub(_("Harmonics (experimental)"))

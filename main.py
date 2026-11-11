@@ -290,6 +290,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     "Exit anyway? (Session will be lost)").format(remaining=remaining)):
                     return
 
+        # An unsaved record-first run on the Analyzer: where does it go? Cancel keeps the app open.
+        # Both ways out come here: the window's close box and the macOS Quit (::tk::mac::Quit).
+        if hasattr(self, '_toner_settle_unsaved_run') and not self._toner_settle_unsaved_run("quit"):
+            return
+
         # Save settings from pad generator tab
         self.settings["sheet_width"] = self.width_entry.get()
         self.settings["sheet_height"] = self.height_entry.get()
@@ -503,7 +508,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label=_("File"), menu=toner_file_menu)
-        toner_file_menu.add_command(label=_("Presets..."), command=self._toner_open_preset_dialog)
+        toner_file_menu.add_command(label=_("Preset Library..."), command=self._toner_open_preset_dialog)
         toner_file_menu.add_command(label=_("Analyze..."), command=self._toner_open_analyze_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
@@ -750,6 +755,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def on_tab_changed(self, event):
         selected = self.notebook.select()
+        # Leaving the Analyzer with an unsaved record-first run asks where it goes first;
+        # Cancel stays put (the tab is selected again, and this handler runs for it).
+        before = getattr(self, '_tab_before', None)
+        toner = str(getattr(self, 'toner_tab_frame', ''))
+        if before == toner and selected != toner and hasattr(self, '_toner_settle_unsaved_run'):
+            if not self._toner_settle_unsaved_run("leave"):
+                self.notebook.select(self.toner_tab_frame)
+                return
+        self._tab_before = selected
 
         # Look up menu for the selected tab
         menu = self._tab_menus.get(selected)
@@ -3460,8 +3474,8 @@ PAGE_CHROME_MAX_PX = 200
 
 
 TOUR_LIBRARY = "Tour"            # the in-memory library the tour's comparison stop draws from
-AUDIO_TOUR_STOPS = ("tuner-no-mic", "tuner", "analyzer-chart", "analyzer-compare", "analyzer-preset-form",
-                    "analyzer-harmonics")       # the stops of the audio tabs (skipped where the build has none)
+AUDIO_TOUR_STOPS = ("tuner-no-mic", "tuner", "analyzer-chart", "analyzer-compare", "analyzer-preset-library",
+                    "analyzer-preset-form", "analyzer-harmonics")   # the audio tabs' stops (skipped where the build has none)
 
 
 def tour_analyzer_presets():
@@ -3625,6 +3639,14 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         app._toner_presets.pop(TOUR_LIBRARY, None)
         app._toner_chart_changed()
 
+    def open_analyzer_preset_library():
+        analyzer_tab()
+        app._toner_open_preset_dialog()             # the one window: list, Load, Capture, Record first, Compare...
+
+    def close_analyzer_preset_library():
+        app._toner_library_close()
+        destroy_new()
+
     def open_analyzer_preset_form():
         analyzer_tab()
         app._toner_new_preset_flow()                # the form, with the Key heights picker
@@ -3680,6 +3702,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("tuner", open_tuner, None),
         ("analyzer-chart", open_analyzer_chart, None),
         ("analyzer-compare", open_analyzer_compare, close_analyzer_compare),
+        ("analyzer-preset-library", open_analyzer_preset_library, close_analyzer_preset_library),
         ("analyzer-preset-form", open_analyzer_preset_form, destroy_new),
         ("analyzer-harmonics", open_analyzer_harmonics, None),
     ]
