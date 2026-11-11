@@ -600,11 +600,16 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         to fit, never past the screen, height and position unchanged. When
         even the screen cannot take one row of the strip, the strip goes to
         two rows first (the right column under the rest) and the window is
-        widened to what two rows need. A maximized window is left alone,
-        and so is one already wide enough. What was widened is remembered
-        for _unwiden_after_analyzer."""
+        widened to what two rows need. A maximized window gets its rows
+        decided the same way (it is as wide as the screen) but is never
+        resized, and a window already wide enough is left as it is. What was
+        widened is remembered for _unwiden_after_analyzer. A restore still
+        pending from the last leave is dropped first: it must never run
+        after this widening and take it for the old one (it did: CI, Windows
+        and Linux, 2026-11-11)."""
         try:
-            if self.root.state() == 'zoomed' or getattr(self, '_analyzer_widened', None):
+            dropped = self._cancel_width_restore("superseded: the Analyzer was selected again")
+            if getattr(self, '_analyzer_widened', None):
                 return
             screen_w = self.root.winfo_screenwidth()
             # the decision is by what ONE row needs, whatever the strip stands at now
@@ -614,8 +619,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if one_row_need > screen_w:
                 self._toner_strip_two_rows(True)
                 self.root.update_idletasks()
+            if self.root.state() == 'zoomed':
+                return
             need = self._analyzer_strip_need_px()
             cur_w, h = self.root.winfo_width(), self.root.winfo_height()
+            if dropped:
+                cur_w = dropped["before"]   # the restore to it is on its way, whatever the window reads now
             if cur_w <= 1 or h <= 1 or need <= cur_w:
                 return
             new_w = min(need, screen_w)
@@ -639,6 +648,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if not record:
             return
         before, widened_to = record
+        self._cancel_width_restore("superseded: left again")
         try:
             state = self.root.state()
             self.root.update_idletasks()
@@ -669,6 +679,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return
 
         def check():
+            self._analyzer_restore_after = None
+            if self._analyzer_restore is not info or info["outcome"] != "pending":
+                return          # a newer restore owns the window now, or this one was closed
             try:
                 self.root.update_idletasks()
                 w = self.root.winfo_width()
@@ -683,9 +696,32 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             else:
                 info["outcome"] = f"gave up at {w} after {info['attempts']} attempts"
         try:
-            self.root.after(100, check)
+            self._analyzer_restore_after = self.root.after(100, check)
         except tk.TclError:
             pass
+
+    def _cancel_width_restore(self, reason):
+        """Drop the restore check still pending from the last leave, if any,
+        and close its record with `reason`; returns the record it closed, or
+        None. The check is scheduled 100 ms after the leave; a select within
+        that time (a test does it, a user can) would otherwise have it read
+        the new widening as the old one not yet undone and take it back (CI,
+        Windows and Linux, 2026-11-11: the window went back to its start
+        width with the tab selected). The record's `before` is the width the
+        window is on its way to, which is what a new widening starts from
+        (on Aqua the window may still read the old width)."""
+        after_id = getattr(self, '_analyzer_restore_after', None)
+        self._analyzer_restore_after = None
+        if after_id is not None:
+            try:
+                self.root.after_cancel(after_id)
+            except (tk.TclError, ValueError):
+                pass
+        info = getattr(self, '_analyzer_restore', None)
+        if info is not None and info.get("outcome") == "pending":
+            info["outcome"] = reason
+            return info                  # the dropped restore: its `before` is where the window is going
+        return None
 
     def _notebook_page_chrome_px(self):
         """How much wider the window is than a notebook page: the window's

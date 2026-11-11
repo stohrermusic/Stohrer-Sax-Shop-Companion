@@ -28,8 +28,12 @@ migration and the switch's terms run as a new user sees them):
   - the window (Matt, 2026-11-10: "have it resize itself"): the start-up width is the
     old rule's (tab labels and the Tooling tab, never the Analyzer's strip); selecting
     the tab widens a narrower window to the strip (Capture on the page), never past the
-    screen; leaving puts the width back; a size the user chose while on the tab, a
-    window already wide enough and a maximized window are left alone
+    screen; leaving puts the width back; coming back within the restore's check leaves
+    the new widening standing; a size the user chose while on the tab and a window
+    already wide enough are left alone; a maximized window is never resized, and on a
+    screen too narrow for one row its strip still goes to two rows; a narrow screen puts
+    the strip on two rows with Capture on the page. Every window check stands the
+    screen's width in (wide or narrow), so the runner's own display decides nothing
   - the HARMONICS switch remembers its position across launches, but "on" in a profile
     that never unlocked counts as off
   - in every language, in a child process each: the tab builds, the start-up width is
@@ -220,9 +224,28 @@ def main():
         run(100)
         while not pred() and time.time() < deadline:
             run(100)
-        assert pred(), f"{what} did not settle within {timeout:.0f} s"
+        assert pred(), f"{what} did not settle within {timeout:.0f} s {where()}"
 
     W = {}      # the window's sizes as the checks find them
+    REAL_SCREEN = root.winfo_screenwidth()
+
+    def screen(width):
+        """Stand the screen's width in for the app and the checks: the runner's own decides nothing."""
+        root.winfo_screenwidth = lambda: width
+        W["screen"] = width
+
+    def where():
+        """The evidence every window message carries: the screen stood in (and this display's), one
+        row's need, the strip's rows, the window, what was widened, the restore's record."""
+        try:
+            rec = getattr(app, "_analyzer_restore", None)
+            return (f"[screen {W.get('screen', 'not stood in')} (this display {REAL_SCREEN}), one-row need "
+                    f"{W.get('need')}, strip rows {getattr(app, '_toner_strip_rows', None)}, window "
+                    f"{root.winfo_width()}x{root.winfo_height()} state {root.state()}, start {W.get('start')}, "
+                    f"widened {getattr(app, '_analyzer_widened', None)}, restore {rec}, restore check pending "
+                    f"{getattr(app, '_analyzer_restore_after', None) is not None}]")
+        except tk.TclError as e:
+            return f"[no window: {e}]"
 
     def chart_now():
         """Draw the chart now, as the tab's debounced redraw would 100 ms later: a check that only
@@ -272,7 +295,8 @@ def main():
         root.update_idletasks()
         W["start"] = (root.winfo_width(), root.winfo_height())
         W["need"] = app._analyzer_strip_need_px()
-        assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
+        assert getattr(app, "_analyzer_widened", None) is None, where()
+        screen(W["need"] + 300)            # a screen with room for one row: the runner's own decides nothing
         app.notebook.select(app.toner_tab_frame)
         # selecting the tab: a window narrower than the strip needs is widened to it (never past the
         # screen), one already wide enough is left as it is; either way the height is unchanged. Under
@@ -282,10 +306,10 @@ def main():
         W["widened"] = root.winfo_width()
         assert root.winfo_height() == W["start"][1], (root.winfo_height(), W["start"][1])
         if W["start"][0] < W["need"]:
-            assert app._analyzer_widened == (W["start"][0], want_w), app._analyzer_widened
+            assert app._analyzer_widened == (W["start"][0], want_w), where()
         else:
             print(f"        (the window opened {W['start'][0]} px wide, already past the strip's {W['need']}: nothing to widen)")
-            assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
+            assert getattr(app, "_analyzer_widened", None) is None, where()
         assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
         assert app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget("bg") == "#FFFFFF", "app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget(\"bg\") == \"#FFFFFF\""
         # the whole control strip is on the page: the Capture button, packed last and rightmost
@@ -327,28 +351,80 @@ def main():
     check("Feature Set offers the tab as Analyzer, in the main list", feature_set_lists_the_analyzer)
 
     # ---------------------------------------------------------------- the window, case by case
+    # Every check here says which screen it is about by standing the screen's width in: a wide
+    # one for the one-row checks, a narrow one for the two-row checks. The runner's own display
+    # decides nothing, so the suite reads the same on a 1024 px runner as here (CI, 2026-11-11).
+    # Each check starts from the same place (the Pad Maker tab, the start-up width, no restore
+    # pending), so one failure cannot run into the next: on CI one did, and read as five.
+    WIDE, NARROW = W["need"] + 300, W["need"] - 40
+
     def width_is(w):
         return lambda: root.winfo_width() == w
 
-    def leaving_puts_the_width_back():
+    def restore_settled():
+        rec = getattr(app, "_analyzer_restore", None)
+        return rec is None or rec["outcome"] != "pending"
+
+    def from_the_start(screen_w):
+        screen(screen_w)
+        app.notebook.select(app.pad_tab)
+        settle(restore_settled, what="the last restore's record")
         start_w, start_h = W["start"]
+        root.geometry(f"{start_w}x{start_h}")
+        settle(width_is(start_w), what="the start width back")
+        assert getattr(app, "_analyzer_widened", None) is None, f"a widening left over from the last check {where()}"
+
+    def leaving_puts_the_width_back():
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the widening")
         app.notebook.select(app.pad_tab)
         settle(width_is(start_w), what="the width going back on leaving")
-        assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None, "root.winfo_height() == start_h and getattr(app, \"_analyzer_widened\", None) is None"
+        assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None, where()
         # the restore is asked for, checked after idle and recorded (retried on Aqua if it applies late)
         if W["start"][0] < W["need"]:
-            settle(lambda: app._analyzer_restore["outcome"] != "pending", what="the restore's record")
+            settle(restore_settled, what="the restore's record")
             rec = app._analyzer_restore
-            assert rec["outcome"] == "restored" and rec["before"] == start_w and rec["widened_to"] == W["widened"], rec
-            assert rec["attempts"] >= 1 and rec["state"] == "normal", rec
+            assert rec["outcome"] == "restored" and rec["before"] == start_w and rec["widened_to"] == W["widened"], where()
+            assert rec["attempts"] >= 1 and rec["state"] == "normal", where()
         # and again: select widens, leave restores
         app.notebook.select(app.toner_tab_frame)
         settle(width_is(W["widened"]), what="the second widening")
         app.notebook.select(app.pad_tab)
         settle(width_is(start_w), what="the second restore")
+        settle(restore_settled, what="the second restore's record")
     check("leaving the tab puts the width back to what it was, height unchanged", leaving_puts_the_width_back)
 
+    def back_within_the_restores_check():
+        """Leave and come back within the 100 ms the restore's check waits before it looks (a
+        user can; the suite did, between two checks). The check must never run after the new
+        widening and take it for the old one not yet undone. On CI it did (Windows and Linux, no
+        audio device so the leave was instant, 2026-11-11): the window went back to its start
+        width with the tab selected, and every check after that failed on the window it left."""
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the widening")
+        app._toner_stop()                    # the engine out of the way: the leave is as instant as on CI
+        app.notebook.select(app.pad_tab)
+        run(30)                              # the leave runs; the restore's check is due in 100 ms
+        assert not restore_settled(), f"the restore's check already ran {where()}"
+        app.notebook.select(app.toner_tab_frame)
+        run(30)                              # back before the check looks
+        settle(width_is(W["widened"]), what="the widening after an early return")
+        run(400)                             # the check's time, and the retries' it would have had
+        assert root.winfo_width() == W["widened"], f"the restore's check took the new widening back {where()}"
+        assert app._analyzer_widened == (start_w, W["widened"]), where()
+        rec = app._analyzer_restore
+        assert rec["attempts"] == 1 and rec["outcome"] == "superseded: the Analyzer was selected again", where()
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width going back on leaving")
+    check("coming back within the restore's check: the new widening stands and the check is dropped",
+          back_within_the_restores_check)
+
     def a_size_the_user_chose_stays():
+        from_the_start(WIDE)
         start_w, start_h = W["start"]
         app.notebook.select(app.toner_tab_frame)
         settle(width_is(W["widened"]), what="the widening")
@@ -356,42 +432,59 @@ def main():
         root.geometry(f"{chosen}x{start_h}")              # the user drags the window wider while on the tab
         settle(width_is(chosen), what="the user's resize")
         app.notebook.select(app.pad_tab)
-        run(400)
-        assert root.winfo_width() == chosen, f"the app took back a width the user chose: {root.winfo_width()}"
-        assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
-        root.geometry(f"{start_w}x{start_h}")
-        settle(width_is(start_w), what="the reset for the next check")
+        settle(restore_settled, what="the leave's record")
+        run(300)
+        assert root.winfo_width() == chosen, f"the app took back a width the user chose {where()}"
+        assert getattr(app, "_analyzer_widened", None) is None, where()
+        assert app._analyzer_restore["outcome"] == "left alone: resized by the user", where()
     check("a size the user chose while on the tab is left alone on leaving", a_size_the_user_chose_stays)
 
     def a_window_already_wide_enough_is_left_alone():
+        from_the_start(WIDE)
         start_w, start_h = W["start"]
         wide = W["need"] + 60
         root.geometry(f"{wide}x{start_h}")
         settle(width_is(wide), what="the wide window")
         app.notebook.select(app.toner_tab_frame)
         run(400)
-        assert root.winfo_width() == wide and getattr(app, "_analyzer_widened", None) is None, "root.winfo_width() == wide and getattr(app, \"_analyzer_widened\", None) is None"
-        assert app._toner_capture_btn.winfo_ismapped(), "app._toner_capture_btn.winfo_ismapped()"
+        assert root.winfo_width() == wide and getattr(app, "_analyzer_widened", None) is None, where()
+        assert app._toner_strip_rows == 1 and app._toner_capture_btn.winfo_ismapped(), where()
         app.notebook.select(app.pad_tab)
         run(400)
-        assert root.winfo_width() == wide, root.winfo_width()
-        root.geometry(f"{start_w}x{start_h}")
-        settle(width_is(start_w), what="the reset for the next check")
+        assert root.winfo_width() == wide, where()
     check("a window already wide enough is left alone, on select and on leave", a_window_already_wide_enough_is_left_alone)
 
     def a_maximized_window_is_left_alone():
+        from_the_start(WIDE)
         start_w, start_h = W["start"]
-        # the guard itself, on every platform: a window that says it is zoomed is not widened,
+        right, row1 = app._toner_strip_right, app._toner_strip_row1
+        # the guard itself, on every platform: a window that says it is zoomed is never resized,
         # however narrow (here: the start-up width, with state() stood in)
         root.state = lambda *a, **k: "zoomed"
         try:
             app.notebook.select(app.toner_tab_frame)
             run(400)
-            assert root.winfo_width() == start_w, f"a zoomed window was widened to {root.winfo_width()}"
-            assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
+            assert root.winfo_width() == start_w, f"a zoomed window was resized {where()}"
+            assert getattr(app, "_analyzer_widened", None) is None and app._toner_strip_rows == 1, where()
             app.notebook.select(app.pad_tab)
             run(400)
-            assert root.winfo_width() == start_w, "root.winfo_width() == start_w"
+            assert root.winfo_width() == start_w, where()
+            # on a screen too narrow for one row the strip still goes to two rows (it is re-packed,
+            # not resized): a maximized window on that screen must not lose Capture either
+            screen(NARROW)
+            app.notebook.select(app.toner_tab_frame)
+            settle(lambda: app._toner_strip_rows == 2, what="two rows on a zoomed window")
+            run(200)
+            assert root.winfo_width() == start_w and getattr(app, "_analyzer_widened", None) is None, \
+                f"a zoomed window on a narrow screen was resized {where()}"
+            assert right.winfo_ismapped() and right.winfo_y() >= row1.winfo_y() + row1.winfo_height(), \
+                f"the right column not under the first row {where()}"
+            if app._analyzer_strip_need_px() <= root.winfo_width():
+                assert app._toner_capture_btn.winfo_ismapped(), f"Capture off the page on two rows {where()}"
+            app.notebook.select(app.pad_tab)
+            run(200)
+            assert root.winfo_width() == start_w, where()
+            screen(WIDE)
         finally:
             del root.state
         # and a really maximized window, where the window manager has one
@@ -408,64 +501,63 @@ def main():
         w = root.winfo_width()
         app.notebook.select(app.toner_tab_frame)
         run(400)
-        assert root.state() == "zoomed" and root.winfo_width() == w, (root.state(), root.winfo_width(), w)
-        assert getattr(app, "_analyzer_widened", None) is None, "getattr(app, \"_analyzer_widened\", None) is None"
+        assert root.state() == "zoomed" and root.winfo_width() == w, f"a maximized window was touched {where()}"
+        assert getattr(app, "_analyzer_widened", None) is None, where()
         app.notebook.select(app.pad_tab)
         run(400)
-        assert root.state() == "zoomed" and root.winfo_width() == w, "root.state() == \"zoomed\" and root.winfo_width() == w"
+        assert root.state() == "zoomed" and root.winfo_width() == w, where()
         root.state("normal")
         settle(width_is(start_w), what="the window back from maximized")
-    check("a maximized window is left alone, on select and on leave", a_maximized_window_is_left_alone)
+    check("a maximized window is never resized, on select and on leave; on a narrow screen its strip still goes "
+          "to two rows", a_maximized_window_is_left_alone)
 
     def a_screen_too_narrow_for_one_row():
         """A screen narrower than one row of the strip needs (German on CI's 1024 px Mac, 2026-11-11):
         the strip goes to two rows, the right column (Load / MODE / Capture) under the rest, Capture
-        is on the page, the window is never wider than the screen, and the real screen gets one row
+        is on the page, the window is never wider than the screen, and a wide screen gets one row
         again. With the window narrower than even two rows need, it widens to that and goes back."""
+        from_the_start(NARROW)
         start_w, start_h = W["start"]
-        narrow = W["need"] - 40                               # a screen narrower than one row needs
         right, row1 = app._toner_strip_right, app._toner_strip_row1
         btn = app._toner_capture_btn
-        root.winfo_screenwidth = lambda: narrow
-        try:
-            app.notebook.select(app.toner_tab_frame)
-            settle(lambda: app._toner_strip_rows == 2, what="the strip going to two rows")
-            root.update_idletasks()
-            two_row_need = app._analyzer_strip_need_px()
-            assert two_row_need < narrow and two_row_need < W["need"] - 200, (two_row_need, narrow, W["need"])
-            assert root.winfo_width() <= narrow, root.winfo_width()
-            assert right.winfo_ismapped() and right.winfo_y() >= row1.winfo_y() + row1.winfo_height(), \
-                (right.winfo_y(), row1.winfo_y(), row1.winfo_height())
-            assert btn.winfo_ismapped() and btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), \
-                "Capture off the page on two rows"
-            assert all(c.winfo_ismapped() for c in right.winfo_children()), "a right-column control unmapped"
-            app.notebook.select(app.pad_tab)
-            settle(width_is(start_w), what="the width after leaving (two rows needed no widening)")
-            # narrower than two rows need: the window widens to exactly that, then goes back
-            root.geometry(f"{two_row_need - 80}x{start_h}")
-            settle(width_is(two_row_need - 80), what="the narrow window")
-            app.notebook.select(app.toner_tab_frame)
-            settle(width_is(two_row_need), what="the widening to two rows' need")
-            assert app._analyzer_widened == (two_row_need - 80, two_row_need) and app._toner_strip_rows == 2, \
-                (app._analyzer_widened, app._toner_strip_rows)
-            assert btn.winfo_ismapped(), "Capture off the page after the two-row widening"
-            app.notebook.select(app.pad_tab)
-            settle(width_is(two_row_need - 80), what="the restore from two rows' need")
-            settle(lambda: app._analyzer_restore["outcome"] != "pending", what="the restore's record")
-            assert app._analyzer_restore["outcome"] == "restored", app._analyzer_restore
-            root.geometry(f"{start_w}x{start_h}")
-            settle(width_is(start_w), what="the start width back")
-        finally:
-            del root.winfo_screenwidth
-        # the real screen: one row again, the right column back on the first row
         app.notebook.select(app.toner_tab_frame)
-        settle(lambda: app._toner_strip_rows == 1 and right.winfo_y() == row1.winfo_y(), what="one row on the real screen")
-        assert app._analyzer_strip_need_px() == W["need"], (app._analyzer_strip_need_px(), W["need"])
+        settle(lambda: app._toner_strip_rows == 2, what="the strip going to two rows")
+        root.update_idletasks()
+        two_row_need = app._analyzer_strip_need_px()
+        assert two_row_need < NARROW and two_row_need < W["need"] - 200, f"two rows need {two_row_need} {where()}"
+        assert root.winfo_width() <= NARROW, f"wider than the screen {where()}"
+        assert right.winfo_ismapped() and right.winfo_y() >= row1.winfo_y() + row1.winfo_height(), \
+            f"the right column not under the first row (y {right.winfo_y()}, row1 {row1.winfo_y()}+{row1.winfo_height()}) {where()}"
+        assert btn.winfo_ismapped() and btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), \
+            f"Capture off the page on two rows {where()}"
+        assert all(c.winfo_ismapped() for c in right.winfo_children()), f"a right-column control unmapped {where()}"
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width after leaving")
+        settle(restore_settled, what="the leave's record")
+        # narrower than two rows need: the window widens to exactly that, then goes back
+        root.geometry(f"{two_row_need - 80}x{start_h}")
+        settle(width_is(two_row_need - 80), what="the narrow window")
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(two_row_need), what="the widening to two rows' need")
+        assert app._analyzer_widened == (two_row_need - 80, two_row_need) and app._toner_strip_rows == 2, where()
+        assert btn.winfo_ismapped(), f"Capture off the page after the two-row widening {where()}"
+        app.notebook.select(app.pad_tab)
+        settle(width_is(two_row_need - 80), what="the restore from two rows' need")
+        settle(restore_settled, what="the restore's record")
+        assert app._analyzer_restore["outcome"] == "restored", where()
+        root.geometry(f"{start_w}x{start_h}")
+        settle(width_is(start_w), what="the start width back")
+        # a wide screen again: one row, the right column back on the first row
+        screen(WIDE)
+        app.notebook.select(app.toner_tab_frame)
+        settle(lambda: app._toner_strip_rows == 1 and right.winfo_y() == row1.winfo_y(), what="one row on a wide screen")
+        assert app._analyzer_strip_need_px() == W["need"], f"one row's need changed {where()}"
         app.notebook.select(app.pad_tab)
         settle(width_is(start_w), what="the width after leaving")
     check("a screen too narrow for one row: the strip goes to two rows with Capture on the page, the window never "
-          "wider than the screen; narrower than two rows need, it widens to that and goes back; the real screen "
+          "wider than the screen; narrower than two rows need, it widens to that and goes back; a wide screen "
           "gets one row again", a_screen_too_narrow_for_one_row)
+    from_the_start(WIDE)                     # the rest of the suite runs on the tab, on a wide screen
     app.notebook.select(app.toner_tab_frame)
     settle(width_is(W["widened"]), what="the tab back for the rest")
 
