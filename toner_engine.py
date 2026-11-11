@@ -201,6 +201,7 @@ class TonerResult:
         'harmonic_bars',         # list of (freq, magnitude_db) for bar-only mode
         'descriptors',           # dict: richness, warmth
         'signal_level',          # 0.0-1.0, RMS input level
+        'level_dbfs',            # dB against full scale, or None in silence (level_dbfs)
         'spectral_centroid',     # Hz, amplitude-weighted center of harmonic series
     ]
 
@@ -218,7 +219,22 @@ class TonerResult:
             'low_harmonic_data': False,
         }
         self.signal_level = 0.0
+        self.level_dbfs = None
         self.spectral_centroid = 0.0
+
+
+def level_dbfs(rms):
+    """An rms as dB against full scale; None for silence. Against the input, so a level
+    compares with another taken at the same microphone place and gain, not with a sound
+    level meter. (2026-11-10.)"""
+    return 20.0 * math.log10(rms) if rms > 0.0 else None
+
+
+def mean_level_dbfs(levels):
+    """The level of frames taken together: their power averaged, not their decibels;
+    None with none."""
+    got = [10.0 ** (v / 10.0) for v in levels if v is not None]
+    return round(10.0 * math.log10(sum(got) / len(got)), 1) if got else None
 
 
 # ============================================
@@ -405,8 +421,19 @@ class TonerEngine:
         return self._samples_in / SAMPLE_RATE
 
     def start_recording(self):
-        """Begin accumulating raw audio for WAV export."""
+        """Begin accumulating raw audio for WAV export. The recording's clock starts
+        here: `recording_time_s` is the audio time since, which is where in the WAV a
+        later moment falls (each guided note's `wav_start_s` / `wav_end_s`)."""
         self._recording_chunks = []
+        self._recording_start_s = self.audio_time_s
+
+    @property
+    def recording_time_s(self):
+        """Seconds of recording so far (audio time since start_recording), or None
+        while nothing is being recorded."""
+        if self._recording_chunks is None:
+            return None
+        return self.audio_time_s - self._recording_start_s
 
     def stop_recording(self):
         """Stop accumulating audio. Returns the chunks list, or None."""
@@ -533,6 +560,7 @@ class TonerEngine:
         # RMS signal level
         rms = float(np.sqrt(np.mean(audio[-FFT_SIZE:] ** 2)))
         result.signal_level = min(1.0, rms * RMS_DISPLAY_SCALE)
+        result.level_dbfs = level_dbfs(rms)
 
         # Sensitivity threshold
         sensitivity_scale = 1.0 + (100 - self._sensitivity) * TONER_SENSITIVITY_FACTOR
@@ -1695,23 +1723,15 @@ def _read_wav_file(filepath):
     return samples, framerate, n_channels
 
 
-def analyze_audio_file(filepath, engine, progress_cb=None):
-    """Analyze an audio file offline. Returns list of capture dicts.
+def _file_windows(filepath, engine, progress_cb=None):
+    """Every analysis window of a WAV in which the engine heard a note, in order: (the
+    note it heard, the result, the end of the window in seconds). Empty for a file that
+    will not read or holds no note.
 
-    Loads the file, slides a window through it, detects stable note
-    segments, and extracts averaged captures — same data as live capture.
-
-    Supports WAV files: PCM 16/24/32-bit and IEEE float 32/64-bit. For other
-    formats, the file must first be converted to WAV.
-
-    Args:
-        filepath: Path to a WAV audio file
-        engine: A TonerEngine instance (configured with sax type, ref pitch, etc.)
-        progress_cb: Optional callback(current, total) called periodically
-
-    Returns:
-        list of capture dicts (same format as session captures)
-    """
+    `progress_cb(done, total)` is called every 200 windows and once more at the end,
+    with `total` the number of windows the file holds, so a short file reports once and
+    every file reports completion (until 2026-11-10 the total was one short, the callback
+    fired only every 200 windows and a file under 200 never called it)."""
     loaded = _read_wav_file(filepath)
     if loaded is None:
         return []
@@ -1729,23 +1749,89 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
         samples = np.interp(indices, np.arange(len(samples)), samples).astype(np.float32)
 
     # Slide through the file, analyzing every hop
-    results = []  # list of (note_name, result)
+    results = []  # list of (note_name, result, window end in seconds)
     hop = FILE_HOP_SAMPLES
-    total_windows = max(1, (len(samples) - FFT_SIZE) // hop)
+    starts = range(0, len(samples) - FFT_SIZE, hop)
+    total_windows = len(starts)
     window_i = 0
-    for start in range(0, len(samples) - FFT_SIZE, hop):
+    for start in starts:
         chunk = samples[start:start + FFT_SIZE]
         if len(chunk) < FFT_SIZE:
             break
 
         r = engine.analyze_buffer(chunk)
         if r.fundamental_freq > 0 and r.harmonics:
-            results.append((r.fundamental_note, r, (start + FFT_SIZE) / SAMPLE_RATE))   # ..., the window's end
+            results.append((r.fundamental_note, r, (start + FFT_SIZE) / SAMPLE_RATE))
 
         window_i += 1
-        if progress_cb and window_i % 200 == 0:
+        if progress_cb and (window_i % 200 == 0 or window_i == total_windows):
             progress_cb(window_i, total_windows)
 
+    return results
+
+
+def _file_capture(seg, seg_note):
+    """One capture from a run of windows, under the name `seg_note`; None with nothing
+    to average. The capture is a session capture's shape (method "file"), with
+    `level_dbfs`, the frames' level taken together."""
+    frames = []
+    for _n, r, _t in seg:
+        frames.append({
+            'note': r.fundamental_note,
+            'freq': r.fundamental_freq,
+            'harmonics_db': [h.magnitude_db for h in r.harmonics],
+            'harmonic_cents': [h.cents_deviation for h in r.harmonics],
+            'level_dbfs': r.level_dbfs,
+        })
+
+    avg = average_captures(frames)
+    if avg:
+        avg_freq = sum(f['freq'] for f in frames) / len(frames)
+        capture = {
+            'note': seg_note,
+            'fundamental_freq': round(avg_freq, 2),
+            'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
+            'timestamp': '',  # Filled by caller
+            'n_frames': len(frames),
+            'method': 'file',
+            'level_dbfs': mean_level_dbfs(f['level_dbfs'] for f in frames),
+        }
+        if avg.get('harmonic_cents'):
+            capture['harmonic_cents'] = [round(c, 2) for c in avg['harmonic_cents']]
+        # Spectral centroid from harmonics
+        h_db = avg['harmonics_db']
+        if h_db and avg_freq > 0:
+            lin = [10.0 ** (db / 20.0) for db in h_db]
+            freqs = [avg_freq * (i + 1) for i in range(len(h_db))]
+            amp_sum = sum(lin)
+            if amp_sum > 0:
+                capture['spectral_centroid'] = round(
+                    sum(f * a for f, a in zip(freqs, lin)) / amp_sum, 1)
+        return capture
+    return None
+
+
+def analyze_audio_file(filepath, engine, progress_cb=None):
+    """Analyze an audio file offline. Returns list of capture dicts.
+
+    Loads the file, slides a window through it, detects stable note
+    segments (a run of windows the detector names alike), and extracts
+    averaged captures — same data as live capture. A segment is named by
+    ear: a note played 60 cents flat lands on its neighbour; a guided run's
+    recording is read under the asked names by `analyze_asked_notes`.
+
+    Supports WAV files: PCM 16/24/32-bit and IEEE float 32/64-bit. For other
+    formats, the file must first be converted to WAV.
+
+    Args:
+        filepath: Path to a WAV audio file
+        engine: A TonerEngine instance (configured with sax type, ref pitch, etc.)
+        progress_cb: Optional callback(current, total), see _file_windows
+
+    Returns:
+        list of capture dicts (same format as session captures)
+    """
+    results = _file_windows(filepath, engine, progress_cb)
     if not results:
         return []
 
@@ -1761,40 +1847,7 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
         seg = [s for s, keep in zip(seg, whole_window(times, times[0], times[-1])) if keep]
         if len(seg) < FREE_MIN_FRAMES:
             return None
-        # Build a capture from this segment
-        frames = []
-        for _, r, _t in seg:
-            frames.append({
-                'note': r.fundamental_note,
-                'freq': r.fundamental_freq,
-                'harmonics_db': [h.magnitude_db for h in r.harmonics],
-                'harmonic_cents': [h.cents_deviation for h in r.harmonics],
-            })
-
-        avg = average_captures(frames)
-        if avg:
-            avg_freq = sum(f['freq'] for f in frames) / len(frames)
-            capture = {
-                'note': seg_note,
-                'fundamental_freq': round(avg_freq, 2),
-                'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
-                'timestamp': '',  # Filled by caller
-                'n_frames': len(frames),
-                'method': 'file',
-            }
-            if avg.get('harmonic_cents'):
-                capture['harmonic_cents'] = [round(c, 2) for c in avg['harmonic_cents']]
-            # Spectral centroid from harmonics
-            h_db = avg['harmonics_db']
-            if h_db and avg_freq > 0:
-                lin = [10.0 ** (db / 20.0) for db in h_db]
-                freqs = [avg_freq * (i + 1) for i in range(len(h_db))]
-                amp_sum = sum(lin)
-                if amp_sum > 0:
-                    capture['spectral_centroid'] = round(
-                        sum(f * a for f, a in zip(freqs, lin)) / amp_sum, 1)
-            return capture
-        return None
+        return _file_capture(seg, seg_note)
 
     for i in range(1, len(results)):
         note = results[i][0]
@@ -1815,6 +1868,48 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
         captures.append(capture)
 
     return captures
+
+
+def analyze_asked_notes(filepath, engine, asked, progress_cb=None):
+    """A guided run's recording read again, each note under the name it was ASKED for.
+
+    `asked` is the run's calibration captures, or anything carrying their `note`
+    (concert), `written_note`, `wav_start_s` and `wav_end_s`: the stretch of the
+    recording each asked note's frames were read from. A window counts for a note
+    when all of it lies inside that stretch, the rule the live capture keeps its
+    frames by, whatever note the detector heard in it: a note played 60 c flat is
+    still the note that was asked for (`analyze_audio_file` names a run of windows
+    by ear, which puts it on its neighbour). 2026-11-10.
+
+    Returns one capture per asked note, in order, None where no window read. A
+    capture is `analyze_audio_file`'s with the asked names, `method` calibration,
+    its stretch, `signal_level` as a live one has, and `detected_note`, the
+    concert note the detector heard most.
+    """
+    from collections import Counter
+    results = _file_windows(filepath, engine, progress_cb)
+    out = [None] * len(asked)
+    if not results:
+        return out
+    ends = np.array([t for _n, _r, t in results])
+    slack = 0.5 / SAMPLE_RATE
+    for i, a in enumerate(asked):
+        try:
+            lo, hi = float(a['wav_start_s']), float(a['wav_end_s'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        seg = [results[j] for j in np.nonzero((ends - WINDOW_S >= lo - slack) & (ends <= hi + slack))[0]]
+        capture = _file_capture(seg, a['note']) if seg else None
+        if not capture:
+            continue
+        levels = [r.signal_level for _n, r, _t in seg if r.signal_level]
+        capture.update(
+            method='calibration', written_note=a.get('written_note'),
+            detected_note=Counter(n for n, _r, _t in seg).most_common(1)[0][0],
+            signal_level=round(sum(levels) / len(levels), 3) if levels else 0.0,
+            wav_start_s=a['wav_start_s'], wav_end_s=a['wav_end_s'])
+        out[i] = capture
+    return out
 
 
 DEFAULT_LIBRARY = "My Presets"

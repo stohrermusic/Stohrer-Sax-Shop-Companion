@@ -26,7 +26,8 @@ import statistics
 from dataclasses import dataclass, field
 
 from toner_engine import (
-    SAX_TRANSPOSITIONS, _capture_is_plausible, note_name_to_midi, player_note_name, transpose_note,
+    SAX_NOTE_RANGES, SAX_TRANSPOSITIONS, _capture_is_plausible, _shift_note, note_name_to_midi, player_note_name,
+    transpose_note,
 )
 
 A4_HZ = 440.0
@@ -135,6 +136,7 @@ class IntonationRun:
     left_out: dict = field(default_factory=dict)          # {"implausible": n, "unlabelled": n}
     sessions_used: int = 0
     captures_used: int = 0
+    corrected: int = 0                  # takes charted under a corrected label (corrected_label)
 
     def reading(self, note):
         for r in self.readings:
@@ -159,6 +161,28 @@ left-out one 112 cents; the 551 left out are six presets from 2026-03-23/25 whos
 two transpositions below the sounding pitch (an early storage mistake), plus detector slips."""
 
 
+def corrected_label(concert_midi, f0_hz, sax_type, reference_hz=A4_HZ):
+    """The note a take with the March 2026 label really is, or None.
+
+    Six presets captured on 2026-03-23/25 (the Toner's first weeks) stored every
+    `note` two transpositions below the sounding pitch: 28 semitones on a tenor, 18 on
+    an alto, 4 on a soprano. Matt (2026-11-10): "Correct for sure." The rule applies
+    only when the label is off by exactly 2T, within OFF_NOTE_CENTS, AND the corrected
+    note lies in the horn's range; nothing else is ever re-labelled. A take an octave
+    above that again is the detector's own slip on the lowest asked notes (its pitch
+    is not the asked note either) and stays out. Read-side only."""
+    shift = 2 * SAX_TRANSPOSITIONS.get(sax_type, 0)
+    if shift == 0:
+        return None
+    candidate = concert_midi + shift
+    lo, hi = SAX_NOTE_RANGES.get(sax_type, (0, 127))
+    if not lo <= candidate <= hi:
+        return None
+    if abs(cents_from_equal_temperament(f0_hz, candidate, reference_hz)) > OFF_NOTE_CENTS:
+        return None
+    return candidate
+
+
 def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     """The sessions' captures (each a dict with "captures") as an IntonationRun.
 
@@ -166,12 +190,14 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     counted under "implausible"; one with no note name or no fundamental under
     "unlabelled"; one whose pitch is further than OFF_NOTE_CENTS from its labelled
     note (at the reference pitch) under "off_note": it is not that note, and the
-    chart must never draw a point that is not its note. Read-side only: nothing on
+    chart must never draw a point that is not its note. The one exception is a label
+    that is exactly two transpositions low (`corrected_label`): the take is charted
+    under the note it is and counted in `corrected`. Read-side only: nothing on
     disk changes. Takes of the same written note are one reading."""
     if sax_type not in SAX_TRANSPOSITIONS:
         raise IntonationError(f"unknown saxophone type {sax_type!r}")
     readings = {}
-    implausible = unlabelled = off_note = used = 0
+    implausible = unlabelled = off_note = corrected = used = 0
     for s in sessions:
         caps = s.get("captures", []) or []
         for cap in caps:
@@ -187,8 +213,14 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
             # that, even when its (wrong) label is also outside the horn's range
             cents = cents_from_equal_temperament(f0, concert, reference_hz)
             if abs(cents) > OFF_NOTE_CENTS:
-                off_note += 1
-                continue
+                fixed = corrected_label(concert, f0, sax_type, reference_hz)
+                if fixed is None:
+                    off_note += 1
+                    continue
+                corrected += 1
+                cap = dict(cap, note=_shift_note(cap["note"], fixed - concert))
+                concert = fixed
+                cents = cents_from_equal_temperament(f0, concert, reference_hz)
             if not _capture_is_plausible(cap, sax_type):
                 implausible += 1
                 continue
@@ -209,7 +241,7 @@ def run_from_captures(sessions, sax_type, reference_hz=A4_HZ, name=""):
     return IntonationRun(name=name, sax_type=sax_type, reference_hz=float(reference_hz),
                          readings=[readings[k] for k in sorted(readings)],
                          left_out={"implausible": implausible, "unlabelled": unlabelled, "off_note": off_note},
-                         sessions_used=len(sessions), captures_used=used)
+                         sessions_used=len(sessions), captures_used=used, corrected=corrected)
 
 
 def run_from_preset(preset, reference_hz=A4_HZ, session_indices=None, name=None):

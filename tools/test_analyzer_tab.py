@@ -90,7 +90,9 @@ SEEDED = {
                 "notes": "", "created": "2026-03-23",
                 "sessions": [{"date": "2026-03-23 11:56:47", "captures": [
                     _capture("A#0", 146.83, method="calibration"), _capture("C1", 164.81, method="calibration"),
-                    _capture("D1", 185.0, method="calibration"), _capture("F1", 220.0, method="calibration")]}]},
+                    _capture("D1", 185.0, method="calibration"), _capture("F1", 220.0, method="calibration"),
+                    # and one the detector slipped a semitone on: not its note, nothing to correct
+                    _capture("C4", 277.18, method="calibration")]}]},
     }
 }
 with open(os.path.join(_PROFILE, "toner_data.json"), "w", encoding="utf-8") as _f:
@@ -664,29 +666,35 @@ def main():
     check("Compare...: a preset and one session of another drawn together, each with its name and marker; Clear "
           "returns to the loaded preset", compare_two_presets)
 
-    def takes_that_are_not_their_note_are_left_out_and_said():
+    def march_labels_corrected_and_the_rest_left_out_and_said():
         load("Old")
         run(300)
         texts = chart_texts()
-        assert "4 takes left out: their pitch did not match their note." in texts, texts
-        assert "No take matched its note." in texts, texts
-        # no point in the plot (the legend's own marker, up by the title, is not a point)
+        # the four March labels are corrected on read and drawn under the notes they are (D3, E3, F#3 and A3
+        # sounding, written E4, F#4, G#4 and B4 on a tenor); the semitone slip is left out; both are said
+        foot = [t for t in texts if "corrected" in t or "left out" in t]
+        assert len(foot) == 1, foot
+        assert foot[0].startswith("4 takes corrected: their labels were two transpositions low.") and \
+            "1 take left out: its pitch did not match its note." in foot[0], foot
+        assert "No take matched its note." not in texts
+        for written in ("E4", "F#4", "G#4", "B4"):
+            assert written in texts, (written, texts)
+        assert not any(t in ("C2", "D2", "E2", "G2", "C#5") for t in texts), texts     # neither the bogus labels nor the slip
         cv = app._toner_chart_canvas
         in_plot = [i for i in cv.find_withtag("chart") if cv.type(i) in ("oval", "polygon") and cv.coords(i)[1] > 60]
-        assert not in_plot, "a point drawn for a take that is not its note"
-        # none of the bogus labels, as written names, reach the axis
-        assert not any(t in ("C2", "D2", "E2", "G2") for t in texts), texts
+        assert len(in_plot) == 4, f"{len(in_plot)} points in the plot, wanted the four corrected takes"
         # the export carries the same line
         runs, prims = app._toner_chart_prims(toner_tab.CHART_W, toner_tab.CHART_H)
-        assert runs[0].left_out["off_note"] == 4 and runs[0].readings == []
-        assert any(p["kind"] == "text" and p["text"].startswith("4 takes left out") for p in prims)
+        assert runs[0].corrected == 4 and runs[0].left_out["off_note"] == 1 and len(runs[0].readings) == 4
+        exported = [p["text"] for p in prims if p["kind"] == "text" and p.get("anchor") == "sw"]
+        assert exported == foot, (exported, foot)
         # a good preset says nothing of the kind
         load("Bench")
         run(300)
-        assert not any("left out" in t for t in chart_texts()), chart_texts()
-    check("a preset whose takes are not their notes (labels two transpositions low) draws no point; the chart says "
-          "how many were left out and why, on screen and in the export; a good preset says nothing",
-          takes_that_are_not_their_note_are_left_out_and_said)
+        assert not any("left out" in t or "corrected" in t for t in chart_texts()), chart_texts()
+    check("a preset from March 2026 (labels two transpositions low) is charted under the notes it is, the chart "
+          "saying how many takes were corrected and how many left out, on screen and in the export; a good preset "
+          "says nothing", march_labels_corrected_and_the_rest_left_out_and_said)
 
     def export_png_and_pdf():
         import tkinter.filedialog as fd

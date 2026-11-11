@@ -301,7 +301,7 @@ def main():
         assert len(caps) == 1, caps
         c = caps[0]
         assert set(c) == {"note", "fundamental_freq", "harmonics_db", "harmonic_cents", "timestamp", "n_frames",
-                          "method", "signal_level", "spectral_centroid"}, sorted(c)
+                          "method", "signal_level", "level_dbfs", "spectral_centroid"}, sorted(c)
         assert c["note"] == "A#3" and c["method"] == "free" and c["n_frames"] == kept_of(40) == 16
         assert c["fundamental_freq"] == round(F0, 2) and c["harmonics_db"] == HARM and c["signal_level"] == 0.8
         assert app._toner_captured_notes == {"A#3"} and app._toner_save_pending is True, "the free save is deferred"
@@ -384,7 +384,7 @@ def main():
         assert len(caps) == 1, caps
         c = caps[0]
         assert set(c) == {"note", "written_note", "detected_as", "fundamental_freq", "harmonics_db", "harmonic_cents",
-                          "timestamp", "n_frames", "method", "signal_level", "spectral_centroid"}, sorted(c)
+                          "timestamp", "n_frames", "method", "signal_level", "level_dbfs", "spectral_centroid"}, sorted(c)
         # stored under the note ASKED for (concert G#2 for written A#3 on a tenor), with what was detected
         assert c["note"] == "G#2" and c["written_note"] == "A#3" and c["detected_as"] == "A#3" and c["method"] == "calibration"
         assert c["n_frames"] == kept == 141, (c["n_frames"], kept)
@@ -417,6 +417,117 @@ def main():
     check("calibration: a 10 s countdown and a 5 s recording on audio time, the frames from WINDOW_S in, the release "
           "dropped when the note stops early, stored under the note asked for with written_note and detected_as, "
           "saved at once, the next note after silence", calibration_rules)
+
+    def a_guided_note_knows_its_stretch_of_the_recording():
+        """With a WAV being recorded, each guided capture carries wav_start_s / wav_end_s: where in
+        the recording its frames were read from (2026-11-10), so the
+        recording can be read again under the asked names (analyze_asked_notes)."""
+        session = start_capture("calibration")
+        e = app._toner_engine
+        tick(2.0)                                                  # 2 s of sound before the recording starts
+        e.start_recording()                                        # the recording's clock starts here
+        assert e.recording_time_s == 0.0
+        rec0 = e.audio_time_s
+        tick(toner_tab.CAL_COUNTDOWN_S + 0.1)
+        app._toner_process_capture_frame(silence())
+        assert app._toner_capture_state == "calibration"
+        g_sharp2 = 103.83
+        app._toner_process_capture_frame(frame(g_sharp2, "G#2"))   # the recording of this note starts now
+        t_start = e.audio_time_s - rec0
+        while app._toner_capture_state == "calibration":
+            tick()
+            app._toner_process_capture_frame(frame(g_sharp2, "G#2"))
+        t_end = e.audio_time_s - rec0                              # the 5 s ran out: the end is now
+        c = session["captures"][0]
+        assert c["wav_start_s"] == round(t_start, 3) and c["wav_end_s"] == round(t_end, 3), (c["wav_start_s"], c["wav_end_s"], t_start, t_end)
+        assert 4.9 < c["wav_end_s"] - c["wav_start_s"] < 5.2
+        # a note that stops early ends at its last sound, not at the 5 s
+        app._toner_process_capture_frame(silence())
+        assert app._toner_capture_state == "calibration" and app._toner_cal_index == 1
+        a2 = 110.0
+        app._toner_process_capture_frame(frame(a2, "A2"))
+        t2_start = e.audio_time_s - rec0
+        for _k in range(60):
+            tick()
+            app._toner_process_capture_frame(frame(a2, "A2"))
+        t2_last = e.audio_time_s - rec0
+        while app._toner_capture_state == "calibration":
+            tick()
+            app._toner_process_capture_frame(silence())
+        c2 = session["captures"][1]
+        assert c2["wav_start_s"] == round(t2_start, 3) and c2["wav_end_s"] == round(t2_last, 3), (c2, t2_start, t2_last)
+        # with no recording there are no stretches (the next session, recording stopped)
+        e.stop_recording()
+        assert e.recording_time_s is None
+        app._toner_stop_capture()
+        session = start_capture("calibration")
+        tick(toner_tab.CAL_COUNTDOWN_S + 0.1)
+        app._toner_process_capture_frame(silence())
+        app._toner_process_capture_frame(frame(g_sharp2, "G#2"))
+        while app._toner_capture_state == "calibration":
+            tick()
+            app._toner_process_capture_frame(frame(g_sharp2, "G#2"))
+        assert "wav_start_s" not in session["captures"][0] and "wav_end_s" not in session["captures"][0]
+        app._toner_stop_capture()
+    check("a guided note records where in the WAV its frames were read from (wav_start_s / wav_end_s on the "
+          "recording's clock; a note that stops early ends at its last sound; none without a recording)",
+          a_guided_note_knows_its_stretch_of_the_recording)
+
+    def the_wav_reanalysis_reads_a_guided_session_under_the_asked_names():
+        """The session's WAV re-analysis: a guided session whose captures all carry their stretch is read
+        again with analyze_asked_notes, each note under the name asked for (its method, written_note and
+        detected_as kept); any other session goes through analyze_audio_file as before. Both readers stood in."""
+        calls = []
+
+        def fake_asked(path, engine, asked, progress_cb=None):
+            calls.append(("asked", path, [a["note"] for a in asked]))
+            out = []
+            for a in asked:
+                out.append(dict(a, fundamental_freq=a["fundamental_freq"] * 1.001, n_frames=99, method="calibration",
+                                detected_note=a["note"], level_dbfs=-20.0))
+            out[-1] = None                       # one note the recording did not read: the live capture stays
+            return out
+
+        def fake_by_ear(path, engine, progress_cb=None):
+            calls.append(("ear", path))
+            return [{"note": "A#3", "fundamental_freq": F0, "harmonics_db": list(HARM), "harmonic_cents": [0.0] * len(HARM),
+                     "n_frames": 40, "method": "file", "timestamp": ""}]
+
+        real_asked, real_ear = toner_tab.analyze_asked_notes, toner_tab.analyze_audio_file
+        toner_tab.analyze_asked_notes, toner_tab.analyze_audio_file = fake_asked, fake_by_ear
+        try:
+            # a guided session with two captures carrying their stretches
+            session = start_capture("calibration")
+            app._toner_active_session["captures"] = [
+                dict(_capture("G#2", 103.83, method="calibration", written_note="A#3", detected_as="A#3",
+                              wav_start_s=1.0, wav_end_s=6.0)),
+                dict(_capture("A2", 110.0, method="calibration", written_note="B3", detected_as="B3",
+                              wav_start_s=8.0, wav_end_s=10.5)),
+            ]
+            app._toner_capture_state = None
+            app._toner_reanalyze_from_wav("guided.wav")
+            assert calls == [("asked", "guided.wav", ["G#2", "A2"])], calls
+            caps = app._toner_active_session["captures"]
+            assert [c["note"] for c in caps] == ["G#2", "A2"] and [c["method"] for c in caps] == ["calibration"] * 2
+            assert caps[0]["n_frames"] == 99 and caps[0]["written_note"] == "A#3" and caps[0]["detected_as"] == "A#3"
+            assert caps[1]["n_frames"] == 30, "the note the recording did not read keeps its live capture"
+            assert all(c.get("timestamp") for c in caps)
+            assert session is app._toner_active_session
+            # a session without the stretches (an older guided session, or free mode) is read by ear
+            calls.clear()
+            app._toner_active_session["captures"] = [dict(_capture("G#2", 103.83, method="calibration", written_note="A#3"))]
+            app._toner_reanalyze_from_wav("free.wav")
+            assert calls == [("ear", "free.wav")], calls
+            caps = app._toner_active_session["captures"]
+            assert [c["note"] for c in caps] == ["A#3"] and caps[0]["method"] == "file"
+        finally:
+            toner_tab.analyze_asked_notes, toner_tab.analyze_audio_file = real_asked, real_ear
+            app._toner_active_session = None
+            app._toner_capture_state = None
+            app._toner_free_accumulator = []
+    check("the WAV re-analysis reads a guided session under the asked names (method, written_note and detected_as "
+          "kept; a note the recording did not read keeps its live capture) and anything else by ear",
+          the_wav_reanalysis_reads_a_guided_session_under_the_asked_names)
 
     def pause_freezes_either_mode():
         start_capture("free")
@@ -452,7 +563,9 @@ def main():
         disk = on_disk()
         bench = disk["My Presets"]["Bench"]
         # the seeded session and the four that made a capture; the paused session made none and was never written
-        assert len(bench["sessions"]) == 5, [len(s["captures"]) for s in bench["sessions"]]
+        # the seeded session, the four that captured above, the two of the recording-stretch check and the
+        # one the WAV re-analysis check filled
+        assert len(bench["sessions"]) == 8, [len(s["captures"]) for s in bench["sessions"]]
         assert bench["sessions"][0]["captures"][0]["note"] == "A#3"
         for s in bench["sessions"][1:]:
             assert set(s) >= {"date", "captures", "mic_type", "mic_model", "horn_type", "horn_make", "horn_model",

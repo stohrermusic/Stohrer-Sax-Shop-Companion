@@ -458,8 +458,11 @@ def t_two_notes():
     assert [c["note"] for c in CAPS] == ["A3", "D4"]
     for c in CAPS:
         assert set(c) == {"note", "fundamental_freq", "harmonics_db", "harmonic_cents", "timestamp",
-                          "n_frames", "method", "spectral_centroid"}, sorted(c)
+                          "n_frames", "method", "spectral_centroid", "level_dbfs"}, sorted(c)
         assert c["method"] == "file" and c["timestamp"] == ""
+        # the level against full scale (2026-11-10): the generated
+        # tones sit well under full scale (measured -16.7 dBFS here), and are not silence
+        assert isinstance(c["level_dbfs"], float) and -25.0 < c["level_dbfs"] < -5.0, c["level_dbfs"]
     near(CAPS[0]["fundamental_freq"], 220.0)
     near(CAPS[1]["fundamental_freq"], 293.66)
     near(CAPS[0]["spectral_centroid"], 536.0)
@@ -512,13 +515,141 @@ def t_progress():
     caps = te.analyze_audio_file(p, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t)))
     windows = (n - te.FFT_SIZE) // te.FILE_HOP_SAMPLES + 1
     assert windows == 415
-    assert calls == [(200, 414), (400, 414)], calls  # total is windows - 1; no call at the end
+    # every 200 windows and once at the end, with the exact total (fixed 2026-11-10: the total was one
+    # short, nothing reported completion, and a file under 200 windows never called)
+    assert calls == [(200, 415), (400, 415), (415, 415)], calls
     assert [(c["note"], c["n_frames"]) for c in caps] == [("A3", 383)]   # 415 windows less 16 at either end
     calls.clear()
     te.analyze_audio_file(_p2, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t)))
-    assert calls == []
-check("progress_cb every 200 windows: [(200, 414), (400, 414)] for 415 windows (total off by one; "
-      "never called under 200 windows)", t_progress)
+    _samples, _rate, _ch = te._read_wav_file(_p2)
+    short_windows = len(range(0, len(_samples) // _ch - te.FFT_SIZE, te.FILE_HOP_SAMPLES))
+    assert 0 < short_windows < 200 and calls == [(short_windows, short_windows)], (calls, short_windows)
+    # the asked-notes reader reports the same way
+    calls.clear()
+    te.analyze_asked_notes(p, te.TonerEngine(), [], progress_cb=lambda i, t: calls.append((i, t)))
+    assert calls == [(200, 415), (400, 415), (415, 415)], calls
+check("progress_cb every 200 windows and once at the end with the exact total: [(200, 415), (400, 415), "
+      "(415, 415)] for 415 windows; a short file reports once; analyze_asked_notes the same", t_progress)
+
+
+# ---- the file path against known recordings (generated; 2026-11-10) ----
+import struct   # noqa: E402
+
+def hz(midi, cents=0.0):
+    return 440.0 * 2 ** ((midi - 69 + cents / 100.0) / 12.0)
+
+def cents_off(f, midi):
+    return 1200.0 * math.log2(f / hz(midi))
+
+def t_scale_known_pitches():
+    # a chromatic scale A3..E4 (concert), a second each with a short silence between: every note found, in
+    # order, within 2 cents of the pitch generated
+    midis = list(range(57, 65))
+    parts = []
+    for m in midis:
+        parts += [(hz(m), 1.0), (None, 0.3)]
+    p, _n = write_wav("scale.wav", parts)
+    caps = te.analyze_audio_file(p, te.TonerEngine())
+    assert [c["note"] for c in caps] == [te.PITCH_CLASSES[m % 12] + str(m // 12 - 1) for m in midis], [c["note"] for c in caps]
+    for c, m in zip(caps, midis):
+        assert abs(cents_off(c["fundamental_freq"], m)) < 2.0, (c["note"], c["fundamental_freq"])
+        assert c["n_frames"] >= te.FREE_MIN_FRAMES
+check("a chromatic scale of known pitches: every note found in order, each within 2 cents", t_scale_known_pitches)
+
+def t_asked_notes():
+    # a note played 60 cents flat: by ear it lands on its neighbour; asked for, it keeps its name and its
+    # pitch is read as it was played
+    parts = [(hz(57, -60), 1.5), (None, 0.5), (hz(62), 1.5)]
+    p, _n = write_wav("asked.wav", parts)
+    by_ear = te.analyze_audio_file(p, te.TonerEngine())
+    assert [c["note"] for c in by_ear] == ["G#3", "D4"], [c["note"] for c in by_ear]
+    asked = [{"note": "A3", "written_note": "B4", "wav_start_s": 0.0, "wav_end_s": 1.5},
+             {"note": "D4", "written_note": "E5", "wav_start_s": 2.0, "wav_end_s": 3.5},
+             {"note": "C4", "written_note": "D5", "wav_start_s": 1.5, "wav_end_s": 2.0},      # the silence: nothing read
+             {"note": "C4", "written_note": "D5"}]                                           # no stretch: nothing read
+    got = te.analyze_asked_notes(p, te.TonerEngine(), asked)
+    assert len(got) == 4 and got[2] is None and got[3] is None, got
+    a, d = got[0], got[1]
+    assert a["note"] == "A3" and a["written_note"] == "B4" and a["method"] == "calibration" and a["detected_note"] == "G#3"
+    assert -62.0 < cents_off(a["fundamental_freq"], 57) < -58.0, a["fundamental_freq"]
+    assert d["note"] == "D4" and d["detected_note"] == "D4" and abs(cents_off(d["fundamental_freq"], 62)) < 2.0
+    assert a["wav_start_s"] == 0.0 and a["wav_end_s"] == 1.5 and d["wav_start_s"] == 2.0
+    # only the windows wholly inside the stretch count (the rule the live capture keeps its frames by)
+    assert a["n_frames"] == len([t for t in (k * te.FILE_HOP_SAMPLES / te.SAMPLE_RATE + te.WINDOW_S
+                                             for k in range(0, 200)) if te.WINDOW_S <= t <= 1.5]), a["n_frames"]
+    assert isinstance(a["level_dbfs"], float) and a["signal_level"] > 0 and "harmonic_cents" in a
+    assert set(a) >= {"spectral_centroid", "harmonics_db", "timestamp"}
+check("analyze_asked_notes: a note played 60 cents flat lands on its neighbour by ear but keeps the asked name "
+      "and its pitch when read under the stretch it was played in; nothing from silence or without a stretch",
+      t_asked_notes)
+
+def t_octave_prone():
+    # a timbre with the 2nd harmonic louder than the fundamental: read at its fundamental, not an octave up
+    loud_h2 = (0.0, 6.0, -6.0, -12.0, -18.0, -24.0)
+    sr = 44100
+    x = synthetic_tone(0, int(sr * 2.0), 220.0, sr, loud_h2, 0.3)
+    pcm = (np.clip(x, -1, 1) * 32767).astype("<i2")
+    p = os.path.join(TMP, "h2.wav")
+    with wave.open(p, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(pcm.tobytes())
+    caps = te.analyze_audio_file(p, te.TonerEngine())
+    assert [c["note"] for c in caps] == ["A3"], [c["note"] for c in caps]
+    assert abs(cents_off(caps[0]["fundamental_freq"], 57)) < 2.0
+    asked = te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "A3", "wav_start_s": 0.0, "wav_end_s": 2.0}])
+    assert asked[0] and asked[0]["detected_note"] == "A3"
+check("an octave-prone timbre (H2 louder than H1) is read at its fundamental, by ear and asked", t_octave_prone)
+
+def t_short_and_silence():
+    p, _n = write_wav("short.wav", [(hz(60), 0.5)])                 # shorter than the whole-window minimum
+    assert te.analyze_audio_file(p, te.TonerEngine()) == []
+    # asked for, a short answer is still an answer (as the live guided capture keeps whatever it heard):
+    # the six windows wholly inside the half second, no minimum
+    short = te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 0.5}])
+    assert short[0]["note"] == "C4" and short[0]["n_frames"] == 6, short
+    assert te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 0.3}]) == [None]
+    p, n = write_wav("silence.wav", [(None, 2.0)])
+    calls = []
+    assert te.analyze_audio_file(p, te.TonerEngine(), progress_cb=lambda i, t: calls.append((i, t))) == []
+    windows = len(range(0, n - te.FFT_SIZE, te.FILE_HOP_SAMPLES))
+    assert calls == [(windows, windows)], calls
+    assert te.analyze_asked_notes(p, te.TonerEngine(), [{"note": "C4", "wav_start_s": 0.0, "wav_end_s": 2.0}]) == [None]
+check("a note too short gives no capture; silence gives none and still reports its progress once", t_short_and_silence)
+
+def _write_pcm(path, x, sampwidth, sr=44100, float_fmt=False):
+    """A mono WAV by hand: 16/24/32-bit PCM or IEEE float32 (the wave module writes no float)."""
+    tag = 1
+    if float_fmt:
+        data, tag, width = x.astype("<f4").tobytes(), 3, 4
+    elif sampwidth == 2:
+        data, width = (np.clip(x, -1, 1) * 32767).astype("<i2").tobytes(), 2
+    elif sampwidth == 3:
+        i32 = (np.clip(x, -1, 1) * 8388607).astype("<i4")
+        data, width = np.frombuffer(i32.tobytes(), np.uint8).reshape(-1, 4)[:, :3].tobytes(), 3
+    else:
+        data, width = (np.clip(x, -1, 1) * 2147483647).astype("<i4").tobytes(), 4
+    fmt = struct.pack("<HHIIHH", tag, 1, sr, sr * width, width, width * 8)
+    with open(path, "wb") as f:
+        f.write(b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVE")
+        f.write(b"fmt " + struct.pack("<I", len(fmt)) + fmt)
+        f.write(b"data" + struct.pack("<I", len(data)) + data)
+
+def t_bit_depths():
+    x = build(TWO, 44100)
+    got = {}
+    for label, kw in (("16", dict(sampwidth=2)), ("24", dict(sampwidth=3)), ("32", dict(sampwidth=4)),
+                      ("f32", dict(sampwidth=4, float_fmt=True))):
+        p = os.path.join(TMP, f"depth{label}.wav")
+        _write_pcm(p, x, **kw)
+        got[label] = [(c["note"], c["n_frames"], c["fundamental_freq"]) for c in te.analyze_audio_file(p, te.TonerEngine())]
+    assert [g[:2] for g in got["16"]] == [("A3", 32), ("D4", 32)], got["16"]
+    for label in ("24", "32", "f32"):
+        assert [(n, k) for n, k, _f in got[label]] == [(n, k) for n, k, _f in got["16"]], (label, got[label])
+        for (_n, _k, f16), (_n2, _k2, f) in zip(got["16"], got[label]):
+            assert abs(f - f16) < 0.02, (label, f16, f)
+check("16-, 24- and 32-bit PCM and float32 WAVs of the same sound give the same notes, frames and pitch", t_bit_depths)
 
 def t_gap():
     p, _n = write_wav("gap_d4.wav", [(293.66, 1.5), (None, 0.5), (293.66, 1.5)])

@@ -218,9 +218,13 @@ def _font(size, bold=False):
 
 
 def _anchor_offset(anchor, w, h):
-    """Where a w x h box's top-left sits relative to its anchor point."""
-    dx = {"w": 0, "e": -w, "n": -w / 2, "s": -w / 2, "center": -w / 2}.get(anchor, -w / 2)
-    dy = {"n": 0, "s": -h, "w": -h / 2, "e": -h / 2, "center": -h / 2}.get(anchor, -h / 2)
+    """Where a w x h box's top-left sits relative to its anchor point, for any of the
+    canvas anchors (n, s, e, w, their corners nw/ne/sw/se, center)."""
+    a = anchor or "center"
+    if a == "center":
+        return -w / 2, -h / 2
+    dx = 0 if "w" in a else (-w if "e" in a else -w / 2)
+    dy = 0 if "n" in a else (-h if "s" in a else -h / 2)
     return dx, dy
 
 

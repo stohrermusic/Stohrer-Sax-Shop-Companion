@@ -45,7 +45,7 @@ try:
         ROLLOFF_MIN_CAPTURES,
         get_rolloff_threshold,
         load_tone_presets, save_tone_presets,
-        analyze_audio_file, check_mic_quality,
+        analyze_audio_file, analyze_asked_notes, mean_level_dbfs, check_mic_quality,
         transpose_note, reverse_transpose_note, note_to_freq, player_note_name,
         compute_population_stats, percentile_rank,
         find_out_of_range_notes, note_name_to_midi,
@@ -1899,10 +1899,14 @@ class TonerTabMixin:
         return runs, prims
 
     def _toner_chart_footnote(self, runs):
-        """One plain line for the takes the chart left out, or nothing."""
+        """One plain line for the takes the chart corrected or left out, or nothing."""
         off = sum(r.left_out.get("off_note", 0) for r in runs)
         other = sum(r.left_out.get("implausible", 0) + r.left_out.get("unlabelled", 0) for r in runs)
+        fixed = sum(getattr(r, "corrected", 0) for r in runs)
         parts = []
+        if fixed:
+            parts.append(ngettext("{n} take corrected: its label was two transpositions low.",
+                                  "{n} takes corrected: their labels were two transpositions low.", fixed).format(n=fixed))
         if off:
             parts.append(ngettext("{n} take left out: its pitch did not match its note.",
                                   "{n} takes left out: their pitch did not match their note.", off).format(n=off))
@@ -3080,9 +3084,21 @@ class TonerTabMixin:
             self._toner_capture_progress.configure(text=f"{pct}%")
             self.root.update_idletasks()
 
+        live = self._toner_active_session.get('captures', [])
+        asked = [c for c in live if c.get('method') == 'calibration' and c.get('wav_start_s') is not None
+                 and c.get('wav_end_s') is not None]
         try:
-            captures = analyze_audio_file(wav_filepath, self._toner_engine,
-                                          progress_cb=on_progress)
+            if asked and len(asked) == len(live):
+                # a guided session: each note read again from its own stretch of the
+                # recording, under the name it was asked for (a note played 60 cents
+                # flat stays that note; by ear it would land on its neighbour)
+                re_read = analyze_asked_notes(wav_filepath, self._toner_engine, asked, progress_cb=on_progress)
+                captures = [new if new is not None else old for new, old in zip(re_read, asked)]
+                for cap in captures:
+                    cap.setdefault('detected_as', self._toner_transpose_note(cap.get('detected_note', ''), player=False))
+            else:
+                captures = analyze_audio_file(wav_filepath, self._toner_engine,
+                                              progress_cb=on_progress)
         except Exception as e:
             messagebox.showwarning(_("WAV Analysis"),
                 _("WAV analysis failed, keeping live captures:\n{e}").format(e=e))
@@ -3094,10 +3110,11 @@ class TonerTabMixin:
                 "Keeping live captures."))
             return
 
-        # Stamp captures with metadata
+        # Stamp captures with metadata (a guided session's keep their method and names)
         for cap in captures:
             cap['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
-            cap['method'] = 'file'
+            if cap.get('method') != 'calibration':
+                cap['method'] = 'file'
 
         self._toner_active_session['captures'] = captures
         self._toner_save_active_session()
@@ -3351,6 +3368,7 @@ class TonerTabMixin:
                     'harmonics_db': [h.magnitude_db for h in result.harmonics],
                     'harmonic_cents': [h.cents_deviation for h in result.harmonics],
                     'signal_level': result.signal_level,
+                    'level_dbfs': result.level_dbfs,
                     'spectral_centroid': result.spectral_centroid,
                     't': self._toner_clock(),
                 })
@@ -3427,6 +3445,8 @@ class TonerTabMixin:
                     self._toner_capture_start = self._toner_clock()
                     self._toner_cal_last_signal = self._toner_capture_start
                     self._toner_capture_frames = []
+                    # where this note starts in the WAV being recorded, if one is
+                    self._toner_cal_wav_start = self._toner_engine.recording_time_s if self._toner_engine else None
                     self._toner_capture_label.configure(
                         text=_("Recording {note}... ({i}/{total})").format(note=shown_note, i=note_num, total=total))
                     self._toner_update_cal_prompt(shown_note, "recording...")
@@ -3457,6 +3477,7 @@ class TonerTabMixin:
                         'harmonics_db': [h.magnitude_db for h in result.harmonics],
                         'harmonic_cents': [h.cents_deviation for h in result.harmonics],
                         'signal_level': result.signal_level,
+                        'level_dbfs': result.level_dbfs,
                         'spectral_centroid': result.spectral_centroid,
                         't': now,
                     })
@@ -3506,8 +3527,17 @@ class TonerTabMixin:
                         'n_frames': len(self._toner_capture_frames),
                         'method': 'calibration',
                         'signal_level': _avg_sig,
+                        'level_dbfs': mean_level_dbfs(f.get('level_dbfs') for f in _frames),
                         'spectral_centroid': _avg_sc,
                     }
+                    # the stretch of the recording this note was read from, so it can be
+                    # read again under the name asked for (analyze_asked_notes)
+                    wav_start = getattr(self, '_toner_cal_wav_start', None)
+                    if wav_start is not None and self._toner_engine and self._toner_engine.recording_time_s is not None:
+                        end_audio = self._toner_cal_last_signal if not has_signal else now
+                        rec_now = self._toner_engine.recording_time_s
+                        capture_entry['wav_start_s'] = round(wav_start, 3)
+                        capture_entry['wav_end_s'] = round(rec_now - (now - end_audio), 3)
 
                     if self._toner_active_session is not None:
                         self._toner_active_session['captures'].append(capture_entry)
@@ -3588,6 +3618,7 @@ class TonerTabMixin:
             'n_frames': len(note_frames),
             'method': 'free',
             'signal_level': avg_signal,
+            'level_dbfs': mean_level_dbfs(f.get('level_dbfs') for f in note_frames),
             'spectral_centroid': avg_sc,
         }
 

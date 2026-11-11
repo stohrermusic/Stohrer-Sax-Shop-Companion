@@ -239,8 +239,19 @@ def the_footnote_is_one_line_under_the_notes():
     pdf = C.render_pdf(with_note, W, H)
     content = zlib.decompress(re.search(rb"stream\n(.*?)\nendstream", pdf, re.S).group(1)).decode("latin-1")
     assert f"({line}) Tj" in content, "the footnote is not in the PDF"
-check("the footnote (what was left out) is one plain line under the notes, in every renderer, only when asked for",
-      the_footnote_is_one_line_under_the_notes)
+    # and the PNG draws it where the primitive says: from the plot's left edge rightwards, in the
+    # bottom strip (the first PNG put the text centred on that point, so a long line ran off the image)
+    if C.PNG_AVAILABLE:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(C.render_png(with_note, W, H))).convert("L")
+        strip = [(x, y) for y in range(H - 16, H) for x in range(W) if img.getpixel((x, y)) < 128]
+        assert strip, "no footnote pixels in the bottom strip"
+        left = min(x for x, _y in strip)
+        assert abs(left - foot[0]["x"]) <= 3, f"the footnote starts at x={left}, the primitive at {foot[0]['x']}"
+        assert max(x for x, _y in strip) < W - 4, "the footnote runs off the right edge"
+check("the footnote (what was left out) is one plain line under the notes, in every renderer, drawn from the "
+      "plot's left edge, only when asked for", the_footnote_is_one_line_under_the_notes)
 
 
 print("=" * 60)

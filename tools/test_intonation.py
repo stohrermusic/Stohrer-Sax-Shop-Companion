@@ -233,23 +233,60 @@ def a_take_that_is_not_its_note_is_left_out():
         cap("C4", detuned(60, -51)),             # not that note
     ]
     run = I.run_from_captures([{"captures": caps}], "Tenor")
-    assert run.left_out == {"implausible": 0, "unlabelled": 0, "off_note": 6}, run.left_out
-    assert run.notes == ["D5"] and len(run.reading("D5").takes) == 2 and run.captures_used == 2
+    # the first is the March label and is corrected (below); the other five are not their note
+    assert run.left_out == {"implausible": 0, "unlabelled": 0, "off_note": 5}, run.left_out
+    assert run.corrected == 1 and run.captures_used == 3
+    assert run.notes == ["E4", "D5"] and len(run.reading("D5").takes) == 2, run.notes     # D3 is written E4 on a tenor
     assert sorted(round(t.cents) for t in run.reading("D5").takes) == [-49, 49]
-    # alto and soprano: the same mistake at their own transpositions (+18 and +4 semitones)
-    assert I.run_from_captures([{"captures": [cap("A2", hz(45 + 18))]}], "Alto").left_out["off_note"] == 1
-    assert I.run_from_captures([{"captures": [cap("A#4", hz(70 + 4))]}], "Soprano").left_out["off_note"] == 1
+    # a detector slip on the chart's own neighbour is not corrected either way
+    assert I.run_from_captures([{"captures": [cap("C4", detuned(60, 100))]}], "Tenor").corrected == 0
     # the line is drawn at the run's reference pitch: 55 cents sharp of A=440 is 47 cents sharp of A=442
     at_440 = I.run_from_captures([{"captures": [cap("C4", detuned(60, 55))]}], "Tenor", 440.0)
     at_442 = I.run_from_captures([{"captures": [cap("C4", detuned(60, 55))]}], "Tenor", 442.0)
     assert at_440.left_out["off_note"] == 1 and at_442.left_out["off_note"] == 0 and at_442.notes == ["D5"]
     # a wrong-note take whose wrong label is also out of the horn's range counts as off note, not as out of range
+    # (the A#0 one is the March label and is corrected now, not counted off note; C1 in tune is out of range)
     both = I.run_from_captures([{"captures": [cap("A#0", hz(22 + 28)), cap("C1", 32.7)]}], "Tenor")
-    assert both.left_out == {"implausible": 1, "unlabelled": 0, "off_note": 1}, both.left_out
+    assert both.left_out == {"implausible": 1, "unlabelled": 0, "off_note": 0} and both.corrected == 1, both.left_out
     assert I.OFF_NOTE_CENTS == 50.0
 check("a take further than half a semitone from its labelled note is left out and counted (the library's "
       "two-transpositions labels, an octave, a semitone slip; 49 c kept, 51 c out; at the reference pitch; "
       "off note before out of range)", a_take_that_is_not_its_note_is_left_out)
+
+
+def the_march_labels_are_corrected_on_read():
+    """Matt, 2026-11-10: "Correct for sure." A label exactly two transpositions below the
+    sounding pitch, within the bound, with the corrected note inside the horn's range,
+    is charted under the note it is and counted; anything else is left as it was."""
+    # tenor (+28): A#0 sounding D3 (written E4), 7 cents sharp of it; the cents are against the corrected note
+    run = I.run_from_captures([{"captures": [cap("A#0", detuned(22 + 28, 7))]}], "Tenor")
+    assert run.corrected == 1 and run.left_out["off_note"] == 0 and run.notes == ["E4"], (run.corrected, run.notes)
+    approx(run.reading("E4").cents, 7.0, 1e-6)
+    assert run.reading("E4").concert_midi == 50
+    # alto (+18) and soprano (+4), the same mistake at their own transpositions
+    assert I.run_from_captures([{"captures": [cap("A2", hz(45 + 18))]}], "Alto").corrected == 1
+    assert I.run_from_captures([{"captures": [cap("A#4", hz(70 + 4))]}], "Soprano").corrected == 1
+    # the guard: the corrected note must lie in the horn's range (a tenor's A#4 + 28 = F#7 does not)
+    out = I.run_from_captures([{"captures": [cap("A#4", hz(70 + 28))]}], "Tenor")
+    assert out.corrected == 0 and out.left_out["off_note"] == 1
+    # the guard: only exactly 2T, within the bound (2T + 51 cents is not it; 2T + 49 is)
+    assert I.run_from_captures([{"captures": [cap("A#0", detuned(50, 51))]}], "Tenor").left_out["off_note"] == 1
+    assert I.run_from_captures([{"captures": [cap("A#0", detuned(50, 49))]}], "Tenor").corrected == 1
+    # an octave above that again is the detector's slip, not the label's: left out
+    assert I.run_from_captures([{"captures": [cap("A#0", hz(22 + 28 + 12))]}], "Tenor").left_out["off_note"] == 1
+    # the corrected take still goes through the fingerprint's filter (an impossible harmonic stays out)
+    bad = I.run_from_captures([{"captures": [cap("A#0", hz(50), harm=(0.0, 25.0))]}], "Tenor")
+    assert bad.corrected == 1 and bad.left_out["implausible"] == 1 and bad.notes == []
+    # a take within the bound of its own label is never touched, on any horn
+    for sax in ("Tenor", "Alto", "Soprano", "Baritone", "C Melody", "Sopranino"):
+        ok = I.run_from_captures([{"captures": [cap("D4", detuned(62, 20))]}], sax)     # D4 is in every range
+        assert ok.corrected == 0 and ok.captures_used == 1, sax
+    # the chart's overlay sees the corrected note like any other
+    ov = I.overlay([run])
+    assert ov["notes"] == ["E4"] and ov["registers"] == {"E4": 1}
+check("the March 2026 labels (exactly two transpositions low, corrected note in the horn's range) are corrected "
+      "on read and counted; the guards: in range, within the bound, not an octave above; the fingerprint's filter "
+      "still applies; a good take is never touched", the_march_labels_are_corrected_on_read)
 
 print("=" * 60)
 print(f"{sum(results)}/{len(results)} passed")
