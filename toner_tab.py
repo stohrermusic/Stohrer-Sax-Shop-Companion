@@ -38,7 +38,7 @@ try:
         MIN_PRESET_NOTES, SAX_TYPES, min_fundamental_hz_for,
         FREE_STABLE_FRAMES, FREE_MIN_FRAMES, WINDOW_S, whole_window,
         CALIBRATION_NOTES, CALIBRATION_DURATION_S,
-        DEFAULT_LIBRARY, average_captures, compute_fingerprint,
+        DEFAULT_LIBRARY, average_captures, frames_frequency, compute_fingerprint,
         compute_session_fingerprint,
         compute_group_fingerprint, compute_rolloff_rate,
 
@@ -4042,7 +4042,7 @@ class TonerTabMixin:
                 # Save this note's capture
                 if self._toner_capture_frames:
                     averaged = average_captures(self._toner_capture_frames)
-                    avg_freq = sum(f['freq'] for f in self._toner_capture_frames) / len(self._toner_capture_frames)
+                    avg_freq = frames_frequency(f['freq'] for f in self._toner_capture_frames)
 
                     from collections import Counter
                     detected = Counter(
@@ -4142,7 +4142,7 @@ class TonerTabMixin:
             return
 
         averaged = average_captures(note_frames)
-        avg_freq = sum(f['freq'] for f in note_frames) / len(note_frames)
+        avg_freq = frames_frequency(f['freq'] for f in note_frames)
 
         # Average signal level and spectral centroid from accumulated frames
         sig_levels = [f.get('signal_level', 0) for f in note_frames if f.get('signal_level')]

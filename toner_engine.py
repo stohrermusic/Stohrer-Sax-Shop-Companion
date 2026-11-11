@@ -520,6 +520,10 @@ class TonerEngine:
         if audio is None:
             return result
 
+        # The reading before this window: analyze_buffer() moves
+        # _last_fundamental to this window's own, so a note change can only
+        # be seen against a value read here, first.
+        prev_fundamental = self._last_fundamental
         result = self.analyze_buffer(audio)
 
         # --- Multi-frame averaging for descriptor stability ---
@@ -529,9 +533,9 @@ class TonerEngine:
         # analyze_buffer() remains stateless for tests.
         if result.harmonics and result.fundamental_freq > 0:
             # Clear history on note change (>1 semitone)
-            if (self._last_fundamental > 0 and
+            if (prev_fundamental > 0 and
                     abs(1200.0 * math.log2(
-                        result.fundamental_freq / self._last_fundamental)) > 100):
+                        result.fundamental_freq / prev_fundamental)) > 100):
                 self._harmonic_history.clear()
             frame_data = {}
             for h in result.harmonics:
@@ -1293,6 +1297,24 @@ def whole_window(times, first_t, last_t):
     return [first_t + WINDOW_S <= t <= last_t - WINDOW_S for t in times]
 
 
+def frames_frequency(freqs):
+    """The frequency of a capture from its frames' readings: their median.
+
+    One wild frame (a window that read an octave or a fifth of the note) moved
+    a mean by tens of cents; the median of a held note's frames does not move.
+    Readings of 0 (no pitch) are left out; 0.0 with nothing to read. The one
+    place a capture's frequency is taken from frames: the file path and both
+    live modes call it.
+    """
+    vals = sorted(f for f in freqs if f and f > 0)
+    if not vals:
+        return 0.0
+    mid = len(vals) // 2
+    if len(vals) % 2:
+        return float(vals[mid])
+    return (vals[mid - 1] + vals[mid]) / 2.0
+
+
 def average_captures(captures):
     """Average a list of per-frame capture dicts into one summary.
 
@@ -1940,7 +1962,7 @@ def _file_capture(seg, seg_note):
 
     avg = average_captures(frames)
     if avg:
-        avg_freq = sum(f['freq'] for f in frames) / len(frames)
+        avg_freq = frames_frequency(f['freq'] for f in frames)
         capture = {
             'note': seg_note,
             'fundamental_freq': round(avg_freq, 2),

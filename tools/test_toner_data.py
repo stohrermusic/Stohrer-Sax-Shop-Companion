@@ -800,5 +800,73 @@ def t_cal_counts():
 check("CALIBRATION_NOTES >= the type's floor: every type 32 (Bass had 28 under the 65 Hz floor)", t_cal_counts)
 
 
+def t_frames_frequency():
+    # a capture's frequency is the MEDIAN of its frames' readings (2026-11-11): one wild frame, a
+    # window that read an octave up or a fifth of the note, moved the mean by tens of cents
+    assert te.frames_frequency([]) == 0.0 and te.frames_frequency([0, 0.0, None]) == 0.0, "nothing to read is 0.0"
+    assert te.frames_frequency([220.0]) == 220.0, "one frame is itself"
+    near(te.frames_frequency([219.0, 221.0]), 220.0)        # an even count: the middle two halved
+    assert te.frames_frequency([0, 220.2, 219.8, 220.0, 0]) == 220.0, "frames with no pitch are left out"
+    wild = [220.0] * 9 + [440.0]
+    assert te.frames_frequency(wild) == 220.0, te.frames_frequency(wild)
+    assert te.frames_frequency(f for f in wild) == 220.0, "a generator is taken"
+check("frames_frequency: the median of the frames that read a pitch; one wild frame in ten moves nothing",
+      t_frames_frequency)
+
+def t_file_capture_median():
+    from types import SimpleNamespace as NS
+    def fr(f0):
+        return NS(fundamental_note="A3", fundamental_freq=f0, level_dbfs=-20.0,
+                  harmonics=[NS(magnitude_db=0.0, cents_deviation=0.0), NS(magnitude_db=-6.0, cents_deviation=0.0)])
+    seg = [(i, fr(220.0), i * 0.023) for i in range(78)] + [(78, fr(44.0), 78 * 0.023)]   # one window read /5
+    cap = te._file_capture(seg, "A3")
+    assert cap["n_frames"] == 79 and cap["fundamental_freq"] == 220.0, cap["fundamental_freq"]
+    # the centroid is built on the same frequency: 220 and 440 at 0 and -6 dB
+    lin = [1.0, 10 ** (-6 / 20)]
+    near(cap["spectral_centroid"], (220 * lin[0] + 440 * lin[1]) / sum(lin), 0.06)
+check("_file_capture: 78 windows at 220 Hz and one that read a fifth of it give 220.00 (the mean gave 217.77, 17.6 c flat)",
+      t_file_capture_median)
+
+def t_captures_use_the_one_function():
+    src = open(os.path.join(ROOT, "toner_tab.py"), encoding="utf-8").read()
+    eng = open(os.path.join(ROOT, "toner_engine.py"), encoding="utf-8").read()
+    assert "sum(f['freq']" not in src and "sum(f['freq']" not in eng, "a capture frequency taken as a mean of frames"
+    assert src.count("frames_frequency(f['freq']") == 2, "the guided and the free capture both call frames_frequency"
+    assert eng.count("frames_frequency(f['freq']") == 1, "the file path calls frames_frequency"
+check("every capture's frequency comes from frames_frequency: the file path, the guided and the free capture",
+      t_captures_use_the_one_function)
+
+def t_history_cleared_on_note_change():
+    # analyze() averages the last frames' harmonics for the live descriptors and must start over
+    # when the note changes. Until 2026-11-11 it compared this window's reading with
+    # _last_fundamental AFTER analyze_buffer had moved that to the same value: never cleared.
+    sr = te.SAMPLE_RATE
+    class Buf:
+        audio = None
+        def is_stale(self):
+            return False
+        def read(self):
+            return self.audio
+    eng = te.TonerEngine()
+    eng.set_sax_type("Tenor")
+    eng._ring_buffer = Buf()
+    eng._running = True
+    eng._ring_buffer.audio = synthetic_tone(0, te.FFT_SIZE, 220.0, sr, HARM, 0.3)
+    for _unused in range(5):
+        r = eng.analyze()                 # the history is full (it holds the last three)
+    near(r.fundamental_freq, 220.0, 0.5)
+    assert len(eng._harmonic_history) == te.DESCRIPTOR_AVG_FRAMES == 3, len(eng._harmonic_history)
+    eng._ring_buffer.audio = synthetic_tone(0, te.FFT_SIZE, 329.63, sr, HARM, 0.3)
+    r = eng.analyze()
+    near(r.fundamental_freq, 329.63, 0.5)
+    assert len(eng._harmonic_history) == 1, f"history holds {len(eng._harmonic_history)} frames after a note change"
+    # the same note again adds to it; a few cents of drift is not a note change
+    eng._ring_buffer.audio = synthetic_tone(0, te.FFT_SIZE, 331.0, sr, HARM, 0.3)
+    eng.analyze()
+    assert len(eng._harmonic_history) == 2, len(eng._harmonic_history)
+check("analyze(): the descriptor history starts over on a note change (a full history of A3, then E4: one frame held), "
+      "and not on a few cents of drift", t_history_cleared_on_note_change)
+
+
 print(f"\n{passed}/{passed + failed} passed  ({time.time() - _t0:.1f} s)")
 sys.exit(0 if failed == 0 else 1)
