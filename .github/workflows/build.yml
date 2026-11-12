@@ -61,6 +61,20 @@ jobs:
             echo "apt attempt $attempt failed; waiting 30 s"; sleep 30
           done
           exit 1
+      - name: Sound server (Linux)
+        if: runner.os == 'Linux'
+        # Best effort and evidence, never a failure: twice on 2026-11-12 a Linux job died
+        # because PortAudio could not reach the runner's sound server ("PulseAudio_Initialize:
+        # Can't connect to server"), on the same image version other jobs passed on. The app
+        # and build.py no longer need it to start; the audio suites still do. This says in the
+        # log whether a server was answering, and tries to start one when it was not.
+        continue-on-error: true
+        run: |
+          pactl info 2>/dev/null | head -3 && exit 0
+          echo "no sound server answering; trying to start one"
+          (pulseaudio --start --exit-idle-time=-1 2>&1 || systemctl --user start pipewire-pulse 2>&1 || true)
+          sleep 2
+          pactl info 2>/dev/null | head -3 || echo "still no sound server: PortAudio may not start on this runner"
       - name: Install dependencies
         if: matrix.os != 'macos-15-intel'
         run: |
@@ -136,6 +150,20 @@ jobs:
             echo "apt attempt $attempt failed; waiting 30 s"; sleep 30
           done
           exit 1
+      - name: Sound server (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        # Best effort and evidence, never a failure: twice on 2026-11-12 a Linux job died
+        # because PortAudio could not reach the runner's sound server ("PulseAudio_Initialize:
+        # Can't connect to server"), on the same image version other jobs passed on. The app
+        # and build.py no longer need it to start; the audio suites still do. This says in the
+        # log whether a server was answering, and tries to start one when it was not.
+        continue-on-error: true
+        run: |
+          pactl info 2>/dev/null | head -3 && exit 0
+          echo "no sound server answering; trying to start one"
+          (pulseaudio --start --exit-idle-time=-1 2>&1 || systemctl --user start pipewire-pulse 2>&1 || true)
+          sleep 2
+          pactl info 2>/dev/null | head -3 || echo "still no sound server: PortAudio may not start on this runner"
 
       - name: Install dependencies (full)
         if: matrix.full_build
