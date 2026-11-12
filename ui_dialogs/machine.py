@@ -2868,7 +2868,11 @@ class CameraCaptureDialog(tk.Toplevel):
         self._refresh_loop()
 
     def _camera_failed(self, err):
-        self._status_var.set(_("Could not open camera: {e}").format(e=err))
+        # Plain words (Matt, 2026-11-11, with the camera's cable out: "Could
+        # not open camera: Could not open camera index 1" told him nothing).
+        # The reason is in app.log, written by camera_capture.
+        mlog.warning("camera capture: could not open the camera: %s", err)
+        self._status_var.set(_("Could not open the laser's camera. Check its USB cable."))
 
     def _set_live_status(self, text):
         """The per-frame status line, unless the fallback notice is still

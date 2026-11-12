@@ -417,7 +417,7 @@ class ToolingTabMixin:
             values=[self._tooling_material_label(k) for k in _ORGANIZER_MATERIALS],
             state="readonly", width=12)
         organizer_mat_combo.pack(side='left', padx=(5, 5))
-        organizer_mat_note = tk.Label(organizer_mat_row, text=_("(G-code only)"), bg=bg)
+        organizer_mat_note = tk.Label(organizer_mat_row, text=_("(for G-code and Frame & Cut)"), bg=bg)
         organizer_mat_note.pack(side='left')
         add_tooltip(organizer_mat_combo,
                     _("What the plate is cut from. The G-code takes its cut speed, power, "
@@ -870,7 +870,7 @@ class ToolingTabMixin:
             values=[self._tooling_material_label(k) for k in _CRESCENT_MATERIALS],
             state="readonly", width=12)
         cr_mat_combo.pack(side='left', padx=(5, 5))
-        cr_mat_note = tk.Label(cr_stl_row, text=_("(G-code only)"), bg=bg)
+        cr_mat_note = tk.Label(cr_stl_row, text=_("(for G-code and Frame & Cut)"), bg=bg)
         cr_mat_note.pack(side='left')
         add_tooltip(cr_mat_combo,
                     _("What the crescents are cut from. The G-code takes its cut speed, power, "

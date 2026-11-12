@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-11 13:56-0500\n"
+"POT-Creation-Date: 2026-11-11 19:26-0500\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: fr\n"
@@ -591,7 +591,7 @@ msgstr "Dépendance manquante"
 msgid "Home needs pyserial: {e}"
 msgstr "L'origine requiert pyserial : {e}"
 
-#: machine_control.py:712 ui_dialogs/machine.py:1270 ui_dialogs/machine.py:3784
+#: machine_control.py:712 ui_dialogs/machine.py:1270 ui_dialogs/machine.py:3788
 msgid "Home Laser?"
 msgstr "Origine du laser ?"
 
@@ -843,7 +843,7 @@ msgstr "OK"
 #: toner_tab.py:4670 toner_tab.py:6493 toner_tab.py:6583 toner_tab.py:6743
 #: ui_dialogs/gcode_settings.py:196 ui_dialogs/machine.py:204
 #: ui_dialogs/machine.py:1077 ui_dialogs/machine.py:2775
-#: ui_dialogs/machine.py:3342 ui_dialogs/presets_io.py:36
+#: ui_dialogs/machine.py:3346 ui_dialogs/presets_io.py:36
 #: ui_dialogs/presets_io.py:486 ui_dialogs/presets_io.py:544
 #: ui_dialogs/sizing.py:76 ui_dialogs/sizing.py:2697 ui_dialogs/sizing.py:2825
 msgid "Cancel"
@@ -884,7 +884,7 @@ msgstr "La marge doit être un nombre entre 0 et 50."
 msgid "Save"
 msgstr "Enregistrer"
 
-#: machine_control.py:1094 ui_dialogs/machine.py:3445
+#: machine_control.py:1094 ui_dialogs/machine.py:3449
 msgid "Homing"
 msgstr "Homing"
 
@@ -1490,7 +1490,7 @@ msgstr "Sur cette chute"
 #: tooling_tab.py:1719 tooling_tab.py:2033 tooling_tab.py:2589
 #: tooling_tab.py:2673 tooling_tab.py:2702 tooling_tab.py:2810
 #: tooling_tab.py:2867 tooling_tab.py:3059 tooling_tab.py:3131
-#: ui_dialogs/machine.py:3322
+#: ui_dialogs/machine.py:3326
 msgid "Done"
 msgstr "Terminé"
 
@@ -1498,7 +1498,7 @@ msgstr "Terminé"
 #: tooling_tab.py:1728 tuner_tab.py:1368 ui_dialogs/guide.py:189
 #: ui_dialogs/guide.py:1308 ui_dialogs/guide.py:1360 ui_dialogs/history.py:116
 #: ui_dialogs/machine.py:934 ui_dialogs/machine.py:2683
-#: ui_dialogs/machine.py:3218 ui_dialogs/machine.py:3426
+#: ui_dialogs/machine.py:3222 ui_dialogs/machine.py:3430
 msgid "Close"
 msgstr "Fermer"
 
@@ -2192,7 +2192,7 @@ msgid "IN TUNE"
 msgstr "JUSTE"
 
 #: toner_tab.py:421 toner_tab.py:3551 toner_tab.py:3871
-#: ui_dialogs/machine.py:3308
+#: ui_dialogs/machine.py:3312
 msgid "Pause"
 msgstr "Pause"
 
@@ -3051,7 +3051,7 @@ msgstr ""
 "{skipped} notes graves ignorées — sous la plage de détection pour {sax}.\n"
 "La calibration couvrira {total} notes."
 
-#: toner_tab.py:2998 ui_dialogs/machine.py:3323
+#: toner_tab.py:2998 ui_dialogs/machine.py:3327
 msgid "Stop"
 msgstr "Arrêter"
 
@@ -3261,7 +3261,7 @@ msgstr "Reprendre la capture"
 msgid "Resumed..."
 msgstr "Reprise…"
 
-#: toner_tab.py:3878 ui_dialogs/machine.py:3311
+#: toner_tab.py:3878 ui_dialogs/machine.py:3315
 msgid "Resume"
 msgstr "Reprendre"
 
@@ -4123,8 +4123,8 @@ msgid "Material:"
 msgstr "Matériau :"
 
 #: tooling_tab.py:420 tooling_tab.py:873
-msgid "(G-code only)"
-msgstr "(G-code uniquement)"
+msgid "(for G-code and Frame & Cut)"
+msgstr "(pour le G-code et Encadrer et couper)"
 
 #: tooling_tab.py:423
 msgid ""
@@ -5298,7 +5298,7 @@ msgstr "Ne plus afficher ce message"
 msgid "Yes, Proceed"
 msgstr "Oui, continuer"
 
-#: ui_dialogs/common.py:260 ui_dialogs/machine.py:3725
+#: ui_dialogs/common.py:260 ui_dialogs/machine.py:3729
 msgid "No, Cancel"
 msgstr "Non, annuler"
 
@@ -8460,7 +8460,7 @@ msgid "Reconnect camera"
 msgstr "Reconnecter la caméra"
 
 #: ui_dialogs/machine.py:1061 ui_dialogs/machine.py:2772
-#: ui_dialogs/machine.py:4053
+#: ui_dialogs/machine.py:4057
 msgid "Switch camera"
 msgstr "Changer de caméra"
 
@@ -8523,8 +8523,8 @@ msgstr "Ouverture de la caméra..."
 msgid "Position the head"
 msgstr "Positionner la tête"
 
-#: ui_dialogs/machine.py:1177 ui_dialogs/machine.py:3399
-#: ui_dialogs/machine.py:3816
+#: ui_dialogs/machine.py:1177 ui_dialogs/machine.py:3403
+#: ui_dialogs/machine.py:3820
 msgid "Home Laser ($H)"
 msgstr "Origine du laser ($H)"
 
@@ -8532,7 +8532,7 @@ msgstr "Origine du laser ($H)"
 msgid "MPos: --"
 msgstr "MPos : --"
 
-#: ui_dialogs/machine.py:1185 ui_dialogs/machine.py:3371
+#: ui_dialogs/machine.py:1185 ui_dialogs/machine.py:3375
 msgid "Step (mm):"
 msgstr "Pas (mm) :"
 
@@ -8549,8 +8549,8 @@ msgstr ""
 "Faire l'origine du laser ? La tête se déplacera vers le coin d'origine à "
 "pleine vitesse."
 
-#: ui_dialogs/machine.py:1286 ui_dialogs/machine.py:3790
-#: ui_dialogs/machine.py:3793
+#: ui_dialogs/machine.py:1286 ui_dialogs/machine.py:3794
+#: ui_dialogs/machine.py:3797
 msgid "Homing..."
 msgstr "Origine en cours..."
 
@@ -8873,12 +8873,12 @@ msgid "Reopening camera..."
 msgstr "Réouverture de la caméra..."
 
 #: ui_dialogs/machine.py:2134 ui_dialogs/machine.py:2794
-#: ui_dialogs/machine.py:4082
+#: ui_dialogs/machine.py:4086
 msgid "Only One Camera"
 msgstr "Une seule caméra"
 
 #: ui_dialogs/machine.py:2135 ui_dialogs/machine.py:2795
-#: ui_dialogs/machine.py:4083
+#: ui_dialogs/machine.py:4087
 msgid "Only one camera is detected."
 msgstr "Une seule caméra détectée."
 
@@ -9117,12 +9117,11 @@ msgstr ""
 msgid "Use"
 msgstr "Utiliser"
 
-#: ui_dialogs/machine.py:2871
-#, python-brace-format
-msgid "Could not open camera: {e}"
-msgstr "Impossible d'ouvrir la caméra : {e}"
+#: ui_dialogs/machine.py:2875
+msgid "Could not open the laser's camera. Check its USB cable."
+msgstr "Impossible d'ouvrir la caméra du laser. Vérifiez son câble USB."
 
-#: ui_dialogs/machine.py:2948
+#: ui_dialogs/machine.py:2952
 #, python-brace-format
 msgid ""
 "This camera is sending {fw}×{fh} images, but the calibration was made at "
@@ -9132,129 +9131,129 @@ msgstr ""
 "faite en {cw}×{ch}. Recalibrez, ou utilisez « Changer de caméra » si ce "
 "n'est pas la bonne."
 
-#: ui_dialogs/machine.py:2994
+#: ui_dialogs/machine.py:2998
 #, python-brace-format
 msgid "Detected: {n}-vertex polygon, {w:.0f} × {h:.0f} mm bbox"
 msgstr "Détecté : polygone à {n} sommets, {w:.0f} × {h:.0f} mm bbox"
 
-#: ui_dialogs/machine.py:2998
+#: ui_dialogs/machine.py:3002
 msgid "No scrap detected — place a piece on the bed."
 msgstr "Aucune chute détectée — pose une pièce sur le plateau."
 
-#: ui_dialogs/machine.py:3164 ui_dialogs/machine.py:3260
+#: ui_dialogs/machine.py:3168 ui_dialogs/machine.py:3264
 msgid "Sending to Falcon"
 msgstr "Envoi au Falcon"
 
-#: ui_dialogs/machine.py:3270
+#: ui_dialogs/machine.py:3274
 #, python-brace-format
 msgid "Position the head, then click {label}."
 msgstr "Positionnez la tête, puis cliquez sur {label}."
 
-#: ui_dialogs/machine.py:3273
+#: ui_dialogs/machine.py:3277
 msgid "Connecting ..."
 msgstr "Connexion ..."
 
-#: ui_dialogs/machine.py:3292
+#: ui_dialogs/machine.py:3296
 #, python-brace-format
 msgid "Line 0 / {n}"
 msgstr "Ligne 0 / {n}"
 
-#: ui_dialogs/machine.py:3296
+#: ui_dialogs/machine.py:3300
 msgid "Elapsed 0:00"
 msgstr "Écoulé 0:00"
 
-#: ui_dialogs/machine.py:3351
+#: ui_dialogs/machine.py:3355
 msgid "Looks Good — Cut!"
 msgstr "Ça va — couper !"
 
-#: ui_dialogs/machine.py:3362
+#: ui_dialogs/machine.py:3366
 msgid "Nudge head"
 msgstr "Déplacer la tête"
 
-#: ui_dialogs/machine.py:3409
+#: ui_dialogs/machine.py:3413
 msgid "Try Auto Locate"
 msgstr "Essayer la localisation auto"
 
-#: ui_dialogs/machine.py:3423
+#: ui_dialogs/machine.py:3427
 msgid "Running ..."
 msgstr "En cours ..."
 
-#: ui_dialogs/machine.py:3425
+#: ui_dialogs/machine.py:3429
 #, python-brace-format
 msgid "Failed to start: {e}"
 msgstr "Échec du démarrage : {e}"
 
-#: ui_dialogs/machine.py:3439
+#: ui_dialogs/machine.py:3443
 msgid "Idle"
 msgstr "Inactif"
 
-#: ui_dialogs/machine.py:3440
+#: ui_dialogs/machine.py:3444
 msgid "Running"
 msgstr "En cours"
 
-#: ui_dialogs/machine.py:3441
+#: ui_dialogs/machine.py:3445
 msgid "Paused (feed hold)"
 msgstr "En pause (feed hold)"
 
-#: ui_dialogs/machine.py:3442
+#: ui_dialogs/machine.py:3446
 msgid "ALARM"
 msgstr "ALARME"
 
-#: ui_dialogs/machine.py:3443
+#: ui_dialogs/machine.py:3447
 msgid "Safety door open"
 msgstr "Porte de sécurité ouverte"
 
-#: ui_dialogs/machine.py:3444
+#: ui_dialogs/machine.py:3448
 msgid "Jogging"
 msgstr "Jog en cours"
 
-#: ui_dialogs/machine.py:3446
+#: ui_dialogs/machine.py:3450
 msgid "Sleeping"
 msgstr "En veille"
 
-#: ui_dialogs/machine.py:3465
+#: ui_dialogs/machine.py:3469
 #, python-brace-format
 msgid "Line {s} / {t}  ({pct:.0f}%)"
 msgstr "Ligne {s} / {t}  ({pct:.0f} %)"
 
-#: ui_dialogs/machine.py:3469
+#: ui_dialogs/machine.py:3473
 #, python-brace-format
 msgid "Error: {m}"
 msgstr "Erreur : {m}"
 
-#: ui_dialogs/machine.py:3473
+#: ui_dialogs/machine.py:3477
 #, python-brace-format
 msgid "ALARM: {m}"
 msgstr "ALARME : {m}"
 
-#: ui_dialogs/machine.py:3487
+#: ui_dialogs/machine.py:3491
 #, python-brace-format
 msgid "Pass {n} complete — waiting for Idle..."
 msgstr "Passe {n} terminée — attente d'Idle..."
 
-#: ui_dialogs/machine.py:3510
+#: ui_dialogs/machine.py:3514
 msgid "Complete ✓"
 msgstr "Terminé ✓"
 
-#: ui_dialogs/machine.py:3512
+#: ui_dialogs/machine.py:3516
 msgid "Stopped"
 msgstr "Arrêté"
 
-#: ui_dialogs/machine.py:3517
+#: ui_dialogs/machine.py:3521
 msgid "unknown error"
 msgstr "erreur inconnue"
 
-#: ui_dialogs/machine.py:3522
+#: ui_dialogs/machine.py:3526
 #, python-brace-format
 msgid "Stopped on error: {e}"
 msgstr "Arrêté sur erreur : {e}"
 
-#: ui_dialogs/machine.py:3524
+#: ui_dialogs/machine.py:3528
 #, python-brace-format
 msgid "  — {d}"
 msgstr "  — {d}"
 
-#: ui_dialogs/machine.py:3526
+#: ui_dialogs/machine.py:3530
 #, python-brace-format
 msgid ""
 "\n"
@@ -9263,83 +9262,83 @@ msgstr ""
 "\n"
 "Ligne en échec {n} : {l}"
 
-#: ui_dialogs/machine.py:3558
+#: ui_dialogs/machine.py:3562
 #, python-brace-format
 msgid "Jog the head to your material's bottom-left corner, then click {label}."
 msgstr "Déplacez la tête au coin bas-gauche du matériau, puis cliquez sur {label}."
 
-#: ui_dialogs/machine.py:3641
+#: ui_dialogs/machine.py:3645
 #, python-brace-format
 msgid "Timed out waiting for Idle (state={s})"
 msgstr "Délai d'attente d'Idle dépassé (état={s})"
 
-#: ui_dialogs/machine.py:3670
+#: ui_dialogs/machine.py:3674
 #, python-brace-format
 msgid "Regenerate failed: {e}"
 msgstr "Échec de la régénération : {e}"
 
-#: ui_dialogs/machine.py:3677
+#: ui_dialogs/machine.py:3681
 #, python-brace-format
 msgid "Restart failed: {e}"
 msgstr "Échec du redémarrage : {e}"
 
-#: ui_dialogs/machine.py:3724
+#: ui_dialogs/machine.py:3728
 msgid "Lid Closed?"
 msgstr "Capot fermé ?"
 
-#: ui_dialogs/machine.py:3724
+#: ui_dialogs/machine.py:3728
 msgid "Is the lid closed?"
 msgstr "Le capot est-il fermé ?"
 
-#: ui_dialogs/machine.py:3725
+#: ui_dialogs/machine.py:3729
 msgid "Yes, Start Frame"
 msgstr "Oui, démarrer l'encadrement"
 
-#: ui_dialogs/machine.py:3739 ui_dialogs/machine.py:3915
+#: ui_dialogs/machine.py:3743 ui_dialogs/machine.py:3919
 msgid "Finishing pass..."
 msgstr "Fin de la passe..."
 
-#: ui_dialogs/machine.py:3743
+#: ui_dialogs/machine.py:3747
 msgid "Cut requested — finishing current framing pass..."
 msgstr "Coupe demandée — fin de la passe d'encadrement en cours..."
 
-#: ui_dialogs/machine.py:3771
+#: ui_dialogs/machine.py:3775
 #, python-brace-format
 msgid "Head positioned. Click {label} when ready."
 msgstr "Tête positionnée. Cliquez {label} quand vous êtes prêt."
 
-#: ui_dialogs/machine.py:3785
+#: ui_dialogs/machine.py:3789
 msgid "Homing will abort the run in progress. Continue?"
 msgstr "L'origine va interrompre le job en cours. Continuer ?"
 
-#: ui_dialogs/machine.py:3826
+#: ui_dialogs/machine.py:3830
 msgid "Homing complete. MPos is now (0, 0)."
 msgstr "Origine terminée. MPos est maintenant (0, 0)."
 
-#: ui_dialogs/machine.py:3828
+#: ui_dialogs/machine.py:3832
 #, python-brace-format
 msgid "Homing failed: {m}"
 msgstr "Échec de l'origine : {m}"
 
-#: ui_dialogs/machine.py:3855
+#: ui_dialogs/machine.py:3859
 #, python-brace-format
 msgid "Auto-locate failed: {e}"
 msgstr "Échec de la localisation auto : {e}"
 
-#: ui_dialogs/machine.py:3857
+#: ui_dialogs/machine.py:3861
 #, python-brace-format
 msgid "Driving to polygon BL at MPos ({x:.1f}, {y:.1f}) …"
 msgstr "Déplacement vers le BL du polygone à MPos ({x:.1f}, {y:.1f}) …"
 
-#: ui_dialogs/machine.py:3919
+#: ui_dialogs/machine.py:3923
 msgid "Finishing current pass + centering head..."
 msgstr "Fin de la passe en cours et centrage de la tête..."
 
-#: ui_dialogs/machine.py:3924
+#: ui_dialogs/machine.py:3928
 msgid "Stop?"
 msgstr "Arrêter ?"
 
-#: ui_dialogs/machine.py:3925
+#: ui_dialogs/machine.py:3929
 msgid ""
 "Stop the job? This will soft-reset the laser and clear the planner buffer"
 " immediately. Material in progress may be ruined."
@@ -9347,29 +9346,29 @@ msgstr ""
 "Arrêter le travail ? Cela fera un soft-reset du laser et videra "
 "immédiatement le buffer du planner. Le matériau en cours peut être abîmé."
 
-#: ui_dialogs/machine.py:3951
+#: ui_dialogs/machine.py:3955
 msgid "Stop and close?"
 msgstr "Arrêter et fermer ?"
 
-#: ui_dialogs/machine.py:3952
+#: ui_dialogs/machine.py:3956
 msgid "A job is still running. Stop it and close the window?"
 msgstr "Un travail est toujours en cours. L'arrêter et fermer la fenêtre ?"
 
-#: ui_dialogs/machine.py:3982 ui_dialogs/machine.py:3992
+#: ui_dialogs/machine.py:3986 ui_dialogs/machine.py:3996
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}"
 msgstr "Écoulé {em}:{es:02d}"
 
-#: ui_dialogs/machine.py:3989
+#: ui_dialogs/machine.py:3993
 #, python-brace-format
 msgid "Elapsed {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 msgstr "Écoulé {em}:{es:02d}  ETA ~{rm}:{rs:02d}"
 
-#: ui_dialogs/machine.py:4015
+#: ui_dialogs/machine.py:4019
 msgid "Live camera"
 msgstr "Caméra en direct"
 
-#: ui_dialogs/machine.py:4036
+#: ui_dialogs/machine.py:4040
 msgid "Camera preview unavailable"
 msgstr "Aperçu caméra indisponible"
 
@@ -11371,4 +11370,10 @@ msgstr "Ferme sans modifier les couleurs de calques."
 #~ "certaines de leurs sessions, avec le "
 #~ "vôtre : chaque relevé avec sa "
 #~ "couleur et son marqueur."
+
+#~ msgid "(G-code only)"
+#~ msgstr "(G-code uniquement)"
+
+#~ msgid "Could not open camera: {e}"
+#~ msgstr "Impossible d'ouvrir la caméra : {e}"
 

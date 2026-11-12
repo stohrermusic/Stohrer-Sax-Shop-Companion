@@ -599,7 +599,7 @@ def gui():
         def refused(logged):
             seen = capture_dialog(world, 900)
             assert seen['cap'] is None and seen['index'] == 1, f"fell back to the webcam: {seen}"
-            assert seen['status'] == "Could not open camera: Could not open camera index 1", seen['status']
+            assert seen['status'] == "Could not open the laser's camera. Check its USB cable.", seen['status']
             assert world.calls == [("open", 1), ("falcon",)], world.calls
             assert not warnings_in(logged), logged
         with_world(world, refused)
