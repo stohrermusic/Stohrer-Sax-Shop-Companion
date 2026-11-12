@@ -804,14 +804,23 @@ def _probe_preview(placements, w_mm, h_mm, polygon, zones):
     root.geometry('900x700')
     out = {}
 
-    def go():
+    def go(tries=50):
         found = [x for x in root.winfo_children()
                  if isinstance(x, NestingPreviewWindow)]
         if not found:
+            if tries > 0:
+                root.after(100, lambda: go(tries - 1))
+                return
             out['err'] = 'no window'
             return
         win = found[0]
         win.update_idletasks()
+        # Draw only once the canvas has been given its size: on a loaded machine the window
+        # was not laid out 400 ms in, the canvas was 1 x 1 and the drawing was empty (one
+        # failure in a full run, 2026-11-12). Bounded: five seconds, then draw anyway.
+        if win._canvas.winfo_width() < 50 and tries > 0:
+            root.after(100, lambda: go(tries - 1))
+            return
         win._draw()
         win.update_idletasks()
         cv = win._canvas

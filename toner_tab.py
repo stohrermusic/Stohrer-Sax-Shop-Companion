@@ -298,9 +298,20 @@ class TonerTabMixin:
         self._toner_main_frame._skip_theme = True
         self._toner_main_frame.pack(fill="both", expand=True)
 
-        # --- Top area, one of two (_toner_show_harmonics): the intonation chart,
-        # or with the HARMONICS switch on, spectrum (left) + gauges (right) ---
-        self._toner_chart_frame = tk.Frame(self._toner_main_frame, bg=bg)
+        # --- Top area: three panes in one grid (_toner_layout_views). The intonation chart
+        # is ALWAYS shown (Matt, 2026-11-12: "chart always stays visible", so a capture is
+        # seen filling it in); the HARMONICS switch adds the spectrum in the left two thirds
+        # and the TUNER switch the needle meter in the right third. Columns 2 : 1, rows
+        # 1 : 1, held to those shares whatever the panes ask for. ---
+        top_area = tk.Frame(self._toner_main_frame, bg=bg)
+        top_area._skip_theme = True
+        top_area.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+        top_area.columnconfigure(0, weight=2, uniform="analyzer-top-cols")
+        top_area.columnconfigure(1, weight=1, uniform="analyzer-top-cols")
+        top_area.rowconfigure(0, weight=1, uniform="analyzer-top-rows")
+        top_area.rowconfigure(1, weight=1, uniform="analyzer-top-rows")
+        self._toner_top_area = top_area
+        self._toner_chart_frame = tk.Frame(top_area, bg=bg)
         self._toner_chart_frame._skip_theme = True
         self._toner_chart_canvas = tk.Canvas(
             self._toner_chart_frame, bg=intonation_chart.BACKGROUND,
@@ -317,33 +328,36 @@ class TonerTabMixin:
         self._toner_chart_last_runs = 0
         self._toner_chart_last_key = ()
         self._toner_chart_cursor = ""
-        chart_row = tk.Frame(self._toner_chart_frame, bg=bg)
+        # Its own row under the top area, in every view (it sat inside the chart's frame and
+        # went away with it when HARMONICS was switched on: Matt, 2026-11-12, "that needs to
+        # not happen").
+        chart_row = tk.Frame(self._toner_main_frame, bg=bg)
         chart_row._skip_theme = True
-        chart_row.pack(fill="x", pady=(4, 0))
-        # one button under the chart: the Preset Library holds Compare and Export chart too
+        chart_row.pack(fill="x", padx=5, pady=(4, 0))
+        self._toner_library_row = chart_row
+        # one button under the views: the Preset Library holds Compare and Export chart too
         self._toner_library_btn = tk.Button(
             chart_row, text=_("Preset Library"), font=("Helvetica", 9),
             command=self._toner_open_preset_dialog)
         self._toner_library_btn.pack(side="left")
 
-        top_frame = tk.Frame(self._toner_main_frame, bg=bg)
+        top_frame = tk.Frame(top_area, bg=bg)
         top_frame._skip_theme = True
-        self._toner_harmonics_frame = top_frame
-        top_frame.columnconfigure(0, weight=3)
-        top_frame.columnconfigure(1, weight=1)
+        self._toner_harmonics_frame = top_frame          # the spectrum's pane
+        top_frame.columnconfigure(0, weight=1)
         top_frame.rowconfigure(0, weight=1)
 
         # --- LEFT: Spectrum analyzer canvas ---
         self._toner_spectrum_canvas = tk.Canvas(
             top_frame, bg="#0D0D0D", highlightthickness=0, borderwidth=0)
         self._toner_spectrum_canvas._dark_canvas = True
-        self._toner_spectrum_canvas.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        self._toner_spectrum_canvas.grid(row=0, column=0, sticky="nsew")
         self._toner_spectrum_canvas.bind("<Configure>", self._toner_on_canvas_resize)
 
         # --- RIGHT: Gauge panel (grid layout for compact vertical fit) ---
-        gauge_outer = tk.Frame(top_frame, bg=bg)
+        gauge_outer = tk.Frame(top_area, bg=bg)
         gauge_outer._skip_theme = True
-        gauge_outer.grid(row=0, column=1, sticky="nsew")
+        self._toner_gauge_frame = gauge_outer            # the needle meter's pane (the TUNER switch)
 
         gauge_frame = tk.Frame(gauge_outer, bg=bg)
         gauge_frame._skip_theme = True
@@ -441,6 +455,7 @@ class TonerTabMixin:
         row1.pack(side="top", fill="x")
         self._toner_strip_row1 = row1
         self._toner_strip_rows = 1
+        self._toner_switch_frames = {}      # grid column -> the switch's frame
 
         eq_lbl_font = ("Helvetica", 8)
 
@@ -450,6 +465,7 @@ class TonerTabMixin:
             ch = tk.Frame(parent, bg=ctrl_bg)
             ch._skip_theme = True
             ch.grid(row=0, column=col, padx=5, sticky="ns")
+            self._toner_switch_frames[col] = ch
             tk.Label(ch, text=label, bg=ctrl_bg, fg="#888888",
                      font=eq_lbl_font).pack(pady=(0, 1))
             tk.Label(ch, text=lbl_top, bg=ctrl_bg, fg="#AAAAAA",
@@ -476,12 +492,18 @@ class TonerTabMixin:
         left_col._skip_theme = True
         left_col.pack(side="left", padx=(0, 12))
 
+        # Columns: SENS, HARMONICS and TUNER first, which always apply; then VIEW, SCALE and
+        # FPS, which only change how the harmonic analyzer is drawn and are shown only while
+        # HARMONICS is on (Matt, 2026-11-12, on the chart view: "the bottom shows controls
+        # as if we should be seeing the tuner, but the main screen is just the chart").
+        # Their columns keep their width while hidden (minsize, below), so the strip is
+        # as wide either way and the window's fit to it does not move.
         _make_vswitch(left_col, "VIEW", self._toner_view_var,
-                      "spectrum", "bars", "spct", "bars", 0)
+                      "spectrum", "bars", "spct", "bars", 3)
         _make_vswitch(left_col, "SCALE", self._toner_scale_var,
-                      "linear", "db", "lin", "dB", 1)
+                      "linear", "db", "lin", "dB", 4)
         _make_vswitch(left_col, "FPS", self._toner_fps_var,
-                      "30", "60", "30", "60", 2)
+                      "30", "60", "30", "60", 5)
 
         # SENS as a two-position switch (high/low)
         self._toner_sens_var = tk.IntVar(
@@ -494,7 +516,7 @@ class TonerTabMixin:
             self._toner_on_sensitivity_changed()
 
         _make_vswitch(left_col, "SENS", sens_str,
-                      "high", "low", "high", "low", 3)
+                      "high", "low", "high", "low", 0)
         sens_str.trace_add("write", _sens_from_switch)
 
         # HARMONICS: the harmonic analyzer (experimental) in place of the chart.
@@ -505,8 +527,26 @@ class TonerTabMixin:
         self._toner_harmonics_var = tk.StringVar(value="on" if remembered_on else "off")
         self._toner_harmonics_int = _make_vswitch(
             left_col, _("HARMONICS"), self._toner_harmonics_var,
-            "off", "on", _("off"), _("on"), 4)
+            "off", "on", _("off"), _("on"), 1)
         self._toner_harmonics_var.trace_add("write", self._toner_on_harmonics_switched)
+
+        # TUNER: the needle meter with the note and the IN TUNE lamp, beside the chart
+        # (Matt, 2026-11-12: "add new tuner button and that shows the VU meter. user can
+        # have both on or both off"). Where it was left (toner_settings.tuner_on).
+        self._toner_tuner_shown = bool(toner_settings.get("tuner_on"))
+        self._toner_harmonics_shown = remembered_on
+        self._toner_tuner_var = tk.StringVar(value="on" if self._toner_tuner_shown else "off")
+        self._toner_tuner_int = _make_vswitch(
+            left_col, _("TUNER"), self._toner_tuner_var,
+            "off", "on", _("off"), _("on"), 2)
+        self._toner_tuner_var.trace_add(
+            "write", lambda *a: self._toner_show_tuner(self._toner_tuner_var.get() == "on"))
+        # the harmonics-only switches: their columns hold their width, and they start hidden
+        # unless the harmonic analyzer is what the tab opens on
+        left_col.update_idletasks()
+        for col in self.HARMONICS_ONLY_SWITCH_COLUMNS:
+            left_col.grid_columnconfigure(col, minsize=self._toner_switch_frames[col].winfo_reqwidth() + 10)
+        self._toner_show_harmonics_switches(remembered_on)
 
         # ========== CENTER COLUMN: sax selector ==========
         # Center column expands to push left/right apart and center the selector
@@ -1708,19 +1748,70 @@ class TonerTabMixin:
         var = getattr(self, '_toner_harmonics_var', None)
         return var is not None and var.get() == "on"
 
+    HARMONICS_ONLY_SWITCH_COLUMNS = (3, 4, 5)       # VIEW, SCALE, FPS
+
+    def _toner_tuner_on(self):
+        """Whether the TUNER switch stands at on (the needle meter is shown)."""
+        return bool(getattr(self, '_toner_tuner_shown', False))
+
+    def _toner_show_tuner(self, on):
+        """Show or hide the needle meter (the TUNER switch); remembered across launches."""
+        self._toner_tuner_shown = bool(on)
+        self.settings.setdefault("toner_settings", {})["tuner_on"] = bool(on)
+        self._toner_layout_views()
+        slider = getattr(self, '_toner_tuner_int', None)
+        if slider is not None and slider.get() != (1 if on else 0):
+            slider.set(1 if on else 0)
+
+    def _toner_layout_views(self):
+        """Put the panes where the two switches say. The chart is in every arrangement:
+
+            neither            the chart, all of it
+            HARMONICS          spectrum (left two thirds) | chart (right third)
+            TUNER              chart (left two thirds)    | meter (right third)
+            both               spectrum (left two thirds) | meter over chart (right third)
+        """
+        chart = getattr(self, '_toner_chart_frame', None)
+        harm = getattr(self, '_toner_harmonics_frame', None)
+        gauge = getattr(self, '_toner_gauge_frame', None)
+        if chart is None or harm is None or gauge is None:
+            return
+        h, t = bool(getattr(self, '_toner_harmonics_shown', False)), self._toner_tuner_on()
+        for pane in (chart, harm, gauge):
+            pane.grid_forget()
+        if h:
+            harm.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 4))
+            if t:
+                gauge.grid(row=0, column=1, sticky="nsew")
+                chart.grid(row=1, column=1, sticky="nsew")
+            else:
+                chart.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        elif t:
+            chart.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 4))
+            gauge.grid(row=0, column=1, rowspan=2, sticky="nsew")
+        else:
+            chart.grid(row=0, column=0, rowspan=2, columnspan=2, sticky="nsew")
+        self._toner_chart_changed()
+
+    def _toner_show_harmonics_switches(self, on):
+        """VIEW, SCALE and FPS on the strip only while the harmonic analyzer is shown: they
+        change how it is drawn and nothing about the chart. Their columns keep their width."""
+        for col in self.HARMONICS_ONLY_SWITCH_COLUMNS:
+            frame = getattr(self, '_toner_switch_frames', {}).get(col)
+            if frame is None:
+                continue
+            if on:
+                frame.grid()
+            else:
+                frame.grid_remove()
+
     def _toner_show_harmonics(self, on):
-        """Put the harmonic analyzer (on) or the intonation chart in the top area."""
-        shown = self._toner_harmonics_frame if on else self._toner_chart_frame
-        hidden = self._toner_chart_frame if on else self._toner_harmonics_frame
+        """Show the harmonic analyzer beside the chart (on), or take it away."""
+        self._toner_show_harmonics_switches(on)
         # remembered across launches (written with the next settings save)
         self.settings.setdefault("toner_settings", {})["harmonics_on"] = bool(on)
-        hidden.pack_forget()
-        if not shown.winfo_manager():
-            first = self._toner_main_frame.pack_slaves()     # the capture bar if shown, else the controls
-            kw = {"before": first[0]} if first else {}
-            shown.pack(fill="both", expand=True, padx=5, pady=(5, 0), **kw)
-        if not on:
-            self._toner_chart_changed()
+        self._toner_harmonics_shown = bool(on)
+        self._toner_layout_views()
         # the slider follows a position set from code (the tour, a remembered "on"): its own
         # trace then puts the var back to the same value, which lands here with nothing to
         # move. Before 2026-11-11 the tour's harmonics shot had the switch drawn at "off".
@@ -6883,6 +6974,7 @@ class TonerTabMixin:
             "sax_type": self._toner_sax_var.get() if hasattr(self, '_toner_sax_var') else "Alto",
             "concert_pitch": self._toner_concert_pitch.get() if hasattr(self, '_toner_concert_pitch') else False,
             "harmonics_on": self._toner_harmonics_on(),
+            "tuner_on": self._toner_tuner_on(),
         })
         # Flush any in-flight capture data so exiting mid-capture doesn't
         # lose the most recent micro-captures (deferred saves batch 10s).

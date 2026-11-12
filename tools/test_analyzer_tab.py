@@ -318,7 +318,8 @@ def main():
         else:
             print(f"        (the window opened {W['start'][0]} px wide, already past the strip's {W['need']}: nothing to widen)")
             assert getattr(app, "_analyzer_widened", None) is None, where()
-        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), \
+            "the chart alone: the spectrum is not shown"
         assert app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget("bg") == "#FFFFFF", "app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget(\"bg\") == \"#FFFFFF\""
         # the whole control strip is on the page: the Capture button, packed last and rightmost
         strip, btn = app._toner_ctrl_frame, app._toner_capture_btn
@@ -339,8 +340,9 @@ def main():
         for label in ("HARMONICS", "off", "on", "MODE", "free", "guided"):
             assert label in texts, f"{label!r} not on the control strip: {texts}"
         assert "cal" not in texts, "\"cal\" not in texts"
-        btns = [w.cget("text") for w in widgets(app._toner_chart_frame, tk.Button)]
+        btns = [w.cget("text") for w in widgets(app._toner_library_row, tk.Button)]
         assert btns == ["Preset Library"], btns      # Compare and Export chart live in the library now
+        assert not widgets(app._toner_chart_frame, tk.Button), "the button is in the chart's frame again"
         # nothing loaded: the chart says what to do
         chart_now()
         assert any("Load a preset" in t for t in chart_texts()), chart_texts()
@@ -381,6 +383,91 @@ def main():
         root.geometry(f"{start_w}x{start_h}")
         settle(width_is(start_w), what="the start width back")
         assert getattr(app, "_analyzer_widened", None) is None, f"a widening left over from the last check {where()}"
+
+    def the_harmonics_only_switches():
+        """VIEW, SCALE and FPS are on the strip only while HARMONICS is on (Matt, 2026-11-12:
+        "the bottom shows controls as if we should be seeing the tuner, but the main screen is
+        just the chart"); SENS and HARMONICS always; the strip is as wide either way."""
+        frames = app._toner_switch_frames
+        assert sorted(frames) == [0, 1, 2, 3, 4, 5], sorted(frames)
+
+        def label(col):
+            return str(frames[col].winfo_children()[0].cget("text"))
+        assert [label(c) for c in range(6)] == ["SENS", "HARMONICS", "TUNER", "VIEW", "SCALE", "FPS"], \
+            [label(c) for c in range(6)]
+        was_on = app._toner_harmonics_on()
+        widths = {}
+        # this profile has not accepted the harmonics terms; showing the spectrum from code moves
+        # the switch, which would ask them (a modal window nobody answers). Unlocked for the
+        # length of this check, in memory only, and put back.
+        was_unlocked = app.settings.get("toner_unlocked")
+        app.settings["toner_unlocked"] = True
+        try:
+            for on in (False, True, False):
+                app._toner_show_harmonics(on)
+                run(60)
+                shown = [c for c in range(6) if frames[c].winfo_manager()]
+                assert shown == ([0, 1, 2, 3, 4, 5] if on else [0, 1, 2]), (on, shown)
+                widths[on] = app._toner_ctrl_frame.winfo_reqwidth()
+            assert widths[True] == widths[False], f"the strip is {widths[False]} px with them hidden, {widths[True]} shown"
+        finally:
+            app._toner_show_harmonics(was_on)
+            run(60)
+            app.settings["toner_unlocked"] = was_unlocked
+    check("VIEW, SCALE and FPS show only while HARMONICS is on; SENS, HARMONICS and TUNER always; the strip keeps "
+          "its width", the_harmonics_only_switches)
+
+    def the_chart_is_in_every_view():
+        """Matt, 2026-11-12: "harmonics button stays the same, add new tuner button and that shows
+        the VU meter. user can have both on or both off. both off: chart view. chart always stays
+        visible." And the Preset Library button "needs to not" disappear."""
+        chart, harm, gauge = app._toner_chart_frame, app._toner_harmonics_frame, app._toner_gauge_frame
+        was_h, was_t = app._toner_harmonics_on(), app._toner_tuner_on()
+        was_unlocked = app.settings.get("toner_unlocked")
+        app.settings["toner_unlocked"] = True        # as above: no terms asked from a check
+
+        def place(pane):
+            g = pane.grid_info()
+            return (int(g["row"]), int(g["column"]), int(g["rowspan"]), int(g["columnspan"])) if g else None
+        want = {
+            (False, False): {"chart": (0, 0, 2, 2), "harm": None, "gauge": None},
+            (True, False): {"harm": (0, 0, 2, 1), "chart": (0, 1, 2, 1), "gauge": None},
+            (False, True): {"chart": (0, 0, 2, 1), "gauge": (0, 1, 2, 1), "harm": None},
+            (True, True): {"harm": (0, 0, 2, 1), "gauge": (0, 1, 1, 1), "chart": (1, 1, 1, 1)},
+        }
+        try:
+            for (h, t), places in want.items():
+                app._toner_show_harmonics(h)
+                app._toner_show_tuner(t)
+                run(150)
+                got = {"chart": place(chart), "harm": place(harm), "gauge": place(gauge)}
+                assert got == places, ((h, t), got)
+                assert chart.winfo_ismapped(), f"the chart is not shown with HARMONICS {h}, TUNER {t}"
+                assert app._toner_library_btn.winfo_ismapped(), f"no Preset Library button with HARMONICS {h}, TUNER {t}"
+                assert app._toner_chart_canvas.winfo_width() > 80 and app._toner_chart_canvas.winfo_height() > 80, \
+                    ((h, t), app._toner_chart_canvas.winfo_width(), app._toner_chart_canvas.winfo_height())
+                if h:       # the spectrum has the left two thirds, give or take the gap between the panes
+                    share = harm.winfo_width() / max(1, app._toner_top_area.winfo_width())
+                    assert 0.60 < share < 0.70, ((h, t), share)
+                if h and t:     # the meter over the chart, a half each
+                    assert abs(gauge.winfo_height() - chart.winfo_height()) <= 4, (gauge.winfo_height(), chart.winfo_height())
+                assert app._toner_tuner_int.get() == (1 if t else 0) and app._toner_tuner_var.get() == ("on" if t else "off")
+                assert app.settings["toner_settings"]["tuner_on"] is t
+            # the TUNER switch itself, as a user moves it; it asks no terms
+            app._toner_show_tuner(False)
+            app._toner_tuner_int.set(1)
+            run(100)
+            assert app._toner_tuner_on() and gauge.winfo_ismapped(), "the TUNER switch did not show the meter"
+            app._toner_tuner_int.set(0)
+            run(100)
+            assert not app._toner_tuner_on() and not gauge.winfo_ismapped()
+        finally:
+            app._toner_show_harmonics(was_h)
+            app._toner_show_tuner(was_t)
+            run(100)
+            app.settings["toner_unlocked"] = was_unlocked
+    check("the four views: the chart alone; spectrum | chart; chart | meter; spectrum | meter over chart; the chart and "
+          "the Preset Library button in every one; TUNER remembered", the_chart_is_in_every_view)
 
     def the_sax_slider_follows_the_type():
         """The SAX slider shows the horn the tab is working in, whoever set it (a preset at the
@@ -618,14 +705,17 @@ def main():
         run(300)
         assert asked == ["declined"], asked
         assert app._toner_harmonics_var.get() == "off" and app._toner_harmonics_int.get() == 0, "app._toner_harmonics_var.get() == \"off\" and app._toner_harmonics_int.get() == 0"
-        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), \
+            "the chart alone: the spectrum is not shown"
         assert not app.settings.get("toner_unlocked") and not settings_on_disk().get("toner_unlocked"), "not app.settings.get(\"toner_unlocked\") and not settings_on_disk().get(\"toner_unlocked\")"
 
         app._toner_show_harmonics_terms = lambda: asked.append("accepted") or True
         app._toner_harmonics_var.set("on")
         run(300)
         assert asked == ["declined", "accepted"], asked
-        assert app._toner_harmonics_frame.winfo_ismapped() and not app._toner_chart_frame.winfo_ismapped(), "app._toner_harmonics_frame.winfo_ismapped() and not app._toner_chart_frame.winfo_ismapped()"
+        assert app._toner_harmonics_frame.winfo_ismapped() and app._toner_chart_frame.winfo_ismapped(), \
+            "HARMONICS on: the spectrum is shown and the chart stays"
+        assert app._toner_library_btn.winfo_ismapped(), "the Preset Library button went away with HARMONICS on"
         assert app.settings["toner_unlocked"] is True and settings_on_disk()["toner_unlocked"] is True, "app.settings[\"toner_unlocked\"] is True and settings_on_disk()[\"toner_unlocked\"] is True"
         assert settings_on_disk().get("analyzer_tab_shown_v3") is True, "the save did not carry the migration's flag"
         cv = app._toner_spectrum_canvas
@@ -634,7 +724,8 @@ def main():
 
         app._toner_harmonics_var.set("off")
         run(200)
-        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), "app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped()"
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), \
+            "the chart alone: the spectrum is not shown"
 
         def never():
             raise AssertionError("the terms were asked again after unlocking")
@@ -650,7 +741,7 @@ def main():
         run(200)
         assert app.settings["toner_settings"]["harmonics_on"] is False, "app.settings[\"toner_settings\"][\"harmonics_on\"] is False"
     check("HARMONICS: declined terms put the switch back and unlock nothing; accepted terms unlock (saved) and show "
-          "the spectrum view, marked experimental; off again shows the chart; unlocked, the terms are not asked again; "
+          "the spectrum beside the chart, marked experimental; off again the chart alone; unlocked, the terms are not asked again; "
           "the position is remembered in the settings", the_switch_and_the_terms)
 
     # ---------------------------------------------------------------- required fields both ways
@@ -1637,7 +1728,7 @@ def walk(w):
             labels.append(c.cget("text"))
         walk(c)
 walk(app._toner_ctrl_frame)
-buttons = [b.cget("text") for b in app._toner_chart_frame.winfo_children()[1].winfo_children()]
+buttons = [b.cget("text") for b in app._toner_library_row.winfo_children()]
 app.notebook.select(app.pad_tab)
 settled_back = settle(lambda: root.winfo_width() == start_w)
 settle(lambda: getattr(app, "_analyzer_restore", None) is None or app._analyzer_restore["outcome"] != "pending")
@@ -1721,7 +1812,7 @@ print("REPORT " + json.dumps(out))
         changed = [a for a, b in zip(en["labels"], de["labels"]) if a != b and re.search(r"[A-Za-z]{3,}", a)]
         assert changed, "no control-strip label is translated in German"
         on = reports["en-remembered-on"]
-        assert on["harm_mapped"] and not on["chart_mapped"] and on["harmonics_var"] == "on", on
+        assert on["harm_mapped"] and on["chart_mapped"] and on["harmonics_var"] == "on", on   # the chart stays
         hand = reports["en-hand-edited-on"]
         assert hand["chart_mapped"] and not hand["harm_mapped"] and hand["harmonics_var"] == "off", hand
     check("in every language (a child process each): the start-up width is the old rule's, selecting the tab widens "

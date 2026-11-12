@@ -1155,11 +1155,14 @@ class UserGuideWindow(tk.Toplevel):
                     "others go grey. Click it again, or an empty spot, to let it go."))
         self._bullet(_("Export chart... in the Preset Library writes the chart as a PNG or a PDF."))
         self._bullet(_("Low notes on the left or on the right: Options > Settings... > General."))
+        self._bullet(_("The TUNER switch shows a needle meter with the note and an IN TUNE lamp beside "
+                    "the chart. The chart stays in view in every arrangement, so you can watch it "
+                    "fill in."))
 
         self._fold_start(_("Harmonics (experimental and SUPER mic-sensitive)"))
-        self._body(_("The HARMONICS switch on the control strip puts the harmonic analyzer in place "
-                  "of the chart: it finds the note you play and measures each harmonic up to the "
-                  "20th. Its presets also need Mic Type and Mic Model."))
+        self._body(_("The HARMONICS switch on the control strip shows the harmonic analyzer beside the "
+                  "chart: it finds the note you play and measures each harmonic up to the 20th. "
+                  "Its presets also need Mic Type and Mic Model."))
         self._body(_("Every reading is the whole chain at once: player, horn, mouthpiece, reed, "
                   "mic and room. So it measures change, not gear. Change one thing at a time "
                   "and compare. Mouthpiece, player and mic routinely outweigh horn-to-horn "

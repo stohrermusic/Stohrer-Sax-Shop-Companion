@@ -1086,6 +1086,7 @@ DEFAULT_SETTINGS = {
         "concert_pitch": False,
         "chart_low_notes_left": True,   # the intonation chart: low notes on the left (Matt's default), or flipped
         "harmonics_on": False,          # the HARMONICS switch where it was left; counts only with toner_unlocked
+        "tuner_on": False,              # the TUNER switch (the needle meter beside the chart) where it was left
         "analysis_descriptors": {
             "richness": True,
             "warmth": True,

@@ -163,8 +163,8 @@ def main():
     root.after(2000, root.quit)
     root.mainloop()
 
-    check("the HARMONICS switch puts the spectrum in the top area (no terms: the profile is unlocked)",
-          lambda: app._toner_harmonics_frame.winfo_ismapped() and not app._toner_chart_frame.winfo_ismapped())
+    check("the HARMONICS switch puts the spectrum in the top area beside the chart (no terms: the profile is unlocked)",
+          lambda: app._toner_harmonics_frame.winfo_ismapped() and app._toner_chart_frame.winfo_ismapped())
 
     check("toner is running on the synthetic source (no stream opened)",
           lambda: app._toner_engine.is_running and app._toner_engine._stream is None)

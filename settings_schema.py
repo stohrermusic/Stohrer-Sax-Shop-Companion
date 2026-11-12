@@ -229,6 +229,7 @@ TONER_SETTINGS = Dict({
     "concert_pitch": Bool(),
     "chart_low_notes_left": Bool(),                          # the intonation chart's direction
     "harmonics_on": Bool(),                                  # the HARMONICS switch's last position
+    "tuner_on": Bool(),                                      # the TUNER switch's last position
     "analysis_descriptors": Dict({"richness": Bool(), "warmth": Bool(), "even_odd": Bool(), "rolloff_shape": Bool()}),
 })
 

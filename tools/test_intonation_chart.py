@@ -40,6 +40,30 @@ def check(name, fn):
         results.append(False)
 
 
+def _a_narrow_chart_thins_its_names():
+    """Beside the spectrum or the meter the chart is a third of the window: not every note
+    name fits. Names are thinned from the low end; every point and marker is still drawn."""
+    def names(prims, notes):
+        return [p["text"] for p in prims if p["kind"] == "text" and p.get("angle") == 90 and p["text"] in notes]
+    notes = OV["notes"]
+    wide = C.chart_primitives(OV, 900, 420)
+    assert names(wide, notes) == notes, "a wide chart names every note"
+    narrow = C.chart_primitives(OV, 300, 300)
+    got = names(narrow, notes)
+    assert 2 <= len(got) < len(notes), (len(got), len(notes))
+    assert got[0] == notes[0], "the thinning starts at the lowest note"
+    step = notes.index(got[1]) - notes.index(got[0])
+    assert got == notes[::step], (got, step)
+    # no two names closer than a name needs, and nothing else thinned
+    xs = sorted(p["x"] for p in narrow if p["kind"] == "text" and p.get("angle") == 90 and p["text"] in notes)
+    assert all(b - a >= C.FONT_PX * C.LABEL_PITCH - 1e-6 for a, b in zip(xs, xs[1:])), xs
+
+    def markers(prims):
+        return sum(1 for p in prims if p.get("run") is not None and p["kind"] not in ("line", "text"))
+    assert markers(narrow) == markers(wide) > 0, (markers(narrow), markers(wide))
+    assert C.run_at(narrow, *next((p["x"], p["y"]) for p in narrow if p.get("run") == 0 and "x" in p and p["kind"] != "text")) == 0
+
+
 def hz(midi, a4=440.0):
     return a4 * 2 ** ((midi - 69) / 12)
 
@@ -54,6 +78,9 @@ RUN_A = I.run_from_captures([{"captures": [cap(44 + k, -6 + k) for k in range(0,
                                            + [cap(44, 4)]}], "Tenor", name="Mark VI, Link 7*")   # Bb3 twice: 2 takes
 RUN_B = I.run_from_captures([{"captures": [cap(46 + k, 3 - k) for k in range(0, 8)]}], "Tenor", name="Conn 10M")
 OV = I.overlay([RUN_A, RUN_B])
+
+check("a narrow chart thins its note names from the low end and still draws every point",
+      _a_narrow_chart_thins_its_names)
 W, H = 800, 400
 PRIMS = C.chart_primitives(OV, W, H, title="Two horns")
 

@@ -89,6 +89,9 @@ def runs_title(lines, width, size):
     return text
 
 
+LABEL_PITCH = 1.25      # the room a turned note name needs along the axis, in font heights
+
+
 def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px=FONT_PX, footnote="",
                      highlight=None):
     """The chart for `overlay` (intonation.overlay(runs): notes low to high, registers,
@@ -184,8 +187,15 @@ def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px
             x = (x_of_note[order[i]] + x_of_note[order[i - 1]]) / 2
             prims.append({"kind": "line", "x1": x, "y1": plot_y0, "x2": x, "y2": plot_y1, "color": REGISTER_LINE,
                           "width": 1, "dash": (4, 3)})
-    # the notes along the bottom, turned 90 degrees, their end at the axis
+    # the notes along the bottom, turned 90 degrees, their end at the axis. In a narrow
+    # frame (the chart beside the spectrum or the meter, 2026-11-12) there is not room for
+    # every name: every second, third... is written, from the low end, and every point is
+    # still drawn.
+    step = max(1, math.ceil(font_px * LABEL_PITCH / (plot_w / n))) if n else 1
+    labelled = set(notes[::step])
     for note in order:
+        if note not in labelled:
+            continue
         prims.append({"kind": "text", "x": x_of_note[note], "y": plot_y1 + 4, "text": note, "color": TEXT,
                       "size": font_px, "anchor": "e", "angle": 90, "bold": False})
     # ---- the runs: the highlighted one last, so it lies on top ----------------------------
