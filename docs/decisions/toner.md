@@ -251,3 +251,11 @@ Matt, on reading round 14's "found, not fixed": "fix the two things you found".
 Found while looking into a chart Matt thought was in the wrong key (it was not: the run was an F Mezzo's and was charted as one). The slider on the strip is bound to an index; loading a preset moved it, but four other places set the horn type from a preset (a capture starting, a run attached to a preset, the two audio imports) and left the slider where it was, so the strip could show one horn while the tab worked in another. The slider now follows the type whoever sets it (a trace on the type, in the strip's builder). Gate: `test_analyzer_tab`, "the SAX slider follows the horn type".
 
 His two "takes left out: out of range" on that chart were not low Bb and B: both were 120 Hz, 0.2 to 0.4 s, at -48 dBFS, mains hum in the eleven quiet seconds before the first note, read as concert B2 and rightly left out. The recording's first played note is low C.
+
+## The Preset Library's Library box (2026-11-12)
+
+Matt: "I would like the libraries for the analyzer to be the same style as the padmaker and key heights. currently they are all mixed together in a long list", with a picture of the Pad Maker's "Library: [My Presets]" box.
+
+A readonly Library box above the list, values All Libraries and the libraries that hold a preset, sorted. One library lists its presets with no heading; All Libraries is the list as it was, a heading per library. It opens on the library last picked while the app has been running, else the loaded preset's, else My Presets when there is one (the Pad Maker's rule), else All Libraries; a library that is renamed away or emptied falls back to All Libraries. The list stays a list (the Pad Maker has a second box for the preset): Compare needs several rows picked at once, and a preset's sessions are rows too. Comparing across libraries means picking All Libraries first; the guide says so. Not kept between launches (not asked; the Pad Maker's is not either). The picker for an unsaved run's preset and the audio import's list are unchanged.
+
+Gate: `test_analyzer_tab`, "the Preset Library's Library box". The suite's other Preset Library checks set the box to All Libraries, since they pick rows across libraries.

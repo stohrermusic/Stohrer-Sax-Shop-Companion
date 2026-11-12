@@ -2093,17 +2093,46 @@ class TonerTabMixin:
 
     LOAD_LIST_MAX_CHARS = 80      # the list grows to its longest entry up to this; past it, it scrolls
 
-    def _toner_library_rows(self):
+    def _toner_library_names(self):
+        """The libraries that hold a preset, sorted: what the Preset Library's Library box offers."""
+        return sorted(name for name, presets in self._toner_presets.items()
+                      if isinstance(presets, dict) and presets)
+
+    def _toner_library_default_filter(self):
+        """The library the Preset Library opens on: the one last picked in it this session,
+        else the loaded preset's, else My Presets when it exists (as the Pad Maker's Library
+        box does), else None, which is All Libraries."""
+        names = self._toner_library_names()
+        picked = getattr(self, '_toner_library_filter', False)
+        if picked is None or picked in names:
+            return picked
+        if self._toner_active_library in names:
+            return self._toner_active_library
+        return DEFAULT_LIBRARY if DEFAULT_LIBRARY in names else None
+
+    def _toner_library_filter_changed(self):
+        """The Library box was changed: remember it and show that library's presets."""
+        text = self._lib_filter_var.get()
+        self._toner_library_filter = None if text == _("All Libraries") else text
+        self._toner_refresh_preset_list()
+        self._toner_on_preset_selected()
+
+    def _toner_library_rows(self, library=None):
         """The rows of the Preset Library's list, in order: (text, key). key is None for a
         library heading, (lib, name, None) for a preset ("Horn type \u2014 name (status)",
         the type as the form stores it, left out for a sandbox preset or one with no type),
         (lib, name, date) for one session of a preset that has more than one with captures
-        (Matt: a preset row is the average of all its sessions, a session row that session)."""
+        (Matt: a preset row is the average of all its sessions, a session row that session).
+        `library` names the one library to list, with no heading; None is every library,
+        each under its heading."""
         rows = []
         for lib_name, lib_presets in self._toner_presets.items():
             if not isinstance(lib_presets, dict) or not lib_presets:
                 continue
-            rows.append((f"\u2500\u2500 {lib_name} \u2500\u2500", None))
+            if library is not None and lib_name != library:
+                continue
+            if library is None:
+                rows.append((f"\u2500\u2500 {lib_name} \u2500\u2500", None))
             for preset_name, preset in lib_presets.items():
                 if not isinstance(preset, dict):
                     continue
@@ -2162,6 +2191,18 @@ class TonerTabMixin:
 
         tk.Label(frame, text=_("Preset Library"), bg=bg, fg=fg,
                  font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
+
+        # The Library box, as on the Pad Maker and Key Heights (Matt, 2026-11-12: "currently
+        # they are all mixed together in a long list"): one library's presets, or all.
+        lib_row = tk.Frame(frame, bg=bg)
+        lib_row.pack(fill="x", pady=(0, 6))
+        tk.Label(lib_row, text=_("Library:"), bg=bg, fg=fg).pack(side="left")
+        self._toner_library_filter = self._toner_library_default_filter()
+        self._lib_filter_var = tk.StringVar(value=self._toner_library_filter or _("All Libraries"))
+        self._lib_filter_combo = ttk.Combobox(lib_row, textvariable=self._lib_filter_var,
+                                              state="readonly", width=30)
+        self._lib_filter_combo.pack(side="left", padx=(5, 0))
+        self._lib_filter_combo.bind("<<ComboboxSelected>>", lambda e: self._toner_library_filter_changed())
 
         list_frame = tk.Frame(frame, bg=bg)
         list_frame.pack(fill="both", expand=True, pady=(0, 5))
@@ -2254,7 +2295,16 @@ class TonerTabMixin:
             return
         lb.delete(0, tk.END)
         self._preset_list_keys = []
-        rows = self._toner_library_rows()
+        # the Library box follows the libraries there are; one that is gone falls back to all
+        names = self._toner_library_names()
+        library = getattr(self, '_toner_library_filter', None)
+        if library is not None and library not in names:
+            library = self._toner_library_filter = None
+        combo = getattr(self, '_lib_filter_combo', None)
+        if combo is not None and combo.winfo_exists():
+            combo.configure(values=[_("All Libraries")] + names)
+            self._lib_filter_var.set(library or _("All Libraries"))
+        rows = self._toner_library_rows(library)
         for text, key in rows:
             lb.insert(tk.END, text)
             self._preset_list_keys.append(key)

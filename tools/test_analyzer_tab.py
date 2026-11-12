@@ -837,10 +837,14 @@ def main():
 
     # ---------------------------------------------------------------- Compare and Export
     def library():
-        """The Preset Library window, open (one window: a second call lifts it)."""
+        """The Preset Library window, open (one window: a second call lifts it), its Library
+        box on All Libraries: these checks pick rows across libraries. The box itself is
+        checked in the_library_box."""
         app._toner_open_preset_dialog()
         run(50)
         win = app._toner_library_win
+        app._toner_library_filter = None
+        app._toner_refresh_preset_list()
         return win, app._preset_listbox, {b.cget("text"): b for b in widgets(win, tk.Button)}
 
     def row_index(lb, text):
@@ -1156,6 +1160,80 @@ def main():
           "a later edit of the entry does not touch", the_key_heights_link)
 
     # ---------------------------------------------------------------- the Preset Library (round 13)
+    def the_library_box():
+        """Matt, 2026-11-12: "I would like the libraries for the analyzer to be the same style as
+        the padmaker and key heights. currently they are all mixed together in a long list." A
+        Library box above the list: one library's presets with no heading, or All Libraries."""
+        from tkinter import ttk
+        app._toner_unload_preset()
+        old = getattr(app, "_toner_library_win", None)
+        if old is not None and old.winfo_exists():
+            old.destroy()
+        keep = app._toner_presets
+        cap_a = {"date": "2026-10-10 10:00:00", "captures": [_capture("A3", 220.0)]}
+        app._toner_presets = {
+            "My Presets": {"Mine": {"horn_type": "Alto", "sessions": [dict(cap_a)]}},
+            "Shop": {"One": {"horn_type": "Tenor", "sessions": [dict(cap_a)]},
+                     "Two": {"horn_type": "Tenor", "sessions": [dict(cap_a)]}},
+            "Empty": {},
+        }
+        try:
+            # opens on My Presets, as the Pad Maker's does, with nothing picked before and nothing loaded
+            app._toner_library_filter = False
+            app._toner_open_preset_dialog()
+            run(50)
+            win, lb = app._toner_library_win, app._preset_listbox
+            combos = widgets(win, ttk.Combobox)
+            assert len(combos) == 1, len(combos)
+            box = combos[0]
+            assert list(box.cget("values")) == ["All Libraries", "My Presets", "Shop"], list(box.cget("values"))
+            assert box.get() == "My Presets" and str(box.cget("state")) == "readonly"
+            rows = [t.strip() for t in lb.get(0, "end")]
+            assert rows == ["Alto \u2014 Mine  (1 notes)"], rows                  # one library, no heading
+            assert app._preset_list_keys == [("My Presets", "Mine", None)]
+
+            def pick(name):
+                box.set(name)
+                box.event_generate("<<ComboboxSelected>>")
+                run(50)
+                return [t.strip() for t in lb.get(0, "end")]
+            rows = pick("Shop")
+            assert rows == ["Tenor \u2014 One  (1 notes)", "Tenor \u2014 Two  (1 notes)"], rows
+            assert app._toner_library_filter == "Shop"
+            rows = pick("All Libraries")
+            assert len(rows) == 5 and rows[0].strip("\u2500 ") == "My Presets" and rows[2].strip("\u2500 ") == "Shop", rows
+            assert app._toner_library_filter is None and app._preset_list_keys[0] is None
+            # the choice is kept while the app runs: close, open, still the last library picked
+            pick("Shop")
+            win.destroy()
+            app._toner_open_preset_dialog()
+            run(50)
+            assert widgets(app._toner_library_win, ttk.Combobox)[0].get() == "Shop"
+            # a library that is gone falls back to All Libraries, and the box loses it
+            del app._toner_presets["Shop"]
+            app._toner_refresh_preset_list()
+            box = widgets(app._toner_library_win, ttk.Combobox)[0]
+            assert box.get() == "All Libraries" and list(box.cget("values")) == ["All Libraries", "My Presets"]
+            # with a preset loaded and nothing picked, it opens on that preset's library
+            app._toner_library_win.destroy()
+            app._toner_presets["Shop"] = {"One": {"horn_type": "Tenor", "sessions": [dict(cap_a)]}}
+            app._toner_library_filter = False
+            app._toner_active_library, app._toner_active_preset = "Shop", "One"
+            assert app._toner_library_default_filter() == "Shop"
+            app._toner_active_library = app._toner_active_preset = None
+            # with no My Presets and nothing loaded: All Libraries
+            del app._toner_presets["My Presets"]
+            assert app._toner_library_default_filter() is None
+        finally:
+            app._toner_active_library = app._toner_active_preset = None
+            app._toner_presets = keep
+            app._toner_library_filter = None
+            w = getattr(app, "_toner_library_win", None)
+            if w is not None and w.winfo_exists():
+                w.destroy()
+    check("the Preset Library's Library box: one library with no heading or All Libraries; opens on My Presets or "
+          "the loaded preset's; the choice is kept; a library that is gone falls back", the_library_box)
+
     def the_preset_library():
         """Matt, 2026-11-11: one window for everything done with presets, and "click capture and go
         record, and enter the preset info after". Buttons by selection count; Load and Capture from

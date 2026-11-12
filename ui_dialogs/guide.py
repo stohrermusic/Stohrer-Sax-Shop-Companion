@@ -1146,6 +1146,8 @@ class UserGuideWindow(tk.Toplevel):
                     "them: name the preset so you know which horn it is."))
 
         self._sub(_("Compare and export"))
+        self._bullet(_("The Library box above the list shows one library's presets, or All Libraries; "
+                    "pick All Libraries to compare presets from different libraries."))
         self._bullet(_("In the Preset Library, select two or more rows and click Compare: presets, or "
                     "single sessions of a preset with several, each run in its own colour and marker. "
                     "A preset row is all its sessions together; a session row is that session alone."))
