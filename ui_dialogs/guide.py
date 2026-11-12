@@ -1213,8 +1213,8 @@ class UserGuideWindow(tk.Toplevel):
                     "ghost bars behind the live spectrum, note by note."))
 
         self._sub(_("Analyze"))
-        self._body(_("File > Analyze... shows what differs between presets: not which is better, "
-                  "but what changed and where."))
+        self._body(_("File > Harmonic Analysis (experimental)... shows what differs between presets: "
+                  "not which is better, but what changed and where."))
         self._bullet(_("Filter the picker by horn type, player, mouthpiece and mic type."))
         self._bullet(_("One preset: its descriptors and harmonic curve. Two: side by side with a "
                     "Difference chart. Three or more: the spread across the group."))

@@ -540,7 +540,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label=_("File"), menu=toner_file_menu)
         toner_file_menu.add_command(label=_("Preset Library..."), command=self._toner_open_preset_dialog)
-        toner_file_menu.add_command(label=_("Analyze..."), command=self._toner_open_analyze_dialog)
+        # Named for what it is (Matt, 2026-11-12): it opens the harmonic comparison, which is
+        # experimental, and is no longer a button in the Preset Library, where it dropped the
+        # selection and asked for the horns again.
+        toner_file_menu.add_command(label=_("Harmonic Analysis (experimental)..."), command=self._toner_open_analyze_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
         toner_file_menu.add_cascade(label=_("Transfer Data"), menu=toner_transfer_menu)

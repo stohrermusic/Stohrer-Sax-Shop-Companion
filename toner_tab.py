@@ -2268,7 +2268,7 @@ class TonerTabMixin:
         """The Preset Library: every preset (and the sessions of those with several) in one
         list, multi-select, and everything done with presets in three rows of buttons: the
         chart and capture (Load, Capture, Record first, Compare, Export chart...), the presets
-        (New Preset..., Mutate..., Rename, Edit Notes..., Delete, Analyze...), files (Import
+        (New Preset..., Mutate..., Rename, Edit Notes..., Delete), files (Import
         Audio File..., Import presets..., Export presets..., Close). One window: a second
         call lifts it. File > Preset Library..., the button under the chart and Capture
         with nothing loaded all come here."""
@@ -2351,7 +2351,6 @@ class TonerTabMixin:
         button(row2, _("Rename"), self._toner_rename_preset, one=True)
         button(row2, _("Edit Notes..."), self._toner_edit_preset_notes, one=True)
         button(row2, _("Delete"), self._toner_delete_preset, one=True)
-        button(row2, _("Analyze..."), lambda: [self._toner_library_close(), self._toner_open_analyze_dialog()], one=True)
         # row 3: files
         row3 = tk.Frame(frame, bg=bg)
         row3.pack(fill="x")
@@ -6841,30 +6840,79 @@ class TonerTabMixin:
         tk.Label(frame, text=_("Select presets to export:"), bg=bg, fg=fg,
                  font=("Helvetica", 10)).pack(pady=(0, 5))
 
-        # Checkboxes
-        list_frame = tk.Frame(frame, bg=bg)
-        list_frame.pack(fill="both", expand=True, pady=(0, 10))
+        # The list scrolls (with a hundred presets it ran off the bottom of the screen, the
+        # Export button with it), and each library has a tick of its own that takes all its
+        # presets, so a whole library is one click and single items still can be picked
+        # (Matt, 2026-11-12: "export library needs a scroll bar and an ability to export an
+        # entire library, or just items"). The file keeps each preset under its library's
+        # name, as it always has, and Import puts it back in the library of that name.
+        from ui_dialogs import bind_mousewheel
+        outer = tk.Frame(frame, bg=bg)
+        outer.pack(fill="both", expand=True, pady=(0, 10))
+        canvas = tk.Canvas(outer, bg=bg, highlightthickness=0, borderwidth=0)
+        scroll = tk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        list_frame = tk.Frame(canvas, bg=bg)
+        canvas.create_window((0, 0), window=list_frame, anchor="nw")
 
         check_vars = []
+        library_vars = {}          # library -> (its tick, its presets' ticks)
+
+        def library_toggled(lib):
+            var, members = library_vars[lib]
+            for m in members:
+                m.set(var.get())
+
+        def preset_toggled(lib):
+            var, members = library_vars[lib]
+            var.set(all(m.get() for m in members))
+
         for lib_name, preset_name, preset_data in all_presets:
+            if lib_name not in library_vars:
+                lib_var = tk.BooleanVar(value=True)
+                library_vars[lib_name] = (lib_var, [])
+                head = tk.Checkbutton(list_frame, text=lib_name, variable=lib_var, bg=bg,
+                                      font=("Helvetica", 9, "bold"), anchor="w",
+                                      command=lambda lib=lib_name: library_toggled(lib))
+                head.pack(fill="x", pady=(4 if library_vars and len(library_vars) > 1 else 0, 0))
+                bind_mousewheel(head, canvas)
             sessions = preset_data.get('sessions', [])
             caps = sum(len(s.get('captures', [])) for s in sessions)
             var = tk.BooleanVar(value=True)
-            tk.Checkbutton(list_frame,
+            row = tk.Checkbutton(list_frame,
                 text=_("[{lib}] {name} ({caps} captures)").format(lib=lib_name, name=preset_name, caps=caps),
                 variable=var, bg=bg, font=("Helvetica", 9),
-                anchor="w").pack(fill="x")
+                anchor="w", command=lambda lib=lib_name: preset_toggled(lib))
+            row.pack(fill="x", padx=(18, 0))
+            bind_mousewheel(row, canvas)
             check_vars.append(var)
+            library_vars[lib_name][1].append(var)
+        for w in (canvas, list_frame):
+            bind_mousewheel(w, canvas)
+        list_frame.update_idletasks()
+        # as wide as its longest row, as tall as its rows up to a share of the screen
+        max_h = max(160, int(dlg.winfo_screenheight() * 0.55))
+        canvas.configure(width=list_frame.winfo_reqwidth(), height=min(list_frame.winfo_reqheight(), max_h),
+                         scrollregion=(0, 0, list_frame.winfo_reqwidth(), list_frame.winfo_reqheight()))
+        dlg._export_check_vars = check_vars          # for the suites
+        dlg._export_library_vars = library_vars
+        dlg._export_canvas = canvas
+        self._toner_export_win = dlg
 
         # Select all / none
         sel_frame = tk.Frame(frame, bg=bg)
         sel_frame.pack(fill="x", pady=(0, 10))
+        def set_all(value):
+            for v in check_vars:
+                v.set(value)
+            for lib_var, _members in library_vars.values():
+                lib_var.set(value)
         tk.Button(sel_frame, text=_("All"), font=("Helvetica", 8),
-                  command=lambda: [v.set(True) for v in check_vars]).pack(
-                      side="left", padx=(0, 5))
+                  command=lambda: set_all(True)).pack(side="left", padx=(0, 5))
         tk.Button(sel_frame, text=_("None"), font=("Helvetica", 8),
-                  command=lambda: [v.set(False) for v in check_vars]).pack(
-                      side="left")
+                  command=lambda: set_all(False)).pack(side="left")
 
         def do_export():
             # Build export data from selected profiles

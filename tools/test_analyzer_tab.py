@@ -1344,6 +1344,129 @@ def main():
     check("the Preset Library's Library box: one library with no heading or All Libraries; opens on My Presets or "
           "the loaded preset's; the choice is kept; a library that is gone falls back", the_library_box)
 
+    def export_and_import_keep_the_libraries():
+        """Matt, 2026-11-12: "export library needs a scroll bar and an ability to export an entire
+        library, or just items. each exported item should carry its library name with it", and
+        "test exporting and importing"."""
+        import copy
+        keep = app._toner_presets
+        keep_save = toner_tab.save_tone_presets
+        from tkinter import filedialog
+
+        def preset(horn, n):
+            return {"horn_type": horn, "horn_make": "M", "horn_model": f"model {n}", "player": "P", "mouthpiece": "MP",
+                    "key_heights": None,
+                    "sessions": [{"date": f"2026-10-{10 + n:02d} 10:00:00", "horn_type": horn,
+                                  "captures": [_capture("A3", 220.0 + n), _capture("C4", 261.6)]}]}
+        library = {
+            "Shop": {f"shop horn {i}": preset("Tenor", i) for i in range(3)},
+            "A customer": {f"customer horn {i}": preset("Alto", i) for i in range(2)},
+            "Big": {f"big {i:03d}": preset("Alto", i % 9) for i in range(60)},
+        }
+        out_dir = tempfile.mkdtemp(prefix="ssc-export-")
+        files, saved = [], []
+        keep_saveas, keep_openname = filedialog.asksaveasfilename, filedialog.askopenfilename
+        filedialog.asksaveasfilename = lambda **k: files[-1]
+        filedialog.askopenfilename = lambda **k: files[-1]
+        toner_tab.save_tone_presets = lambda presets, path: saved.append(copy.deepcopy(presets))
+
+        def export(pick):
+            """Open the window, apply `pick(window)`, click Export; the file's contents."""
+            app._toner_presets = copy.deepcopy(library)
+            files.append(os.path.join(out_dir, f"export{len(files)}.json"))
+            app._toner_export_presets()
+            run(80)
+            win = app._toner_export_win
+            pick(win)
+            next(b for b in widgets(win, tk.Button) if b.cget("text") == "Export").invoke()
+            run(80)
+            with open(files[-1], encoding="utf-8") as f:
+                return json.load(f)
+
+        def import_into(start):
+            app._toner_presets = copy.deepcopy(start)
+            app._toner_import_presets()
+            run(50)
+            return app._toner_presets
+        try:
+            # the window: a tick per library and per preset, everything ticked, and it scrolls
+            app._toner_presets = copy.deepcopy(library)
+            files.append(os.path.join(out_dir, "unused.json"))
+            app._toner_export_presets()
+            run(80)
+            win = app._toner_export_win
+            assert sorted(win._export_library_vars) == ["A customer", "Big", "Shop"], sorted(win._export_library_vars)
+            assert len(win._export_check_vars) == 65 and all(v.get() for v in win._export_check_vars)
+            cv = win._export_canvas
+            region = [float(x) for x in str(cv.cget("scrollregion")).split()]
+            assert region[3] > cv.winfo_height() + 200, f"sixty-five rows do not need to scroll? {region} in {cv.winfo_height()}"
+            assert win.winfo_reqheight() <= win.winfo_screenheight(), "the window is taller than the screen"
+            assert widgets(win, tk.Scrollbar), "no scroll bar"
+            assert all(b.winfo_y() + b.winfo_height() <= win.winfo_reqheight() for b in widgets(win, tk.Button)), \
+                "a button is below the window's own height"
+            first, last = cv.yview()
+            cv.yview_moveto(1.0)
+            run(30)
+            assert cv.yview()[1] == 1.0 and cv.yview()[0] > first, (first, last, cv.yview())
+            # a library's tick takes all its presets; a preset's tick clears its library's
+            lib_var, members = win._export_library_vars["Shop"]
+            head = next(c for c in widgets(win, tk.Checkbutton) if c.cget("text") == "Shop")
+            head.invoke()                                   # through the widget's own command: off
+            assert not lib_var.get() and not any(m.get() for m in members), "the library's tick did not clear its presets"
+            head.invoke()                                   # on again
+            assert lib_var.get() and all(m.get() for m in members), "the library's tick did not take its presets"
+            head.invoke()                                   # and off, for what follows
+            assert not lib_var.get() and not any(m.get() for m in members), "the library's tick did not clear its presets"
+            row = next(c for c in widgets(win, tk.Checkbutton) if "shop horn 1" in c.cget("text"))
+            row.invoke()
+            assert members[1].get() and not lib_var.get(), "one preset of three ticked the library"
+            for c in widgets(win, tk.Checkbutton):
+                if "shop horn 0" in c.cget("text") or "shop horn 2" in c.cget("text"):
+                    c.invoke()
+            assert lib_var.get(), "all its presets ticked, the library's tick is still clear"
+            win.destroy()
+
+            # everything: the file holds every preset under its library, and imports back the same
+            whole = export(lambda w: None)
+            assert whole == library, "the export of everything is not the library"
+            assert import_into({}) == library and saved, "export then import into an empty library lost something"
+
+            # one whole library, by its tick alone
+            def only_shop(w):
+                next(b for b in widgets(w, tk.Button) if b.cget("text") == "None").invoke()
+                next(c for c in widgets(w, tk.Checkbutton) if c.cget("text") == "Shop").invoke()
+            one = export(only_shop)
+            assert one == {"Shop": library["Shop"]}, sorted(one)
+            got = import_into({"Shop": {"already": preset("Tenor", 5)}, "Other": {"x": preset("Alto", 1)}})
+            assert sorted(got) == ["Other", "Shop"] and sorted(got["Shop"]) == ["already"] + sorted(library["Shop"]), \
+                {k: sorted(v) for k, v in got.items()}
+
+            # single items from two libraries: each goes back under its own library's name
+            def two_items(w):
+                next(b for b in widgets(w, tk.Button) if b.cget("text") == "None").invoke()
+                for c in widgets(w, tk.Checkbutton):
+                    if "customer horn 1" in c.cget("text") or "big 007" in c.cget("text"):
+                        c.invoke()
+            few = export(two_items)
+            assert few == {"A customer": {"customer horn 1": library["A customer"]["customer horn 1"]},
+                           "Big": {"big 007": library["Big"]["big 007"]}}, {k: sorted(v) for k, v in few.items()}
+            got = import_into({})
+            assert got == few
+            # the same file again adds nothing: a preset there already keeps its sessions once
+            app._toner_presets = copy.deepcopy(few)
+            app._toner_import_presets()
+            run(50)
+            assert app._toner_presets == few, "a second import of the same file changed the library"
+        finally:
+            filedialog.asksaveasfilename, filedialog.askopenfilename = keep_saveas, keep_openname
+            toner_tab.save_tone_presets = keep_save
+            app._toner_presets = keep
+            w = getattr(app, "_toner_export_win", None)
+            if w is not None and w.winfo_exists():
+                w.destroy()
+    check("Export presets: the list scrolls and fits the screen; a library's tick takes its presets; a whole library, "
+          "or single items, go to the file under their library's name and import back into it", export_and_import_keep_the_libraries)
+
     def the_preset_library():
         """Matt, 2026-11-11: one window for everything done with presets, and "click capture and go
         record, and enter the preset info after". Buttons by selection count; Load and Capture from
@@ -1352,10 +1475,18 @@ def main():
         app._toner_unload_preset()
         win, lb, buttons = library()
         for name in ("Load", "Capture", "Record first", "Compare", "Export chart...", "New Preset...", "Mutate...",
-                     "Rename", "Edit Notes...", "Delete", "Analyze...", "Import Audio File...", "Import presets...",
+                     "Rename", "Edit Notes...", "Delete", "Import Audio File...", "Import presets...",
                      "Export presets...", "Close"):
             assert name in buttons, (name, sorted(buttons))
-        one_only = ("Load", "Capture", "Mutate...", "Rename", "Edit Notes...", "Delete", "Analyze...")
+        one_only = ("Load", "Capture", "Mutate...", "Rename", "Edit Notes...", "Delete")
+        # no Analyze button: it opened the harmonic comparison and asked for the horns again
+        # (Matt, 2026-11-12); that is File > Harmonic Analysis (experimental)... now
+        assert "Analyze..." not in buttons, sorted(buttons)
+        labels = [app.toner_menu.nametowidget(app.toner_menu.entrycget(i, "menu")).entrycget(j, "label")
+                  for i in range(app.toner_menu.index("end") + 1) if app.toner_menu.type(i) == "cascade"
+                  for m in [app.toner_menu.nametowidget(app.toner_menu.entrycget(i, "menu"))]
+                  for j in range(m.index("end") + 1) if m.type(j) == "command"]
+        assert "Harmonic Analysis (experimental)..." in labels and "Analyze..." not in labels, labels
         always = ("Record first", "New Preset...", "Import Audio File...", "Import presets...", "Export presets...", "Close")
 
         def states():

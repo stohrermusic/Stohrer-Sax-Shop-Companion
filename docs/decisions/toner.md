@@ -277,3 +277,15 @@ Gates: `test_analyzer_tab` ("the four views", "VIEW, SCALE and FPS show only whi
 Matt: "what if someone switches the sax type mid-capture? when does that decision log?" With a preset loaded it could not happen (the slider is locked and the type is the preset's). A record-first run takes the slider's type when the capture starts; the slider was free, and moving it mid-capture re-named the live readout and moved the detector's floor while the run and its chart kept the type they started with. Nothing stored was wrong (captures hold the sounding pitch) but the run could end up named as the wrong horn. His answer to the two ways offered: "yes, lock it while capturing, allow re-categorizing upon save".
 
 The slider is locked from the moment a capture starts (free or guided) and freed at Stop unless a preset holds it. Re-categorizing at save was already there and is unchanged: the new-preset form opens with the run's type and takes whatever is chosen, and a run attached to an existing preset takes that preset's type. Gate: `test_analyzer_tab`, in the record-first check.
+
+## Analyze leaves the Preset Library and is named for what it is (2026-11-12)
+
+Matt: "take 'analyze' out of the preset library menu- it only opens up harmonic analysis and you have to select horns again. rename 'analyze' in the file menu to 'harmonic analysis (experimental)'". The library's Analyze... button closed the library and opened the Analyze tool's own picker, dropping the row that was selected; it is gone. The File menu's item reads "Harmonic Analysis (experimental)..." and opens the same tool. The tool's own windows and the guide's "Analyze tool" wording are unchanged. Gate: `test_analyzer_tab`, in the Preset Library check.
+
+## Export presets: a list that scrolls, a tick per library (2026-11-12)
+
+Matt, with a picture of the Export Tone Presets window running off the bottom of his screen: "export library needs a scroll bar and an ability to export an entire library, or just items. each exported item should carry its library name with it", then "also test exporting and importing if you have not already". Nothing had tested them.
+
+The list is in a scrolled canvas, as tall as its rows up to 55 % of the screen, so the Export button is always on it. Each library has a tick of its own above its presets: it takes or clears all of them, and it shows ticked only while all of them are. All and None act on both. The rows keep their text ("[library] name (N captures)"), so there is no new string. The file was already `{library: {preset: data}}` and Import already merged each preset into the library of that name (a preset there already gains only the sessions it lacks): that is the "carries its library name", and it is now pinned.
+
+Gate: `test_analyzer_tab`, "Export presets": sixty-five presets in three libraries scroll and fit the screen; a library's tick and a preset's tick through the widgets' own commands; everything, one whole library by its tick, and two single items from two libraries each written and imported back under their own library; a second import of the same file changes nothing.
