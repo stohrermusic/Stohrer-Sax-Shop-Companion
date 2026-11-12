@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-12 10:23-0500\n"
+"POT-Creation-Date: 2026-11-12 10:44-0500\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -827,7 +827,7 @@ msgid "Save Failed"
 msgstr "Salvataggio fallito"
 
 #: machine_control.py:1019 toner_tab.py:1590 toner_tab.py:4249
-#: tooling_tab.py:1927 ui_dialogs/guide.py:1557
+#: tooling_tab.py:1927 ui_dialogs/guide.py:1558
 msgid "OK"
 msgstr "OK"
 
@@ -1133,7 +1133,7 @@ msgstr "Soglia di acquisizione..."
 msgid "Help"
 msgstr "Aiuto"
 
-#: main.py:531 ui_dialogs/guide.py:1431
+#: main.py:531 ui_dialogs/guide.py:1432
 msgid "Welcome"
 msgstr "Benvenuto"
 
@@ -1145,7 +1145,7 @@ msgstr "Guida utente..."
 msgid "Open Log File"
 msgstr "Apri file di log"
 
-#: main.py:536 ui_dialogs/guide.py:1478
+#: main.py:536 ui_dialogs/guide.py:1479
 msgid "About"
 msgstr "Informazioni"
 
@@ -1153,27 +1153,27 @@ msgstr "Informazioni"
 msgid "Pad Maker"
 msgstr "Crea tamponi"
 
-#: main.py:806 main.py:3215 ui_dialogs/guide.py:81 ui_dialogs/guide.py:1066
+#: main.py:806 main.py:3215 ui_dialogs/guide.py:81 ui_dialogs/guide.py:1067
 msgid "Key Height Library"
 msgstr "Libreria altezze chiavi"
 
-#: main.py:811 main.py:3216 ui_dialogs/guide.py:82 ui_dialogs/guide.py:1074
+#: main.py:811 main.py:3216 ui_dialogs/guide.py:82 ui_dialogs/guide.py:1075
 msgid "Serial Lookup"
 msgstr "Ricerca numeri di serie"
 
-#: main.py:816 main.py:3217 ui_dialogs/guide.py:83 ui_dialogs/guide.py:1078
+#: main.py:816 main.py:3217 ui_dialogs/guide.py:83 ui_dialogs/guide.py:1079
 msgid "Screw Specs"
 msgstr "Specifiche viti"
 
-#: main.py:820 main.py:3218 ui_dialogs/guide.py:84 ui_dialogs/guide.py:958
+#: main.py:820 main.py:3218 ui_dialogs/guide.py:84 ui_dialogs/guide.py:959
 msgid "Tooling"
 msgstr "Attrezzatura"
 
-#: main.py:825 main.py:3219 ui_dialogs/guide.py:85 ui_dialogs/guide.py:1084
+#: main.py:825 main.py:3219 ui_dialogs/guide.py:85 ui_dialogs/guide.py:1085
 msgid "Tuner"
 msgstr "Accordatore"
 
-#: main.py:830 main.py:3220 ui_dialogs/guide.py:86 ui_dialogs/guide.py:1113
+#: main.py:830 main.py:3220 ui_dialogs/guide.py:86 ui_dialogs/guide.py:1114
 msgid "Analyzer"
 msgstr "Analizzatore"
 
@@ -1279,7 +1279,7 @@ msgid "Generate G-code"
 msgstr "Genera G-code"
 
 #: main.py:1144 tooling_tab.py:76 ui_dialogs/guide.py:683
-#: ui_dialogs/guide.py:921 ui_dialogs/guide.py:1044
+#: ui_dialogs/guide.py:921 ui_dialogs/guide.py:1045
 msgid "Frame & Cut"
 msgstr "Inquadra e taglia"
 
@@ -1486,7 +1486,7 @@ msgstr "Fatto"
 
 #: main.py:1760 toner_tab.py:2210 toner_tab.py:5923 toner_tab.py:6231
 #: tooling_tab.py:1729 tuner_tab.py:1368 ui_dialogs/guide.py:191
-#: ui_dialogs/guide.py:1398 ui_dialogs/guide.py:1452 ui_dialogs/history.py:116
+#: ui_dialogs/guide.py:1399 ui_dialogs/guide.py:1453 ui_dialogs/history.py:116
 #: ui_dialogs/machine.py:934 ui_dialogs/machine.py:2683
 #: ui_dialogs/machine.py:3222 ui_dialogs/machine.py:3430
 msgid "Close"
@@ -2433,7 +2433,7 @@ msgid "Ligature"
 msgstr "Legatura"
 
 #: toner_tab.py:1342 toner_tab.py:2513 toner_tab.py:2527
-#: ui_dialogs/guide.py:1189
+#: ui_dialogs/guide.py:1190
 msgid "Mic Position"
 msgstr "Posizione microfono"
 
@@ -2862,37 +2862,37 @@ msgid "Notes for \"{name}\":"
 msgstr "Note per \"{name}\":"
 
 #: toner_tab.py:2513 toner_tab.py:2515 toner_tab.py:2602 toner_tab.py:2719
-#: ui_dialogs/guide.py:1120
+#: ui_dialogs/guide.py:1121
 msgid "Horn Type"
 msgstr "Tipo di sassofono"
 
 #: toner_tab.py:2513 toner_tab.py:2516 toner_tab.py:2603 toner_tab.py:2715
-#: ui_dialogs/guide.py:1120 ui_dialogs/guide.py:1175
+#: ui_dialogs/guide.py:1121 ui_dialogs/guide.py:1176
 msgid "Make"
 msgstr "Marca"
 
 #: toner_tab.py:2513 toner_tab.py:2517 toner_tab.py:2604 toner_tab.py:2717
-#: ui_dialogs/guide.py:1120 ui_dialogs/guide.py:1175
+#: ui_dialogs/guide.py:1121 ui_dialogs/guide.py:1176
 msgid "Model"
 msgstr "Modello"
 
 #: toner_tab.py:2513 toner_tab.py:2518 toner_tab.py:2605
-#: ui_dialogs/guide.py:1120 ui_dialogs/guide.py:1175
+#: ui_dialogs/guide.py:1121 ui_dialogs/guide.py:1176
 msgid "Player"
 msgstr "Musicista"
 
 #: toner_tab.py:2513 toner_tab.py:2519 toner_tab.py:2606
-#: ui_dialogs/guide.py:1120 ui_dialogs/guide.py:1175
+#: ui_dialogs/guide.py:1121 ui_dialogs/guide.py:1176
 msgid "Mouthpiece"
 msgstr "Bocchino"
 
 #: toner_tab.py:2513 toner_tab.py:2520 toner_tab.py:2610 toner_tab.py:5579
-#: ui_dialogs/guide.py:1175
+#: ui_dialogs/guide.py:1176
 msgid "Mic Type"
 msgstr "Tipo microfono"
 
 #: toner_tab.py:2513 toner_tab.py:2521 toner_tab.py:2611
-#: ui_dialogs/guide.py:1175
+#: ui_dialogs/guide.py:1176
 msgid "Mic Model"
 msgstr "Modello microfono"
 
@@ -3939,31 +3939,31 @@ msgstr ""
 msgid "Please pay him the respect of including this in your tooling."
 msgstr "Gli renda l'onore di includere questa incisione nella sua attrezzatura."
 
-#: tooling_tab.py:131 ui_dialogs/guide.py:968 ui_dialogs/history.py:19
+#: tooling_tab.py:131 ui_dialogs/guide.py:969 ui_dialogs/history.py:19
 msgid "Die Inserts"
 msgstr "Stampi"
 
-#: tooling_tab.py:132 ui_dialogs/guide.py:982 ui_dialogs/history.py:20
+#: tooling_tab.py:132 ui_dialogs/guide.py:983 ui_dialogs/history.py:20
 msgid "Die Holders"
 msgstr "Porta-stampo"
 
-#: tooling_tab.py:133 ui_dialogs/guide.py:990 ui_dialogs/history.py:21
+#: tooling_tab.py:133 ui_dialogs/guide.py:991 ui_dialogs/history.py:21
 msgid "Die Organizer"
 msgstr "Organizer per stampi"
 
-#: tooling_tab.py:134 ui_dialogs/guide.py:998 ui_dialogs/history.py:22
+#: tooling_tab.py:134 ui_dialogs/guide.py:999 ui_dialogs/history.py:22
 msgid "Kerf Test"
 msgstr "Test del kerf"
 
-#: tooling_tab.py:135 ui_dialogs/guide.py:1011 ui_dialogs/history.py:23
+#: tooling_tab.py:135 ui_dialogs/guide.py:1012 ui_dialogs/history.py:23
 msgid "Speed & Power Test"
 msgstr "Test velocità e potenza"
 
-#: tooling_tab.py:136 ui_dialogs/guide.py:1024
+#: tooling_tab.py:136 ui_dialogs/guide.py:1025
 msgid "Pad Press Spacers"
 msgstr "Spessori per pressa tamponi"
 
-#: tooling_tab.py:137 ui_dialogs/guide.py:1029 ui_dialogs/history.py:24
+#: tooling_tab.py:137 ui_dialogs/guide.py:1030 ui_dialogs/history.py:24
 msgid "Tonehole Crescent"
 msgstr "Mezzaluna per foro"
 
@@ -5983,7 +5983,7 @@ msgstr "Cavo USB"
 msgid "Three ways to the laser."
 msgstr "Tre modi per arrivare al laser."
 
-#: ui_dialogs/guide.py:706 ui_dialogs/guide.py:1439 ui_dialogs/guide.py:1484
+#: ui_dialogs/guide.py:706 ui_dialogs/guide.py:1440 ui_dialogs/guide.py:1485
 msgid "Stohrer Sax Shop Companion"
 msgstr "Stohrer Sax Shop Companion"
 
@@ -6005,7 +6005,7 @@ msgstr ""
 "Il metodo per fare i tamponi attorno a cui è costruita questa app è "
 "quello di Phil Noy, che lui condivide liberamente. Grazie, Phil."
 
-#: ui_dialogs/guide.py:715 ui_dialogs/guide.py:965
+#: ui_dialogs/guide.py:715 ui_dialogs/guide.py:966
 msgid "noysaxophonesupplies.com"
 msgstr "noysaxophonesupplies.com"
 
@@ -6751,10 +6751,14 @@ msgstr ""
 " scrittura."
 
 #: ui_dialogs/guide.py:955
-msgid "For the Falcon, the SD card must have nothing else on it."
-msgstr "Per il Falcon, sulla scheda SD non deve esserci nient'altro."
+msgid ""
+"For the Falcon, the SD card must be empty except for the one G-code file "
+"it will run, so put one material's file on it at a time."
+msgstr ""
+"Per il Falcon, la scheda SD deve essere vuota tranne l'unico file G-code "
+"che eseguirà; quindi ci metta il file di un solo materiale alla volta."
 
-#: ui_dialogs/guide.py:959
+#: ui_dialogs/guide.py:960
 msgid ""
 "Laser files for the die holders and die inserts you assemble pads in, "
 "plus a few shop tools. Pick a tool with its button, fill it in, then "
@@ -6765,7 +6769,7 @@ msgstr ""
 "suo pulsante, lo compili, poi Genera SVG, Genera G-code o Inquadra e "
 "taglia."
 
-#: ui_dialogs/guide.py:962
+#: ui_dialogs/guide.py:963
 msgid ""
 "The die inserts and die holders follow Phil Noy's pad-making method, "
 "which he shares freely: every die insert is engraved \"NOY\" and every "
@@ -6775,19 +6779,19 @@ msgstr ""
 "che lui condivide liberamente: ogni stampo è inciso \"NOY\" e ogni anello"
 " del porta-stampo \"DESIGNED BY PHIL NOY\"."
 
-#: ui_dialogs/guide.py:969
+#: ui_dialogs/guide.py:970
 msgid "An acrylic ring for each pad size; the pad is assembled in its hole."
 msgstr ""
 "Un anello di acrilico per ogni misura di tampone; il tampone si assembla "
 "nel suo foro."
 
-#: ui_dialogs/guide.py:970
+#: ui_dialogs/guide.py:971
 msgid "Pads 7.0 to 39.5 mm get a 50 mm ring, 40.0 to 60.0 mm a 70 mm ring."
 msgstr ""
 "I tamponi da 7.0 a 39.5 mm hanno un anello da 50 mm, quelli da 40.0 a "
 "60.0 mm un anello da 70 mm."
 
-#: ui_dialogs/guide.py:971
+#: ui_dialogs/guide.py:972
 msgid ""
 "Enter sizes (7, 8.5, 25) or ranges (15-30, by Step), or click Full Set "
 "(S), Full Set (L) or Full Set (All)."
@@ -6795,7 +6799,7 @@ msgstr ""
 "Inserisca misure (7, 8.5, 25) o intervalli (15-30, con Passo), oppure "
 "clicchi Set completo (S), Set completo (L) o Set completo (tutto)."
 
-#: ui_dialogs/guide.py:973
+#: ui_dialogs/guide.py:974
 msgid ""
 "\"Engrave size on ring\" numbers the ring. \"Engrave size on cutout\" "
 "numbers the disc that drops out with its real size."
@@ -6803,13 +6807,13 @@ msgstr ""
 "\"Incidi la misura sull'anello\" numera l'anello. \"Incidi la misura sul "
 "disco interno\" numera il disco che cade con la sua misura reale."
 
-#: ui_dialogs/guide.py:975
+#: ui_dialogs/guide.py:976
 msgid "Dies nest in rows from the sheet's bottom-left corner, largest first."
 msgstr ""
 "Gli stampi si dispongono in file dall'angolo in basso a sinistra della "
 "lastra, dal più grande."
 
-#: ui_dialogs/guide.py:976
+#: ui_dialogs/guide.py:977
 msgid ""
 "The cutout discs make handy pad cup tools. For an exact diameter, use the"
 " Pad Maker's Exact size (SVG only)."
@@ -6817,7 +6821,7 @@ msgstr ""
 "I dischi che cadono sono comodi attrezzi per le coppe dei tamponi. Per un"
 " diametro esatto usi Dimensione esatta di Crea tamponi (solo SVG)."
 
-#: ui_dialogs/guide.py:978
+#: ui_dialogs/guide.py:979
 msgid ""
 "Scrap Mode: tick it to spread a set over several sheets: each Generate "
 "fills one sheet, a window tracks what is left, and files are named "
@@ -6827,7 +6831,7 @@ msgstr ""
 "Genera riempie una lastra, una finestra tiene conto di ciò che resta e i "
 "file si chiamano _scrap1, _scrap2."
 
-#: ui_dialogs/guide.py:983
+#: ui_dialogs/guide.py:984
 msgid ""
 "A stack of 85 mm acrylic discs cemented together for good: a solid "
 "bottom, a magnet disc (6.5 mm hole), two or three pin discs (3.5 mm "
@@ -6837,7 +6841,7 @@ msgstr ""
 "pieno, un disco per il magnete (foro da 6.5 mm), due o tre dischi per i "
 "perni (fori da 3.5 mm) e un anello di ritenuta."
 
-#: ui_dialogs/guide.py:986
+#: ui_dialogs/guide.py:987
 msgid ""
 "Pick 5 or 6 layers, and Small (50 mm dies), Large (70 mm) or Both, two "
 "complete holders on one sheet."
@@ -6845,13 +6849,13 @@ msgstr ""
 "Scelga 5 o 6 strati, e Piccolo (stampi da 50 mm), Grande (70 mm) o "
 "Entrambi, due porta-stampo completi su una lastra."
 
-#: ui_dialogs/guide.py:988
+#: ui_dialogs/guide.py:989
 msgid "If the pieces don't fit the sheet, it says the smallest sheet that works."
 msgstr ""
 "Se i pezzi non entrano nella lastra, indica la lastra più piccola che va "
 "bene."
 
-#: ui_dialogs/guide.py:991
+#: ui_dialogs/guide.py:992
 msgid ""
 "A stacking rack for dies, 230 x 330 mm. Cut three upper plates and one "
 "lower, line up the four 1/8 in corner holes on pins and glue the stack; a"
@@ -6861,7 +6865,7 @@ msgstr ""
 "e una inferiore, allinei i quattro fori d'angolo da 1/8 in su dei perni e"
 " incolli la pila; una pressa per libri la stringe bene."
 
-#: ui_dialogs/guide.py:994
+#: ui_dialogs/guide.py:995
 msgid ""
 "Pick basswood or acrylic. G-code cuts every slot and hole before the "
 "plate's edge; the sheet must be at least 234 x 334 mm."
@@ -6869,29 +6873,29 @@ msgstr ""
 "Scelga tiglio o acrilico. Il G-code taglia ogni fessura e ogni foro prima"
 " del bordo della piastra; la lastra deve essere almeno 234 x 334 mm."
 
-#: ui_dialogs/guide.py:996
+#: ui_dialogs/guide.py:997
 msgid "The SVG is the bare drawing, for LightBurn."
 msgstr "L'SVG è il disegno nudo, per LightBurn."
 
-#: ui_dialogs/guide.py:999
+#: ui_dialogs/guide.py:1000
 msgid "Kerf is the full width the beam removes. Measure it for each material:"
 msgstr ""
 "Il kerf è l'intera larghezza che il raggio asporta. Lo misuri per ogni "
 "materiale:"
 
-#: ui_dialogs/guide.py:1002
+#: ui_dialogs/guide.py:1003
 msgid "Pick the material and cut the test: three discs, 10, 20 and 30 mm."
 msgstr "Scelga il materiale e tagli il test: tre dischi, da 10, 20 e 30 mm."
 
-#: ui_dialogs/guide.py:1003
+#: ui_dialogs/guide.py:1004
 msgid "Pop the discs out and measure each hole and disc with calipers."
 msgstr "Estragga i dischi e misuri ogni foro e ogni disco con il calibro."
 
-#: ui_dialogs/guide.py:1004
+#: ui_dialogs/guide.py:1005
 msgid "Kerf = hole diameter minus disc diameter."
 msgstr "Kerf = diametro del foro meno diametro del disco."
 
-#: ui_dialogs/guide.py:1005
+#: ui_dialogs/guide.py:1006
 msgid ""
 "Enter that full kerf in G-code Settings (LightBurn asks for half). The "
 "app compensates every cut."
@@ -6899,7 +6903,7 @@ msgstr ""
 "Inserisca quel kerf intero in Impostazioni G-code (LightBurn chiede la "
 "metà). L'app compensa ogni taglio."
 
-#: ui_dialogs/guide.py:1008
+#: ui_dialogs/guide.py:1009
 msgid ""
 "It cuts at the material's settings; untick \"Use existing G-code settings"
 " for this material\" to try others."
@@ -6907,7 +6911,7 @@ msgstr ""
 "Taglia con le impostazioni del materiale; tolga la spunta a \"Usa le "
 "impostazioni G-code esistenti per questo materiale\" per provarne altre."
 
-#: ui_dialogs/guide.py:1012
+#: ui_dialogs/guide.py:1013
 msgid ""
 "Beta. Cuts small discs, each at its own speed, power and passes and "
 "engraved with an ID; a legend file lists them. Keep the settings of the "
@@ -6917,13 +6921,13 @@ msgstr ""
 " di passate e inciso con un ID; un file legenda li elenca. Tenga le "
 "impostazioni dei dischi usciti puliti senza bruciature."
 
-#: ui_dialogs/guide.py:1015
+#: ui_dialogs/guide.py:1016
 msgid "\"Apply material defaults\" fills the fields from the material."
 msgstr ""
 "\"Applica valori predefiniti del materiale\" riempie i campi dal "
 "materiale."
 
-#: ui_dialogs/guide.py:1016
+#: ui_dialogs/guide.py:1017
 msgid ""
 "Tick Sweep on Speed, Power or Passes to test Stops values from Start to "
 "End; untick to hold one value."
@@ -6931,11 +6935,11 @@ msgstr ""
 "Spunti Sweep su Velocità, Potenza o Passate per provare Stops valori da "
 "Inizio a Fine; tolga la spunta per tenere un solo valore."
 
-#: ui_dialogs/guide.py:1018
+#: ui_dialogs/guide.py:1019
 msgid "\"Also test with air off\" runs half the discs without air."
 msgstr "\"Prova anche senza aria\" esegue metà dei dischi senza aria."
 
-#: ui_dialogs/guide.py:1019
+#: ui_dialogs/guide.py:1020
 msgid ""
 "Keep the engraving readable: the IDs are the point. A hole diameter above"
 " 0 makes washers, for shim stock."
@@ -6943,15 +6947,15 @@ msgstr ""
 "Mantenga l'incisione leggibile: gli ID sono lo scopo del test. Un "
 "diametro del foro sopra 0 crea rondelle, per gli spessori."
 
-#: ui_dialogs/guide.py:1021
+#: ui_dialogs/guide.py:1022
 msgid "G-code only: an SVG would lose each disc's settings."
 msgstr "Solo G-code: un SVG perderebbe le impostazioni di ogni disco."
 
-#: ui_dialogs/guide.py:1022
+#: ui_dialogs/guide.py:1023
 msgid "Test on the material you will really cut."
 msgstr "Provi sul materiale che taglierà davvero."
 
-#: ui_dialogs/guide.py:1025
+#: ui_dialogs/guide.py:1026
 #, python-format
 msgid ""
 "3D-printable 1.75 in square spacers with their thickness on top; put them"
@@ -6963,7 +6967,7 @@ msgstr ""
 "set a mezzi passi (da 3.0 a 4.5 mm), uno a quarti di passo (da 3.25 a "
 "4.25 mm) e un rack. Stampi con riempimento al 100%."
 
-#: ui_dialogs/guide.py:1030
+#: ui_dialogs/guide.py:1031
 msgid ""
 "A crescent glued into the mouthpiece side of a tonehole covers part of it"
 " and flattens that note. Enter the tonehole ID and the percent of its "
@@ -6973,7 +6977,7 @@ msgstr ""
 " abbassa quella nota. Inserisca il diametro interno del foro e la "
 "percentuale della sua area aperta da coprire."
 
-#: ui_dialogs/guide.py:1034
+#: ui_dialogs/guide.py:1035
 msgid ""
 "Inner edge: \"Match tonehole curve\" is the classic crescent; flatter is "
 "shorter and wider, rounder longer and thinner. The area stays the same."
@@ -6982,7 +6986,7 @@ msgstr ""
 "piatto è più corta e larga, più tondo più lunga e sottile. L'area resta "
 "la stessa."
 
-#: ui_dialogs/guide.py:1036
+#: ui_dialogs/guide.py:1037
 msgid ""
 "For several, set each up with a quantity and click Add to list. Generate "
 "makes the list, or the fields when it is empty. The SVG numbers each part"
@@ -6992,7 +6996,7 @@ msgstr ""
 "lista. Genera crea la lista, o i campi quando la lista è vuota. L'SVG "
 "numera ogni pezzo sullo scarto."
 
-#: ui_dialogs/guide.py:1039
+#: ui_dialogs/guide.py:1040
 msgid ""
 "G-code cuts the chosen material (cork by default) half a kerf outside the"
 " outline, so the part comes out at size."
@@ -7000,7 +7004,7 @@ msgstr ""
 "Il G-code taglia il materiale scelto (sughero di default) mezzo kerf "
 "fuori dal contorno, così il pezzo esce a misura."
 
-#: ui_dialogs/guide.py:1041
+#: ui_dialogs/guide.py:1042
 msgid ""
 "The SVG has no kerf compensation; set it in LightBurn. Generate STL to "
 "output an STL at the shape and thickness entered."
@@ -7008,7 +7012,7 @@ msgstr ""
 "L'SVG non ha compensazione del kerf; la imposti in LightBurn. Genera STL "
 "produce un STL con la forma e lo spessore inseriti."
 
-#: ui_dialogs/guide.py:1045
+#: ui_dialogs/guide.py:1046
 msgid ""
 "Every tool that writes G-code has Frame & Cut beside Generate G-code. It "
 "sends the same job the file would hold, the same way as on the Pad Maker."
@@ -7017,17 +7021,17 @@ msgstr ""
 "G-code. Invia lo stesso lavoro che conterrebbe il file, nello stesso modo"
 " di Crea tamponi."
 
-#: ui_dialogs/guide.py:1047
+#: ui_dialogs/guide.py:1048
 msgid "Jog to the sheet's bottom-left corner."
 msgstr "Muova la testa all'angolo in basso a sinistra della lastra."
 
-#: ui_dialogs/guide.py:1048
+#: ui_dialogs/guide.py:1049
 msgid "Speed & Power Test asks where to save its legend before the laser moves."
 msgstr ""
 "Test velocità e potenza chiede dove salvare la legenda prima che il laser"
 " si muova."
 
-#: ui_dialogs/guide.py:1049
+#: ui_dialogs/guide.py:1050
 msgid ""
 "In Scrap Mode each click cuts one sheet; a sheet counts only once its cut"
 " has finished."
@@ -7035,11 +7039,11 @@ msgstr ""
 "In Modalità ritagli ogni clic taglia una lastra; una lastra conta solo "
 "quando il suo taglio è finito."
 
-#: ui_dialogs/guide.py:1052
+#: ui_dialogs/guide.py:1053
 msgid "Settings"
 msgstr "Impostazioni"
 
-#: ui_dialogs/guide.py:1053
+#: ui_dialogs/guide.py:1054
 msgid ""
 "Options > Settings...: speed, power, passes, kerf and air for acrylic, "
 "basswood and cork, and the die engraving options (line or filled, font "
@@ -7049,7 +7053,7 @@ msgstr ""
 "acrilico, tiglio e sughero, e le opzioni di incisione degli stampi (linea"
 " o piena, dimensioni del carattere, posizionamento sull'anello)."
 
-#: ui_dialogs/guide.py:1056
+#: ui_dialogs/guide.py:1057
 msgid ""
 "Die inserts and holders use the acrylic settings. Defaults suit a Falcon2"
 " Pro 40W on 3 mm acrylic and basswood; adjust for your laser."
@@ -7058,13 +7062,13 @@ msgstr ""
 "predefiniti sono per un Falcon2 Pro 40W su acrilico e tiglio da 3 mm; li "
 "adatti al suo laser."
 
-#: ui_dialogs/guide.py:1058
+#: ui_dialogs/guide.py:1059
 msgid "The basswood settings also engrave the camera calibration card."
 msgstr ""
 "Le impostazioni del tiglio incidono anche la scheda di calibrazione della"
 " fotocamera."
 
-#: ui_dialogs/guide.py:1059
+#: ui_dialogs/guide.py:1060
 #, python-format
 msgid ""
 "Cork: the default cut was tested at 1000 mm/min and 30 % on 3/32 in cork "
@@ -7075,7 +7079,7 @@ msgstr ""
 "sughero da 3/32 in con un laser da 40 W. Il kerf non è misurato (0) e "
 "l'incisione non è impostata (0 e 0)."
 
-#: ui_dialogs/guide.py:1062
+#: ui_dialogs/guide.py:1063
 msgid ""
 "While cork's engraving is not set, nothing is engraved on cork, and the "
 "app says so before it cuts."
@@ -7083,7 +7087,7 @@ msgstr ""
 "Finché l'incisione del sughero non è impostata, sul sughero non si incide"
 " nulla, e l'app lo dice prima di tagliare."
 
-#: ui_dialogs/guide.py:1067
+#: ui_dialogs/guide.py:1068
 msgid ""
 "Record and compare key heights for different saxophones, in libraries you"
 " organize. Entries and libraries are exportable, and you can share with "
@@ -7093,11 +7097,11 @@ msgstr ""
 "librerie che organizza lei. Voci e librerie si possono esportare e, se "
 "vuole, condividere con altri utenti di SSC."
 
-#: ui_dialogs/guide.py:1070
+#: ui_dialogs/guide.py:1071
 msgid "Options > Layout Options... chooses which keys are shown."
 msgstr "Opzioni > Opzioni di layout... sceglie quali chiavi mostrare."
 
-#: ui_dialogs/guide.py:1071
+#: ui_dialogs/guide.py:1072
 msgid ""
 "File > Import Matt's Key Heights downloads Matt's sets from "
 "stohrermusic.com."
@@ -7105,7 +7109,7 @@ msgstr ""
 "File > Importa le altezze chiavi di Matt scarica i set di Matt da "
 "stohrermusic.com."
 
-#: ui_dialogs/guide.py:1075
+#: ui_dialogs/guide.py:1076
 msgid ""
 "Pick the maker and type the serial number to estimate the year it was "
 "made."
@@ -7113,11 +7117,11 @@ msgstr ""
 "Scelga il produttore e scriva il numero di serie per stimare l'anno di "
 "fabbricazione."
 
-#: ui_dialogs/guide.py:1079
+#: ui_dialogs/guide.py:1080
 msgid "Thread specifications for screws and rods, by saxophone model."
 msgstr "Specifiche di filettatura di viti e aste, per modello di sassofono."
 
-#: ui_dialogs/guide.py:1080
+#: ui_dialogs/guide.py:1081
 msgid ""
 "File > Import Matt's Specs downloads the latest from stohrermusic.com. "
 "Also exportable if you desire."
@@ -7125,7 +7129,7 @@ msgstr ""
 "File > Importa le specifiche di Matt scarica le più recenti da "
 "stohrermusic.com. Si possono anche esportare, se lo desidera."
 
-#: ui_dialogs/guide.py:1085
+#: ui_dialogs/guide.py:1086
 msgid ""
 "A 12-wheel chromatic strobe tuner: one wheel per note, one ring per "
 "octave. It runs while the tab is open."
@@ -7133,7 +7137,7 @@ msgstr ""
 "Un accordatore stroboscopico cromatico a 12 ruote: una ruota per nota, un"
 " anello per ottava. Funziona mentre la scheda è aperta."
 
-#: ui_dialogs/guide.py:1087
+#: ui_dialogs/guide.py:1088
 msgid ""
 "Frozen pattern: in tune. Drifting right: sharp. Left: flat. The faster "
 "the drift, the further off."
@@ -7141,29 +7145,29 @@ msgstr ""
 "Disegno fermo: intonato. Scorre a destra: crescente. A sinistra: calante."
 " Più veloce scorre, più è lontano."
 
-#: ui_dialogs/guide.py:1089
+#: ui_dialogs/guide.py:1090
 msgid "Several wheels move at once: those are the harmonics in your sound."
 msgstr "Più ruote si muovono insieme: sono gli armonici del suo suono."
 
-#: ui_dialogs/guide.py:1090
+#: ui_dialogs/guide.py:1091
 msgid "The VU meter at the bottom shows the note and how many cents off it is."
 msgstr "Il VU meter in basso mostra la nota e di quanti cent è fuori."
 
-#: ui_dialogs/guide.py:1092
+#: ui_dialogs/guide.py:1093
 msgid "Controls"
 msgstr "Comandi"
 
-#: ui_dialogs/guide.py:1093
+#: ui_dialogs/guide.py:1094
 msgid "DISP: SENS (how loud a sound must be), BRIGHT, FPS (60, 90 or 120)."
 msgstr "DISP: SENS (quanto forte deve essere un suono), LUMIN, FPS (60, 90 o 120)."
 
-#: ui_dialogs/guide.py:1094
+#: ui_dialogs/guide.py:1095
 msgid "PITCH: A= reference (440 Hz by default), KEY transposition (C, Bb, Eb, F)."
 msgstr ""
 "INTON: A= riferimento (440 Hz di default), TON trasposizione (C, Bb, Eb, "
 "F)."
 
-#: ui_dialogs/guide.py:1095
+#: ui_dialogs/guide.py:1096
 msgid ""
 "BIAS: NOTE brightens the played octave's ring; OCT. boosts the strongest "
 "ring."
@@ -7171,7 +7175,7 @@ msgstr ""
 "BIAS: NOTA illumina l'anello dell'ottava suonata; OTT. rinforza l'anello "
 "più forte."
 
-#: ui_dialogs/guide.py:1096
+#: ui_dialogs/guide.py:1097
 msgid ""
 "Options > Settings...: backlight and faceplate colors, frame-rate "
 "readout. Options > Input Device... picks the microphone."
@@ -7180,11 +7184,11 @@ msgstr ""
 "indicazione del frame rate. Opzioni > Dispositivo di input... sceglie il "
 "microfono."
 
-#: ui_dialogs/guide.py:1099
+#: ui_dialogs/guide.py:1100
 msgid "Microphone"
 msgstr "Microfono"
 
-#: ui_dialogs/guide.py:1100
+#: ui_dialogs/guide.py:1101
 msgid ""
 "A good mic is a must. A USB condenser such as the Audio-Technica AT2020 "
 "USB works well."
@@ -7192,7 +7196,7 @@ msgstr ""
 "Un buon microfono è indispensabile. Un condensatore USB come l'Audio-"
 "Technica AT2020 USB funziona bene."
 
-#: ui_dialogs/guide.py:1102
+#: ui_dialogs/guide.py:1103
 msgid ""
 "Built-in laptop mics manage basic tuning but struggle low down and leave "
 "out harmonics. Bluetooth headset mics do not work: their sample rate is "
@@ -7203,11 +7207,11 @@ msgstr ""
 "Bluetooth non funzionano: la loro frequenza di campionamento è troppo "
 "bassa."
 
-#: ui_dialogs/guide.py:1106 ui_dialogs/guide.py:1285
+#: ui_dialogs/guide.py:1107 ui_dialogs/guide.py:1286
 msgid "How it works"
 msgstr "Come funziona"
 
-#: ui_dialogs/guide.py:1107
+#: ui_dialogs/guide.py:1108
 msgid ""
 "Each wheel turns at the difference between the sound and its note, from "
 "real analysis of the audio, not a simulation."
@@ -7215,7 +7219,7 @@ msgstr ""
 "Ogni ruota gira alla differenza tra il suono e la sua nota, da un'analisi"
 " reale dell'audio, non da una simulazione."
 
-#: ui_dialogs/guide.py:1109
+#: ui_dialogs/guide.py:1110
 msgid ""
 "It draws on the graphics card where it can (60 to 120 fps) and falls back"
 " to a slower drawing mode where it can't."
@@ -7223,7 +7227,7 @@ msgstr ""
 "Disegna sulla scheda grafica dove può (da 60 a 120 fps) e passa a un "
 "disegno più lento dove non può."
 
-#: ui_dialogs/guide.py:1114
+#: ui_dialogs/guide.py:1115
 msgid ""
 "The Analyzer listens to you play and charts your intonation: each written"
 " note as played, in cents. Its harmonic side, behind the HARMONICS "
@@ -7233,11 +7237,11 @@ msgstr ""
 " scritta come la suona, in cent. La parte armonica, dietro il selettore "
 "ARMONICI, è sperimentale e misura gli armonici."
 
-#: ui_dialogs/guide.py:1118
+#: ui_dialogs/guide.py:1119
 msgid "An intonation run"
 msgstr "Una rilevazione dell'intonazione"
 
-#: ui_dialogs/guide.py:1122
+#: ui_dialogs/guide.py:1123
 #, python-brace-format
 msgid ""
 "Open the Preset Library (the button under the chart, or File > Preset "
@@ -7249,7 +7253,7 @@ msgstr ""
 "o Registra prima per suonare subito e scegliere il preset quando si "
 "ferma. Un preset richiede {fields}."
 
-#: ui_dialogs/guide.py:1125
+#: ui_dialogs/guide.py:1126
 msgid ""
 "Click Capture and play. Each note held long enough is kept, and the chart"
 " draws as you go."
@@ -7257,7 +7261,7 @@ msgstr ""
 "Clicchi Acquisisci e suoni. Ogni nota tenuta abbastanza a lungo viene "
 "conservata, e il grafico si disegna man mano."
 
-#: ui_dialogs/guide.py:1127
+#: ui_dialogs/guide.py:1128
 msgid ""
 "Click Stop. The run is saved with the preset, dated. A run recorded first"
 " asks where it goes: an existing preset, a new one, or discard; Keep for "
@@ -7269,7 +7273,7 @@ msgstr ""
 " nuovo, o scartarla; Tieni per ora la trattiene finché non decide, e "
 "nulla lascia la scheda, carica o chiude senza chiedere."
 
-#: ui_dialogs/guide.py:1131
+#: ui_dialogs/guide.py:1132
 msgid ""
 "Unload on the control strip puts the preset away; Capture then opens the "
 "Preset Library."
@@ -7277,7 +7281,7 @@ msgstr ""
 "Scarica, sulla barra dei comandi, mette via il preset; Acquisisci apre "
 "poi la Libreria preset."
 
-#: ui_dialogs/guide.py:1133
+#: ui_dialogs/guide.py:1134
 msgid ""
 "Free mode, the default, takes the notes as you play them. Guided mode "
 "walks you up a chromatic scale, 5 seconds a note, with a large note name "
@@ -7287,7 +7291,7 @@ msgstr ""
 "modalità guidata la accompagna su una scala cromatica, 5 secondi per "
 "nota, mostrando in grande la nota da suonare."
 
-#: ui_dialogs/guide.py:1135
+#: ui_dialogs/guide.py:1136
 msgid ""
 "The readout counts the frames a held note has given and turns green once "
 "there are enough to keep, about a second. A note let go sooner is named "
@@ -7297,7 +7301,7 @@ msgstr ""
 " bastano per conservarla, circa un secondo. Una nota lasciata prima viene"
 " segnalata come troppo breve."
 
-#: ui_dialogs/guide.py:1138
+#: ui_dialogs/guide.py:1139
 msgid ""
 "Several takes of one note are one point: their median, with a bar from "
 "the lowest to the highest."
@@ -7305,7 +7309,7 @@ msgstr ""
 "Più prese della stessa nota formano un solo punto: la loro mediana, con "
 "una barra dalla più bassa alla più alta."
 
-#: ui_dialogs/guide.py:1140
+#: ui_dialogs/guide.py:1141
 msgid ""
 "The dashed line marks the register change. The SAX selector sets the "
 "written names and is saved with the preset."
@@ -7313,7 +7317,7 @@ msgstr ""
 "La linea tratteggiata segna il cambio di registro. Il selettore SAX "
 "imposta i nomi scritti ed è salvato con il preset."
 
-#: ui_dialogs/guide.py:1142
+#: ui_dialogs/guide.py:1143
 msgid ""
 "Key heights: a preset can link to a set in the Key Heights library, or "
 "enter the horn's heights from the preset form (saved there as a new set)."
@@ -7326,11 +7330,11 @@ msgstr ""
 "delle altezze con cui è stata registrata. Il grafico non ne mostra nulla:"
 " dia al preset un nome che faccia riconoscere il sassofono."
 
-#: ui_dialogs/guide.py:1147
+#: ui_dialogs/guide.py:1148
 msgid "Compare and export"
 msgstr "Confronto ed esportazione"
 
-#: ui_dialogs/guide.py:1148
+#: ui_dialogs/guide.py:1149
 msgid ""
 "In the Preset Library, select two or more rows and click Compare: "
 "presets, or single sessions of a preset with several, each run in its own"
@@ -7343,7 +7347,7 @@ msgstr ""
 "tutte le sue sessioni insieme; una riga di sessione è quella sessione "
 "sola."
 
-#: ui_dialogs/guide.py:1151
+#: ui_dialogs/guide.py:1152
 msgid ""
 "Click a run's line, a point or its legend entry to bring it to the front;"
 " the others go grey. Click it again, or an empty spot, to let it go."
@@ -7352,19 +7356,19 @@ msgstr ""
 "legenda per portarla in primo piano; le altre diventano grigie. Clicchi "
 "di nuovo su di essa, o su un punto vuoto, per rilasciarla."
 
-#: ui_dialogs/guide.py:1153
+#: ui_dialogs/guide.py:1154
 msgid "Export chart... in the Preset Library writes the chart as a PNG or a PDF."
 msgstr "Esporta grafico... nella Libreria preset salva il grafico come PNG o PDF."
 
-#: ui_dialogs/guide.py:1154
+#: ui_dialogs/guide.py:1155
 msgid "Low notes on the left or on the right: Options > Settings... > General."
 msgstr "Note gravi a sinistra o a destra: Opzioni > Impostazioni... > Generale."
 
-#: ui_dialogs/guide.py:1156
+#: ui_dialogs/guide.py:1157
 msgid "Harmonics (experimental and SUPER mic-sensitive)"
 msgstr "Armonici (sperimentale e MOLTO sensibile al microfono)"
 
-#: ui_dialogs/guide.py:1157
+#: ui_dialogs/guide.py:1158
 msgid ""
 "The HARMONICS switch on the control strip puts the harmonic analyzer in "
 "place of the chart: it finds the note you play and measures each harmonic"
@@ -7375,7 +7379,7 @@ msgstr ""
 "armonico fino al 20°. I suoi preset richiedono anche Tipo microfono e "
 "Modello microfono."
 
-#: ui_dialogs/guide.py:1160
+#: ui_dialogs/guide.py:1161
 msgid ""
 "Every reading is the whole chain at once: player, horn, mouthpiece, reed,"
 " mic and room. So it measures change, not gear. Change one thing at a "
@@ -7388,11 +7392,11 @@ msgstr ""
 "musicista e microfono di solito pesano più delle differenze tra "
 "strumenti; confronti i suoi setup con gli altri suoi setup."
 
-#: ui_dialogs/guide.py:1165
+#: ui_dialogs/guide.py:1166
 msgid "Two ways to use it"
 msgstr "Due modi per usarlo"
 
-#: ui_dialogs/guide.py:1166
+#: ui_dialogs/guide.py:1167
 msgid ""
 "Live: watch the spectrum while you play to see how air, embouchure and "
 "voicing change the sound."
@@ -7400,7 +7404,7 @@ msgstr ""
 "Dal vivo: guardi lo spettro mentre suona per vedere come aria, "
 "imboccatura e voicing cambiano il suono."
 
-#: ui_dialogs/guide.py:1168
+#: ui_dialogs/guide.py:1169
 msgid ""
 "Over time: record a session, change one thing, record another, and "
 "compare. The thing you changed is the difference: a mouthpiece, a mic, a "
@@ -7410,15 +7414,15 @@ msgstr ""
 "confronti. La cosa cambiata è la differenza: un bocchino, un microfono, "
 "uno strumento, o lei in un altro giorno."
 
-#: ui_dialogs/guide.py:1171
+#: ui_dialogs/guide.py:1172
 msgid "Be skeptical of strong conclusions from small samples."
 msgstr "Diffidi delle conclusioni forti tratte da pochi campioni."
 
-#: ui_dialogs/guide.py:1173
+#: ui_dialogs/guide.py:1174
 msgid "Before you capture"
 msgstr "Prima di acquisire"
 
-#: ui_dialogs/guide.py:1176
+#: ui_dialogs/guide.py:1177
 #, python-brace-format
 msgid ""
 "You need a preset: File > Presets.... {fields} are required. More fields "
@@ -7427,11 +7431,11 @@ msgstr ""
 "Serve un preset: File > Preset.... {fields} sono obbligatori. Altri campi"
 " si attivano in Opzioni > Impostazioni... > Analisi."
 
-#: ui_dialogs/guide.py:1178
+#: ui_dialogs/guide.py:1179
 msgid "The SAX selector sets the transposition and is saved with the preset."
 msgstr "Il selettore SAX imposta la trasposizione ed è salvato con il preset."
 
-#: ui_dialogs/guide.py:1179
+#: ui_dialogs/guide.py:1180
 msgid ""
 "A condenser mic (such as an AT2020 USB) gives the fullest picture. Ribbon"
 " and dynamic mics dull the upper harmonics; the Analyze tool warns when "
@@ -7441,17 +7445,17 @@ msgstr ""
 "completo. I microfoni a nastro e dinamici attenuano gli armonici alti; lo"
 " strumento Analizza avvisa quando i tipi di microfono sono diversi."
 
-#: ui_dialogs/guide.py:1182
+#: ui_dialogs/guide.py:1183
 msgid "Laptop mics are not suitable. Bluetooth headset mics do not work."
 msgstr ""
 "I microfoni dei portatili non sono adatti. I microfoni delle cuffie "
 "Bluetooth non funzionano."
 
-#: ui_dialogs/guide.py:1184
+#: ui_dialogs/guide.py:1185
 msgid "Mic placement"
 msgstr "Posizionamento del microfono"
 
-#: ui_dialogs/guide.py:1185
+#: ui_dialogs/guide.py:1186
 msgid ""
 "2 to 3 feet (60 to 90 cm) from the bell, slightly off-axis, in a quiet "
 "room. Closer than a foot exaggerates the low harmonics."
@@ -7459,7 +7463,7 @@ msgstr ""
 "Da 60 a 90 cm (2-3 piedi) dalla campana, leggermente fuori asse, in una "
 "stanza silenziosa. Più vicino di 30 cm esagera gli armonici bassi."
 
-#: ui_dialogs/guide.py:1187
+#: ui_dialogs/guide.py:1188
 #, python-brace-format
 msgid ""
 "Mic position matters more than almost anything: a few inches between "
@@ -7470,21 +7474,21 @@ msgstr ""
 " una ripresa e l'altra possono spostare la complessità del 10-20 "
 "percento. Usi un'asta in un punto fisso e lo annoti nel campo {field}."
 
-#: ui_dialogs/guide.py:1191
+#: ui_dialogs/guide.py:1192
 msgid "Capturing"
 msgstr "Cattura"
 
-#: ui_dialogs/guide.py:1193
+#: ui_dialogs/guide.py:1194
 msgid "Click Capture and pick or create a preset."
 msgstr "Clicchi Acquisisci e scelga o crei un preset."
 
-#: ui_dialogs/guide.py:1194
+#: ui_dialogs/guide.py:1195
 msgid "Play. Hold a note about a second and it is captured; move on to the next."
 msgstr ""
 "Suoni. Tenga una nota per circa un secondo e viene acquisita; passi alla "
 "successiva."
 
-#: ui_dialogs/guide.py:1195
+#: ui_dialogs/guide.py:1196
 msgid ""
 "Click Stop. A summary shows which notes you covered and where the gaps "
 "are."
@@ -7492,11 +7496,11 @@ msgstr ""
 "Clicchi Stop. Un riepilogo mostra quali note ha coperto e dove sono i "
 "vuoti."
 
-#: ui_dialogs/guide.py:1197
+#: ui_dialogs/guide.py:1198
 msgid "Capture at least 8 different notes; more is better."
 msgstr "Acquisisca almeno 8 note diverse; più sono, meglio è."
 
-#: ui_dialogs/guide.py:1198
+#: ui_dialogs/guide.py:1199
 msgid ""
 "Guided mode walks you up a chromatic scale, 5 seconds per note. File > "
 "Presets... > Import Audio File... analyzes a WAV."
@@ -7504,19 +7508,19 @@ msgstr ""
 "La modalità guidata la accompagna su una scala cromatica, 5 secondi per "
 "nota. File > Preset... > Importa file audio... analizza un WAV."
 
-#: ui_dialogs/guide.py:1200
+#: ui_dialogs/guide.py:1201
 msgid "Sessions are dated and saved automatically."
 msgstr "Le sessioni sono datate e salvate automaticamente."
 
-#: ui_dialogs/guide.py:1202
+#: ui_dialogs/guide.py:1203
 msgid "Display"
 msgstr "Visualizzazione"
 
-#: ui_dialogs/guide.py:1203
+#: ui_dialogs/guide.py:1204
 msgid "Spectrum or Bars view, with Linear (true ratios) or dB scale."
 msgstr "Vista Spettro o Barre, con scala Lineare (rapporti reali) o dB."
 
-#: ui_dialogs/guide.py:1204
+#: ui_dialogs/guide.py:1205
 msgid ""
 "The intonation gauge shows cents flat or sharp; the IN TUNE lamp lights "
 "within 4 cents."
@@ -7524,7 +7528,7 @@ msgstr ""
 "L'indicatore di intonazione mostra i cent calanti o crescenti; la spia "
 "INTONATO si accende entro 4 cent."
 
-#: ui_dialogs/guide.py:1206
+#: ui_dialogs/guide.py:1207
 msgid ""
 "Overlay on Spectrum (from the Analyze tool) shows a stored preset as blue"
 " ghost bars behind the live spectrum, note by note."
@@ -7533,11 +7537,11 @@ msgstr ""
 "salvato come barre fantasma blu dietro lo spettro dal vivo, nota per "
 "nota."
 
-#: ui_dialogs/guide.py:1209
+#: ui_dialogs/guide.py:1210
 msgid "Analyze"
 msgstr "Analizza"
 
-#: ui_dialogs/guide.py:1210
+#: ui_dialogs/guide.py:1211
 msgid ""
 "File > Analyze... shows what differs between presets: not which is "
 "better, but what changed and where."
@@ -7545,13 +7549,13 @@ msgstr ""
 "File > Analizza... mostra cosa differisce tra i preset: non quale è "
 "migliore, ma cosa è cambiato e dove."
 
-#: ui_dialogs/guide.py:1212
+#: ui_dialogs/guide.py:1213
 msgid "Filter the picker by horn type, player, mouthpiece and mic type."
 msgstr ""
 "Filtri il selettore per tipo di sassofono, musicista, bocchino e tipo di "
 "microfono."
 
-#: ui_dialogs/guide.py:1213
+#: ui_dialogs/guide.py:1214
 msgid ""
 "One preset: its descriptors and harmonic curve. Two: side by side with a "
 "Difference chart. Three or more: the spread across the group."
@@ -7559,7 +7563,7 @@ msgstr ""
 "Un preset: i suoi descrittori e la curva degli armonici. Due: affiancati "
 "con un grafico Differenza. Tre o più: la dispersione nel gruppo."
 
-#: ui_dialogs/guide.py:1215
+#: ui_dialogs/guide.py:1216
 msgid ""
 "Horn Average or Per-Note shows whether a difference is everywhere or in "
 "one register."
@@ -7567,13 +7571,13 @@ msgstr ""
 "Media dello strumento o Per nota mostra se una differenza è ovunque o in "
 "un solo registro."
 
-#: ui_dialogs/guide.py:1217
+#: ui_dialogs/guide.py:1218
 msgid "Percentiles rank each preset against all presets of the same sax type."
 msgstr ""
 "I percentili collocano ogni preset rispetto a tutti i preset dello stesso"
 " tipo di sassofono."
 
-#: ui_dialogs/guide.py:1218
+#: ui_dialogs/guide.py:1219
 msgid ""
 "Click a legend label or chart line for that preset's details. Back "
 "returns to the picker."
@@ -7581,7 +7585,7 @@ msgstr ""
 "Clicchi un'etichetta della legenda o una linea del grafico per i dettagli"
 " di quel preset. Indietro torna al selettore."
 
-#: ui_dialogs/guide.py:1220
+#: ui_dialogs/guide.py:1221
 msgid ""
 "The table shows each preset's mic type and rolloff, and notes when mics "
 "differ."
@@ -7589,11 +7593,11 @@ msgstr ""
 "La tabella mostra tipo di microfono e rolloff di ogni preset, e segnala "
 "quando i microfoni sono diversi."
 
-#: ui_dialogs/guide.py:1223
+#: ui_dialogs/guide.py:1224
 msgid "Descriptors"
 msgstr "Descrittori"
 
-#: ui_dialogs/guide.py:1224
+#: ui_dialogs/guide.py:1225
 msgid ""
 "Most useful as differences between two presets, where mic and room "
 "effects cancel. Choose which are shown in Options > Settings... > "
@@ -7603,7 +7607,7 @@ msgstr ""
 " stanza si annullano. Scelga quali mostrare in Opzioni > Impostazioni... "
 "> Analisi."
 
-#: ui_dialogs/guide.py:1226
+#: ui_dialogs/guide.py:1227
 msgid ""
 "Warmth (Thin to Warm): the strength of the 2nd harmonic. Not the same as "
 "dark: a sound can be warm and bright, or thin and dark."
@@ -7611,7 +7615,7 @@ msgstr ""
 "Calore (da Sottile a Caldo): la forza del 2° armonico. Non è lo stesso di"
 " scuro: un suono può essere caldo e brillante, o sottile e scuro."
 
-#: ui_dialogs/guide.py:1228
+#: ui_dialogs/guide.py:1229
 msgid ""
 "Some setups, metal mouthpieces played hard especially, make the 2nd "
 "harmonic louder than the fundamental. Warmth reads these as moderately "
@@ -7621,7 +7625,7 @@ msgstr ""
 "il 2° armonico più forte della fondamentale. Calore li legge come "
 "moderatamente caldi; questa parte della formula potrebbe cambiare."
 
-#: ui_dialogs/guide.py:1231
+#: ui_dialogs/guide.py:1232
 msgid ""
 "Harmonic Complexity (Pure to Complex): how evenly the energy spreads over"
 " the harmonics."
@@ -7629,7 +7633,7 @@ msgstr ""
 "Complessità armonica (da Puro a Complesso): quanto uniformemente "
 "l'energia si distribuisce sugli armonici."
 
-#: ui_dialogs/guide.py:1233
+#: ui_dialogs/guide.py:1234
 msgid ""
 "Even/Odd Ratio: even against odd harmonics, round against edgy. The most "
 "consistent across recording conditions. On by default."
@@ -7638,7 +7642,7 @@ msgstr ""
 "tagliente. Il più stabile tra condizioni di registrazione diverse. Attivo"
 " di default."
 
-#: ui_dialogs/guide.py:1235
+#: ui_dialogs/guide.py:1236
 msgid ""
 "Rolloff Shape (Smooth to Peaked): bumps where harmonics stick out. Off by"
 " default."
@@ -7646,7 +7650,7 @@ msgstr ""
 "Forma del rolloff (da Liscia a Con picchi): rilievi dove gli armonici "
 "sporgono. Disattivata di default."
 
-#: ui_dialogs/guide.py:1237
+#: ui_dialogs/guide.py:1238
 msgid ""
 "Evenness (Variable to Even): how alike the character is across the range."
 " Needs at least 5 notes."
@@ -7654,11 +7658,11 @@ msgstr ""
 "Uniformità (da Variabile a Uniforme): quanto il carattere è simile lungo "
 "l'estensione. Servono almeno 5 note."
 
-#: ui_dialogs/guide.py:1240
+#: ui_dialogs/guide.py:1241
 msgid "Character Map"
 msgstr "Mappa del Carattere"
 
-#: ui_dialogs/guide.py:1241
+#: ui_dialogs/guide.py:1242
 msgid ""
 "Plots Warmth against Harmonic Complexity, so each preset sits in one of "
 "four corners: warm and bright, warm and dark, thin and bright, thin and "
@@ -7668,7 +7672,7 @@ msgstr ""
 "dei quattro angoli: caldo e brillante, caldo e scuro, sottile e "
 "brillante, sottile e scuro. Tutti e quattro sono caratteri reali."
 
-#: ui_dialogs/guide.py:1244
+#: ui_dialogs/guide.py:1245
 msgid ""
 "Warmth comes from how the chamber and reed couple to the fundamental, "
 "brightness from the reed's buzz on the tip rail, so they move "
@@ -7678,7 +7682,7 @@ msgstr ""
 "la brillantezza dalla vibrazione dell'ancia sul bordo della punta del "
 "bocchino, quindi si muovono in modo indipendente."
 
-#: ui_dialogs/guide.py:1246
+#: ui_dialogs/guide.py:1247
 msgid ""
 "H4-H5 mean and Rolloff are offered as other axes, but they tend to follow"
 " Warmth."
@@ -7686,7 +7690,7 @@ msgstr ""
 "Media H4-H5 e Rolloff sono offerti come altri assi, ma tendono a seguire "
 "il Calore."
 
-#: ui_dialogs/guide.py:1247
+#: ui_dialogs/guide.py:1248
 msgid ""
 "Compare within one sax type: lower horns read warmer and brighter "
 "whatever the mouthpiece. It warns before mixing types."
@@ -7695,11 +7699,11 @@ msgstr ""
 "gravi risultano più caldi e brillanti qualunque sia il bocchino. Avvisa "
 "prima di mescolare i tipi."
 
-#: ui_dialogs/guide.py:1250
+#: ui_dialogs/guide.py:1251
 msgid "Reading the differences"
 msgstr "Leggere le differenze"
 
-#: ui_dialogs/guide.py:1251
+#: ui_dialogs/guide.py:1252
 msgid ""
 "H1 to H4: mostly the bore; the least change in player and mouthpiece "
 "swaps."
@@ -7707,15 +7711,15 @@ msgstr ""
 "Da H1 a H4: soprattutto il canneggio; cambiano meno di tutti scambiando "
 "musicista o bocchino."
 
-#: ui_dialogs/guide.py:1252
+#: ui_dialogs/guide.py:1253
 msgid "H7 to H13: where neck and mouthpiece swaps show most."
 msgstr "Da H7 a H13: dove i cambi di chiver e bocchino si vedono di più."
 
-#: ui_dialogs/guide.py:1253
+#: ui_dialogs/guide.py:1254
 msgid "H3 to H12 all together: usually mouthpiece or player."
 msgstr "Da H3 a H12 tutti insieme: di solito bocchino o musicista."
 
-#: ui_dialogs/guide.py:1254
+#: ui_dialogs/guide.py:1255
 msgid ""
 "Two takes of one setup ten minutes apart differed by 1 to 3 percent on "
 "descriptors and about 0.3 dB/H on rolloff. Smaller differences are "
@@ -7725,7 +7729,7 @@ msgstr ""
 "dell'1-3 percento sui descrittori e di circa 0,3 dB/H sul rolloff. "
 "Differenze più piccole sono probabilmente rumore."
 
-#: ui_dialogs/guide.py:1257
+#: ui_dialogs/guide.py:1258
 msgid ""
 "These are observed patterns, not laws. Same-player comparisons isolate "
 "equipment best."
@@ -7733,11 +7737,11 @@ msgstr ""
 "Sono tendenze osservate, non leggi. I confronti con lo stesso musicista "
 "isolano meglio l'attrezzatura."
 
-#: ui_dialogs/guide.py:1260
+#: ui_dialogs/guide.py:1261
 msgid "Recording quality"
 msgstr "Qualità della registrazione"
 
-#: ui_dialogs/guide.py:1261
+#: ui_dialogs/guide.py:1262
 msgid ""
 "Rolloff, how fast the upper harmonics fade, shows how much your recording"
 " catches:"
@@ -7745,15 +7749,15 @@ msgstr ""
 "Il rolloff, cioè quanto in fretta svaniscono gli armonici alti, mostra "
 "quanto cattura la sua registrazione:"
 
-#: ui_dialogs/guide.py:1263
+#: ui_dialogs/guide.py:1264
 msgid "1.0 to 2.0 dB/H: condenser, close. Full detail."
 msgstr "1,0-2,0 dB/H: condensatore, vicino. Dettaglio completo."
 
-#: ui_dialogs/guide.py:1264
+#: ui_dialogs/guide.py:1265
 msgid "2.0 to 2.5 dB/H: good mic, further away or a lively room."
 msgstr "2,0-2,5 dB/H: buon microfono, più lontano o stanza riverberante."
 
-#: ui_dialogs/guide.py:1265
+#: ui_dialogs/guide.py:1266
 msgid ""
 "Over 2.5 dB/H: ribbon, dynamic, built-in or distant mic. The app warns "
 "after the first few captures."
@@ -7761,11 +7765,11 @@ msgstr ""
 "Oltre 2,5 dB/H: microfono a nastro, dinamico, integrato o lontano. L'app "
 "avvisa dopo le prime acquisizioni."
 
-#: ui_dialogs/guide.py:1268
+#: ui_dialogs/guide.py:1269
 msgid "Presets and data"
 msgstr "Preset e dati"
 
-#: ui_dialogs/guide.py:1269
+#: ui_dialogs/guide.py:1270
 msgid ""
 "Mutate Preset copies a preset with its fields filled in, so you can "
 "change one thing and save it as new."
@@ -7773,7 +7777,7 @@ msgstr ""
 "Muta preset copia un preset con i campi compilati, così può cambiare una "
 "cosa e salvarlo come nuovo."
 
-#: ui_dialogs/guide.py:1271
+#: ui_dialogs/guide.py:1272
 msgid ""
 "Sandbox mode (Options > Settings... > Analysis) relaxes the required "
 "fields for other instruments and experiments. Sandbox presets are marked "
@@ -7783,7 +7787,7 @@ msgstr ""
 " obbligatori per altri strumenti ed esperimenti. I preset sandbox sono "
 "segnati in ambra."
 
-#: ui_dialogs/guide.py:1274
+#: ui_dialogs/guide.py:1275
 msgid ""
 "A preset's report shows its sessions over time, with the change from each"
 " to the next and a per-note breakdown."
@@ -7791,15 +7795,15 @@ msgstr ""
 "Il report di un preset mostra le sue sessioni nel tempo, con il "
 "cambiamento da una all'altra e un dettaglio per nota."
 
-#: ui_dialogs/guide.py:1276
+#: ui_dialogs/guide.py:1277
 msgid "File > Transfer Data exports or imports the preset library."
 msgstr "File > Trasferimento dati esporta o importa la libreria dei preset."
 
-#: ui_dialogs/guide.py:1278
+#: ui_dialogs/guide.py:1279
 msgid "WAV recording"
 msgstr "Registrazione WAV"
 
-#: ui_dialogs/guide.py:1279
+#: ui_dialogs/guide.py:1280
 msgid ""
 "On by default; the first capture asks for a folder. At the end of a "
 "session the recording is analyzed again, more strictly than live, and "
@@ -7809,7 +7813,7 @@ msgstr ""
 "sessione la registrazione viene rianalizzata, in modo più rigoroso che "
 "dal vivo, e si conserva quel risultato migliore."
 
-#: ui_dialogs/guide.py:1282
+#: ui_dialogs/guide.py:1283
 msgid ""
 "Turn it off, or delete each WAV after analysis, in Options > Settings... "
 "> General."
@@ -7817,7 +7821,7 @@ msgstr ""
 "La disattivi, o elimini ogni WAV dopo l'analisi, in Opzioni > "
 "Impostazioni... > Generale."
 
-#: ui_dialogs/guide.py:1283
+#: ui_dialogs/guide.py:1284
 msgid ""
 "Keep the WAVs to listen back, share, or re-analyze with better tools "
 "later."
@@ -7825,7 +7829,7 @@ msgstr ""
 "Conservi i WAV per riascoltarli, condividerli o rianalizzarli in futuro "
 "con strumenti migliori."
 
-#: ui_dialogs/guide.py:1286
+#: ui_dialogs/guide.py:1287
 msgid ""
 "Harmonics are measured in dB against the fundamental, so volume and mic "
 "gain drop out. Below -60 dB counts as noise."
@@ -7833,7 +7837,7 @@ msgstr ""
 "Gli armonici sono misurati in dB rispetto alla fondamentale, quindi "
 "volume e guadagno del microfono non contano. Sotto -60 dB è rumore."
 
-#: ui_dialogs/guide.py:1288
+#: ui_dialogs/guide.py:1289
 msgid ""
 "Only the frames whose whole analysis window lies inside the note count, "
 "so the attack and the release are left out."
@@ -7841,7 +7845,7 @@ msgstr ""
 "Contano solo i frame la cui finestra di analisi cade tutta dentro la "
 "nota, quindi l'attacco e il rilascio restano fuori."
 
-#: ui_dialogs/guide.py:1290
+#: ui_dialogs/guide.py:1291
 msgid ""
 "The detector checks whether a loud peak is a harmonic of a lower note, "
 "which keeps it from reading the wrong octave."
@@ -7849,7 +7853,7 @@ msgstr ""
 "Il rilevatore verifica se un picco forte è un armonico di una nota più "
 "bassa, il che evita di leggere l'ottava sbagliata."
 
-#: ui_dialogs/guide.py:1292
+#: ui_dialogs/guide.py:1293
 msgid ""
 "Notes are averaged first, then the notes together, so many captures of "
 "one register don't outweigh the rest."
@@ -7857,7 +7861,7 @@ msgstr ""
 "Si fa prima la media di ogni nota, poi delle note insieme, così molte "
 "acquisizioni di un registro non pesano più del resto."
 
-#: ui_dialogs/guide.py:1294
+#: ui_dialogs/guide.py:1295
 msgid ""
 "Only raw measurements are stored. Descriptors are worked out fresh each "
 "time, so improvements apply to old captures too."
@@ -7865,11 +7869,11 @@ msgstr ""
 "Si salvano solo misure grezze. I descrittori si ricalcolano ogni volta, "
 "quindi i miglioramenti valgono anche per le vecchie acquisizioni."
 
-#: ui_dialogs/guide.py:1299
+#: ui_dialogs/guide.py:1300
 msgid "Sharing data"
 msgstr "Condividere i dati"
 
-#: ui_dialogs/guide.py:1300
+#: ui_dialogs/guide.py:1301
 msgid ""
 "Each data tab can export to a file and import one, to share with "
 "colleagues or keep a backup:"
@@ -7877,29 +7881,29 @@ msgstr ""
 "Ogni scheda di dati può esportare in un file e importarne uno, per "
 "condividere con i colleghi o tenere un backup:"
 
-#: ui_dialogs/guide.py:1302
+#: ui_dialogs/guide.py:1303
 msgid "Pad presets: File > Export Pad Presets... and Import Pad Presets...."
 msgstr ""
 "Preset tamponi: File > Esporta preset tamponi... e Importa preset "
 "tamponi...."
 
-#: ui_dialogs/guide.py:1303
+#: ui_dialogs/guide.py:1304
 msgid "Key heights: File > Export Key Sets... and Import Key Sets...."
 msgstr ""
 "Altezze chiavi: File > Esporta set di chiavi... e Importa set di "
 "chiavi...."
 
-#: ui_dialogs/guide.py:1304
+#: ui_dialogs/guide.py:1305
 msgid "Screw specs: File > Export Screw Specs... and Import Screw Specs...."
 msgstr ""
 "Specifiche viti: File > Esporta specifiche viti... e Importa specifiche "
 "viti...."
 
-#: ui_dialogs/guide.py:1305
+#: ui_dialogs/guide.py:1306
 msgid "Analyzer presets: File > Transfer Data."
 msgstr "Preset dell'Analizzatore: File > Trasferimento dati."
 
-#: ui_dialogs/guide.py:1306
+#: ui_dialogs/guide.py:1307
 msgid ""
 "Everything: File > Import Settings from Folder... copies the settings of "
 "another installation."
@@ -7907,31 +7911,31 @@ msgstr ""
 "Tutto: File > Importa impostazioni da cartella... copia le impostazioni "
 "di un'altra installazione."
 
-#: ui_dialogs/guide.py:1338
+#: ui_dialogs/guide.py:1339
 msgid "Welcome. This is a complex, many-featured program."
 msgstr "Benvenuto. Questo è un programma complesso, con molte funzioni."
 
-#: ui_dialogs/guide.py:1339
+#: ui_dialogs/guide.py:1340
 msgid "See Help > User Guide for the full rundown."
 msgstr "Vedi Aiuto > Guida utente per la spiegazione completa."
 
-#: ui_dialogs/guide.py:1340
+#: ui_dialogs/guide.py:1341
 msgid "Quick start"
 msgstr "Avvio rapido"
 
-#: ui_dialogs/guide.py:1343
+#: ui_dialogs/guide.py:1344
 msgid "Pad Maker outputs pads ready to cut, per material. Three ways to do it:"
 msgstr ""
 "Crea tamponi produce tamponi pronti da tagliare, per materiale. Tre modi "
 "per farlo:"
 
-#: ui_dialogs/guide.py:1345
+#: ui_dialogs/guide.py:1346
 msgid "Pad Maker outputs pads ready to cut, per material. Two ways to do it:"
 msgstr ""
 "Crea tamponi produce tamponi pronti da tagliare, per materiale. Due modi "
 "per farlo:"
 
-#: ui_dialogs/guide.py:1347
+#: ui_dialogs/guide.py:1348
 msgid ""
 "SD card: Enter pads, click Generate G-code, save it to the SD card, run "
 "it on the laser."
@@ -7939,7 +7943,7 @@ msgstr ""
 "Scheda SD: inserisci i tamponi, clicca Genera G-code, salvalo sulla "
 "scheda SD, avvialo sul laser."
 
-#: ui_dialogs/guide.py:1348
+#: ui_dialogs/guide.py:1349
 msgid ""
 "LightBurn: Enter pads, click Generate SVG, save them, open them in "
 "LightBurn, set speed and power for each color, export to SD or direct "
@@ -7949,7 +7953,7 @@ msgstr ""
 "LightBurn, imposta velocità e potenza per ogni colore, esporta su SD o "
 "controlla il laser direttamente."
 
-#: ui_dialogs/guide.py:1352
+#: ui_dialogs/guide.py:1353
 msgid ""
 "Direct laser control: Sax Shop Companion controls your laser. Enter your "
 "pads, click Frame & Cut, frame, cut. Switch it on in File > Feature Set. "
@@ -7961,11 +7965,11 @@ msgstr ""
 "attiva in File > Funzionalità attive. Può essere manuale, oppure con la "
 "fotocamera per un lavoro molto rapido e automatizzato."
 
-#: ui_dialogs/guide.py:1357
+#: ui_dialogs/guide.py:1358
 msgid "Before you cut!"
 msgstr "Prima di tagliare!"
 
-#: ui_dialogs/guide.py:1358
+#: ui_dialogs/guide.py:1359
 msgid ""
 "Speeds and powers are in Options > G-code Settings (Pad Maker) and "
 "Options > Settings (Tooling). Defaults are for a 40 W diode laser."
@@ -7974,49 +7978,49 @@ msgstr ""
 " Opzioni > Impostazioni (Attrezzatura). I valori predefiniti sono per un "
 "laser a diodo da 40 W."
 
-#: ui_dialogs/guide.py:1360
+#: ui_dialogs/guide.py:1361
 msgid "Test first. Don't start a fire."
 msgstr "Prima prova. Non appiccare un incendio."
 
-#: ui_dialogs/guide.py:1368
+#: ui_dialogs/guide.py:1369
 msgid "Quick Start Guide"
 msgstr "Guida rapida"
 
-#: ui_dialogs/guide.py:1442
+#: ui_dialogs/guide.py:1443
 #, python-brace-format
 msgid "Version {version}"
 msgstr "Versione {version}"
 
-#: ui_dialogs/guide.py:1445
+#: ui_dialogs/guide.py:1446
 msgid "Thank you for installing."
 msgstr "Grazie per l'installazione."
 
-#: ui_dialogs/guide.py:1450
+#: ui_dialogs/guide.py:1451
 msgid "Click here for the quick start or"
 msgstr "Clicchi qui per la guida rapida oppure"
 
-#: ui_dialogs/guide.py:1451
+#: ui_dialogs/guide.py:1452
 msgid "Be a BOSS and click HERE for the User Guide"
 msgstr "Faccia il BOSS e clicchi QUI per la Guida utente"
 
-#: ui_dialogs/guide.py:1486
+#: ui_dialogs/guide.py:1487
 msgid "by Matt Stohrer"
 msgstr "di Matt Stohrer"
 
-#: ui_dialogs/guide.py:1488
+#: ui_dialogs/guide.py:1489
 msgid "~Salingeresque Sax Repair Techno-poet~"
 msgstr "~Tecnopoeta della riparazione del sax in stile Salingeriano~"
 
-#: ui_dialogs/guide.py:1490
+#: ui_dialogs/guide.py:1491
 #, python-brace-format
 msgid "Version {version}  •  Built {build}"
 msgstr "Versione {version}  •  Compilato {build}"
 
-#: ui_dialogs/guide.py:1493
+#: ui_dialogs/guide.py:1494
 msgid "Check for a newer version"
 msgstr "Cerca una versione più recente"
 
-#: ui_dialogs/guide.py:1501
+#: ui_dialogs/guide.py:1502
 msgid ""
 "•  SVG & G-code generation for laser-cut pads\n"
 "•  Key height library with import/export\n"
@@ -8034,15 +8038,15 @@ msgstr ""
 "•  Accordatore stroboscopico cromatico\n"
 "•  Grafico di intonazione e analizzatore armonico"
 
-#: ui_dialogs/guide.py:1518
+#: ui_dialogs/guide.py:1519
 msgid "Questions or feedback:"
 msgstr "Domande o riscontri:"
 
-#: ui_dialogs/guide.py:1528
+#: ui_dialogs/guide.py:1529
 msgid "Like this app? Want to say thanks?"
 msgstr "Le piace questa app? Vuole ringraziare?"
 
-#: ui_dialogs/guide.py:1531
+#: ui_dialogs/guide.py:1532
 msgid ""
 "PayPal: stohrermusic@gmail.com\n"
 "Venmo: @matthew-stohrer"
@@ -8050,19 +8054,19 @@ msgstr ""
 "PayPal: stohrermusic@gmail.com\n"
 "Venmo: @matthew-stohrer"
 
-#: ui_dialogs/guide.py:1540
+#: ui_dialogs/guide.py:1541
 msgid "Join my "
 msgstr "Si iscriva al mio "
 
-#: ui_dialogs/guide.py:1542
+#: ui_dialogs/guide.py:1543
 msgid "YouTube channel"
 msgstr "canale YouTube"
 
-#: ui_dialogs/guide.py:1549
+#: ui_dialogs/guide.py:1550
 msgid " as a paying member"
 msgstr " come membro pagante"
 
-#: ui_dialogs/guide.py:1552
+#: ui_dialogs/guide.py:1553
 msgid ""
 "Or email me for my address to send a six-pack,\n"
 "some old tools, or whatever!"
@@ -11355,4 +11359,7 @@ msgstr "Chiude senza cambiare i colori dei livelli."
 
 #~ msgid "Questions? Search the User Guide."
 #~ msgstr "Domande? Cerchi nella Guida utente."
+
+#~ msgid "For the Falcon, the SD card must have nothing else on it."
+#~ msgstr "Per il Falcon, sulla scheda SD non deve esserci nient'altro."
 

@@ -952,7 +952,8 @@ class UserGuideWindow(tk.Toplevel):
 
         self._sub(_("SD card"))
         self._body(_("Windows: \"Eject SD card after G-code export\" ejects it after writing."))
-        self._bullet(_("For the Falcon, the SD card must have nothing else on it."))
+        self._bullet(_("For the Falcon, the SD card must be empty except for the one G-code file "
+                    "it will run, so put one material's file on it at a time."))
 
     def _section_tooling(self):
         self._section("tooling", _("Tooling"))
