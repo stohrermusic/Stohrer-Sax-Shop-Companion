@@ -34,6 +34,14 @@ try:
     import sounddevice as sd
 except (ImportError, OSError):
     sd = None
+except Exception as _audio_error:
+    # sounddevice starts PortAudio when it is imported, and a machine whose sound system
+    # will not start raises sounddevice.PortAudioError there (it cannot be named: the
+    # import is what failed). Uncaught, that ended the whole app at launch for want of a
+    # tuner (a CI Linux runner, 2026-11-12: "Error initializing PortAudio"). No audio.
+    import logging as _logging
+    _logging.getLogger(__name__).warning("audio unavailable: PortAudio did not start: %s", _audio_error)
+    sd = None
 AUDIO_AVAILABLE = np is not None and sd is not None
 
 from audio_utils import AudioRingBuffer, hann_peak_freq, synthetic_tone  # noqa: E402 — shared with tuner_engine
