@@ -271,3 +271,9 @@ Matt, on the installed beta. First, of the chart view: "the bottom shows control
 - **A narrow chart thins its note names** from the low end (`LABEL_PITCH`), every point still drawn: in the right third there is not room for thirty names. The assistant's choice among three put to Matt (thin the names; give the chart the full width along the bottom; accept it); he moved to the simpler design before answering, and thinning is needed in it all the same.
 
 Gates: `test_analyzer_tab` ("the four views", "VIEW, SCALE and FPS show only while HARMONICS is on"), `test_intonation_chart` ("a narrow chart thins its note names"). Two of the new checks unlock the harmonics terms in memory for their own length: showing the spectrum from code moves the switch, which on a never-unlocked profile asks the terms in a modal window.
+
+## The sax slider is locked while a capture runs (2026-11-12)
+
+Matt: "what if someone switches the sax type mid-capture? when does that decision log?" With a preset loaded it could not happen (the slider is locked and the type is the preset's). A record-first run takes the slider's type when the capture starts; the slider was free, and moving it mid-capture re-named the live readout and moved the detector's floor while the run and its chart kept the type they started with. Nothing stored was wrong (captures hold the sounding pitch) but the run could end up named as the wrong horn. His answer to the two ways offered: "yes, lock it while capturing, allow re-categorizing upon save".
+
+The slider is locked from the moment a capture starts (free or guided) and freed at Stop unless a preset holds it. Re-categorizing at save was already there and is unchanged: the new-preset form opens with the run's type and takes whatever is chosen, and a run attached to an existing preset takes that preset's type. Gate: `test_analyzer_tab`, in the record-first check.

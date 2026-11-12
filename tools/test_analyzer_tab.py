@@ -1440,6 +1440,8 @@ def main():
         assert app._toner_capture_state == "free_listening" and app._toner_active_session["horn_type"] == "Alto", \
             (app._toner_capture_state, app._toner_active_session)
         assert app._toner_preset_label.cget("text") == "Unsaved run", app._toner_preset_label.cget("text")
+        # the horn type cannot change under a capture: the slider is locked while it runs
+        assert str(app._toner_sax_scale_widget.cget("state")) == "disabled", "the sax slider is free during a capture"
         capture_one()
         chart_now()
         assert "Unsaved run" in chart_texts(), chart_texts()
@@ -1450,11 +1452,14 @@ def main():
         app._toner_stop_capture()
         run(50)
         assert app._toner_has_unsaved_run() and app._toner_capture_state is None and not answers, "Keep for now did not keep the run"
+        # stopped, with no preset: the slider is free again
+        assert str(app._toner_sax_scale_widget.cget("state")) == "normal", "the sax slider stayed locked after Stop"
         chart_now()
         assert "Unsaved run" in chart_texts(), chart_texts()
         app._toner_toggle_capture()
         run(50)
         assert app._toner_capture_state == "free_listening" and len(app._toner_active_session["captures"]) == 1, "Capture did not resume the kept run"
+        assert str(app._toner_sax_scale_widget.cget("state")) == "disabled", "the sax slider is free during a resumed capture"
         # the four ways out, each with Cancel staying put
         app._toner_free_accumulator = []
         app._toner_stop_capture()      # the question again: keep

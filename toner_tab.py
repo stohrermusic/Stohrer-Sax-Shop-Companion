@@ -1174,7 +1174,13 @@ class TonerTabMixin:
         self._toner_chart_changed()
 
     def _toner_lock_sax_selector(self, locked):
-        """Lock or unlock the sax selector (locked when preset is loaded)."""
+        """Lock or unlock the sax selector: locked while a preset is loaded, and while a capture
+        runs with or without one (Matt, 2026-11-12: "lock it while capturing, allow
+        re-categorizing upon save"). A record-first run takes the slider's horn type when it
+        starts; moved mid-capture, the slider used to re-name the live readout and move the
+        detector's floor while the run and its chart kept the type they started with. The type
+        can still be changed where the run is saved: the new-preset form, or the preset it is
+        attached to, whose type the session takes (_toner_attach_run_to_preset)."""
         if hasattr(self, '_toner_sax_scale_widget'):
             state = "disabled" if locked else "normal"
             self._toner_sax_scale_widget.configure(state=state)
@@ -3134,11 +3140,13 @@ class TonerTabMixin:
             self._toner_capture_frames = []
             self._toner_capture_start = self._toner_clock()
             self._toner_capture_state = 'cal_countdown'
+            self._toner_lock_sax_selector(True)      # the horn type cannot change under a capture
             label_text = f"Calibration starting in {CAL_COUNTDOWN_S:.0f}s... get ready"
         else:
             # Free mode: continuous auto-captures
             self._toner_stable_threshold = FREE_STABLE_FRAMES
             self._toner_capture_state = 'free_listening'
+            self._toner_lock_sax_selector(True)      # the horn type cannot change under a capture
             self._toner_free_accumulator = []
             self._toner_too_short = None
             is_sb = (self._toner_active_session or {}).get('sandbox')
@@ -3688,6 +3696,8 @@ class TonerTabMixin:
                 self._toner_save_active_session()
 
         self._toner_capture_state = None
+        # the slider is free again unless a preset holds it (a preset's horn type is its own)
+        self._toner_lock_sax_selector(bool(self._toner_active_preset))
         self._toner_capture_frames = []
         self._toner_free_accumulator = []
         self._toner_stable_note = ""
