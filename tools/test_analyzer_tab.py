@@ -415,13 +415,29 @@ def main():
         app.notebook.select(app.toner_tab_frame)
         settle(width_is(W["widened"]), what="the widening")
         app._toner_stop()                    # the engine out of the way: the leave is as instant as on CI
-        app.notebook.select(app.pad_tab)
-        run(30)                              # the leave runs; the restore's check is due in 100 ms
-        assert not restore_settled(), f"the restore's check already ran {where()}"
-        app.notebook.select(app.toner_tab_frame)
-        run(30)                              # back before the check looks
+        # The restore's check is held back for this check (HOLD_MS, not its 100 ms), so "back
+        # before it looks" does not depend on how fast the runner turns two 30 ms slices: on a
+        # loaded Apple Silicon runner the check had already run before the return (CI,
+        # 2026-11-12), which failed this check's own precondition, not the app.
+        HOLD_MS = 1500
+        real_after = root.after
+
+        def after_with_the_check_held(ms, func=None, *args):
+            if ms == 100 and getattr(func, "__name__", "") == "check":
+                ms = HOLD_MS
+            return real_after(ms, func, *args)
+        root.after = after_with_the_check_held
+        try:
+            app.notebook.select(app.pad_tab)
+            run(30)                              # the leave runs; the restore's check is due
+            assert not restore_settled(), f"the restore's check already ran {where()}"
+            assert getattr(app, "_analyzer_restore_after", None) is not None, f"the leave scheduled no check {where()}"
+            app.notebook.select(app.toner_tab_frame)
+            run(30)                              # back before the check looks
+        finally:
+            del root.after
         settle(width_is(W["widened"]), what="the widening after an early return")
-        run(400)                             # the check's time, and the retries' it would have had
+        run(HOLD_MS + 500)                   # past when the held check would have looked, had it not been dropped
         assert root.winfo_width() == W["widened"], f"the restore's check took the new widening back {where()}"
         assert app._analyzer_widened == (start_w, W["widened"]), where()
         rec = app._analyzer_restore
