@@ -17,6 +17,7 @@ from config import (
     append_job_history, load_job_history, save_job_history,
     find_config_files_in_directory, import_config_files,
     get_ssl_context, get_input_devices, migrate_analyzer_tab,
+    rescan_input_devices, set_input_device, input_device_for,
     setup_logging, get_log_file,
     settings_to_sizing_preset, settings_to_gcode_presets,
 )
@@ -3007,6 +3008,31 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
 
+    def _rescan_audio_devices(self):
+        """Look for audio devices again (config.rescan_input_devices), with
+        the tuner's and the Analyzer's engines stopped round it and started
+        again after: a rescan invalidates every open stream and may move
+        every device index. The engines come back on the chosen device by
+        its name (config.input_device_for). Never during a capture, which
+        would lose its stream: False then, and the old list stands."""
+        if getattr(self, "_toner_capture_state", None) is not None:
+            return False
+        tuner = getattr(self, "_tuner_engine", None)
+        toner = getattr(self, "_toner_engine", None)
+        tuner_on = bool(tuner and tuner.is_running)
+        toner_on = bool(toner and toner.is_running)
+        if tuner_on:
+            self._tuner_stop()
+        if toner_on:
+            self._toner_stop()
+        try:
+            return rescan_input_devices()
+        finally:
+            if tuner_on:
+                self._tuner_start()
+            if toner_on:
+                self._toner_start()
+
     def _open_input_device_dialog(self):
         """Open a dialog to select the audio input device."""
         if sys.platform == 'linux':
@@ -3016,6 +3042,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "(PulseAudio or PipeWire)."))
             return
 
+        self._rescan_audio_devices()        # a microphone plugged in since the app started is listed
         devices = get_input_devices()
         if not devices:
             messagebox.showinfo(_("No Devices"), _("No audio input devices found."))
@@ -3037,7 +3064,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                  "Bluetooth headsets are excluded (sample rate too low)."),
                  bg=bg, fg="#666666", font=("Helvetica", 8)).pack(pady=(0, 8))
 
-        current_dev = self.settings.get("audio_input_device")
+        current_dev = input_device_for(self.settings, devices)
         dev_names = [_("System Default")] + [name for _idx, name in devices]
         dev_indices = [None] + [idx for idx, _name in devices]
 
@@ -3069,7 +3096,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if not sel:
                 return
             dev_idx = dev_indices[sel[0]]
-            self.settings["audio_input_device"] = dev_idx
+            set_input_device(self.settings, dev_idx, devices)
             save_settings(self.settings)
 
             # Restart active audio engine with new device

@@ -348,6 +348,7 @@ SCHEMA = {
     "welcomed_version": Str(),
     "seen_kerf_test_tutorial": Bool(), "seen_calibration_tutorial": Bool(),
     "audio_input_device": Int(nullable=True),                 # a sounddevice index, or None for the default
+    "audio_input_device_name": Str(nullable=True),            # that device's name; what is looked up (config.input_device_for)
     "capture_threshold": Int(min=0, max=100),                 # the Capture Threshold slider
     "toner_record_wav": Bool(),
     "toner_recording_dir": Str(),

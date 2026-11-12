@@ -33,3 +33,11 @@ Also: **a software adapter counted as GPU mode.** If wgpu only finds Windows' Ba
 - `_tuner_error_state` keeps the "Audio error" / stream-error message across canvas rebuilds: `_tuner_build_wheels_canvas` starts with `delete("all")`, which used to wipe the message on the next resize, so a user with no microphone saw dark wheels and no explanation (Mac tour, 2026-10-06).
 
 - **macOS is canvas-only**: `_HAS_GPU_RENDERER` is forced False on darwin at the top of `tuner_tab.py` — Tk Aqua's `winfo_id()` returns a `MacDrawable` pointer, not an NSView, and handing it to wgpu segfaults natively in `objc_msgSend` (no Python fallback possible). The same gate lives in `build.py` (no `--hidden-import` on darwin) and CI (no Rust/maturin on macOS runners). The "install tuner_render" CPU-mode hint is suppressed on macOS. Full mechanism in CLAUDE.md "GPU Tuner Renderer".
+
+## The bottom row drifted the wrong way (2026-11-12)
+
+Matt, on the installed beta: "the wheels on the tuner on the bottom row are moving in the wrong direction". True, and since the tuner shipped. Both renderers turn every disc the same way for a sharp note. The top row (the five accidentals) is seen through a wedge that opens upward, where that turn carries the stripes right; the bottom row (the seven naturals) through a wedge that opens downward, onto the bottom of the disc, where the same turn carries them left. So "drifting right: sharp" (the User Guide's words) held for five wheels of twelve.
+
+Fix: `tuner_tab.window_phases(pitch_class, phases)` negates the phases of the bottom row's wheels (`BOTTOM_ROW_PITCH_CLASSES`, pinned to the layout's own `is_up`) before either renderer gets them: the GPU path's `ring_phases` and the canvas path's `phase` and `ring_phase_offsets`. Python only, one place; the shader's `angle - phase` and the Rust side are untouched, so no wheel rebuild is needed and the two renderers cannot disagree. Rejected: a sign per wheel in the shader (a second copy of the rule across the Python/Rust line, and a rebuilt wheel, for the same picture).
+
+Gate: `test_tuner_canvas`, "the bottom row's discs are turned the other way". What no suite can see is the picture: Matt's eyes on a sharp and a flat natural. JustATuner carries the same tuner and has the same fault; not touched from here.

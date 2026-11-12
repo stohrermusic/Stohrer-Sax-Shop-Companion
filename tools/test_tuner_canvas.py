@@ -93,7 +93,118 @@ def _drive(root, gpu):
     return app
 
 
+def the_bottom_row_drifts_the_same_way():
+    """A sharp note drifts right in every window (Matt, 2026-11-12: the bottom row moved the
+    wrong way). The bottom row's wedge opens downward, where a disc turning the same way
+    travels the other way across the window, so those discs are turned the other way."""
+    import inspect
+    import tuner_tab
+    layout = tuner_tab.TunerTabMixin._tuner_compute_layout(None, 900, 500)
+    assert layout and len(layout) == 12, layout
+    bottom = {pc for pc, _cx, _cy, _r, is_up in layout if not is_up}
+    assert bottom == set(tuner_tab.BOTTOM_ROW_PITCH_CLASSES) == {0, 2, 4, 5, 7, 9, 11}, bottom
+    phases = [10.0, -20.0, 0.0, 3.5, 4.0, 5.0, 6.0]
+    for pc in range(12):
+        got = tuner_tab.window_phases(pc, list(phases))
+        want = [-p for p in phases] if pc in bottom else phases
+        assert got == want, (pc, got)
+    # THE RULE, from the picture itself: which way the stripes travel across each window for a
+    # sharp note. A stripe sits at angle a (0 at the top of the disc, clockwise, as the shader's
+    # atan2(x, y) and the canvas both count) where a - phase is constant, so it turns with the
+    # phase the renderer is given; on screen its x is sin(a), so at the middle of a window
+    # centred on angle c it travels right at cos(c) times that turn. A sharp note raises the
+    # engine's phase. Right is positive, in all twelve windows.
+    import math
+    engine_src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                   "tuner_engine.py"), encoding="utf-8").read()
+    assert "phase_offsets[pc] += cents" in engine_src, "the engine's phase no longer rises for a sharp note"
+    for pc, _cx, _cy, _r, is_up in layout:
+        window_centre = 0.0 if is_up else math.pi
+        turn = tuner_tab.window_phases(pc, [1.0])[0]          # what the renderer gets for +1 from the engine
+        travel = math.cos(window_centre) * turn
+        assert travel > 0, (f"pitch class {pc} ({'top' if is_up else 'bottom'} row): a sharp note's stripes travel "
+                            f"{'left' if travel < 0 else 'nowhere'} across its window")
+    # both renderers take their phases through it, and the shader's own sign is untouched
+    src = inspect.getsource(tuner_tab.TunerTabMixin)
+    assert src.count("window_phases(i, ") == 3, src.count("window_phases(i, ")
+    assert "ring_phases.append(list(result.ring_phase_offsets[i]))" not in src, "the GPU path sends raw phases"
+    assert "rp = list(result.ring_phase_offsets[i])" not in src, "the canvas path sends raw phases"
+    shader = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               "tuner_renderer", "src", "shader.wgsl"), encoding="utf-8").read()
+    assert "angle - wheel.ring_phases[ring_idx]" in shader
+
+
+def the_rescan_goes_round_the_engines():
+    """main._rescan_audio_devices stops the running engines, rescans, starts them again, in that
+    order; never during a capture; every device list in the app is read after a rescan."""
+    import inspect
+    import config
+    import main as main_mod
+    import toner_tab
+    import tuner_tab
+    calls = []
+
+    class Engine:
+        def __init__(self, running):
+            self.is_running = running
+
+    class App:
+        _rescan_audio_devices = main_mod.PadSVGGeneratorApp._rescan_audio_devices
+        _toner_capture_state = None
+
+        def __init__(self, tuner_on, toner_on):
+            self._tuner_engine, self._toner_engine = Engine(tuner_on), Engine(toner_on)
+
+        def _tuner_stop(self):
+            calls.append("tuner stop")
+
+        def _tuner_start(self):
+            calls.append("tuner start")
+
+        def _toner_stop(self):
+            calls.append("toner stop")
+
+        def _toner_start(self):
+            calls.append("toner start")
+    keep = main_mod.rescan_input_devices
+    main_mod.rescan_input_devices = lambda: calls.append("rescan") or True
+    try:
+        assert App(True, False)._rescan_audio_devices() is True
+        assert calls == ["tuner stop", "rescan", "tuner start"], calls
+        del calls[:]
+        assert App(False, True)._rescan_audio_devices() is True
+        assert calls == ["toner stop", "rescan", "toner start"], calls
+        del calls[:]
+        assert App(False, False)._rescan_audio_devices() is True
+        assert calls == ["rescan"], calls
+        del calls[:]
+        capturing = App(False, True)
+        capturing._toner_capture_state = "free_listening"
+        assert capturing._rescan_audio_devices() is False
+        assert calls == [], calls
+    finally:
+        main_mod.rescan_input_devices = keep
+    # the three places that list devices rescan first, and nothing opens a raw saved index
+    for mod, fn in ((main_mod.PadSVGGeneratorApp, "_open_input_device_dialog"),
+                    (toner_tab.TonerTabMixin, "_toner_open_settings"),
+                    (tuner_tab.TunerTabMixin, None)):
+        src = inspect.getsource(getattr(mod, fn)) if fn else inspect.getsource(mod)
+        a, b = src.find("self._rescan_audio_devices()"), src.find("devices = get_input_devices()")
+        assert 0 <= a < b, f"{mod.__name__}.{fn or '*'}: the list is read before the rescan"
+    for mod in (main_mod, toner_tab, tuner_tab):
+        src = inspect.getsource(mod)
+        assert 'settings.get("audio_input_device")' not in src, f"{mod.__name__} reads the saved index raw"
+        assert 'settings["audio_input_device"] =' not in src, \
+            f"{mod.__name__} writes the saved index without its name"
+    assert callable(config.input_device_for) and callable(config.set_input_device)
+
+
 def main():
+    check("a device rescan stops the running engines, rescans and starts them again; never during a "
+          "capture; every device list is read after one, and no saved index is opened raw",
+          the_rescan_goes_round_the_engines)
+    check("the bottom row's discs are turned the other way, so a sharp note drifts right in every window; "
+          "both renderers go through window_phases", the_bottom_row_drifts_the_same_way)
     import tkinter as tk
     try:
         root = tk.Tk()

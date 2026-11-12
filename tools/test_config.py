@@ -756,6 +756,60 @@ def test_input_devices_deduplication():
             del sys.modules["sounddevice"]
 
 
+def test_input_device_by_name():
+    """The chosen microphone is found by its name: the index moves when a device is plugged
+    in or out (Matt's AT2020 takes index 1 and pushes the built-in array to 2)."""
+    import config
+    without = [(1, "Microphone Array (AMD Audio Dev")]
+    with_usb = [(1, "Microphone (AT2020USB-X)"), (2, "Microphone Array (AMD Audio Dev")]
+    s = {"audio_input_device": None, "audio_input_device_name": None}
+    assert_equal(config.input_device_for(s, with_usb), None)                 # the system default
+    config.set_input_device(s, 1, with_usb)
+    assert_equal((s["audio_input_device"], s["audio_input_device_name"]), (1, "Microphone (AT2020USB-X)"))
+    assert_equal(config.input_device_for(s, with_usb), 1)
+    # unplugged: the system default, and the choice is kept for when it is back
+    assert_equal(config.input_device_for(s, without), None)
+    assert_equal(s["audio_input_device_name"], "Microphone (AT2020USB-X)")
+    assert_equal(config.input_device_for(s, with_usb), 1)
+    # the built-in array chosen with the USB mic out (index 1), then the USB mic plugged in:
+    # the array is found at 2, never the USB mic that now sits at 1
+    config.set_input_device(s, 1, without)
+    assert_equal(config.input_device_for(s, with_usb), 2)
+    assert_equal(s["audio_input_device"], 2)
+    # a profile from before the name was kept: its index stands, and adopts the name there
+    old = {"audio_input_device": 2, "audio_input_device_name": None}
+    assert_equal(config.input_device_for(old, with_usb), 2)
+    assert_equal(old["audio_input_device_name"], "Microphone Array (AMD Audio Dev")
+    # an old index the list does not hold is passed through as it always was
+    odd = {"audio_input_device": 37, "audio_input_device_name": None}
+    assert_equal(config.input_device_for(odd, with_usb), 37)
+    assert_equal(odd["audio_input_device_name"], None)
+    # back to the system default clears both
+    config.set_input_device(s, None, with_usb)
+    assert_equal((s["audio_input_device"], s["audio_input_device_name"]), (None, None))
+
+
+def test_rescan_input_devices():
+    """rescan_input_devices re-initialises PortAudio, terminate first; False without sounddevice."""
+    import config
+    calls = []
+    fake_sd = types.ModuleType("sounddevice")
+    fake_sd._terminate = lambda: calls.append("terminate")
+    fake_sd._initialize = lambda: calls.append("initialize")
+    orig_sd = sys.modules.get("sounddevice")
+    sys.modules["sounddevice"] = fake_sd
+    try:
+        assert_equal(config.rescan_input_devices(), True)
+        assert_equal(calls, ["terminate", "initialize"])
+        sys.modules["sounddevice"] = None
+        assert_equal(config.rescan_input_devices(), False)
+    finally:
+        if orig_sd is not None:
+            sys.modules["sounddevice"] = orig_sd
+        else:
+            del sys.modules["sounddevice"]
+
+
 # ============================================================================
 # TESTS: Edge cases for settings merge
 # ============================================================================
@@ -891,6 +945,8 @@ def main():
             ("Filters Bluetooth and sound mapper", test_input_devices_filters_bluetooth),
             ("No sounddevice returns empty list", test_input_devices_no_sounddevice),
             ("Deduplication of similar device names", test_input_devices_deduplication),
+            ("The chosen device is found by name when its index moves", test_input_device_by_name),
+            ("Rescan re-initialises PortAudio", test_rescan_input_devices),
         ]),
     ]
 

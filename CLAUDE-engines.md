@@ -116,6 +116,7 @@ There is no "Send G-code to SD Card" menu item.
 
 - macOS is canvas-only: see CLAUDE.md "GPU Tuner Renderer".
 
+- **A sharp note drifts right in every window.** The bottom row's wedge opens downward, where a disc turning the same way travels the other way, so `tuner_tab.window_phases(pitch_class, phases)` negates the bottom row's phases before either renderer gets them (2026-11-12). Never hand a renderer a raw phase, and do not move the sign into the shader. Gated in `test_tuner_canvas`.
 - Transposition support: wheel labels and VU readout both apply the shift from TRANSPOSITION_SHIFTS, with octave correction when the shift wraps past C.
 - **GPU/Canvas constant alignment**: these constants exist on both sides of the Python/Rust boundary and must stay in sync: `DIM_MULTIPLIER` (`tuner_tab.py` ↔ `tuner_renderer/src/shader.wgsl`), `BRIGHTNESS_GAMMA` (`tuner_tab.py` ↔ `tuner_renderer/src/renderer.rs`, applied in host code, not the shader), `MAGNITUDE_THRESHOLD` (`tuner_tab.py` ↔ `renderer.rs`), `CENTER_GAP_FRACTION`/`CENTER_GAP` (`tuner_tab.py` ↔ `shader.wgsl`), and `RING_SEGMENTS` (`tuner_tab.py` ↔ the `ring_segments()` switch in `shader.wgsl`). If you change any of them, update both sides. Known divergence: `RING_GAP_FRACTION` (Python, 0.05 off the ring's outer edge) vs `RING_GAP` (shader, 0.015 off each side) — the two renderers draw slightly different ring gaps; align these if anyone complains about the look differing between GPU and CPU mode.
 - `ReferencePlayer` in tuner_engine.py can output reference tones, but no UI control currently calls it (the play button was removed with the "Experimental" section) — it's exercised only by `tools/test_tuner_engine.py`.
@@ -123,6 +124,8 @@ There is no "Send G-code to SD Card" menu item.
 History: `docs/decisions/tuner.md`.
 
 ## Audio Stream Health
+
+**The input device is looked up by name** (2026-11-12): engines open `config.input_device_for(settings)`, dialogs save with `config.set_input_device`, and every device list is read after `self._rescan_audio_devices()` (PortAudio lists devices once per initialisation; a rescan stops and restarts the running engine and never runs during a capture). No module reads or writes `settings["audio_input_device"]` directly. Why: `docs/decisions/user-interface.md`.
 
 Both `tuner_engine.py` and `toner_engine.py` import `AudioRingBuffer` from `audio_utils.py` for stream health monitoring. The ring buffer tracks a write counter; if the analysis loop detects no new audio data for ~1 second, the engine automatically restarts the sounddevice stream. This recovers from silent callback death on Windows.
 

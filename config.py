@@ -149,6 +149,67 @@ def assert_tls_ready():
 APP_NAME = "StohrerSaxShopCompanion"
 
 
+def rescan_input_devices():
+    """Have PortAudio look for audio devices again. It lists them once, when
+    it is initialised, so a microphone plugged in after the app started was
+    not offered until a restart (Matt, 2026-11-12: "my usb mic is plugged in
+    ... but the ssc (exe) shows only the built in mic").
+
+    Only with no stream open: every stream is invalid afterwards, and every
+    device index may have changed (main._rescan_audio_devices stops and
+    restarts the engines round it). True when it was done."""
+    try:
+        import sounddevice as sd
+        sd._terminate()
+        sd._initialize()
+        return True
+    except Exception as e:
+        logging.getLogger("ssc.audio").warning("audio device rescan failed: %s", e)
+        return False
+
+
+def set_input_device(settings, index, devices=None):
+    """Store the user's choice of input device: its index and, since the
+    index moves when devices come and go, its name. None is the system
+    default."""
+    name = None
+    if index is not None:
+        for i, n in (get_input_devices() if devices is None else devices):
+            if i == index:
+                name = n
+                break
+    settings["audio_input_device"] = index
+    settings["audio_input_device_name"] = name
+
+
+def input_device_for(settings, devices=None):
+    """The index to open for the user's chosen input device, or None for the
+    system default.
+
+    The device is found by its saved name, wherever it is in the list now,
+    and the saved index is brought up to date. A named device that is not
+    connected gives None (the system default) and the choice is kept for
+    when it is back. A profile with an index and no name (before
+    2026-11-12) keeps its index and adopts the name found there."""
+    index = settings.get("audio_input_device")
+    if index is None:
+        return None
+    name = settings.get("audio_input_device_name")
+    if devices is None:
+        devices = get_input_devices()
+    if name:
+        for i, n in devices:
+            if n == name:
+                settings["audio_input_device"] = i
+                return i
+        return None
+    for i, n in devices:
+        if i == index:
+            settings["audio_input_device_name"] = n
+            break
+    return index
+
+
 def get_input_devices():
     """Return list of (device_index, device_name) for usable audio input devices.
 
@@ -1217,6 +1278,11 @@ DEFAULT_SETTINGS = {
 
     # AUDIO INPUT
     "audio_input_device": None,  # None = system default, or device index
+    # The chosen device's name as get_input_devices lists it. The index moves
+    # when a microphone is plugged in or out; the name is what is looked up
+    # (input_device_for). None with the system default, and in a profile from
+    # before 2026-11-12, which adopts the name of its index on first use.
+    "audio_input_device_name": None,
     "capture_threshold": 50,     # 0-100, how loud a signal must be to trigger capture
     "toner_record_wav": True,    # Record WAV audio during toner capture sessions
     "toner_recording_dir": "",   # Directory for WAV recordings (empty = Music/StohrerSaxShopCompanion)

@@ -565,6 +565,16 @@ class TonerTabMixin:
                 self._toner_on_sax_type_changed()
         sax_idx_var.trace_add("write", _on_sax_changed)
 
+        def _sax_type_written(*args):
+            # The slider follows the type whoever sets it. Four places set the type from a
+            # preset (a capture starting, a run attached to a preset, the two audio imports)
+            # without moving the slider, which then showed one horn while the tab worked in
+            # another (found 2026-11-12, after Matt's chart came out in a key he had not picked).
+            stype = self._toner_sax_var.get()
+            if stype in visible_sax and sax_idx_var.get() != visible_sax.index(stype):
+                sax_idx_var.set(visible_sax.index(stype))
+        self._toner_sax_var.trace_add("write", _sax_type_written)
+
         # Sandbox checkbox (below sax selector, visible only when enabled)
         self._toner_sandbox_var = tk.BooleanVar(value=False)
 
@@ -1131,7 +1141,7 @@ class TonerTabMixin:
 
     def _toner_open_settings(self):
         """Open consolidated toner settings dialog."""
-        from config import get_input_devices, save_settings
+        from config import get_input_devices, save_settings, set_input_device, input_device_for
         from tkinter import filedialog
         from ui_dialogs import add_tooltip
 
@@ -1157,6 +1167,7 @@ class TonerTabMixin:
                                      fg=fg, padx=10, pady=8)
         input_frame.pack(fill="x", pady=(0, 8))
 
+        self._rescan_audio_devices()        # a microphone plugged in since the app started is listed
         devices = get_input_devices()
         dev_indices = [None]
         dev_names = ["System Default"]
@@ -1169,7 +1180,7 @@ class TonerTabMixin:
             dev_names += [name for _idx, name in devices]
             dev_indices += [idx for idx, _name in devices]
 
-            current_dev = self.settings.get("audio_input_device")
+            current_dev = input_device_for(self.settings, devices)
             if current_dev is not None:
                 for idx, name in devices:
                     if idx == current_dev:
@@ -1533,11 +1544,11 @@ class TonerTabMixin:
         def save():
             # Input device (remember the old one to detect a change below —
             # nothing else persists it, so compare before overwriting)
-            old_dev = self.settings.get("audio_input_device")
+            old_dev = input_device_for(self.settings, devices)
             if devices and sys.platform != 'linux':
                 sel = listbox.curselection()
                 if sel:
-                    self.settings["audio_input_device"] = dev_indices[sel[0]]
+                    set_input_device(self.settings, dev_indices[sel[0]], devices)
 
             # Recording
             rec = record_var.get()
@@ -6251,7 +6262,8 @@ class TonerTabMixin:
                 messagebox.showwarning(_("Microphone Notice"),
                     _('Your input device appears to be a built-in microphone ("{device}").\n\nBuilt-in mics often have poor low-frequency response, which can cause inaccurate readings — especially in the low register.\n\nFor best results, use a condenser mic such as the Audio-Technica AT2020 USB.').format(device=dev_name))
 
-        device = self.settings.get("audio_input_device")
+        from config import input_device_for
+        device = input_device_for(self.settings)      # by name: the index moves when devices come and go
         if sys.platform == 'linux':
             device = None  # Linux/PulseAudio: device selection unreliable, use system default
         success, err = self._toner_engine.start(device=device)

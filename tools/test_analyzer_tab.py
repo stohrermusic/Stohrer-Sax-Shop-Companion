@@ -382,6 +382,25 @@ def main():
         settle(width_is(start_w), what="the start width back")
         assert getattr(app, "_analyzer_widened", None) is None, f"a widening left over from the last check {where()}"
 
+    def the_sax_slider_follows_the_type():
+        """The SAX slider shows the horn the tab is working in, whoever set it (a preset at the
+        start of a capture, a run attached to a preset, an audio import): four of those set
+        the type and left the slider where it was."""
+        visible = app._toner_visible_sax
+        keep = app._toner_sax_var.get()
+        try:
+            for stype in ("Tenor", "Baritone", "Alto", "Soprano"):
+                app._toner_sax_var.set(stype)
+                assert app._toner_sax_idx_var.get() == visible.index(stype), \
+                    f"the type is {stype}, the slider is on {visible[app._toner_sax_idx_var.get()]}"
+            # and the slider still sets the type
+            app._toner_sax_idx_var.set(visible.index("Tenor"))
+            assert app._toner_sax_var.get() == "Tenor"
+            assert app._toner_engine is None or app._toner_engine.sax_type == "Tenor"
+        finally:
+            app._toner_sax_var.set(keep)
+    check("the SAX slider follows the horn type whoever sets it, and still sets it", the_sax_slider_follows_the_type)
+
     def leaving_puts_the_width_back():
         from_the_start(WIDE)
         start_w, start_h = W["start"]
