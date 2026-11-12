@@ -74,7 +74,7 @@ class UserGuideWindow(tk.Toplevel):
     """
 
     SECTION_KEYS = ("pad_generator", "laser", "tooling", "key_heights", "serial_lookup",
-                    "screw_specs", "tuner", "toner", "sharing", "learn")
+                    "screw_specs", "tuner", "toner", "sharing")
     # Kept for callers and tests that map a tab to its section.
     SECTION_TITLES = {
         "pad_generator": _("Pad Maker"),
@@ -179,6 +179,8 @@ class UserGuideWindow(tk.Toplevel):
         self._figures = []          # (name, canvas), in reading order
         self._cur_section_item = None
         self._current_item = None
+        self._fold_head = None      # the folded part's heading mark (_fold_start), or None
+        self.fold_open = True
         self._insert_content()
         self.text.tag_add("col", "1.0", "end")
         self.text.config(state="disabled")
@@ -249,6 +251,8 @@ class UserGuideWindow(tk.Toplevel):
         mark = next((m for m, it in self._marks if it == item), None)
         if mark is None:
             return
+        if mark == self._fold_head or self._in_fold(mark):
+            self.set_fold(True)
         self._current_item = item
         self._select_toc(item)
         self.text.yview(mark)
@@ -329,7 +333,7 @@ class UserGuideWindow(tk.Toplevel):
         count = tk.IntVar()
         pos = "1.0"
         while True:
-            pos = self.text.search(query, pos, stopindex="end", nocase=True, count=count)
+            pos = self.text.search(query, pos, stopindex="end", nocase=True, count=count, elide=True)
             if not pos or count.get() == 0:
                 break
             end = f"{pos}+{count.get()}c"
@@ -354,6 +358,8 @@ class UserGuideWindow(tk.Toplevel):
         self.text.tag_remove("search_current", "1.0", "end")
         self._search_at = index
         start, end = self._search_hits[index]
+        if self._in_fold(start):
+            self.set_fold(True)
         self.text.tag_add("search_current", start, end)
         self.text.see(start)
         self._search_status_var.set(_("{n} of {total}").format(
@@ -381,6 +387,53 @@ class UserGuideWindow(tk.Toplevel):
         parent = self._cur_section_item if self._cur_section_item is not None else ""
         item = self.toc.insert(parent, "end", text=title)
         self._marks.append((mark, item))
+
+    # A part of the guide folded away until its heading is clicked (Matt,
+    # 2026-11-11: "make the harmonics section click-to-expand"). One fold;
+    # the text is all there, hidden with the tag's elide, so the search
+    # finds it (and opens it) and the contents list reaches into it.
+    FOLD_CLOSED, FOLD_OPEN = "\u25b8", "\u25be"
+
+    def _fold_start(self, title):
+        """A sub-heading that opens and closes everything up to _fold_stop."""
+        mark = f"sub_{len(self._marks)}"
+        self.text.mark_set(mark, "end-1c")
+        self.text.mark_gravity(mark, "left")
+        self.text.insert("end", f"{self.FOLD_CLOSED} {title}\n", ("h2", "col", "fold_head"))
+        parent = self._cur_section_item if self._cur_section_item is not None else ""
+        item = self.toc.insert(parent, "end", text=title)
+        self._marks.append((mark, item))
+        self.text.mark_set("fold_start", "end-1c")
+        self.text.mark_gravity("fold_start", "left")
+        self._fold_head = mark
+
+    def _fold_stop(self):
+        self.text.mark_set("fold_end", "end-1c")
+        self.text.mark_gravity("fold_end", "left")
+        self.text.tag_add("fold_body", "fold_start", "fold_end")
+        self.text.tag_configure("fold_body", elide=True)
+        self.fold_open = False
+        self.text.tag_bind("fold_head", "<Button-1>", lambda e: self.set_fold(not self.fold_open))
+        self.text.tag_bind("fold_head", "<Enter>", lambda e: self.text.config(cursor="hand2"))
+        self.text.tag_bind("fold_head", "<Leave>", lambda e: self.text.config(cursor=""))
+
+    def _in_fold(self, index):
+        if self._fold_head is None:
+            return False
+        return self.text.compare(index, ">=", "fold_start") and self.text.compare(index, "<", "fold_end")
+
+    def set_fold(self, open_):
+        """Open or close the folded part; the heading's marker follows."""
+        if self._fold_head is None or open_ == self.fold_open:
+            return
+        self.fold_open = open_
+        self.text.tag_configure("fold_body", elide=not open_)
+        state = str(self.text.cget("state"))
+        self.text.config(state="normal")
+        self.text.delete(self._fold_head, f"{self._fold_head}+1c")
+        self.text.insert(self._fold_head, self.FOLD_OPEN if open_ else self.FOLD_CLOSED,
+                         ("h2", "col", "fold_head"))
+        self.text.config(state=state)
 
     def _title(self, text):
         """The guide's own title: a heading with no contents entry."""
@@ -654,6 +707,18 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("A tool for saxophone technicians: generate laser-cutting templates, "
                     "record key heights, look up serial numbers, reference screw specs, "
                     "tune, and analyze tone."))
+        # The credit at the top of the guide (Matt, 2026-11-11: "put a shoutout
+        # to phil and his method at the top of the user guide, and link to his
+        # website"). An addition: the Tooling section's credit stays as it is.
+        self._body(_("The pad-making method this app is built around is Phil Noy's, which he "
+                     "shares freely. Thank you, Phil."))
+        self._link(_("noysaxophonesupplies.com"), "https://www.noysaxophonesupplies.com")
+        # The pad-making guide, at the top since 2026-11-11 (it was a last
+        # section of its own, "Learn to make pads"; Matt: "put a link
+        # somewhere at the top").
+        self._body(_("To make pads, read the guide:"))
+        self._link(_("How to make saxophone pads"),
+                   "https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/")
         self._intro()
         self._blank()
         self._section_pad_maker()
@@ -665,14 +730,13 @@ class UserGuideWindow(tk.Toplevel):
         self._section_tuner()
         self._section_toner()
         self._section_sharing()
-        self._section_learn()
 
     def _intro(self):
         # Optional: one line for the top of the full guide (in _insert_content),
-        # not one of the ten sections. Drop it if the window says this itself.
+        # not one of the nine sections. Drop it if the window says this itself.
         self._body(_("Type in the search box (Ctrl+F, or Cmd+F on a Mac) to find a word, "
                   "or click a heading in the contents list on the right. "
-                  "Help > Quick Start Guide has the basics on one page."))
+                  "Help > Welcome has a link to the Quick Start Guide, the basics on one page."))
 
     def _section_pad_maker(self):
         self._section("pad_generator", _("Pad Maker"))
@@ -798,8 +862,10 @@ class UserGuideWindow(tk.Toplevel):
                   "material and each step: engraving, center hole, outer cut."))
         self._bullet(_("Engraving mode: Line (single stroke) or Filled. Fill density and overscan "
                     "apply to Filled."))
-        self._bullet(_("Kerf width: enter the full measured kerf (LightBurn asks for half). The "
-                    "app compensates every cut. Measure it with Tooling > Kerf Test."))
+        self._bullet(_("Kerf width: enter the full measured kerf (LightBurn asks for half). When "
+                       "outputting G-code or using Frame & Cut, the app compensates every cut, in "
+                       "the appropriate direction, automatically. Measure it with Tooling > Kerf "
+                       "Test."))
         self._bullet(_("Air assist per step, return-to-home speed, and Cut grouping: by layer "
                     "(all engravings, all holes, all cuts) or by pad."))
         self._bullet(_("Each material has its own presets: Load, Save, Rename, Delete."))
@@ -837,7 +903,9 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("A G-code file carries its own speeds and powers, the ones set in this app. "
                   "Send it to the laser as it is, on an SD card or with Frame & Cut."))
         self._body(_("LightBurn ignores those values when it imports G-code, so for LightBurn use "
-                  "Generate SVG and set speed and power there."))
+                     "Generate SVG and set speed and power there. You can set a fixed layer color "
+                     "for your SVG outputs, and then set LightBurn to always treat that color as "
+                     "the same type of layer, saving you time."))
 
         self._sub(_("Machine integration"))
         self._steps([
@@ -863,10 +931,17 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Stop is a soft reset. No calibration needed."))
 
         self._sub(_("Camera"))
+        # Matt's own words (2026-11-11), lightly tidied.
+        self._body(_("Ultimate workflow for GRBL lasers: place material on the bed, capture its "
+                     "shape with the camera, auto-locate the laser, cut! You can go from entering "
+                     "pad numbers to cutting in under a minute, and the precision lets you make "
+                     "the most of your material."))
         self._body(_("Optional. Options > Machine > Camera Calibration..., done once:"))
         self._steps([
             _("Secure basswood, home, jog to mid-bed, Frame, then Engrave."),
-            _("Capture the card untouched first, click Done with references, then move it for the rest of the 12."),
+            _("Capture the card untouched first, click Done with references, then move it around "
+              "the bed for the rest of the 12 captures (at least 5 moved), so the camera knows "
+              "where in space things on the bed are."),
         ])
         self._bullet(_("This unlocks \"Get from camera\", the shape dialog's live overlay, Try "
                     "Auto Locate, Re-capture from camera and \"Live camera preview\"."))
@@ -899,6 +974,9 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Dies nest in rows from the sheet's bottom-left corner, largest first."))
         self._bullet(_("The cutout discs make handy pad cup tools. For an exact diameter, use the "
                     "Pad Maker's Exact size (SVG only)."))
+        self._bullet(_("Scrap Mode: tick it to spread a set over several sheets: each Generate "
+                       "fills one sheet, a window tracks what is left, and files are named "
+                       "_scrap1, _scrap2."))
 
         self._sub(_("Die Holders"))
         self._body(_("A stack of 85 mm acrylic discs cemented together for good: a solid bottom, "
@@ -912,8 +990,8 @@ class UserGuideWindow(tk.Toplevel):
         self._body(_("A stacking rack for dies, 230 x 330 mm. Cut three upper plates and one "
                   "lower, line up the four 1/8 in corner holes on pins and glue the stack; a "
                   "book press clamps it nicely."))
-        self._bullet(_("Pick basswood, acrylic or cork and the sheet. G-code cuts every slot and "
-                    "hole before the plate's edge; the sheet must be at least 234 x 334 mm."))
+        self._bullet(_("Pick basswood or acrylic. G-code cuts every slot and hole before the "
+                       "plate's edge; the sheet must be at least 234 x 334 mm."))
         self._bullet(_("The SVG is the bare drawing, for LightBurn."))
 
         self._sub(_("Kerf Test"))
@@ -943,9 +1021,9 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Test on the material you will really cut."))
 
         self._sub(_("Pad Press Spacers"))
-        self._body(_("3D-printable 1.75 in square spacers with their thickness on top; stack them "
-                  "to set press depth. A half-step set (3.0 to 4.5 mm), a quarter-step set "
-                  "(3.25 to 4.25 mm) and a rack. Print in PLA or PETG."))
+        self._body(_("3D-printable 1.75 in square spacers with their thickness on top; put them "
+                     "at press corners to set press depth. A half-step set (3.0 to 4.5 mm), a "
+                     "quarter-step set (3.25 to 4.25 mm) and a rack. Print with 100% infill."))
 
         self._sub(_("Tonehole Crescent"))
         self._body(_("A crescent glued into the mouthpiece side of a tonehole covers part of it "
@@ -959,13 +1037,8 @@ class UserGuideWindow(tk.Toplevel):
                     "on the scrap."))
         self._bullet(_("G-code cuts the chosen material (cork by default) half a kerf outside the "
                     "outline, so the part comes out at size."))
-        self._bullet(_("The SVG has no kerf compensation; set it in LightBurn. Generate STL prints "
-                    "it at the thickness entered."))
-
-        self._sub(_("Scrap Mode"))
-        self._body(_("Tick Scrap Mode on Die Inserts to spread a set over several sheets: each "
-                  "Generate fills one sheet, a window tracks what is left, and files are named "
-                  "_scrap1, _scrap2."))
+        self._bullet(_("The SVG has no kerf compensation; set it in LightBurn. Generate STL to "
+                       "output an STL at the shape and thickness entered."))
 
         self._sub(_("Frame & Cut"))
         self._body(_("Every tool that writes G-code has Frame & Cut beside Generate G-code. It "
@@ -991,7 +1064,8 @@ class UserGuideWindow(tk.Toplevel):
     def _section_key_heights(self):
         self._section("key_heights", _("Key Height Library"))
         self._body(_("Record and compare key heights for different saxophones, in libraries you "
-                  "can share."))
+                     "organize. Entries and libraries are exportable, and you can share with "
+                     "other SSC users if you want."))
         self._bullet(_("Options > Layout Options... chooses which keys are shown."))
         self._bullet(_("File > Import Matt's Key Heights downloads Matt's sets from stohrermusic.com."))
 
@@ -1002,12 +1076,13 @@ class UserGuideWindow(tk.Toplevel):
     def _section_screw_specs(self):
         self._section("screw_specs", _("Screw Specs"))
         self._body(_("Thread specifications for screws and rods, by saxophone model."))
-        self._bullet(_("File > Import Matt's Specs downloads the latest from stohrermusic.com."))
+        self._bullet(_("File > Import Matt's Specs downloads the latest from stohrermusic.com. "
+                       "Also exportable if you desire."))
 
     def _section_tuner(self):
         self._section("tuner", _("Tuner"))
-        self._body(_("A strobe tuner: one wheel per note, one ring per octave. It runs while the "
-                  "tab is open."))
+        self._body(_("A 12-wheel chromatic strobe tuner: one wheel per note, one ring per octave. "
+                     "It runs while the tab is open."))
         self._bullet(_("Frozen pattern: in tune. Drifting right: sharp. Left: flat. The faster "
                     "the drift, the further off."))
         self._bullet(_("Several wheels move at once: those are the harmonics in your sound."))
@@ -1021,11 +1096,11 @@ class UserGuideWindow(tk.Toplevel):
                     "Options > Input Device... picks the microphone."))
 
         self._sub(_("Microphone"))
-        self._bullet(_("A good mic matters most on low notes. A USB condenser such as the "
-                    "Audio-Technica AT2020 USB works well, as does any condenser through an "
-                    "audio interface."))
-        self._bullet(_("Built-in laptop mics manage basic tuning but struggle low down. Bluetooth "
-                    "headset mics do not work: their sample rate is too low."))
+        self._bullet(_("A good mic is a must. A USB condenser such as the Audio-Technica AT2020 "
+                    "USB works well."))
+        self._bullet(_("Built-in laptop mics manage basic tuning but struggle low down and leave "
+                    "out harmonics. Bluetooth headset mics do not work: their sample rate is "
+                    "too low."))
 
         self._sub(_("How it works"))
         self._bullet(_("Each wheel turns at the difference between the sound and its note, from "
@@ -1077,7 +1152,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Export chart... in the Preset Library writes the chart as a PNG or a PDF."))
         self._bullet(_("Low notes on the left or on the right: Options > Settings... > General."))
 
-        self._sub(_("Harmonics (experimental)"))
+        self._fold_start(_("Harmonics (experimental and SUPER mic-sensitive)"))
         self._body(_("The HARMONICS switch on the control strip puts the harmonic analyzer in place "
                   "of the chart: it finds the note you play and measures each harmonic up to the "
                   "20th. Its presets also need Mic Type and Mic Model."))
@@ -1217,6 +1292,7 @@ class UserGuideWindow(tk.Toplevel):
                     "register don't outweigh the rest."))
         self._bullet(_("Only raw measurements are stored. Descriptors are worked out fresh each "
                     "time, so improvements apply to old captures too."))
+        self._fold_stop()
 
     def _section_sharing(self):
         self._section("sharing", _("Sharing data"))
@@ -1229,12 +1305,6 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Everything: File > Import Settings from Folder... copies the settings of "
                     "another installation."))
 
-    def _section_learn(self):
-        self._section("learn", _("Learn to make pads"))
-        self._body(_("The materials, the die holder, gluing, pressing and treating the leather "
-                  "are in Matt Stohrer's guide:"))
-        self._link(_("How to make saxophone pads"),
-                "https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/")
 
 class QuickStartWindow(tk.Toplevel):
     """The quick start guide: one small page of plain text for someone new
@@ -1243,8 +1313,9 @@ class QuickStartWindow(tk.Toplevel):
     would be handy so people don't get things backwards", and "whatever
     guide we write should be SUPER concise").
 
-    Opened from Help > Quick Start Guide and from the Welcome window's
-    link, never by itself. No images, no steps, no scrolling: the window
+    Opened from the Welcome window's link only (Help > Welcome, or the
+    Welcome a new version shows once), never by itself and not from the
+    Help menu (Matt, 2026-11-11). No images, no steps, no scrolling: the window
     is as big as its text. Not modal. Every line is its own translatable
     string, because the wording is Matt's to change. The words are his
     own since 2026-11-11 (he asked for the text and sent it back
@@ -1373,8 +1444,10 @@ class WelcomeWindow(tk.Toplevel):
         self.thanks_label = tk.Label(self, text=_("Thank you for installing."), bg=DIALOG_BG,
                                      font=("Helvetica", 10), wraplength=self.WRAP)
         self.thanks_label.pack(padx=28, pady=(10, 10))
-        self.guide_link = self._link(_("Questions? Search the User Guide."), self._search_guide)
-        self.quick_start_link = self._link(_("Click here for the quick start guide"), self._quick_start)
+        # The two links in Matt's words and his order (2026-11-11): the quick
+        # start first, then the User Guide.
+        self.quick_start_link = self._link(_("Click here for the quick start or"), self._quick_start)
+        self.guide_link = self._link(_("Be a BOSS and click HERE for the User Guide"), self._search_guide)
         self.close_button = tk.Button(self, text=_("Close"), width=10, command=self.destroy)
         self.close_button.pack(pady=(14, 16))
 

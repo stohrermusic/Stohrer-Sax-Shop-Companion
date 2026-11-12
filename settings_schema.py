@@ -172,7 +172,7 @@ SAX_TYPES = ("Bass", "Baritone", "Tenor", "C Melody", "Alto", "F Mezzo", "Sopran
 HOLDER_LAYERS = (5, 6)                                          # the Die Holders radios
 HEX_COLOUR = r"#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})"               # what Tk and SVG both take; the chooser writes 6
 
-ORGANIZER_MATERIALS = ("basswood", "acrylic", "cork")           # tooling_tab._ORGANIZER_MATERIALS
+ORGANIZER_MATERIALS = ("basswood", "acrylic")                   # tooling_tab._ORGANIZER_MATERIALS
 CRESCENT_MATERIALS = ("cork", "acrylic", "basswood", "leather", "felt", "card")  # tooling_tab._CRESCENT_MATERIALS
 PAD_MATERIALS = ("felt", "card", "leather", "exact_size")       # the Pad Maker's four, as the dicts key them
 GCODE_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood", "adhesive_ring", "cork")  # config.GCODE_PRESET_MATERIALS

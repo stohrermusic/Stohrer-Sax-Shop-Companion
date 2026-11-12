@@ -8,7 +8,7 @@ example graphics where appropriate."
 Pinned here, on the real window (off screen), the real app and the source:
   - it opens maximized (a normal window filling the screen) and is not
     transient; nothing is scheduled (no timer races a timer)
-  - the contents list: ten sections in order, every entry backed by a mark
+  - the contents list: nine sections in order, every entry backed by a mark
     in the text whose line holds that entry's title, Tooling's entries named
     exactly as its buttons; a click on any entry puts its heading at the top
     of the view (or, where the end of the text stops it, on screen) and
@@ -66,7 +66,7 @@ def check(name, fn):
 TOOL_BUTTONS = ["Die Inserts", "Die Holders", "Die Organizer", "Kerf Test", "Speed & Power Test",
                 "Pad Press Spacers", "Tonehole Crescent"]
 SECTION_TITLES = ["Pad Maker", "Getting a job to the laser", "Tooling", "Key Height Library", "Serial Lookup",
-                  "Screw Specs", "Tuner", "Analyzer", "Sharing data", "Learn to make pads"]
+                  "Screw Specs", "Tuner", "Analyzer", "Sharing data"]
 MUST_SAY = [
     "Is the lid closed?",                               # the lid question, on Start Frame
     "low power is still power",                         # framing is a live laser
@@ -119,14 +119,14 @@ def the_text_is_shorter_and_plain():
     order = re.findall(r"self\.(_section_\w+)\(\)", src)
     assert order == ["_section_pad_maker", "_section_laser", "_section_tooling", "_section_key_heights",
                      "_section_serial_lookup", "_section_screw_specs", "_section_tuner", "_section_toner",
-                     "_section_sharing", "_section_learn"], order
+                     "_section_sharing"], order
     for name in order:
         body = inspect.getsource(getattr(ui_dialogs.UserGuideWindow, name))
         assert re.search(r'self\._section\("[a-z_]+", _\(', body), f"{name} does not open with its section heading"
 
 
 check("the text: shorter than the old guide, every string a plain literal, none empty or over 60 words, "
-      "ten sections in order", the_text_is_shorter_and_plain)
+      "nine sections in order", the_text_is_shorter_and_plain)
 
 
 def it_says_what_it_must():
@@ -247,6 +247,9 @@ def gui():
         for item in items:
             mark = marks[item]
             line = g.text.get(f"{mark} linestart", f"{mark} lineend").strip()
+            if mark == g._fold_head:            # the folded part's heading carries its marker
+                assert line[:2] == g.FOLD_CLOSED + " ", ascii(line)
+                line = line[2:]
             assert line == g.toc.item(item, "text"), f"{g.toc.item(item, 'text')!r} marks the line {line!r}"
         tooling = g._toc_items["tooling"]
         subs = [g.toc.item(i, "text") for i in g.toc.get_children(tooling)]
@@ -256,7 +259,7 @@ def gui():
         # Marks are in reading order, and strictly increasing.
         lines = [line_of(g, m) for m, _i in g._marks]
         assert lines == sorted(lines) and len(set(lines)) == len(lines), lines
-    check("the contents list: ten sections in order, every entry backed by a heading on its own line, "
+    check("the contents list: nine sections in order, every entry backed by a heading on its own line, "
           "Tooling's entries named as its buttons", the_contents_list_matches_the_text)
 
     def a_click_on_any_entry_goes_there_and_none_is_dead():
@@ -372,6 +375,48 @@ def gui():
         finally:
             g2.destroy()
     check("search covers the whole guide whatever section it opened at", search_covers_the_whole_guide)
+
+    def the_harmonics_part_is_folded():
+        g3 = open_guide("toner")
+        try:
+            head = g3._fold_head
+            assert head is not None and g3.fold_open is False
+            line = g3.text.get(head, f"{head} lineend")
+            assert line == g3.FOLD_CLOSED + " Harmonics (experimental and SUPER mic-sensitive)", line
+            assert str(g3.text.tag_cget("fold_body", "elide")) in ("1", "True", "true")
+            inside = "Two takes of one setup ten minutes apart"
+            assert inside in g3.text.get("fold_start", "fold_end"), "the folded text is not in the guide"
+            assert "sample rate is too low" not in g3.text.get("fold_start", "fold_end"), "the Tuner's text got folded"
+            # everything from the heading to the end of the Analyzer section, and nothing after it
+            assert g3.text.compare("fold_end", "<=", "sec_sharing") and g3.text.compare("fold_start", ">", head)
+            assert g3.text.tag_bind("fold_head", "<Button-1>", None), "the heading is not bound to a click"
+            g3.set_fold(True)
+            assert g3.fold_open and g3.text.get(head, f"{head}+1c") == g3.FOLD_OPEN
+            assert str(g3.text.tag_cget("fold_body", "elide")) in ("0", "False", "false")
+            assert str(g3.text.cget("state")) == "disabled"
+            g3.set_fold(False)
+            assert g3.text.get(head, f"{head} lineend") == line
+            # a search hit inside opens it
+            g3._search_var.set(inside)
+            assert len(g3._search_hits) == 1 and g3.fold_open, "the search did not open the folded part"
+            g3._search_var.set("")
+            g3.set_fold(False)
+            # so does a contents entry inside it, and the heading's own entry
+            inner = [it for m, it in g3._marks if g3._in_fold(m)]
+            assert len(inner) >= 8, len(inner)
+            g3._go_to_item(inner[3])
+            assert g3.fold_open
+            g3.set_fold(False)
+            g3._go_to_item(next(it for m, it in g3._marks if m == head))
+            assert g3.fold_open
+            # a contents entry outside leaves it alone
+            g3.set_fold(False)
+            g3._go_to_item(g3._toc_items["tuner"])
+            assert not g3.fold_open
+        finally:
+            g3.destroy()
+    check("the Harmonics part is folded under its heading: a click, a search hit or a contents entry opens it",
+          the_harmonics_part_is_folded)
 
     g.destroy()
 
@@ -505,7 +550,7 @@ def in_german():
         reports[lang] = json.loads(line[0][7:])
     en, de = reports["en"], reports["de"]
     assert de["top_ok"], "German: the Tooling heading is not at the top"
-    assert len(de["sections"]) == 10 and de["sections"] != en["sections"], de["sections"]
+    assert len(de["sections"]) == 9 and de["sections"] != en["sections"], de["sections"]
     assert de["tooling"][:7] != en["tooling"][:7], "German Tooling entries are still English"
     for name in en["figures"]:
         en_texts, de_texts = en["figures"][name], de["figures"][name]

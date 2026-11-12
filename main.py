@@ -525,8 +525,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
             help_menu = tk.Menu(menu, tearoff=0)
             menu.add_cascade(label=_("Help"), menu=help_menu)
+            # No Quick Start Guide entry (Matt, 2026-11-11: "keep quick start
+            # out of the menu ... if they want it again they can click welcome
+            # and then click it"): Welcome has the link to it.
             help_menu.add_command(label=_("Welcome"), command=self.open_welcome)
-            help_menu.add_command(label=_("Quick Start Guide"), command=self.open_quick_start)
             help_menu.add_command(label=_("User Guide..."), command=self.open_user_guide)
             help_menu.add_separator()
             help_menu.add_command(label=_("Open Log File"), command=self._open_log_file)
@@ -3318,7 +3320,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         return guide
 
     def open_quick_start(self):
-        """Help > Quick Start Guide, and the Welcome window's link. Its last
+        """The Welcome window's link (not in the Help menu since 2026-11-11). Its last
         line opens the whole User Guide."""
         return QuickStartWindow(self.root, show_frame_cut=machine_supported(),
                                 on_user_guide=lambda: UserGuideWindow(self.root))
@@ -3419,7 +3421,10 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
                 ["powershell", "-Command", ps_script],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                # No console window of its own: without this a windowed
+                # build flashed one for a second (Matt, 2026-11-11).
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
             )
             # Give it a moment to complete
             time.sleep(1)

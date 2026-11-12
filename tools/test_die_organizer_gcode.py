@@ -494,7 +494,7 @@ def gui():
     def section_has_a_material_and_a_sheet():
         frame = app._tooling_sections["die_organizer"]
         combos = [w for row in frame.winfo_children() for w in row.winfo_children() if isinstance(w, ttk.Combobox)]
-        assert len(combos) == 1 and list(combos[0].cget("values")) == ["Basswood", "Acrylic", "Cork"], \
+        assert len(combos) == 1 and list(combos[0].cget("values")) == ["Basswood", "Acrylic"],\
             [list(c.cget("values")) for c in combos]
         assert app.organizer_material_var.get() == "Basswood" and app._organizer_material_key() == "basswood"
         texts = []

@@ -42,7 +42,8 @@ _TOOLING_MATERIALS = ("Felt", "Card", "Leather", "Acrylic", "Basswood", "Cork")
 # What the Tonehole Crescent and Die Organizer material choices offer, first
 # one the default: crescents are usually cork, the organizer usually wood.
 _CRESCENT_MATERIALS = ("cork", "acrylic", "basswood", "leather", "felt", "card")
-_ORGANIZER_MATERIALS = ("basswood", "acrylic", "cork")
+# No cork: a rack of plates is not made of it (Matt, 2026-11-11).
+_ORGANIZER_MATERIALS = ("basswood", "acrylic")
 
 
 class ToolingTabMixin:

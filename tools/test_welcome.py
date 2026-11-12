@@ -26,7 +26,7 @@ Pinned here:
   - the User Guide search: finds a known word, counts the matches, wraps
     round, says when there are none, ignores case, and switches a one-tab
     guide to the full guide
-  - Help has Welcome and Quick Start Guide above User Guide on every tab
+  - Help has Welcome above User Guide on every tab, and no Quick Start Guide entry
   - in German (the longest language) both windows fit, measured in a
     child process
 
@@ -179,7 +179,7 @@ def gui():
             labels = [w for w in children if isinstance(w, tk.Label)]
             assert [str(w.cget("text")) for w in labels] == [
                 "Stohrer Sax Shop Companion", "Version 9.87", "Thank you for installing.",
-                "Questions? Search the User Guide.", "Click here for the quick start guide"], \
+                "Click here for the quick start or", "Be a BOSS and click HERE for the User Guide"], \
                 [str(w.cget("text")) for w in labels]
             buttons = [w for w in children if isinstance(w, tk.Button)]
             assert [str(b.cget("text")) for b in buttons] == ["Close"]
@@ -327,8 +327,9 @@ def gui():
             assert len(helps) == 1
             sub = menu.nametowidget(menu.entrycget(helps[0], "menu"))
             labels = [sub.entrycget(i, "label") for i in range(sub.index("end") + 1) if sub.type(i) == "command"]
-            assert labels[:3] == ["Welcome", "Quick Start Guide", "User Guide..."], labels
-    check("Help on every tab: Welcome and Quick Start Guide, above User Guide", help_menu_on_every_tab)
+            assert labels[:2] == ["Welcome", "User Guide..."], labels
+            assert "Quick Start Guide" not in labels, "the Quick Start Guide is reached from Welcome, not the menu"
+    check("Help on every tab: Welcome above User Guide, and no Quick Start Guide entry", help_menu_on_every_tab)
 
     def searching_the_user_guide():
         # Opened at the Tuner's section: the whole guide is there all the
@@ -413,7 +414,7 @@ def gui():
         assert p.returncode == 0 and line, (p.returncode, (p.stdout or "")[-300:], (p.stderr or "")[-800:])
         r = json.loads(line[0][7:])
         assert r["language_shown"] == "Schließen", f"fixture: the child should be in German, got {r['language_shown']!r}"
-        assert r["links"] == ["Fragen? Durchsuchen Sie das Benutzerhandbuch.", "Hier klicken für den Schnellstart"], r["links"]
+        assert r["links"] == ["Seien Sie ein PROFI und klicken Sie HIER für das Benutzerhandbuch", "Hier klicken für den Schnellstart oder"], r["links"]
         w, h = r["welcome"]
         assert w <= 480 and h <= 300, f"the German Welcome window is {w} x {h}: it should be small"
         assert w <= r["screen"][0] and h <= r["screen"][1]
