@@ -186,6 +186,113 @@ def gui():
     check("Pad Maker: the G-code box ends with the line (all three wordings); the SVG box does not",
           pad_maker_standard)
 
+    # ---- the SD card question (2026-11-12) ----
+    # Matt: "the falcon literally needs the card to be empty except for the one gcode file it
+    # will run"; "make a simple warning that they can say 'never show this again'".
+    def the_count_of_gcode_files_on_a_card():
+        card = tempfile.mkdtemp(prefix="ssc-card-")
+        sub_dir = os.path.join(card, "jobs")
+        os.mkdir(sub_dir)
+        count = main_mod.gcode_files_after_save
+        assert count(card, ["a.gcode"], card) == 1, "one file on an empty card"
+        assert count(card, ["a.gcode", "b.gcode"], card) == 2
+        open(os.path.join(card, "old.GCODE"), "w").close()
+        open(os.path.join(card, "notes.txt"), "w").close()
+        assert count(card, ["a.gcode"], card) == 2, "a G-code file already on the card counts, whatever its case"
+        assert count(card, ["OLD.gcode"], card) == 1, "a file the save overwrites is not counted twice"
+        assert count(sub_dir, ["a.gcode"], card) == 2, "the card's top folder counts when saving into a folder on it"
+        open(os.path.join(card, "x.nc"), "w").close()
+        assert count(card, ["a.gcode"], card) == 3, ".nc is G-code too"
+        assert count(os.path.join(card, "missing"), ["a.gcode"], card) == 3, "a folder that cannot be listed counts nothing"
+    check("SD card: the count of G-code files a save would leave (existing ones, the top folder, overwrites)",
+          the_count_of_gcode_files_on_a_card)
+
+    def the_sd_card_question():
+        asked = []
+        answers = []
+
+        class FakeDialog:
+            def __init__(self, parent, title, message):
+                asked.append((title, message))
+                result, dont = answers.pop(0)
+                self.result = result
+                self.dont_show_again = tk.BooleanVar(value=dont)
+        keep_dialog, keep_removable = main_mod.ConfirmationDialog, app._is_removable_drive
+        keep_dir = main_mod.filedialog.askdirectory
+        keep_save = main_mod.filedialog.asksaveasfilename
+        card = tempfile.mkdtemp(prefix="ssc-card-")
+        main_mod.ConfirmationDialog = FakeDialog
+        main_mod.filedialog.askdirectory = lambda **k: card
+        main_mod.filedialog.asksaveasfilename = lambda **k: os.path.join(card, k.get("initialfile") or "out.gcode")
+        app.scrap_mode_var.set(False)
+        app.eject_sd_var.set(False)
+        app.settings["show_sd_card_warning"] = True
+
+        def on_card():
+            return sorted(n for n in os.listdir(card) if n.endswith(".gcode"))
+        try:
+            # Not a removable drive: three files, no question.
+            app._is_removable_drive = lambda path: False
+            pad_form("20 x 3\n30 x 2", ("felt", "card", "leather"))
+            said(app.on_generate_gcode)
+            assert not asked and len(on_card()) == 3, (asked, on_card())
+            for n in on_card():
+                os.remove(os.path.join(card, n))
+
+            # A removable drive, one material, an empty card: no question.
+            app._is_removable_drive = lambda path: True
+            pad_form("20 x 3", ("felt",))
+            said(app.on_generate_gcode)
+            assert not asked and on_card() == ["note_felt.gcode"], (asked, on_card())
+            # The same file again overwrites it: still one file, still no question.
+            said(app.on_generate_gcode)
+            assert not asked, asked
+            os.remove(os.path.join(card, "note_felt.gcode"))
+
+            # Three materials: asked once, before anything is written; "no" writes nothing.
+            pad_form("20 x 3\n30 x 2", ("felt", "card", "leather"))
+            answers.append((False, False))
+            boxes_shown = said(app.on_generate_gcode)
+            assert len(asked) == 1 and asked[0][0] == "SD Card", asked
+            assert "empty except for the one G-code file" in asked[0][1] and "3 G-code files" in asked[0][1], asked[0][1]
+            assert on_card() == [] and not boxes_shown, (on_card(), boxes_shown)
+            # "yes" writes them.
+            answers.append((True, False))
+            said(app.on_generate_gcode)
+            assert len(asked) == 2 and len(on_card()) == 3, (asked, on_card())
+            for n in on_card():
+                os.remove(os.path.join(card, n))
+
+            # One material onto a card that already holds a G-code file: asked, with the count.
+            open(os.path.join(card, "yesterday.gcode"), "w").close()
+            pad_form("20 x 3", ("felt",))
+            answers.append((True, True))            # go on, and never show this again
+            said(app.on_generate_gcode)
+            assert len(asked) == 3 and "2 G-code files" in asked[2][1], asked
+            assert app.settings["show_sd_card_warning"] is False
+            # Never again: three more files, no question.
+            pad_form("20 x 3\n30 x 2", ("felt", "card", "leather"))
+            said(app.on_generate_gcode)
+            assert len(asked) == 3, "asked after 'Don't show this message again'"
+
+            # Tooling asks the same way: the Kerf Test onto the card that now holds files.
+            app.settings["show_sd_card_warning"] = True
+            before = on_card()
+            answers.append((False, False))
+            said(app._on_generate_kerf_gcode)
+            assert len(asked) == 4 and on_card() == before, (asked, on_card(), before)
+        finally:
+            main_mod.ConfirmationDialog, app._is_removable_drive = keep_dialog, keep_removable
+            main_mod.filedialog.askdirectory, main_mod.filedialog.asksaveasfilename = keep_dir, keep_save
+            app.settings["show_sd_card_warning"] = True
+        # Every Tooling Generate G-code that asks for one file goes through the question.
+        import tooling_tab
+        src = inspect.getsource(tooling_tab)
+        assert src.count('defaultextension=".gcode"') == 6 == src.count("self._sd_card_ok("), \
+            (src.count('defaultextension=".gcode"'), src.count("self._sd_card_ok("))
+    check("SD card: more than one G-code file on a removable drive is asked about once, before writing; no writes "
+          "nothing; 'Don't show this message again' is kept; Tooling asks too", the_sd_card_question)
+
     def pad_maker_scrap_mode():
         try:
             for handler, is_gcode in ((app.on_generate_gcode, True), (app.on_generate_svg, False)):

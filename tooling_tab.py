@@ -1254,6 +1254,8 @@ class ToolingTabMixin:
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
                 return
+            if not self._sd_card_ok(os.path.dirname(save_path), [os.path.basename(save_path)]):
+                return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
 
@@ -2018,6 +2020,8 @@ class ToolingTabMixin:
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
                 return
+            if not self._sd_card_ok(os.path.dirname(save_path), [os.path.basename(save_path)]):
+                return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             self._write_kerf_gcode(job, save_path)
@@ -2516,6 +2520,8 @@ class ToolingTabMixin:
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
                 return
+            if not self._sd_card_ok(os.path.dirname(save_path), [os.path.basename(save_path)]):
+                return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
             self._persist_feeds_speeds_settings()
@@ -2652,6 +2658,8 @@ class ToolingTabMixin:
                 initialfile=f"{base}.gcode",
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
+                return
+            if not self._sd_card_ok(os.path.dirname(save_path), [os.path.basename(save_path)]):
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
@@ -2794,6 +2802,8 @@ class ToolingTabMixin:
                 initialfile=f"{base}_{variant}.gcode",
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
+                return
+            if not self._sd_card_ok(os.path.dirname(save_path), [os.path.basename(save_path)]):
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)
@@ -3040,6 +3050,8 @@ class ToolingTabMixin:
                 initialfile=self._crescent_initial_name(entries, ".gcode"),
                 initialdir=self.settings.get("last_output_dir", ""))
             if not save_path:
+                return
+            if not self._sd_card_ok(os.path.dirname(save_path), [os.path.basename(save_path)]):
                 return
 
             self.settings["last_output_dir"] = os.path.dirname(save_path)

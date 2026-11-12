@@ -285,6 +285,7 @@ SCHEMA = {
     "felt_thickness_unit": Str(choices=THICKNESS_UNITS),
     "engraving_on": Bool(),
     "show_engraving_warning": Bool(),
+    "show_sd_card_warning": Bool(),
     "last_output_dir": Str(),
     "resonance_clicks": Int(),                               # a counter
     "compatibility_mode": Bool(),

@@ -714,6 +714,9 @@ DEFAULT_SETTINGS = {
     "felt_thickness_unit": "mm",
     "engraving_on": True,
     "show_engraving_warning": True,
+    # The "more than one G-code file on the SD card" question (main._sd_card_ok);
+    # False once the user ticks "Don't show this message again".
+    "show_sd_card_warning": True,
     "last_output_dir": "",
     "resonance_clicks": 0, 
     "compatibility_mode": False,

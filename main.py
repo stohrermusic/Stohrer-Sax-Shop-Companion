@@ -97,6 +97,36 @@ def reveal_in_file_manager_command(path, platform=None):
     return ['xdg-open', os.path.dirname(path) or '.']
 
 
+# What counts as a G-code file on an SD card (gcode_files_after_save).
+GCODE_FILE_EXTENSIONS = (".gcode", ".gc", ".nc", ".ngc", ".g")
+
+
+def gcode_files_after_save(folder, new_names, root=None):
+    """How many G-code files a card would hold once `new_names` are written
+    into `folder`: the ones already in the folder and in the card's top
+    folder `root`, less any the save overwrites, plus the new ones. Top
+    level only; a folder that cannot be listed counts nothing."""
+    folder = os.path.abspath(folder)
+    new = {name.lower() for name in new_names}
+    places = [folder]
+    if root and os.path.abspath(root) != folder:
+        places.append(os.path.abspath(root))
+    count = 0
+    for place in places:
+        try:
+            names = os.listdir(place)
+        except OSError:
+            continue
+        for name in names:
+            if not name.lower().endswith(GCODE_FILE_EXTENSIONS):
+                continue
+            if place == folder and name.lower() in new:
+                continue                    # overwritten by this save
+            if os.path.isfile(os.path.join(place, name)):
+                count += 1
+    return count + len(new)
+
+
 class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, TonerTabMixin, MachineControlMixin):
     def __init__(self, root):
         self.root = root
@@ -2471,6 +2501,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     return
                 self.settings["last_output_dir"] = save_dir
 
+            if not self._sd_card_ok(save_dir, [f"{base}_{m}.gcode" for m in all_placed]):
+                return
+
             # Show working indicator
             working_popup = tk.Toplevel(self.root)
             working_popup.title(_("Working"))
@@ -3391,6 +3424,34 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Persist the eject SD card checkbox state."""
         self.settings["eject_sd_after_gcode"] = self.eject_sd_var.get()
         save_settings(self.settings)
+
+    def _sd_card_ok(self, folder, new_names):
+        """Before G-code is written to a removable drive: if the card would
+        then hold more than one G-code file, say so and ask (Matt,
+        2026-11-12: "the falcon literally needs the card to be empty except
+        for the one gcode file it will run", and "make a simple warning that
+        they can say 'never show this again'"). True to go on.
+
+        Asked from the Pad Maker's Generate G-code and every Tooling
+        Generate G-code that writes one file; not in the two Scrap Modes,
+        whose sessions have no clean way back from a "no" here. Windows
+        only, like the eject (_is_removable_drive)."""
+        if not self.settings.get("show_sd_card_warning", True):
+            return True
+        if not self._is_removable_drive(folder):
+            return True
+        root = os.path.splitdrive(os.path.abspath(folder))[0] + os.sep
+        n = gcode_files_after_save(folder, new_names, root)
+        if n <= 1:
+            return True
+        dialog = ConfirmationDialog(
+            self.root, _("SD Card"),
+            _("The Falcon needs its SD card empty except for the one G-code file it will run.\n\n"
+              "This would leave {n} G-code files on the card.\n\n"
+              "Do you want to proceed?").format(n=n))
+        if dialog.dont_show_again.get():
+            self.settings["show_sd_card_warning"] = False
+        return bool(dialog.result)
 
     def _is_removable_drive(self, path):
         """Check if path is on a removable drive (USB/SD). Windows only."""

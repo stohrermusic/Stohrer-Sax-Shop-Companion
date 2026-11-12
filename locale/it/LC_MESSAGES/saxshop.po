@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: SaxShopCompanion VERSION\n"
 "Report-Msgid-Bugs-To: stohrermusic@gmail.com\n"
-"POT-Creation-Date: 2026-11-12 10:44-0500\n"
+"POT-Creation-Date: 2026-11-12 10:53-0500\n"
 "PO-Revision-Date: 2026-05-13 11:58-0400\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: it\n"
@@ -94,11 +94,11 @@ msgstr "Adesso si può usare la colla a caldo senza problemi!"
 msgid "Look at me! I am the resonator now!"
 msgstr "Guardatemi! Ora il risonatore sono io!"
 
-#: config.py:1437
+#: config.py:1440
 msgid "Error Saving Settings"
 msgstr "Errore nel salvataggio delle impostazioni"
 
-#: config.py:1437
+#: config.py:1440
 #, python-brace-format
 msgid ""
 "Could not save settings:\n"
@@ -107,11 +107,11 @@ msgstr ""
 "Impossibile salvare le impostazioni:\n"
 "{e}"
 
-#: config.py:1458
+#: config.py:1461
 msgid "Library Updated"
 msgstr "Libreria aggiornata"
 
-#: config.py:1459
+#: config.py:1462
 #, python-brace-format
 msgid ""
 "Your existing {preset_type_name} sets have been moved into a new library "
@@ -120,7 +120,7 @@ msgstr ""
 "I suoi set {preset_type_name} esistenti sono stati spostati in una nuova "
 "libreria chiamata 'My Presets'."
 
-#: config.py:1473
+#: config.py:1476
 msgid "Error Saving Preset"
 msgstr "Errore nel salvataggio del preset"
 
@@ -128,7 +128,7 @@ msgstr "Errore nel salvataggio del preset"
 msgid "Save as Set"
 msgstr "Salva come set"
 
-#: library_features.py:168 main.py:933 toner_tab.py:2499 toner_tab.py:2708
+#: library_features.py:168 main.py:963 toner_tab.py:2499 toner_tab.py:2708
 msgid "Library:"
 msgstr "Libreria:"
 
@@ -167,7 +167,7 @@ msgstr "Unità:"
 msgid "mm"
 msgstr "mm"
 
-#: library_features.py:235 main.py:1237 toner_tab.py:2732
+#: library_features.py:235 main.py:1267 toner_tab.py:2732
 msgid "inches"
 msgstr "pollici"
 
@@ -181,9 +181,9 @@ msgstr "Inserisca un nome per questo set:"
 
 #: library_features.py:306 library_features.py:347 library_features.py:381
 #: library_features.py:399 library_features.py:423 library_features.py:434
-#: library_features.py:445 library_features.py:450 main.py:2655 main.py:2666
-#: main.py:2677 main.py:2683 main.py:2694 main.py:2758 main.py:2783
-#: main.py:2801
+#: library_features.py:445 library_features.py:450 main.py:2688 main.py:2699
+#: main.py:2710 main.py:2716 main.py:2727 main.py:2791 main.py:2816
+#: main.py:2834
 msgid "All Libraries"
 msgstr "Tutte le librerie"
 
@@ -203,16 +203,16 @@ msgstr "Dati mancanti"
 msgid "Please fill in at least Make, Model, and Size before saving."
 msgstr "Compili almeno Marca, Modello e Taglia prima di salvare."
 
-#: library_features.py:332 main.py:2723
+#: library_features.py:332 main.py:2756
 msgid "Overwrite"
 msgstr "Sovrascrivi"
 
-#: library_features.py:332 main.py:2723
+#: library_features.py:332 main.py:2756
 #, python-brace-format
 msgid "A set named '{name}' already exists in this library. Overwrite it?"
 msgstr "Un set chiamato '{name}' esiste già in questa libreria. Sovrascriverlo?"
 
-#: library_features.py:338 main.py:2748
+#: library_features.py:338 main.py:2781
 msgid "Preset Saved"
 msgstr "Preset salvato"
 
@@ -221,7 +221,7 @@ msgstr "Preset salvato"
 msgid "Preset '{name}' saved successfully to '{active_library}'."
 msgstr "Preset '{name}' salvato correttamente in '{active_library}'."
 
-#: library_features.py:384 library_features.py:437 main.py:2669 main.py:2786
+#: library_features.py:384 library_features.py:437 main.py:2702 main.py:2819
 msgid "Delete Library"
 msgstr "Elimina libreria"
 
@@ -230,7 +230,7 @@ msgstr "Elimina libreria"
 msgid "Are you sure you want to delete the empty library '{selected_lib}'?"
 msgstr "Sicuro di voler eliminare la libreria vuota '{selected_lib}'?"
 
-#: library_features.py:389 main.py:2791
+#: library_features.py:389 main.py:2824
 msgid "Library Deleted"
 msgstr "Libreria eliminata"
 
@@ -239,16 +239,16 @@ msgstr "Libreria eliminata"
 msgid "Library '{selected_lib}' deleted."
 msgstr "Libreria '{selected_lib}' eliminata."
 
-#: library_features.py:396 library_features.py:404 main.py:2798 main.py:2806
-#: main.py:2821
+#: library_features.py:396 library_features.py:404 main.py:2831 main.py:2839
+#: main.py:2854
 msgid "Delete Error"
 msgstr "Errore di eliminazione"
 
-#: library_features.py:396 main.py:2798
+#: library_features.py:396 main.py:2831
 msgid "Please load a set to delete."
 msgstr "Carichi un set da eliminare."
 
-#: library_features.py:404 main.py:2806
+#: library_features.py:404 main.py:2839
 msgid ""
 "Cannot delete from 'All Libraries' view. Please select the specific "
 "library first."
@@ -269,7 +269,7 @@ msgstr ""
 "Sicuro di voler eliminare il set '{selected_preset}' dalla libreria "
 "'{selected_lib}'?"
 
-#: library_features.py:418 main.py:2819
+#: library_features.py:418 main.py:2852
 msgid "Preset Deleted"
 msgstr "Preset eliminato"
 
@@ -282,19 +282,19 @@ msgstr "Preset '{selected_preset}' eliminato."
 msgid "Import Key Height Sets"
 msgstr "Importa set di altezze chiavi"
 
-#: library_features.py:456 library_features.py:896 main.py:2841
+#: library_features.py:456 library_features.py:896 main.py:2874
 #: ui_dialogs/presets_io.py:220 ui_dialogs/sizing.py:2090
 #: ui_dialogs/sizing.py:2109
 msgid "JSON files"
 msgstr "File JSON"
 
-#: library_features.py:456 library_features.py:896 main.py:2841
+#: library_features.py:456 library_features.py:896 main.py:2874
 #: ui_dialogs/presets_io.py:220 ui_dialogs/sizing.py:2090
 #: ui_dialogs/sizing.py:2109
 msgid "All files"
 msgstr "Tutti i file"
 
-#: library_features.py:477 library_features.py:1003 main.py:2861 main.py:2944
+#: library_features.py:477 library_features.py:1003 main.py:2894 main.py:2977
 #: toner_tab.py:6606 toner_tab.py:6761 ui_dialogs/presets_io.py:332
 #: ui_dialogs/presets_io.py:445 ui_dialogs/sizing.py:2117
 #: ui_dialogs/sizing.py:2120
@@ -310,7 +310,7 @@ msgstr ""
 "Impossibile importare i set di chiavi:\n"
 "{e}"
 
-#: library_features.py:492 library_features.py:837 main.py:2878
+#: library_features.py:492 library_features.py:837 main.py:2911
 msgid "Connection Error"
 msgstr "Errore di connessione"
 
@@ -325,7 +325,7 @@ msgstr ""
 "\n"
 "{e}"
 
-#: library_features.py:496 library_features.py:841 main.py:2882
+#: library_features.py:496 library_features.py:841 main.py:2915
 msgid "Data Error"
 msgstr "Errore nei dati"
 
@@ -341,7 +341,7 @@ msgstr ""
 "{e}"
 
 #: library_features.py:501 library_features.py:514 library_features.py:539
-#: library_features.py:846 library_features.py:888 main.py:2887
+#: library_features.py:846 library_features.py:888 main.py:2920
 #: toner_tab.py:5938 toner_tab.py:6612
 msgid "No Data"
 msgstr "Nessun dato"
@@ -368,7 +368,7 @@ msgstr ""
 "La libreria di Matt contiene già {n} preset. Sovrascriverli con l'ultima "
 "versione dal web?"
 
-#: library_features.py:536 library_features.py:885 main.py:2940
+#: library_features.py:536 library_features.py:885 main.py:2973
 #: toner_tab.py:6805 ui_dialogs/presets_io.py:334 ui_dialogs/presets_io.py:442
 #: ui_dialogs/presets_io.py:447
 msgid "Import Complete"
@@ -550,12 +550,12 @@ msgstr ""
 "Importazione non riuscita:\n"
 "{e}"
 
-#: machine_control.py:258 main.py:2399 main.py:2590 tooling_tab.py:1427
-#: tooling_tab.py:1621 tooling_tab.py:1663
+#: machine_control.py:258 main.py:2429 main.py:2623 tooling_tab.py:1429
+#: tooling_tab.py:1623 tooling_tab.py:1665
 msgid "Session Complete!"
 msgstr "Sessione completata!"
 
-#: machine_control.py:259 main.py:1679 main.py:2350
+#: machine_control.py:259 main.py:1709 main.py:2380
 msgid "All pads have been placed!"
 msgstr "Tutti i tamponi sono stati posizionati!"
 
@@ -799,7 +799,7 @@ msgstr ""
 "poco alla volta: la potenza in cui diventa visibile è di solito vicina a "
 "quella che inizia a lasciare un segno."
 
-#: machine_control.py:956 main.py:1881 main.py:2968 main.py:3691
+#: machine_control.py:956 main.py:1911 main.py:3001 main.py:3752
 #: ui_dialogs/common.py:26 ui_dialogs/sizing.py:2178
 msgid "Adhesive rings"
 msgstr "Anelli adesivi"
@@ -827,12 +827,12 @@ msgid "Save Failed"
 msgstr "Salvataggio fallito"
 
 #: machine_control.py:1019 toner_tab.py:1590 toner_tab.py:4249
-#: tooling_tab.py:1927 ui_dialogs/guide.py:1558
+#: tooling_tab.py:1929 ui_dialogs/guide.py:1558
 msgid "OK"
 msgstr "OK"
 
-#: machine_control.py:1021 machine_control.py:1083 main.py:3059 main.py:3154
-#: main.py:3295 toner_tab.py:1592 toner_tab.py:1865 toner_tab.py:2379
+#: machine_control.py:1021 machine_control.py:1083 main.py:3092 main.py:3187
+#: main.py:3328 toner_tab.py:1592 toner_tab.py:1865 toner_tab.py:2379
 #: toner_tab.py:2443 toner_tab.py:2776 toner_tab.py:2827 toner_tab.py:2890
 #: toner_tab.py:3064 toner_tab.py:3148 toner_tab.py:3208 toner_tab.py:3296
 #: toner_tab.py:4669 toner_tab.py:6492 toner_tab.py:6582 toner_tab.py:6742
@@ -904,7 +904,7 @@ msgstr ""
 "\n"
 "{e}"
 
-#: machine_control.py:1235 main.py:2299 main.py:2408 main.py:2519 main.py:2602
+#: machine_control.py:1235 main.py:2329 main.py:2438 main.py:2552 main.py:2635
 msgid "An Error Occurred"
 msgstr "Si è verificato un errore"
 
@@ -931,7 +931,7 @@ msgstr ""
 "Inquadra e taglia funziona con un materiale alla volta. Seleziona "
 "esattamente un materiale (non Dimensione esatta)."
 
-#: machine_control.py:1304 main.py:2268 main.py:2456 tooling_tab.py:1185
+#: machine_control.py:1304 main.py:2298 main.py:2486 tooling_tab.py:1185
 #: tooling_tab.py:1230
 msgid "Nesting Error"
 msgstr "Errore di nesting"
@@ -941,7 +941,7 @@ msgstr "Errore di nesting"
 msgid "Could not fit all '{m}' pieces in the available area."
 msgstr "Impossibile far entrare tutti i pezzi '{m}' nell'area disponibile."
 
-#: machine_control.py:1318 tooling_tab.py:2450
+#: machine_control.py:1318 tooling_tab.py:2454
 msgid "Continue →"
 msgstr "Continua →"
 
@@ -974,11 +974,11 @@ msgstr ""
 msgid "Cutting — {m}"
 msgstr "Taglio — {m}"
 
-#: main.py:288 main.py:2159
+#: main.py:318 main.py:2189
 msgid "Scrap Session Active"
 msgstr "Sessione ritagli attiva"
 
-#: main.py:289
+#: main.py:319
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining in your scrap session.\n"
@@ -989,326 +989,326 @@ msgstr ""
 "\n"
 "Uscire comunque? (La sessione andrà persa)"
 
-#: main.py:385 main.py:458 main.py:473 main.py:487 main.py:510
+#: main.py:415 main.py:488 main.py:503 main.py:517 main.py:540
 msgid "File"
 msgstr "File"
 
-#: main.py:386
+#: main.py:416
 msgid "Import Pad Presets..."
 msgstr "Importa preset tamponi..."
 
-#: main.py:387
+#: main.py:417
 msgid "Export Pad Presets..."
 msgstr "Esporta preset tamponi..."
 
-#: main.py:389 ui_dialogs/presets_io.py:348
+#: main.py:419 ui_dialogs/presets_io.py:348
 msgid "Import Matt's Pad Sets"
 msgstr "Importa i set di tamponi di Matt"
 
-#: main.py:391
+#: main.py:421
 msgid "Job History..."
 msgstr "Cronologia lavori..."
 
-#: main.py:393
+#: main.py:423
 msgid "Import Settings from Folder..."
 msgstr "Importa impostazioni da cartella..."
 
-#: main.py:395
+#: main.py:425
 msgid "Feature Set..."
 msgstr "Funzionalità attive..."
 
-#: main.py:397 main.py:463 main.py:478 main.py:488
+#: main.py:427 main.py:493 main.py:508 main.py:518
 msgid "Exit"
 msgstr "Esci"
 
-#: main.py:400 main.py:466 main.py:491 main.py:502 main.py:520
+#: main.py:430 main.py:496 main.py:521 main.py:532 main.py:550
 msgid "Options"
 msgstr "Opzioni"
 
-#: main.py:401
+#: main.py:431
 msgid "Sizing Rules..."
 msgstr "Regole di dimensionamento..."
 
-#: main.py:402
+#: main.py:432
 msgid "Layer Colors..."
 msgstr "Colori dei livelli..."
 
-#: main.py:404
+#: main.py:434
 msgid "G-code Settings..."
 msgstr "Impostazioni G-code..."
 
-#: main.py:417
+#: main.py:447
 msgid "Machine"
 msgstr "Macchina"
 
-#: main.py:422
+#: main.py:452
 msgid "Camera Calibration..."
 msgstr "Calibrazione fotocamera..."
 
-#: main.py:427
+#: main.py:457
 msgid "Camera-Polygon Inset Margin..."
 msgstr "Margine di rientro del poligono..."
 
-#: main.py:432
+#: main.py:462
 msgid "Framing Power..."
 msgstr "Potenza di inquadratura..."
 
-#: main.py:437
+#: main.py:467
 msgid "Home Laser"
 msgstr "Azzeramento laser"
 
-#: main.py:441
+#: main.py:471
 msgid "Test Connection"
 msgstr "Prova connessione"
 
-#: main.py:445
+#: main.py:475
 msgid "Clear Errors ($X)"
 msgstr "Cancella errori ($X)"
 
-#: main.py:449
+#: main.py:479
 msgid "Reset Falcon (soft-reset)"
 msgstr "Riavvio Falcon (soft-reset)"
 
-#: main.py:459
+#: main.py:489
 msgid "Import Key Sets..."
 msgstr "Importa set di chiavi..."
 
-#: main.py:460
+#: main.py:490
 msgid "Import Matt's Key Heights"
 msgstr "Importa le altezze chiavi di Matt"
 
-#: main.py:461
+#: main.py:491
 msgid "Export Key Sets..."
 msgstr "Esporta set di chiavi..."
 
-#: main.py:467
+#: main.py:497
 msgid "Layout Options..."
 msgstr "Opzioni di layout..."
 
-#: main.py:474
+#: main.py:504
 msgid "Import Screw Specs..."
 msgstr "Importa specifiche viti..."
 
-#: main.py:475
+#: main.py:505
 msgid "Import Matt's Specs"
 msgstr "Importa le specifiche di Matt"
 
-#: main.py:476
+#: main.py:506
 msgid "Export Screw Specs..."
 msgstr "Esporta specifiche viti..."
 
-#: main.py:492 main.py:503 main.py:521
+#: main.py:522 main.py:533 main.py:551
 msgid "Settings..."
 msgstr "Impostazioni..."
 
-#: main.py:504
+#: main.py:534
 msgid "Input Device..."
 msgstr "Dispositivo di input..."
 
-#: main.py:511
+#: main.py:541
 msgid "Preset Library..."
 msgstr "Libreria preset..."
 
-#: main.py:512 toner_tab.py:2203
+#: main.py:542 toner_tab.py:2203
 msgid "Analyze..."
 msgstr "Analizza..."
 
-#: main.py:515
+#: main.py:545
 msgid "Transfer Data"
 msgstr "Trasferimento dati"
 
-#: main.py:516
+#: main.py:546
 msgid "Export Preset Library..."
 msgstr "Esporta libreria preset..."
 
-#: main.py:517
+#: main.py:547
 msgid "Import Preset Library..."
 msgstr "Importa libreria preset..."
 
-#: main.py:522
+#: main.py:552
 msgid "Capture Threshold..."
 msgstr "Soglia di acquisizione..."
 
-#: main.py:527
+#: main.py:557
 msgid "Help"
 msgstr "Aiuto"
 
-#: main.py:531 ui_dialogs/guide.py:1432
+#: main.py:561 ui_dialogs/guide.py:1432
 msgid "Welcome"
 msgstr "Benvenuto"
 
-#: main.py:532
+#: main.py:562
 msgid "User Guide..."
 msgstr "Guida utente..."
 
-#: main.py:534
+#: main.py:564
 msgid "Open Log File"
 msgstr "Apri file di log"
 
-#: main.py:536 ui_dialogs/guide.py:1479
+#: main.py:566 ui_dialogs/guide.py:1479
 msgid "About"
 msgstr "Informazioni"
 
-#: main.py:801 ui_dialogs/guide.py:80 ui_dialogs/guide.py:742
+#: main.py:831 ui_dialogs/guide.py:80 ui_dialogs/guide.py:742
 msgid "Pad Maker"
 msgstr "Crea tamponi"
 
-#: main.py:806 main.py:3215 ui_dialogs/guide.py:81 ui_dialogs/guide.py:1067
+#: main.py:836 main.py:3248 ui_dialogs/guide.py:81 ui_dialogs/guide.py:1067
 msgid "Key Height Library"
 msgstr "Libreria altezze chiavi"
 
-#: main.py:811 main.py:3216 ui_dialogs/guide.py:82 ui_dialogs/guide.py:1075
+#: main.py:841 main.py:3249 ui_dialogs/guide.py:82 ui_dialogs/guide.py:1075
 msgid "Serial Lookup"
 msgstr "Ricerca numeri di serie"
 
-#: main.py:816 main.py:3217 ui_dialogs/guide.py:83 ui_dialogs/guide.py:1079
+#: main.py:846 main.py:3250 ui_dialogs/guide.py:83 ui_dialogs/guide.py:1079
 msgid "Screw Specs"
 msgstr "Specifiche viti"
 
-#: main.py:820 main.py:3218 ui_dialogs/guide.py:84 ui_dialogs/guide.py:959
+#: main.py:850 main.py:3251 ui_dialogs/guide.py:84 ui_dialogs/guide.py:959
 msgid "Tooling"
 msgstr "Attrezzatura"
 
-#: main.py:825 main.py:3219 ui_dialogs/guide.py:85 ui_dialogs/guide.py:1085
+#: main.py:855 main.py:3252 ui_dialogs/guide.py:85 ui_dialogs/guide.py:1085
 msgid "Tuner"
 msgstr "Accordatore"
 
-#: main.py:830 main.py:3220 ui_dialogs/guide.py:86 ui_dialogs/guide.py:1114
+#: main.py:860 main.py:3253 ui_dialogs/guide.py:86 ui_dialogs/guide.py:1114
 msgid "Analyzer"
 msgstr "Analizzatore"
 
-#: main.py:916
+#: main.py:946
 msgid "Enter pad sizes (e.g. 42.0x3):"
 msgstr "Inserisca le misure dei tamponi (es. 42.0x3):"
 
-#: main.py:942 main.py:2663 main.py:2751
+#: main.py:972 main.py:2696 main.py:2784
 msgid "Load Pad Preset"
 msgstr "Carica preset tamponi"
 
-#: main.py:952
+#: main.py:982
 msgid "Save as Preset"
 msgstr "Salva come preset"
 
-#: main.py:953
+#: main.py:983
 msgid "View Notes"
 msgstr "Visualizza note"
 
-#: main.py:956 main.py:2671 toner_tab.py:2898 ui_dialogs/gcode_settings.py:861
+#: main.py:986 main.py:2704 toner_tab.py:2898 ui_dialogs/gcode_settings.py:861
 #: ui_dialogs/gcode_settings.py:867 ui_dialogs/gcode_settings.py:873
 #: ui_dialogs/sizing.py:2064 ui_dialogs/sizing.py:2068
 #: ui_dialogs/sizing.py:2074
 msgid "Delete Preset"
 msgstr "Elimina preset"
 
-#: main.py:979
+#: main.py:1009
 msgid "Materials"
 msgstr "Materiali"
 
-#: main.py:992 ui_dialogs/guide.py:784
+#: main.py:1022 ui_dialogs/guide.py:784
 msgid "Center Hole"
 msgstr "Foro centrale"
 
-#: main.py:996 toner_tab.py:6698
+#: main.py:1026 toner_tab.py:6698
 msgid "None"
 msgstr "Nessuno"
 
-#: main.py:999
+#: main.py:1029
 msgid "Custom:"
 msgstr "Personalizzato:"
 
-#: main.py:1007 tooling_tab.py:239 tooling_tab.py:333 tooling_tab.py:427
+#: main.py:1037 tooling_tab.py:239 tooling_tab.py:333 tooling_tab.py:427
 #: tooling_tab.py:632
 msgid "Sheet Size"
 msgstr "Misura lastra"
 
-#: main.py:1011 main.py:3437
+#: main.py:1041 main.py:3498
 #, python-brace-format
 msgid "Width ({units}):"
 msgstr "Larghezza ({units}):"
 
-#: main.py:1017 main.py:3438
+#: main.py:1047 main.py:3499
 #, python-brace-format
 msgid "Height ({units}):"
 msgstr "Altezza ({units}):"
 
-#: main.py:1034 main.py:1438 tooling_tab.py:264 ui_dialogs/guide.py:799
+#: main.py:1064 main.py:1468 tooling_tab.py:264 ui_dialogs/guide.py:799
 msgid "Scrap Mode"
 msgstr "Modalità ritagli"
 
-#: main.py:1045 tooling_tab.py:267 ui_dialogs/machine.py:195
+#: main.py:1075 tooling_tab.py:267 ui_dialogs/machine.py:195
 msgid "Clear"
 msgstr "Pulisci"
 
-#: main.py:1052
+#: main.py:1082
 msgid "Edge Bias"
 msgstr "Bias del bordo"
 
-#: main.py:1073 main.py:1414
+#: main.py:1103 main.py:1444
 msgid "ctr"
 msgstr "ctr"
 
-#: main.py:1090
+#: main.py:1120
 msgid "Fit card to paper:"
 msgstr "Adatta cartoncino al foglio:"
 
-#: main.py:1117
+#: main.py:1147
 msgid "Draw / Capture Shape..."
 msgstr "Disegna / cattura forma..."
 
-#: main.py:1119
+#: main.py:1149
 msgid "Draw Shape..."
 msgstr "Disegna forma..."
 
-#: main.py:1127 toner_tab.py:630 toner_tab.py:3087
+#: main.py:1157 toner_tab.py:630 toner_tab.py:3087
 msgid "Unload"
 msgstr "Scarica"
 
-#: main.py:1131
+#: main.py:1161
 msgid "Output filename base (no extension):"
 msgstr "Nome file di output (senza estensione):"
 
-#: main.py:1141 tooling_tab.py:286 tooling_tab.py:363 tooling_tab.py:457
+#: main.py:1171 tooling_tab.py:286 tooling_tab.py:363 tooling_tab.py:457
 #: tooling_tab.py:517 tooling_tab.py:883 ui_dialogs/guide.py:682
 msgid "Generate SVG"
 msgstr "Genera SVG"
 
-#: main.py:1142 tooling_tab.py:288 tooling_tab.py:365 tooling_tab.py:459
+#: main.py:1172 tooling_tab.py:288 tooling_tab.py:365 tooling_tab.py:459
 #: tooling_tab.py:519 tooling_tab.py:719 tooling_tab.py:887
 #: ui_dialogs/guide.py:681
 msgid "Generate G-code"
 msgstr "Genera G-code"
 
-#: main.py:1144 tooling_tab.py:76 ui_dialogs/guide.py:683
+#: main.py:1174 tooling_tab.py:76 ui_dialogs/guide.py:683
 #: ui_dialogs/guide.py:921 ui_dialogs/guide.py:1045
 msgid "Frame & Cut"
 msgstr "Inquadra e taglia"
 
-#: main.py:1160 tooling_tab.py:725
+#: main.py:1190 tooling_tab.py:725
 msgid "Preview before saving"
 msgstr "Anteprima prima di salvare"
 
-#: main.py:1173
+#: main.py:1203
 msgid "Live camera preview"
 msgstr "Anteprima fotocamera live"
 
-#: main.py:1180
+#: main.py:1210
 msgid "Eject SD card after G-code export"
 msgstr "Espelli SD dopo l'esportazione del G-code"
 
-#: main.py:1224
+#: main.py:1254
 #, python-brace-format
 msgid "Shape loaded ({n} pts)"
 msgstr "Forma caricata ({n} pt)"
 
-#: main.py:1228
+#: main.py:1258
 msgid "Using rectangle dimensions"
 msgstr "Si usano le dimensioni del rettangolo"
 
-#: main.py:1237
+#: main.py:1267
 msgid "centimeters"
 msgstr "centimetri"
 
-#: main.py:1240
+#: main.py:1270
 #, python-brace-format
 msgid ""
 "Draw Custom Shape - How to Use\n"
@@ -1338,11 +1338,11 @@ msgstr ""
 "Nota: la generazione può richiedere 5-10 volte più tempo per forme "
 "complesse."
 
-#: main.py:1250
+#: main.py:1280
 msgid "Draw Custom Shape"
 msgstr "Disegna forma personalizzata"
 
-#: main.py:1306
+#: main.py:1336
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1355,39 +1355,39 @@ msgstr ""
 "{remaining_count} tamponi rimanenti.\n"
 "Regoli le dimensioni e clicchi di nuovo Genera."
 
-#: main.py:1315 main.py:1320
+#: main.py:1345 main.py:1350
 msgid "Scrap Generated"
 msgstr "Ritaglio generato"
 
-#: main.py:1329
+#: main.py:1359
 msgid "A custom shape is loaded for the next scrap:"
 msgstr "Una forma personalizzata è caricata per il prossimo ritaglio:"
 
-#: main.py:1339
+#: main.py:1369
 msgid "Re-capture from camera"
 msgstr "Ricattura da fotocamera"
 
-#: main.py:1343
+#: main.py:1373
 msgid "Unload Shape"
 msgstr "Scarica forma"
 
-#: main.py:1346
+#: main.py:1376
 msgid "Keep Shape"
 msgstr "Mantieni forma"
 
-#: main.py:1414 toner_tab.py:508
+#: main.py:1444 toner_tab.py:508
 msgid "off"
 msgstr "off"
 
-#: main.py:1439
+#: main.py:1469
 msgid "Please select exactly one material to use Scrap Mode."
 msgstr "Selezioni esattamente un materiale per usare la modalità ritagli."
 
-#: main.py:1447 main.py:1509 tooling_tab.py:1458 tooling_tab.py:1483
+#: main.py:1477 main.py:1539 tooling_tab.py:1460 tooling_tab.py:1485
 msgid "Clear Session?"
 msgstr "Pulire la sessione?"
 
-#: main.py:1448
+#: main.py:1478
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining.\n"
@@ -1400,21 +1400,21 @@ msgstr ""
 "\n"
 "Continuare?"
 
-#: main.py:1483
+#: main.py:1513
 msgid "Done!"
 msgstr "Fatto!"
 
-#: main.py:1490
+#: main.py:1520
 #, python-brace-format
 msgid "{remaining} left, {pending} on this scrap ({count} scraps)"
 msgstr "{remaining} rimasti, {pending} su questo ritaglio ({count} ritagli)"
 
-#: main.py:1493
+#: main.py:1523
 #, python-brace-format
 msgid "{remaining} left ({count} scraps)"
 msgstr "{remaining} rimasti ({count} ritagli)"
 
-#: main.py:1510
+#: main.py:1540
 #, python-brace-format
 msgid ""
 "You have {remaining} pads remaining.\n"
@@ -1425,15 +1425,15 @@ msgstr ""
 "\n"
 "Cancellare la sessione?"
 
-#: main.py:1651 main.py:1668 main.py:2469 tooling_tab.py:1637
+#: main.py:1681 main.py:1698 main.py:2499 tooling_tab.py:1639
 msgid "Select Folder to Save G-code"
 msgstr "Selezioni la cartella per salvare il G-code"
 
-#: main.py:1659 main.py:2340
+#: main.py:1689 main.py:2370
 msgid "Material Mismatch"
 msgstr "Materiale non corrispondente"
 
-#: main.py:1660 main.py:2341
+#: main.py:1690 main.py:2371
 #, python-brace-format
 msgid ""
 "Current session is for {material}.\n"
@@ -1442,15 +1442,15 @@ msgstr ""
 "La sessione attuale è per {material}.\n"
 "Cancelli la sessione per cambiare materiale."
 
-#: main.py:1679 main.py:2350 tooling_tab.py:1577
+#: main.py:1709 main.py:2380 tooling_tab.py:1579
 msgid "Session Complete"
 msgstr "Sessione completata"
 
-#: main.py:1688 main.py:2360
+#: main.py:1718 main.py:2390
 msgid "No Pads Fit"
 msgstr "Nessun tampone entra"
 
-#: main.py:1689 main.py:2361
+#: main.py:1719 main.py:2391
 #, python-brace-format
 msgid ""
 "No pads could be placed on this scrap.\n"
@@ -1463,106 +1463,106 @@ msgstr ""
 "Tampone più piccolo rimanente: {min_pad_size}mm\n"
 "Provi un ritaglio più grande."
 
-#: main.py:1706
+#: main.py:1736
 msgid "Scrap Mode Progress"
 msgstr "Avanzamento modalità ritagli"
 
-#: main.py:1733 tooling_tab.py:1713
+#: main.py:1763 tooling_tab.py:1715
 msgid "Remaining"
 msgstr "Rimanenti"
 
-#: main.py:1741
+#: main.py:1771
 msgid "On this scrap"
 msgstr "Su questo ritaglio"
 
-#: main.py:1749 main.py:2295 main.py:2508 main.py:2511 main.py:2514
-#: toner_tab.py:3856 tooling_tab.py:1206 tooling_tab.py:1266
-#: tooling_tab.py:1720 tooling_tab.py:2034 tooling_tab.py:2590
-#: tooling_tab.py:2674 tooling_tab.py:2703 tooling_tab.py:2811
-#: tooling_tab.py:2868 tooling_tab.py:3060 tooling_tab.py:3132
+#: main.py:1779 main.py:2325 main.py:2541 main.py:2544 main.py:2547
+#: toner_tab.py:3856 tooling_tab.py:1206 tooling_tab.py:1268
+#: tooling_tab.py:1722 tooling_tab.py:2038 tooling_tab.py:2596
+#: tooling_tab.py:2682 tooling_tab.py:2711 tooling_tab.py:2821
+#: tooling_tab.py:2878 tooling_tab.py:3072 tooling_tab.py:3144
 #: ui_dialogs/machine.py:3326
 msgid "Done"
 msgstr "Fatto"
 
-#: main.py:1760 toner_tab.py:2210 toner_tab.py:5923 toner_tab.py:6231
-#: tooling_tab.py:1729 tuner_tab.py:1368 ui_dialogs/guide.py:191
+#: main.py:1790 toner_tab.py:2210 toner_tab.py:5923 toner_tab.py:6231
+#: tooling_tab.py:1731 tuner_tab.py:1368 ui_dialogs/guide.py:191
 #: ui_dialogs/guide.py:1399 ui_dialogs/guide.py:1453 ui_dialogs/history.py:116
 #: ui_dialogs/machine.py:934 ui_dialogs/machine.py:2683
 #: ui_dialogs/machine.py:3222 ui_dialogs/machine.py:3430
 msgid "Close"
 msgstr "Chiudi"
 
-#: main.py:1805 tooling_tab.py:1761
+#: main.py:1835 tooling_tab.py:1763
 msgid "All done!"
 msgstr "Tutto fatto!"
 
-#: main.py:1808
+#: main.py:1838
 #, python-brace-format
 msgid "{placed} on scrap #{num}, {done} / {total} cut"
 msgstr "{placed} sul ritaglio #{num}, {done} / {total} tagliati"
 
-#: main.py:1813
+#: main.py:1843
 #, python-brace-format
 msgid "{done} / {total} pads complete"
 msgstr "{done} / {total} tamponi completati"
 
-#: main.py:1823 main.py:1832 main.py:1842
+#: main.py:1853 main.py:1862 main.py:1872
 msgid " (none)"
 msgstr " (nessuno)"
 
-#: main.py:1846
+#: main.py:1876
 #, python-brace-format
 msgid "{material} | {scraps} scrap(s) used"
 msgstr "{material} | {scraps} ritagli usati"
 
-#: main.py:1923 main.py:1926 main.py:2002 main.py:2006 tooling_tab.py:989
+#: main.py:1953 main.py:1956 main.py:2032 main.py:2036 tooling_tab.py:989
 #: tooling_tab.py:993 tooling_tab.py:1136 tooling_tab.py:1140
-#: tooling_tab.py:1979 tooling_tab.py:2241 tooling_tab.py:2247
-#: tooling_tab.py:2251 tooling_tab.py:2258 tooling_tab.py:2262
-#: tooling_tab.py:2266 tooling_tab.py:2274 tooling_tab.py:2281
-#: tooling_tab.py:2288 tooling_tab.py:2724 tooling_tab.py:2727
-#: tooling_tab.py:2753 tooling_tab.py:2762 tooling_tab.py:2946
-#: tooling_tab.py:3020 tooling_tab.py:3023 tooling_tab.py:3032
-#: tooling_tab.py:3072 tooling_tab.py:3107 ui_dialogs/gcode_settings.py:963
+#: tooling_tab.py:1981 tooling_tab.py:2245 tooling_tab.py:2251
+#: tooling_tab.py:2255 tooling_tab.py:2262 tooling_tab.py:2266
+#: tooling_tab.py:2270 tooling_tab.py:2278 tooling_tab.py:2285
+#: tooling_tab.py:2292 tooling_tab.py:2732 tooling_tab.py:2735
+#: tooling_tab.py:2761 tooling_tab.py:2770 tooling_tab.py:2956
+#: tooling_tab.py:3030 tooling_tab.py:3033 tooling_tab.py:3042
+#: tooling_tab.py:3084 tooling_tab.py:3119 ui_dialogs/gcode_settings.py:963
 #: ui_dialogs/gcode_settings.py:978 ui_dialogs/gcode_settings.py:989
 #: ui_dialogs/gcode_settings.py:1009 ui_dialogs/gcode_settings.py:1018
 #: ui_dialogs/gcode_settings.py:1041 ui_dialogs/gcode_settings.py:1050
 msgid "Invalid Input"
 msgstr "Input non valido"
 
-#: main.py:1923
+#: main.py:1953
 msgid "Custom hole size must be a valid number."
 msgstr "La misura del foro personalizzato deve essere un numero valido."
 
-#: main.py:1926
+#: main.py:1956
 msgid "Custom hole size must be greater than zero."
 msgstr "La misura del foro personalizzato deve essere maggiore di zero."
 
-#: main.py:1940 main.py:1957 main.py:2016 main.py:2021 toner_tab.py:6387
+#: main.py:1970 main.py:1987 main.py:2046 main.py:2051 toner_tab.py:6387
 #: tooling_tab.py:1174 tooling_tab.py:1210 tooling_tab.py:1219
-#: tooling_tab.py:1271 tooling_tab.py:1552 tooling_tab.py:1632
-#: tooling_tab.py:1676 tooling_tab.py:1951 tooling_tab.py:2038
-#: tooling_tab.py:2541 tooling_tab.py:2594 tooling_tab.py:2679
-#: tooling_tab.py:2707 tooling_tab.py:2755 tooling_tab.py:2816
-#: tooling_tab.py:2852 tooling_tab.py:2872 tooling_tab.py:3063
-#: tooling_tab.py:3135
+#: tooling_tab.py:1273 tooling_tab.py:1554 tooling_tab.py:1634
+#: tooling_tab.py:1678 tooling_tab.py:1953 tooling_tab.py:2042
+#: tooling_tab.py:2547 tooling_tab.py:2600 tooling_tab.py:2687
+#: tooling_tab.py:2715 tooling_tab.py:2763 tooling_tab.py:2826
+#: tooling_tab.py:2862 tooling_tab.py:2882 tooling_tab.py:3075
+#: tooling_tab.py:3147
 msgid "Error"
 msgstr "Errore"
 
-#: main.py:1940
+#: main.py:1970
 msgid "No valid pad sizes entered."
 msgstr "Nessuna misura valida di tampone inserita."
 
-#: main.py:1946
+#: main.py:1976
 #, python-brace-format
 msgid "  … and {n} more"
 msgstr "  … e altri {n}"
 
-#: main.py:1948
+#: main.py:1978
 msgid "Some lines skipped"
 msgstr "Alcune righe saltate"
 
-#: main.py:1949
+#: main.py:1979
 #, python-brace-format
 msgid ""
 "These lines couldn't be read as \"size x quantity\" and won't be cut:\n"
@@ -1578,15 +1578,15 @@ msgstr ""
 "\n"
 "Continuare senza di esse?"
 
-#: main.py:1957
+#: main.py:1987
 msgid "Only one pad size can use 'max' quantity at a time."
 msgstr "Solo una misura di tampone alla volta può usare la quantità 'max'."
 
-#: main.py:1976
+#: main.py:2006
 msgid "Can't group a 'max' size"
 msgstr "Non si può raggruppare una misura «max»"
 
-#: main.py:1977
+#: main.py:2007
 #, python-brace-format
 msgid ""
 "{size} mm is set to 'max', but Labeled Zones is grouping {lo}–{hi} mm. A "
@@ -1602,7 +1602,7 @@ msgstr ""
 "Assegna una quantità a {size}, oppure usa «max» su una misura fuori da "
 "quell'intervallo per riempire il resto."
 
-#: main.py:1988
+#: main.py:2018
 msgid ""
 "Warning: The current font size is too large for some pads and the "
 "engraving will be skipped:\n"
@@ -1612,7 +1612,7 @@ msgstr ""
 "tamponi e l'incisione verrà saltata:\n"
 "\n"
 
-#: main.py:1991
+#: main.py:2021
 msgid ""
 "\n"
 "Do you want to proceed?"
@@ -1620,28 +1620,28 @@ msgstr ""
 "\n"
 "Vuole procedere?"
 
-#: main.py:1992
+#: main.py:2022
 msgid "Engraving Size Warning"
 msgstr "Avviso dimensione incisione"
 
-#: main.py:2002 tooling_tab.py:989 tooling_tab.py:1136 tooling_tab.py:2724
+#: main.py:2032 tooling_tab.py:989 tooling_tab.py:1136 tooling_tab.py:2732
 msgid "Sheet width and height must be valid numbers."
 msgstr "Larghezza e altezza della lastra devono essere numeri validi."
 
-#: main.py:2006
+#: main.py:2036
 msgid "Sheet width and height must be greater than zero."
 msgstr "Larghezza e altezza della lastra devono essere maggiori di zero."
 
-#: main.py:2016
+#: main.py:2046
 #, python-brace-format
 msgid "Unknown unit '{units}' in settings."
 msgstr "Unità sconosciuta '{units}' nelle impostazioni."
 
-#: main.py:2021
+#: main.py:2051
 msgid "Please enter a base filename."
 msgstr "Inserisca un nome file di base."
 
-#: main.py:2160
+#: main.py:2190
 msgid ""
 "Finish or clear the current scrap session before loading a job from "
 "history."
@@ -1649,11 +1649,11 @@ msgstr ""
 "Completare o cancellare la sessione ritagli in corso prima di caricare un"
 " lavoro dalla cronologia."
 
-#: main.py:2215
+#: main.py:2245
 msgid "Job Loaded"
 msgstr "Lavoro caricato"
 
-#: main.py:2216
+#: main.py:2246
 msgid ""
 "Pad list, materials and sheet size are back.\n"
 "\n"
@@ -1665,19 +1665,19 @@ msgstr ""
 "La forma personalizzata di quel lavoro non è stata ripristinata — "
 "disegnare o acquisire il pezzo da tagliare ora."
 
-#: main.py:2239 main.py:2433
+#: main.py:2269 main.py:2463
 msgid "No Materials Selected"
 msgstr "Nessun materiale selezionato"
 
-#: main.py:2239
+#: main.py:2269
 msgid "Please select at least one material."
 msgstr "Selezioni almeno un materiale."
 
-#: main.py:2246 main.py:2439
+#: main.py:2276 main.py:2469
 msgid "Preview"
 msgstr "Anteprima"
 
-#: main.py:2247 main.py:2440
+#: main.py:2277 main.py:2470
 msgid ""
 "Preview works with one material at a time.\n"
 "Please select a single material to preview its layout."
@@ -1685,30 +1685,30 @@ msgstr ""
 "L'anteprima funziona con un solo materiale alla volta.\n"
 "Selezioni un singolo materiale per vederne il layout."
 
-#: main.py:2267 main.py:2455
+#: main.py:2297 main.py:2485
 msgid "paper"
 msgstr "foglio"
 
-#: main.py:2267 main.py:2455
+#: main.py:2297 main.py:2485
 msgid "sheet"
 msgstr "lastra"
 
-#: main.py:2268 main.py:2456
+#: main.py:2298 main.py:2486
 #, python-brace-format
 msgid "Could not fit all '{material}' pieces on the specified {size_desc} size."
 msgstr ""
 "Impossibile far entrare tutti i pezzi di '{material}' nella misura "
 "{size_desc} indicata."
 
-#: main.py:2281 main.py:2330 tooling_tab.py:1595
+#: main.py:2311 main.py:2360 tooling_tab.py:1597
 msgid "Select Folder to Save SVGs"
 msgstr "Selezioni la cartella per salvare gli SVG"
 
-#: main.py:2295
+#: main.py:2325
 msgid "SVG files generated successfully."
 msgstr "File SVG generati correttamente."
 
-#: main.py:2299
+#: main.py:2329
 #, python-brace-format
 msgid ""
 "Something went wrong during generation:\n"
@@ -1719,15 +1719,15 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2317 main.py:2537
+#: main.py:2347 main.py:2570
 msgid "Scrap Mode Error"
 msgstr "Errore modalità ritagli"
 
-#: main.py:2318
+#: main.py:2348
 msgid "Please select exactly one material for scrap mode."
 msgstr "Selezioni esattamente un materiale per la modalità ritagli."
 
-#: main.py:2400 main.py:2591
+#: main.py:2430 main.py:2624
 #, python-brace-format
 msgid ""
 "Placed {placed_count} pads on scrap #{scrap_num}.\n"
@@ -1740,7 +1740,7 @@ msgstr ""
 "Tutti i tamponi posizionati! Sessione completata.\n"
 "File salvati in: {save_dir}"
 
-#: main.py:2408 main.py:2602
+#: main.py:2438 main.py:2635
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -1751,21 +1751,21 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2433
+#: main.py:2463
 msgid "Please select at least one material (G-code not supported for Exact Size)."
 msgstr ""
 "Selezioni almeno un materiale (G-code non supportato per la misura "
 "esatta)."
 
-#: main.py:2476
+#: main.py:2509
 msgid "Working"
 msgstr "Elaborazione in corso"
 
-#: main.py:2486
+#: main.py:2519
 msgid "Generating G-code..."
 msgstr "Generazione G-code..."
 
-#: main.py:2508
+#: main.py:2541
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
@@ -1775,7 +1775,7 @@ msgstr ""
 "\n"
 "SD espulsa in sicurezza — può rimuoverla adesso!"
 
-#: main.py:2511
+#: main.py:2544
 msgid ""
 "G-code files generated successfully.\n"
 "\n"
@@ -1785,11 +1785,11 @@ msgstr ""
 "\n"
 "Espelle in sicurezza la SD prima di rimuoverla."
 
-#: main.py:2514
+#: main.py:2547
 msgid "G-code files generated successfully."
 msgstr "File G-code generati correttamente."
 
-#: main.py:2519
+#: main.py:2552
 #, python-brace-format
 msgid ""
 "Something went wrong during G-code generation:\n"
@@ -1800,7 +1800,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2538
+#: main.py:2571
 msgid ""
 "Please select exactly one material for scrap mode.\n"
 "(G-code not supported for Exact Size)"
@@ -1808,31 +1808,31 @@ msgstr ""
 "Selezioni esattamente un materiale per la modalità ritagli.\n"
 "(G-code non supportato per la misura esatta)"
 
-#: main.py:2696
+#: main.py:2729
 msgid "Library Name"
 msgstr "Nome libreria"
 
-#: main.py:2697
+#: main.py:2730
 msgid "Enter a library name to save to:"
 msgstr "Inserisca il nome della libreria in cui salvare:"
 
-#: main.py:2710 main.py:2714
+#: main.py:2743 main.py:2747
 msgid "Save Pad Preset"
 msgstr "Salva preset tamponi"
 
-#: main.py:2710
+#: main.py:2743
 msgid "Enter a name for this preset:"
 msgstr "Inserisca un nome per questo preset:"
 
-#: main.py:2714
+#: main.py:2747
 msgid "Cannot save an empty list."
 msgstr "Impossibile salvare una lista vuota."
 
-#: main.py:2736
+#: main.py:2769
 msgid "Duplicate Detected"
 msgstr "Duplicato rilevato"
 
-#: main.py:2737
+#: main.py:2770
 #, python-brace-format
 msgid ""
 "This pad list is identical to '{pname}' in '{lib}'.\n"
@@ -1843,54 +1843,54 @@ msgstr ""
 "\n"
 "Salvare comunque?"
 
-#: main.py:2748
+#: main.py:2781
 #, python-brace-format
 msgid "Preset '{name}' saved successfully."
 msgstr "Preset '{name}' salvato correttamente."
 
-#: main.py:2787
+#: main.py:2820
 #, python-brace-format
 msgid "Are you sure you want to delete the empty library '{lib}'?"
 msgstr "Sicuro di voler eliminare la libreria vuota '{lib}'?"
 
-#: main.py:2791
+#: main.py:2824
 #, python-brace-format
 msgid "Library '{lib}' deleted."
 msgstr "Libreria '{lib}' eliminata."
 
-#: main.py:2809
+#: main.py:2842
 msgid "Delete Pad Preset"
 msgstr "Elimina preset tamponi"
 
-#: main.py:2809
+#: main.py:2842
 #, python-brace-format
 msgid ""
 "Are you sure you want to delete the preset '{preset}' from the '{lib}' "
 "library?"
 msgstr "Sicuro di voler eliminare il preset '{preset}' dalla libreria '{lib}'?"
 
-#: main.py:2819
+#: main.py:2852
 #, python-brace-format
 msgid "Preset '{preset}' deleted."
 msgstr "Preset '{preset}' eliminato."
 
-#: main.py:2821
+#: main.py:2854
 msgid "Could not find the preset to delete."
 msgstr "Impossibile trovare il preset da eliminare."
 
-#: main.py:2827 toner_tab.py:1345
+#: main.py:2860 toner_tab.py:1345
 msgid "Notes"
 msgstr "Note"
 
-#: main.py:2827
+#: main.py:2860
 msgid "No preset loaded."
 msgstr "Nessun preset caricato."
 
-#: main.py:2840
+#: main.py:2873
 msgid "Import Pad Presets"
 msgstr "Importa preset tamponi"
 
-#: main.py:2861
+#: main.py:2894
 #, python-brace-format
 msgid ""
 "Could not import pad presets:\n"
@@ -1899,7 +1899,7 @@ msgstr ""
 "Impossibile importare i preset tamponi:\n"
 "{error}"
 
-#: main.py:2879
+#: main.py:2912
 #, python-brace-format
 msgid ""
 "Could not fetch pad sets from stohrermusic.com:\n"
@@ -1910,7 +1910,7 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2883
+#: main.py:2916
 #, python-brace-format
 msgid ""
 "Invalid data received from server:\n"
@@ -1921,19 +1921,19 @@ msgstr ""
 "\n"
 "{error}"
 
-#: main.py:2887
+#: main.py:2920
 msgid "No pad set data found on the server."
 msgstr "Nessun dato di set di tamponi trovato sul server."
 
-#: main.py:2895
+#: main.py:2928
 msgid "Select Folder with Settings"
 msgstr "Selezioni la cartella con le impostazioni"
 
-#: main.py:2903
+#: main.py:2936
 msgid "No Settings Found"
 msgstr "Nessuna impostazione trovata"
 
-#: main.py:2904
+#: main.py:2937
 msgid ""
 "No config files found in the selected folder.\n"
 "\n"
@@ -1945,7 +1945,7 @@ msgstr ""
 "File cercati: app_settings.json, pad_presets.json, sizing_presets.json, "
 "key_height_library.json, screw_specs.json, toner_data.json"
 
-#: main.py:2910
+#: main.py:2943
 #, python-brace-format
 msgid ""
 "The following files will be imported and will REPLACE your current "
@@ -1962,11 +1962,11 @@ msgstr ""
 "\n"
 "Sicuro di voler continuare?"
 
-#: main.py:2914
+#: main.py:2947
 msgid "Confirm Import"
 msgstr "Conferma importazione"
 
-#: main.py:2941
+#: main.py:2974
 #, python-brace-format
 msgid ""
 "Successfully imported {count} file(s).\n"
@@ -1977,7 +1977,7 @@ msgstr ""
 "\n"
 "File importati: {files}"
 
-#: main.py:2944
+#: main.py:2977
 #, python-brace-format
 msgid ""
 "Could not import settings:\n"
@@ -1986,26 +1986,26 @@ msgstr ""
 "Impossibile importare le impostazioni:\n"
 "{error}"
 
-#: main.py:2965 main.py:3689 tooling_tab.py:483 tooling_tab.py:551
+#: main.py:2998 main.py:3750 tooling_tab.py:483 tooling_tab.py:551
 #: ui_dialogs/sizing.py:772 ui_dialogs/sizing.py:2175
 msgid "Felt"
 msgstr "Feltro"
 
-#: main.py:2965 main.py:3689 tooling_tab.py:483 tooling_tab.py:551
+#: main.py:2998 main.py:3750 tooling_tab.py:483 tooling_tab.py:551
 #: ui_dialogs/sizing.py:773 ui_dialogs/sizing.py:2176
 msgid "Card"
 msgstr "Cartoncino"
 
-#: main.py:2965 main.py:3689 tooling_tab.py:483 tooling_tab.py:551
+#: main.py:2998 main.py:3750 tooling_tab.py:483 tooling_tab.py:551
 #: ui_dialogs/guide.py:832 ui_dialogs/sizing.py:770 ui_dialogs/sizing.py:2174
 msgid "Leather"
 msgstr "Cuoio"
 
-#: main.py:2980 main.py:2992 main.py:3052 toner_tab.py:1156
+#: main.py:3013 main.py:3025 main.py:3085 toner_tab.py:1156
 msgid "Input Device"
 msgstr "Dispositivo di input"
 
-#: main.py:2981
+#: main.py:3014
 msgid ""
 "On Linux, audio input is locked to the system default.\n"
 "\n"
@@ -2017,19 +2017,19 @@ msgstr ""
 "Imposti il dispositivo preferito nelle impostazioni audio del sistema\n"
 "(PulseAudio o PipeWire)."
 
-#: main.py:2988
+#: main.py:3021
 msgid "No Devices"
 msgstr "Nessun dispositivo"
 
-#: main.py:2988 toner_tab.py:1198
+#: main.py:3021 toner_tab.py:1198
 msgid "No audio input devices found."
 msgstr "Nessun dispositivo di input audio trovato."
 
-#: main.py:3001
+#: main.py:3034
 msgid "Select audio input device:"
 msgstr "Selezioni il dispositivo di input audio:"
 
-#: main.py:3003
+#: main.py:3036
 msgid ""
 "Showing devices with 44.1 kHz+ sample rate.\n"
 "Bluetooth headsets are excluded (sample rate too low)."
@@ -2038,25 +2038,25 @@ msgstr ""
 "superiore.\n"
 "Le cuffie Bluetooth sono escluse (campionamento troppo basso)."
 
-#: main.py:3008 main.py:3011 tuner_tab.py:1247 tuner_tab.py:1250
+#: main.py:3041 main.py:3044 tuner_tab.py:1247 tuner_tab.py:1250
 msgid "System Default"
 msgstr "Predefinito di sistema"
 
-#: main.py:3053
+#: main.py:3086
 #, python-brace-format
 msgid "Audio input set to: {dev_name}"
 msgstr "Input audio impostato su: {dev_name}"
 
-#: main.py:3057 main.py:3152 main.py:3293 ui_dialogs/gcode_settings.py:194
+#: main.py:3090 main.py:3185 main.py:3326 ui_dialogs/gcode_settings.py:194
 #: ui_dialogs/sizing.py:74
 msgid "Apply"
 msgstr "Applica"
 
-#: main.py:3065
+#: main.py:3098
 msgid "Capture Threshold"
 msgstr "Soglia di acquisizione"
 
-#: main.py:3074
+#: main.py:3107
 msgid ""
 "Set the minimum signal level to trigger capture.\n"
 "Raise the threshold if chair noises or breathing\n"
@@ -2066,19 +2066,19 @@ msgstr ""
 "Alzi la soglia se rumori della sedia o il respiro\n"
 "attivano acquisizioni false."
 
-#: main.py:3083
+#: main.py:3116
 msgid "Current level:"
 msgstr "Livello attuale:"
 
-#: main.py:3098
+#: main.py:3131
 msgid "Threshold:"
 msgstr "Soglia:"
 
-#: main.py:3162 main.py:3171 main.py:3285 main.py:3288
+#: main.py:3195 main.py:3204 main.py:3318 main.py:3321
 msgid "Feature Set"
 msgstr "Funzionalità attive"
 
-#: main.py:3173
+#: main.py:3206
 msgid ""
 "Choose which tabs to show.\n"
 "The Pad Maker is always on."
@@ -2086,23 +2086,23 @@ msgstr ""
 "Scelga quali schede mostrare.\n"
 "Pad Maker è sempre attiva."
 
-#: main.py:3178
+#: main.py:3211
 msgid "Language"
 msgstr "Lingua"
 
-#: main.py:3195
+#: main.py:3228
 msgid " (restart to apply)"
 msgstr " (riavvii per applicare)"
 
-#: main.py:3199
+#: main.py:3232
 msgid "Tool Tips"
 msgstr "Suggerimenti"
 
-#: main.py:3203
+#: main.py:3236
 msgid "Show tool tips when hovering over settings"
 msgstr "Mostra suggerimenti al passaggio del mouse sulle impostazioni"
 
-#: main.py:3206
+#: main.py:3239
 msgid ""
 "\n"
 "Tabs"
@@ -2110,7 +2110,7 @@ msgstr ""
 "\n"
 "Schede"
 
-#: main.py:3243
+#: main.py:3276
 msgid ""
 "\n"
 "Experimental / In Progress"
@@ -2118,23 +2118,23 @@ msgstr ""
 "\n"
 "Sperimentali / in sviluppo"
 
-#: main.py:3247
+#: main.py:3280
 msgid "Direct machine control (GRBL)"
 msgstr "Controllo diretto della macchina (GRBL)"
 
-#: main.py:3286
+#: main.py:3319
 msgid "Restart the app for the language change to take effect."
 msgstr "Riavvii l'applicazione perché il cambio di lingua abbia effetto."
 
-#: main.py:3289
+#: main.py:3322
 msgid "Changes will take effect next time you open the app."
 msgstr "Le modifiche avranno effetto al prossimo avvio dell'app."
 
-#: main.py:3383
+#: main.py:3416
 msgid "Log File"
 msgstr "File di log"
 
-#: main.py:3383
+#: main.py:3416
 #, python-brace-format
 msgid ""
 "No log file found.\n"
@@ -2143,11 +2143,32 @@ msgstr ""
 "Nessun file di log trovato.\n"
 "Percorso atteso: {log_path}"
 
-#: main.py:3842
+#: main.py:3448
+msgid "SD Card"
+msgstr "Scheda SD"
+
+#: main.py:3449
+#, python-brace-format
+msgid ""
+"The Falcon needs its SD card empty except for the one G-code file it will"
+" run.\n"
+"\n"
+"This would leave {n} G-code files on the card.\n"
+"\n"
+"Do you want to proceed?"
+msgstr ""
+"Il Falcon ha bisogno che la scheda SD sia vuota, tranne l'unico file "
+"G-code che eseguirà.\n"
+"\n"
+"Così resterebbero {n} file G-code sulla scheda.\n"
+"\n"
+"Vuole procedere?"
+
+#: main.py:3903
 msgid "Unexpected Error"
 msgstr "Errore imprevisto"
 
-#: main.py:3843
+#: main.py:3904
 #, python-brace-format
 msgid ""
 "{exc_type}: {exc_value}\n"
@@ -4028,11 +4049,11 @@ msgstr "I portastampi sono per il"
 msgid "Layers:"
 msgstr "Strati:"
 
-#: tooling_tab.py:315 tooling_tab.py:1311
+#: tooling_tab.py:315 tooling_tab.py:1313
 msgid "5-layer (2× pin)"
 msgstr "5 strati (2× perno)"
 
-#: tooling_tab.py:317 tooling_tab.py:1311
+#: tooling_tab.py:317 tooling_tab.py:1313
 msgid "6-layer (3× pin)"
 msgstr "6 strati (3× perno)"
 
@@ -4073,13 +4094,13 @@ msgstr ""
 "fori di riferimento sono da 1/8\" — li ridimensioni per il perno che ha. "
 "Il legno va benissimo; anche l'acrilico va bene."
 
-#: tooling_tab.py:402 tooling_tab.py:1316 tooling_tab.py:2702
-#: tooling_tab.py:2810
+#: tooling_tab.py:402 tooling_tab.py:1318 tooling_tab.py:2710
+#: tooling_tab.py:2820
 msgid "Upper (slotted)"
 msgstr "Superiore (con slot)"
 
-#: tooling_tab.py:405 tooling_tab.py:1316 tooling_tab.py:2702
-#: tooling_tab.py:2810
+#: tooling_tab.py:405 tooling_tab.py:1318 tooling_tab.py:2710
+#: tooling_tab.py:2820
 msgid "Lower (base)"
 msgstr "Inferiore (base)"
 
@@ -4327,7 +4348,7 @@ msgstr ""
 msgid "Generate STL"
 msgstr "Genera STL"
 
-#: tooling_tab.py:993 tooling_tab.py:1140 tooling_tab.py:2727
+#: tooling_tab.py:993 tooling_tab.py:1140 tooling_tab.py:2735
 msgid "Sheet dimensions must be positive."
 msgstr "Le dimensioni della lastra devono essere positive."
 
@@ -4382,7 +4403,7 @@ msgstr ""
 "Porta-stampo a {n} strati: base, magnete (6.5mm), {pin}× perno (3.5mm), "
 "anello di ritenzione."
 
-#: tooling_tab.py:1174 tooling_tab.py:1219 tooling_tab.py:1552
+#: tooling_tab.py:1174 tooling_tab.py:1219 tooling_tab.py:1554
 msgid "No valid die sizes entered."
 msgstr "Nessuna misura valida di stampo inserita."
 
@@ -4399,8 +4420,8 @@ msgstr ""
 msgid "Save Die Insert SVG"
 msgstr "Salva SVG degli stampi"
 
-#: tooling_tab.py:1194 tooling_tab.py:1936 tooling_tab.py:2567
-#: tooling_tab.py:2690 tooling_tab.py:3116
+#: tooling_tab.py:1194 tooling_tab.py:1938 tooling_tab.py:2573
+#: tooling_tab.py:2698 tooling_tab.py:3128
 msgid "SVG files"
 msgstr "File SVG"
 
@@ -4415,11 +4436,11 @@ msgstr ""
 "\n"
 "Salvati in: {path}"
 
-#: tooling_tab.py:1210 tooling_tab.py:1271 tooling_tab.py:1632
-#: tooling_tab.py:1676 tooling_tab.py:1951 tooling_tab.py:2038
-#: tooling_tab.py:2542 tooling_tab.py:2594 tooling_tab.py:2679
-#: tooling_tab.py:2707 tooling_tab.py:2816 tooling_tab.py:2872
-#: tooling_tab.py:3063 tooling_tab.py:3135
+#: tooling_tab.py:1210 tooling_tab.py:1273 tooling_tab.py:1634
+#: tooling_tab.py:1678 tooling_tab.py:1953 tooling_tab.py:2042
+#: tooling_tab.py:2548 tooling_tab.py:2600 tooling_tab.py:2687
+#: tooling_tab.py:2715 tooling_tab.py:2826 tooling_tab.py:2882
+#: tooling_tab.py:3075 tooling_tab.py:3147
 #, python-brace-format
 msgid ""
 "Something went wrong:\n"
@@ -4434,12 +4455,12 @@ msgstr ""
 msgid "Save Die Insert G-code"
 msgstr "Salva G-code degli stampi"
 
-#: tooling_tab.py:1252 tooling_tab.py:2014 tooling_tab.py:2514
-#: tooling_tab.py:2651 tooling_tab.py:2793 tooling_tab.py:3039
+#: tooling_tab.py:1252 tooling_tab.py:2016 tooling_tab.py:2518
+#: tooling_tab.py:2657 tooling_tab.py:2801 tooling_tab.py:3049
 msgid "G-code files"
 msgstr "File G-code"
 
-#: tooling_tab.py:1267
+#: tooling_tab.py:1269
 #, python-brace-format
 msgid ""
 "Generated G-code for {n} die rings.\n"
@@ -4450,29 +4471,29 @@ msgstr ""
 "\n"
 "Salvato in: {path}"
 
-#: tooling_tab.py:1309 tooling_tab.py:2587 tooling_tab.py:2671
+#: tooling_tab.py:1311 tooling_tab.py:2593 tooling_tab.py:2679
 msgid "Large (40–60mm)"
 msgstr "Grande (40–60mm)"
 
-#: tooling_tab.py:1309 tooling_tab.py:2588 tooling_tab.py:2672
+#: tooling_tab.py:1311 tooling_tab.py:2594 tooling_tab.py:2680
 msgid "Small (7–39.5mm)"
 msgstr "Piccolo (7–39.5mm)"
 
-#: tooling_tab.py:1310 tooling_tab.py:2589 tooling_tab.py:2673
+#: tooling_tab.py:1312 tooling_tab.py:2595 tooling_tab.py:2681
 msgid "Both (Small + Large)"
 msgstr "Entrambi (piccolo + grande)"
 
-#: tooling_tab.py:1329 tooling_tab.py:2385
+#: tooling_tab.py:1331 tooling_tab.py:2389
 #, python-brace-format
 msgid "Disc diameter: {d:.1f} mm"
 msgstr "Diametro del disco: {d:.1f} mm"
 
-#: tooling_tab.py:1338 tooling_tab.py:2963
+#: tooling_tab.py:1340 tooling_tab.py:2973
 #, python-brace-format
 msgid "{n}.  {d} mm, {pct}%, inner edge radius {r} mm, × {qty}"
 msgstr "{n}.  {d} mm, {pct}%, raggio del bordo interno {r} mm, × {qty}"
 
-#: tooling_tab.py:1428
+#: tooling_tab.py:1430
 #, python-brace-format
 msgid ""
 "Cut {placed_count} dies on sheet #{scrap_num}.\n"
@@ -4483,11 +4504,11 @@ msgstr ""
 "\n"
 "Tutti gli stampi tagliati! Sessione completata."
 
-#: tooling_tab.py:1432
+#: tooling_tab.py:1434
 msgid "Sheet Cut"
 msgstr "Lastra tagliata"
 
-#: tooling_tab.py:1433
+#: tooling_tab.py:1435
 #, python-brace-format
 msgid ""
 "Cut {placed_count} dies on sheet #{scrap_num}.\n"
@@ -4502,7 +4523,7 @@ msgstr ""
 "Carichi la lastra successiva, regoli la misura della lastra se necessario"
 " e faccia di nuovo clic su Inquadra e taglia."
 
-#: tooling_tab.py:1459
+#: tooling_tab.py:1461
 #, python-brace-format
 msgid ""
 "You have {remaining} dies remaining.\n"
@@ -4515,7 +4536,7 @@ msgstr ""
 "\n"
 "Continuare?"
 
-#: tooling_tab.py:1484
+#: tooling_tab.py:1486
 #, python-brace-format
 msgid ""
 "You have {remaining} dies remaining.\n"
@@ -4526,15 +4547,15 @@ msgstr ""
 "\n"
 "Cancellare la sessione?"
 
-#: tooling_tab.py:1577
+#: tooling_tab.py:1579
 msgid "All dies have been placed!"
 msgstr "Tutti gli stampi sono stati posizionati!"
 
-#: tooling_tab.py:1585
+#: tooling_tab.py:1587
 msgid "No Dies Fit"
 msgstr "Nessuno stampo entra"
 
-#: tooling_tab.py:1586
+#: tooling_tab.py:1588
 #, python-brace-format
 msgid ""
 "No dies could be placed on this sheet.\n"
@@ -4547,7 +4568,7 @@ msgstr ""
 "Stampo più piccolo rimanente: {min_size}mm\n"
 "Provi una lastra più grande."
 
-#: tooling_tab.py:1622
+#: tooling_tab.py:1624
 #, python-brace-format
 msgid ""
 "Placed {placed_count} dies on sheet #{scrap_num}.\n"
@@ -4560,11 +4581,11 @@ msgstr ""
 "Tutti gli stampi posizionati! Sessione completata.\n"
 "File salvati in: {save_dir}"
 
-#: tooling_tab.py:1626 tooling_tab.py:1669
+#: tooling_tab.py:1628 tooling_tab.py:1671
 msgid "Sheet Generated"
 msgstr "Lastra generata"
 
-#: tooling_tab.py:1627
+#: tooling_tab.py:1629
 #, python-brace-format
 msgid ""
 "Placed {placed_count} dies on sheet #{scrap_num}.\n"
@@ -4577,7 +4598,7 @@ msgstr ""
 "{remaining_count} stampi rimanenti.\n"
 "Regoli la misura della lastra se necessario e generi di nuovo."
 
-#: tooling_tab.py:1664
+#: tooling_tab.py:1666
 #, python-brace-format
 msgid ""
 "Generated G-code for {placed_count} dies on sheet #{scrap_num}.\n"
@@ -4590,7 +4611,7 @@ msgstr ""
 "Tutti gli stampi posizionati! Sessione completata.\n"
 "File salvati in: {save_dir}"
 
-#: tooling_tab.py:1670
+#: tooling_tab.py:1672
 #, python-brace-format
 msgid ""
 "Generated G-code for {placed_count} dies on sheet #{scrap_num}.\n"
@@ -4603,29 +4624,29 @@ msgstr ""
 "{remaining_count} stampi rimanenti.\n"
 "Regoli la misura della lastra se necessario e generi di nuovo."
 
-#: tooling_tab.py:1691
+#: tooling_tab.py:1693
 msgid "Die Scrap Mode Progress"
 msgstr "Avanzamento modalità ritagli stampi"
 
-#: tooling_tab.py:1764
+#: tooling_tab.py:1766
 #, python-brace-format
 msgid "{done} / {total} dies complete"
 msgstr "{done} / {total} stampi completati"
 
-#: tooling_tab.py:1782
+#: tooling_tab.py:1784
 #, python-brace-format
 msgid "die_ring | {scraps} sheet(s) used"
 msgstr "anello_stampo | {scraps} lastre usate"
 
-#: tooling_tab.py:1845
+#: tooling_tab.py:1847
 msgid "Tooling > Options > Settings"
 msgstr "Attrezzatura > Opzioni > Impostazioni"
 
-#: tooling_tab.py:1846
+#: tooling_tab.py:1848
 msgid "Pad Maker > Options > G-code Settings"
 msgstr "Crea tamponi > Opzioni > Impostazioni G-code"
 
-#: tooling_tab.py:1857
+#: tooling_tab.py:1859
 msgid ""
 "The engraving speed and power are 0, so the disc IDs will not be "
 "engraved. Fill in the Engraving fields to label the discs."
@@ -4633,7 +4654,7 @@ msgstr ""
 "Velocità e potenza di incisione sono 0, quindi gli ID dei dischi non "
 "verranno incisi. Compili i campi Incisione per etichettare i dischi."
 
-#: tooling_tab.py:1862
+#: tooling_tab.py:1864
 #, python-brace-format
 msgid ""
 "{material} has no engraving speed and power set ({where}), so the "
@@ -4642,7 +4663,7 @@ msgstr ""
 "{material} non ha velocità e potenza di incisione impostate ({where}), "
 "quindi le mezzelune non verranno numerate."
 
-#: tooling_tab.py:1864
+#: tooling_tab.py:1866
 #, python-brace-format
 msgid ""
 "{material} has no engraving speed and power set ({where}), so the "
@@ -4651,40 +4672,40 @@ msgstr ""
 "{material} non ha velocità e potenza di incisione impostate ({where}), "
 "quindi il titolo e le misure del motivo non verranno incisi."
 
-#: tooling_tab.py:1870
+#: tooling_tab.py:1872
 msgid "Engraving Not Set"
 msgstr "Incisione non impostata"
 
-#: tooling_tab.py:1886
+#: tooling_tab.py:1888
 msgid "Tooling > Options > Settings > Acrylic > Kerf Width"
 msgstr "Attrezzatura > Opzioni > Impostazioni > Acrilico > Larghezza kerf"
 
-#: tooling_tab.py:1888
+#: tooling_tab.py:1890
 #, python-brace-format
 msgid "Tooling > Options > Settings > {material_name} > Kerf Width"
 msgstr "Attrezzatura > Opzioni > Impostazioni > {material_name} > Larghezza kerf"
 
-#: tooling_tab.py:1890
+#: tooling_tab.py:1892
 #, python-brace-format
 msgid "Pad Maker > Options > G-code Settings > {material_name} > Kerf Width"
 msgstr ""
 "Crea tamponi > Opzioni > Impostazioni G-code > {material_name} > "
 "Larghezza kerf"
 
-#: tooling_tab.py:1893 tooling_tab.py:1901
+#: tooling_tab.py:1895 tooling_tab.py:1903
 #, python-brace-format
 msgid "Kerf Test — {material_name}"
 msgstr "Test del kerf — {material_name}"
 
-#: tooling_tab.py:1905
+#: tooling_tab.py:1907
 msgid "1.  Cut the pattern on your material"
 msgstr "1.  Tagli il pattern sul suo materiale"
 
-#: tooling_tab.py:1906
+#: tooling_tab.py:1908
 msgid "2.  Pop out the 3 discs (10mm, 20mm, 30mm)"
 msgstr "2.  Estragga i 3 dischi (10mm, 20mm, 30mm)"
 
-#: tooling_tab.py:1907
+#: tooling_tab.py:1909
 msgid ""
 "3.  For each circle, measure the hole ID\n"
 "     and disc OD with calipers"
@@ -4692,15 +4713,15 @@ msgstr ""
 "3.  Per ogni cerchio, misuri il diametro interno del foro\n"
 "     e il diametro esterno del disco con un calibro"
 
-#: tooling_tab.py:1909
+#: tooling_tab.py:1911
 msgid "4.  Kerf = hole ID − disc OD"
 msgstr "4.  Kerf = diametro foro − diametro disco"
 
-#: tooling_tab.py:1910
+#: tooling_tab.py:1912
 msgid "5.  Average the 3 results for best accuracy"
 msgstr "5.  Faccia la media dei 3 risultati per la massima precisione"
 
-#: tooling_tab.py:1911
+#: tooling_tab.py:1913
 #, python-brace-format
 msgid ""
 "6.  Enter the full kerf value in:\n"
@@ -4709,80 +4730,80 @@ msgstr ""
 "6.  Inserisca il valore completo del kerf in:\n"
 "     {settings_path}"
 
-#: tooling_tab.py:1918
+#: tooling_tab.py:1920
 msgid "Don't show this again"
 msgstr "Non mostrare più"
 
-#: tooling_tab.py:1934
+#: tooling_tab.py:1936
 msgid "Save Kerf Test SVG"
 msgstr "Salva SVG del test kerf"
 
-#: tooling_tab.py:1979
+#: tooling_tab.py:1981
 msgid "Speed and power must be valid numbers."
 msgstr "Velocità e potenza devono essere numeri validi."
 
-#: tooling_tab.py:2012
+#: tooling_tab.py:2014
 msgid "Save Kerf Test G-code"
 msgstr "Salva G-code del test kerf"
 
-#: tooling_tab.py:2030 tooling_tab.py:3056 tooling_tab.py:3132
+#: tooling_tab.py:2034 tooling_tab.py:3068 tooling_tab.py:3144
 #: ui_dialogs/history.py:345
 #, python-brace-format
 msgid "Saved to: {d}"
 msgstr "Salvato in: {d}"
 
-#: tooling_tab.py:2176
+#: tooling_tab.py:2180
 msgid "  ✓ fits sheet"
 msgstr "  ✓ entra nel foglio"
 
-#: tooling_tab.py:2180
+#: tooling_tab.py:2184
 msgid "  → sheet will grow to fit"
 msgstr "  → il foglio verrà ingrandito per contenerli"
 
-#: tooling_tab.py:2182
+#: tooling_tab.py:2186
 #, python-brace-format
 msgid "{n} discs — need at least {w:.0f} × {h:.0f} mm{note}"
 msgstr "{n} dischi — servono almeno {w:.0f} × {h:.0f} mm{note}"
 
-#: tooling_tab.py:2242
+#: tooling_tab.py:2246
 msgid "Sheet width and height must be positive numbers."
 msgstr "Larghezza e altezza del foglio devono essere numeri positivi."
 
-#: tooling_tab.py:2248
+#: tooling_tab.py:2252
 msgid "Disc diameter must be a valid number."
 msgstr "Il diametro del disco deve essere un numero valido."
 
-#: tooling_tab.py:2252
+#: tooling_tab.py:2256
 msgid "Disc diameter must be greater than zero."
 msgstr "Il diametro del disco deve essere maggiore di zero."
 
-#: tooling_tab.py:2259
+#: tooling_tab.py:2263
 msgid "Hole diameter must be a valid number (use 0 for a solid disc)."
 msgstr ""
 "Il diametro del foro deve essere un numero valido (usare 0 per un disco "
 "pieno)."
 
-#: tooling_tab.py:2263
+#: tooling_tab.py:2267
 msgid "Hole diameter can't be negative (use 0 for a solid disc)."
 msgstr "Il diametro del foro non può essere negativo (usare 0 per un disco pieno)."
 
-#: tooling_tab.py:2267
+#: tooling_tab.py:2271
 msgid "Hole diameter must be smaller than the disc diameter."
 msgstr "Il diametro del foro deve essere minore del diametro del disco."
 
-#: tooling_tab.py:2275
+#: tooling_tab.py:2279
 msgid "Engraving speed and power must be valid numbers."
 msgstr "Velocità e potenza di incisione devono essere numeri validi."
 
-#: tooling_tab.py:2282
+#: tooling_tab.py:2286
 msgid "Engraving speed must be > 0 and power must be 1-100%."
 msgstr "La velocità di incisione deve essere > 0 e la potenza tra 1 e 100%."
 
-#: tooling_tab.py:2331
+#: tooling_tab.py:2335
 msgid "Thin Ring"
 msgstr "Anello stretto"
 
-#: tooling_tab.py:2332
+#: tooling_tab.py:2336
 #, python-brace-format
 msgid ""
 "With a {hole:.1f} mm hole in a {dia:.1f} mm disc, the ring is too narrow "
@@ -4797,61 +4818,61 @@ msgstr ""
 "\n"
 "Generare comunque?"
 
-#: tooling_tab.py:2369
+#: tooling_tab.py:2373
 #, python-brace-format
 msgid "Speed & Power Test — {fname}"
 msgstr "Test velocità e potenza — {fname}"
 
-#: tooling_tab.py:2374
+#: tooling_tab.py:2378
 #, python-brace-format
 msgid "Speed & Power Test — sent to the laser with Frame & Cut, {when}"
 msgstr "Test velocità e potenza — inviato al laser con Inquadra e taglia, {when}"
 
-#: tooling_tab.py:2384 ui_dialogs/history.py:317
+#: tooling_tab.py:2388 ui_dialogs/history.py:317
 #, python-brace-format
 msgid "Material: {m}"
 msgstr "Materiale: {m}"
 
-#: tooling_tab.py:2388
+#: tooling_tab.py:2392
 #, python-brace-format
 msgid "Hole diameter: {d:.1f} mm (washer / shim)"
 msgstr "Diametro del foro: {d:.1f} mm (rondella / spessore)"
 
-#: tooling_tab.py:2389
+#: tooling_tab.py:2393
 #, python-brace-format
 msgid "Engraving (labels): {s:.0f} mm/min @ {p:.0f}%"
 msgstr "Incisione (etichette): {s:.0f} mm/min @ {p:.0f}%"
 
-#: tooling_tab.py:2392
+#: tooling_tab.py:2396
 msgid "Air assist: varies per disc (see Air column)"
 msgstr "Assistenza ad aria: varia per disco (vedi colonna Aria)"
 
-#: tooling_tab.py:2394
+#: tooling_tab.py:2398
 #, python-brace-format
 msgid "Air assist: {state}"
 msgstr "Assistenza ad aria: {state}"
 
-#: tooling_tab.py:2395
+#: tooling_tab.py:2399
 msgid "ON"
 msgstr "ON"
 
-#: tooling_tab.py:2395
+#: tooling_tab.py:2399
 msgid "OFF"
 msgstr "OFF"
 
-#: tooling_tab.py:2461
+#: tooling_tab.py:2465
 msgid "Save Speed & Power Test Legend"
 msgstr "Salva la legenda del test velocità e potenza"
 
-#: tooling_tab.py:2463
+#: tooling_tab.py:2467
 msgid "Text files"
 msgstr "File di testo"
 
-#: tooling_tab.py:2512
+#: tooling_tab.py:2516
 msgid "Save Speed & Power Test G-code"
 msgstr "Salva G-code del test velocità e potenza"
 
-#: tooling_tab.py:2533
+#: tooling_tab.py:2539
 #, python-brace-format
 msgid ""
 "Wrote {n} test discs to:\n"
@@ -4866,20 +4887,20 @@ msgstr ""
 "Legenda salvata in:\n"
 "{l}"
 
-#: tooling_tab.py:2538
+#: tooling_tab.py:2544
 msgid "G-code Generated"
 msgstr "G-code generato"
 
-#: tooling_tab.py:2561 tooling_tab.py:2580 tooling_tab.py:2609
-#: tooling_tab.py:2628 tooling_tab.py:2664 tooling_tab.py:2735
+#: tooling_tab.py:2567 tooling_tab.py:2586 tooling_tab.py:2615
+#: tooling_tab.py:2634 tooling_tab.py:2672 tooling_tab.py:2743
 msgid "Sheet too small"
 msgstr "Lastra troppo piccola"
 
-#: tooling_tab.py:2565
+#: tooling_tab.py:2571
 msgid "Save Die Holder SVG"
 msgstr "Salva SVG del porta-stampo"
 
-#: tooling_tab.py:2591
+#: tooling_tab.py:2597
 #, python-brace-format
 msgid ""
 "Generated {layer_count}-layer {variant_label} die holder.\n"
@@ -4890,11 +4911,11 @@ msgstr ""
 "\n"
 "Salvato in: {path}"
 
-#: tooling_tab.py:2649
+#: tooling_tab.py:2655
 msgid "Save Die Holder G-code"
 msgstr "Salva G-code del porta-stampo"
 
-#: tooling_tab.py:2675
+#: tooling_tab.py:2683
 #, python-brace-format
 msgid ""
 "Generated {layer_count}-layer {variant_label} die holder G-code.\n"
@@ -4905,11 +4926,11 @@ msgstr ""
 "\n"
 "Salvato in: {path}"
 
-#: tooling_tab.py:2688
+#: tooling_tab.py:2696
 msgid "Save Die Organizer SVG"
 msgstr "Salva SVG dell'organizer"
 
-#: tooling_tab.py:2704 tooling_tab.py:2812
+#: tooling_tab.py:2712 tooling_tab.py:2822
 #, python-brace-format
 msgid ""
 "Generated {variant_label} die organizer.\n"
@@ -4920,7 +4941,7 @@ msgstr ""
 "\n"
 "Salvato in: {path}"
 
-#: tooling_tab.py:2736
+#: tooling_tab.py:2744
 #, python-brace-format
 msgid ""
 "The organizer plate needs a sheet at least {w} × {h} mm ({w_in} × {h_in} "
@@ -4929,12 +4950,12 @@ msgstr ""
 "La piastra dell'organizer richiede una lastra di almeno {w} × {h} mm "
 "({w_in} × {h_in} in), in verticale, come disegnata."
 
-#: tooling_tab.py:2771
+#: tooling_tab.py:2779
 #, python-brace-format
 msgid "The {material} kerf is negative ({kerf} mm). Check it in {where}."
 msgstr "Il kerf di {material} è negativo ({kerf} mm). Lo controlli in {where}."
 
-#: tooling_tab.py:2773
+#: tooling_tab.py:2781
 #, python-brace-format
 msgid ""
 "The {material} kerf ({kerf} mm) is too wide for an opening of {opening} "
@@ -4944,29 +4965,29 @@ msgstr ""
 "{opening} mm nella piastra dell'organizer per stampi. Lo controlli in "
 "{where}."
 
-#: tooling_tab.py:2778
+#: tooling_tab.py:2786
 #, python-brace-format
 msgid "{material} has no cut speed and power set ({where})."
 msgstr "{material} non ha velocità e potenza di taglio impostate ({where})."
 
-#: tooling_tab.py:2791
+#: tooling_tab.py:2799
 msgid "Save Die Organizer G-code"
 msgstr "Salva G-code dell'organizer"
 
-#: tooling_tab.py:2853
+#: tooling_tab.py:2863
 #, python-brace-format
 msgid "Could not find bundled STL: {path}"
 msgstr "Impossibile trovare l'STL incluso: {path}"
 
-#: tooling_tab.py:2857
+#: tooling_tab.py:2867
 msgid "Save Pad Press Spacer STL"
 msgstr "Salva STL spessore"
 
-#: tooling_tab.py:2859 tooling_tab.py:3116
+#: tooling_tab.py:2869 tooling_tab.py:3128
 msgid "STL files"
 msgstr "File STL"
 
-#: tooling_tab.py:2869
+#: tooling_tab.py:2879
 #, python-brace-format
 msgid ""
 "Saved {filename} to:\n"
@@ -4977,53 +4998,53 @@ msgstr ""
 "\n"
 "{path}"
 
-#: tooling_tab.py:2887
+#: tooling_tab.py:2897
 msgid "Enter the tonehole ID and the percentage as numbers."
 msgstr "Inserisca il diametro interno del foro e la percentuale come numeri."
 
-#: tooling_tab.py:2889
+#: tooling_tab.py:2899
 #, python-brace-format
 msgid "Tonehole ID must be more than 0 and at most {max} mm."
 msgstr ""
 "Il diametro interno del foro deve essere maggiore di 0 e al massimo {max}"
 " mm."
 
-#: tooling_tab.py:2892
+#: tooling_tab.py:2902
 #, python-brace-format
 msgid "The percentage must be more than 0 and at most {max}."
 msgstr "La percentuale deve essere maggiore di 0 e al massimo {max}."
 
-#: tooling_tab.py:2915
+#: tooling_tab.py:2925
 #, python-brace-format
 msgid "Widest point {w} mm, inner edge radius {r} mm"
 msgstr "Punto più largo {w} mm, raggio del bordo interno {r} mm"
 
-#: tooling_tab.py:2918
+#: tooling_tab.py:2928
 #, python-brace-format
 msgid "Open area left {pct}%, same as a {d} mm round hole"
 msgstr "Area aperta residua {pct}%, come un foro tondo da {d} mm"
 
-#: tooling_tab.py:2927
+#: tooling_tab.py:2937
 #, python-brace-format
 msgid "Quantity must be a whole number from 1 to {max}."
 msgstr "La quantità deve essere un numero intero da 1 a {max}."
 
-#: tooling_tab.py:2967
+#: tooling_tab.py:2977
 msgid "The list is empty, so Generate makes the crescent above."
 msgstr "La lista è vuota, quindi viene generata la mezzaluna qui sopra."
 
-#: tooling_tab.py:2970
+#: tooling_tab.py:2980
 #, python-brace-format
 msgid "Generate makes the list: {n} crescent."
 msgid_plural "Generate makes the list: {n} crescents."
 msgstr[0] "Viene generata la lista: {n} mezzaluna."
 msgstr[1] "Viene generata la lista: {n} mezzelune."
 
-#: tooling_tab.py:2973
+#: tooling_tab.py:2983
 msgid "The SVG engraves each one's list number on the scrap beside it."
 msgstr "L'SVG incide il numero di lista di ciascuna sullo sfrido, accanto."
 
-#: tooling_tab.py:3011
+#: tooling_tab.py:3021
 #, python-brace-format
 msgid ""
 "The opening between this crescent's horns ({gap} mm) is narrower than the"
@@ -5034,7 +5055,7 @@ msgstr ""
 "kerf di {material} ({kerf} mm), quindi il laser non può tagliarla. Usi "
 "una percentuale minore o un bordo interno più piatto."
 
-#: tooling_tab.py:3016
+#: tooling_tab.py:3026
 #, python-brace-format
 msgid ""
 "The {material} kerf ({kerf} mm) is too large for this crescent. Check it "
@@ -5043,11 +5064,11 @@ msgstr ""
 "Il kerf di {material} ({kerf} mm) è troppo grande per questa mezzaluna. "
 "Lo controlli in {where}."
 
-#: tooling_tab.py:3037 tooling_tab.py:3114
+#: tooling_tab.py:3047 tooling_tab.py:3126
 msgid "Save Tonehole Crescent"
 msgstr "Salva mezzaluna per foro"
 
-#: tooling_tab.py:3104
+#: tooling_tab.py:3116
 #, python-brace-format
 msgid "Print thickness must be more than 0 and at most {max} mm."
 msgstr "Lo spessore di stampa deve essere maggiore di 0 e al massimo {max} mm."
