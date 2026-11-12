@@ -70,11 +70,14 @@ jobs:
         # log whether a server was answering, and tries to start one when it was not.
         continue-on-error: true
         run: |
-          pactl info 2>/dev/null | head -3 && exit 0
+          # (a first version piped pactl into head, whose exit status hid a missing pactl:
+          # it printed nothing at all on 2026-11-12)
+          command -v pactl >/dev/null || { echo "no pactl on this runner: cannot ask the sound server"; exit 0; }
+          if pactl info >/tmp/sound-server 2>&1; then head -3 /tmp/sound-server; exit 0; fi
           echo "no sound server answering; trying to start one"
           (pulseaudio --start --exit-idle-time=-1 2>&1 || systemctl --user start pipewire-pulse 2>&1 || true)
           sleep 2
-          pactl info 2>/dev/null | head -3 || echo "still no sound server: PortAudio may not start on this runner"
+          if pactl info >/tmp/sound-server 2>&1; then head -3 /tmp/sound-server; else echo "still no sound server: PortAudio may not start on this runner"; fi
       - name: Install dependencies
         if: matrix.os != 'macos-15-intel'
         run: |
@@ -159,11 +162,14 @@ jobs:
         # log whether a server was answering, and tries to start one when it was not.
         continue-on-error: true
         run: |
-          pactl info 2>/dev/null | head -3 && exit 0
+          # (a first version piped pactl into head, whose exit status hid a missing pactl:
+          # it printed nothing at all on 2026-11-12)
+          command -v pactl >/dev/null || { echo "no pactl on this runner: cannot ask the sound server"; exit 0; }
+          if pactl info >/tmp/sound-server 2>&1; then head -3 /tmp/sound-server; exit 0; fi
           echo "no sound server answering; trying to start one"
           (pulseaudio --start --exit-idle-time=-1 2>&1 || systemctl --user start pipewire-pulse 2>&1 || true)
           sleep 2
-          pactl info 2>/dev/null | head -3 || echo "still no sound server: PortAudio may not start on this runner"
+          if pactl info >/tmp/sound-server 2>&1; then head -3 /tmp/sound-server; else echo "still no sound server: PortAudio may not start on this runner"; fi
 
       - name: Install dependencies (full)
         if: matrix.full_build
