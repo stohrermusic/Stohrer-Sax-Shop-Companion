@@ -453,6 +453,25 @@ def main():
                     assert abs(gauge.winfo_height() - chart.winfo_height()) <= 4, (gauge.winfo_height(), chart.winfo_height())
                 assert app._toner_tuner_int.get() == (1 if t else 0) and app._toner_tuner_var.get() == ("on" if t else "off")
                 assert app.settings["toner_settings"]["tuner_on"] is t
+            # in the narrow chart the empty-state line is wrapped inside it, and the guided prompt
+            # is on the chart only while the spectrum (which carries it too) is not shown
+            cv = app._toner_chart_canvas
+            for h in (True, False):
+                app._toner_show_harmonics(h)
+                app._toner_show_tuner(False)
+                run(150)
+                chart_now()
+                lines = [i for i in cv.find_withtag("chart") if cv.type(i) == "text"
+                         and "intonation" in cv.itemcget(i, "text")]
+                assert lines, "no empty-state line on the chart"
+                wrap = int(float(cv.itemcget(lines[0], "width")))
+                assert 0 < wrap <= cv.winfo_width(), (h, wrap, cv.winfo_width())
+                x0, _y0, x1, _y1 = cv.bbox(lines[0])
+                assert x0 >= 0 and x1 <= cv.winfo_width(), f"the line runs off the chart: {x0}..{x1} of {cv.winfo_width()}"
+                app._toner_update_cal_prompt("A4", "3 s")
+                shown = bool(cv.find_withtag("calprompt"))
+                app._toner_update_cal_prompt("")
+                assert shown is (not h), f"HARMONICS {h}: the guided prompt on the chart is {shown}"
             # the TUNER switch itself, as a user moves it; it asks no terms
             app._toner_show_tuner(False)
             app._toner_tuner_int.set(1)

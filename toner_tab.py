@@ -2102,8 +2102,10 @@ class TonerTabMixin:
                 text = _("No captures yet.")
             else:
                 text = _("Load a preset and capture to chart its intonation.")
-            cv.create_text(w / 2, h / 2, text=text, fill="#666666",
-                           font=("Helvetica", 11), tags="chart")
+            # wrapped to the canvas: beside the spectrum or the meter the chart is a third of
+            # the window and the line ran out over its left edge (the Mac tour, 2026-11-12)
+            cv.create_text(w / 2, h / 2, text=text, fill="#666666", width=max(60, w - 80),
+                           justify="center", font=("Helvetica", 11), tags="chart")
         cv.tag_raise("calprompt")
 
     def _toner_chart_click(self, event):
@@ -3520,7 +3522,9 @@ class TonerTabMixin:
         chart = getattr(self, '_toner_chart_canvas', None)
         if chart is not None:
             chart.delete("calprompt")
-            if text:
+            # on the chart only while the spectrum, which carries the prompt too, is not shown:
+            # with both on screen the prompt would be drawn twice, the second over a small chart
+            if text and not getattr(self, '_toner_harmonics_shown', False):
                 cw = chart.winfo_width()
                 chart.create_text(cw - 10, 10, text=text, fill="#333333",
                                   font=("Helvetica", 48, "bold"), anchor="ne", tags="calprompt")
