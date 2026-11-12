@@ -122,7 +122,7 @@ Patching the plist breaks the bundle's ad-hoc signature, and macOS then silently
 
 - `maybe_show_welcome` is called from exactly one place: the `__main__` block of main.py, under `if not tour:`, on an `after(600)`. Never from `__init__`: `--selftest`, `--tour` and every suite build the app.
 - It is plain on purpose: the ordinary dialog look, no canvas, timers, colours of its own or grab. Do not style it. Matt: "let's have the welcome screen be simple. if I have a detailed ui request I will give it." Content: name and version, "Thank you for installing.", a link to search the User Guide, a link to the Quick Start Guide, Close.
-- `QuickStartWindow` (Help > Quick Start Guide) is one small page; each line is its own string in `QuickStartWindow.lines`; the Frame & Cut line only when `machine_supported()`. It never opens by itself.
+- `QuickStartWindow` (Help > Quick Start Guide) is one small page; each line is its own string in `QuickStartWindow.lines` (the wording is Matt's own, 2026-11-11; kind `'link'` is the line that opens the User Guide); the direct laser control line only when `machine_supported()`, and the count above it says two ways without it. It never opens by itself.
 
 Tests: `test_welcome`. History: `docs/decisions/user-interface.md`.
 

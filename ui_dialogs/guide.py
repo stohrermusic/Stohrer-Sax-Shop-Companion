@@ -471,7 +471,11 @@ class UserGuideWindow(tk.Toplevel):
     def _fig_nest_zone(self, cv, W, H):
         """A small nest on a traced scrap, with one labeled-zone block."""
         from svg_engine import nest_pads_with_zones
-        settings = self._figure_settings(zone_labels_enabled=True)
+        # A corner Edge Bias, so the block and the loose pads are seen starting
+        # from the same corner (they follow the bias together since 2026-11-11;
+        # before, the block was always top-left and the default "center" put
+        # the pads in the middle, which Matt read as a broken nest).
+        settings = self._figure_settings(zone_labels_enabled=True, edge_bias="nw")
         polygon = [(0.0, 0.0), (140.0, 0.0), (140.0, 60.0), (95.0, 100.0), (0.0, 95.0)]
         pads = [{'size': 9.0, 'qty': 6}, {'size': 24.0, 'qty': 3}, {'size': 30.0, 'qty': 2}]
         placed, zones = nest_pads_with_zones(pads, 'felt', 140.0, 100.0, settings, polygon=polygon)
@@ -498,7 +502,7 @@ class UserGuideWindow(tk.Toplevel):
                 cv.create_text(x, y, text=f"{size:g}", fill=color, font=("Helvetica", 8))
         cv.create_text(W / 2, H - 6, anchor="s", width=W - 16, justify="center",
                        fill=self.FIGURE_INK, font=("Helvetica", 9),
-                       text=_("A traced scrap: the 9 mm pads in their labeled block, the rest nested round it"))
+                       text=_("A traced scrap: the 9 mm pads in their labeled block, the rest nested as usual"))
 
     def _fig_adhesive_rings(self, cv, W, H):
         """Two adhesive rings: the number in the hole, and under a small ring."""
@@ -701,7 +705,7 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Min. Pad Size for Hole: smaller pads get no center hole."))
         self._bullet(_("Universal uses one set of values for every size. Per Size Range sets "
                     "values for size ranges; a size outside every range uses the universal values."))
-        self._bullet(_("Darts: leather pads under a size get darts so the leather folds flat "
+        self._bullet(_("Darts: leather pads in the size ranges you set get darts so the leather folds flat "
                     "over the back. Shape, frequency, overwrap and sizes are adjustable. "
                     "A size outside every dart range gets no darts."))
         self._bullet(_("\"Show live pad preview\" draws one pad's felt, card and leather with "
@@ -724,7 +728,7 @@ class UserGuideWindow(tk.Toplevel):
                     "on the grid (points are not snapped). Pads nest inside the shape. "
                     "Unload goes back to the rectangle."))
         self._bullet(_("Edge Bias: click an arrow to pack the pads toward that edge or corner, "
-                    "say where a skin has a clean edge. The center dot clears it."))
+                    "say where a skin has a clean edge. The center dot packs from the middle outward."))
         self._bullet(_("\"Preview before saving\" shows the nest and the material used before "
                     "anything is written. Save Files writes; Adjust goes back. One material at a time."))
 
@@ -1242,32 +1246,46 @@ class QuickStartWindow(tk.Toplevel):
     Opened from Help > Quick Start Guide and from the Welcome window's
     link, never by itself. No images, no steps, no scrolling: the window
     is as big as its text. Not modal. Every line is its own translatable
-    string, because the wording is Matt's to change.
+    string, because the wording is Matt's to change. The words are his
+    own since 2026-11-11 (he asked for the text and sent it back
+    rewritten); only the tab's and the button's names were set to match
+    the app.
 
-    show_frame_cut: the Frame & Cut line is only for a build that can
-    drive a laser (main.machine_supported()).
+    show_frame_cut: the direct laser control line is only for a build
+    that can drive a laser (main.machine_supported()), and the line
+    above the ways counts them.
     """
 
     WRAP = 460
 
     @staticmethod
     def lines(show_frame_cut=True):
-        """The page, top to bottom: (kind, text), kind 'h' or 'p'."""
+        """The page, top to bottom: (kind, text), kind 'h' (a heading),
+        'p' (a line) or 'link' (the line that opens the User Guide)."""
         page = [
-            ('h', _("Three ways to cut")),
-            ('p', _("SD card: Generate G-code, save it to the card, run it on the laser.")),
-            ('p', _("LightBurn: Generate SVG, open it in LightBurn, set speed and power for each color.")),
+            ('p', _("Welcome. This is a complex, many-featured program.")),
+            ('link', _("See Help > User Guide for the full rundown.")),
+            ('h', _("Quick start")),
         ]
         if show_frame_cut:
-            page.append(('p', _("Frame & Cut: laser on USB, jog to the corner, frame, cut. "
-                                "Switch it on in File > Feature Set.")))
+            page.append(('p', _("Pad Maker outputs pads ready to cut, per material. Three ways to do it:")))
+        else:
+            page.append(('p', _("Pad Maker outputs pads ready to cut, per material. Two ways to do it:")))
         page += [
-            ('h', _("Before you cut")),
+            ('p', _("SD card: Enter pads, click Generate G-code, save it to the SD card, run it on the laser.")),
+            ('p', _("LightBurn: Enter pads, click Generate SVG, save them, open them in LightBurn, "
+                    "set speed and power for each color, export to SD or direct laser control.")),
+        ]
+        if show_frame_cut:
+            page.append(('p', _("Direct laser control: Sax Shop Companion controls your laser. Enter your "
+                                "pads, click Frame & Cut, frame, cut. Switch it on in File > Feature Set. "
+                                "Can be manual, or set it up to be camera-assisted for a very quick and "
+                                "automated workflow.")))
+        page += [
+            ('h', _("Before you cut!")),
             ('p', _("Speeds and powers are in Options > G-code Settings (Pad Maker) and "
-                    "Options > Settings (Tooling).")),
-            ('p', _("Test on the material you will really cut.")),
-            ('p', _("Die inserts and holders use the Acrylic settings.")),
-            ('p', _("The rest is in Help > User Guide.")),
+                    "Options > Settings (Tooling). Defaults are for a 40 W diode laser.")),
+            ('p', _("Test first. Don't start a fire.")),
         ]
         return page
 
@@ -1286,14 +1304,14 @@ class QuickStartWindow(tk.Toplevel):
         self.line_labels = []
         page = self.lines(show_frame_cut)
         self.guide_link = None
-        for i, (kind, text) in enumerate(page):
+        for kind, text in page:
             if kind == 'h':
                 label = tk.Label(body, text=text, bg=DIALOG_BG, font=("Helvetica", 12, "bold"),
                                  justify="left", anchor="w", wraplength=self.WRAP)
                 label.pack(anchor="w", pady=(10, 2))
-            elif i == len(page) - 1 and on_user_guide is not None:
-                # The last line ("The rest is in Help > User Guide.") opens
-                # the User Guide itself (2026-11-09, the guide upgrade).
+            elif kind == 'link' and on_user_guide is not None:
+                # The line that names the User Guide opens it (2026-11-09,
+                # the guide upgrade; the second line since 2026-11-11).
                 label = tk.Label(body, text=text, bg=DIALOG_BG, fg=self.LINK, cursor="hand2",
                                  font=("Helvetica", 10, "underline"), justify="left", anchor="w",
                                  wraplength=self.WRAP)

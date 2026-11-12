@@ -883,6 +883,130 @@ def test_preview_shows_nothing_extra_when_zones_off():
         f"expected only the sheet rectangle, got {got['kinds']}"
 
 
+# --------------------------------------------------------------------------
+# The groups follow the Edge Bias (2026-11-11)
+# --------------------------------------------------------------------------
+# Until then a traced scrap's groups were always scanned from the top-left
+# and a sheet's band was always along the bottom, whatever the bias, so the
+# labeled groups and the loose pads grew from different places.
+ALL_BIASES = ("center", "n", "ne", "e", "se", "s", "sw", "w", "nw")
+BIAS_PADS = BAND_PADS + [{'size': 24.0, 'qty': 3}]
+
+
+def _biased(bias):
+    s = base_settings()
+    s['edge_bias'] = bias
+    return s
+
+
+def _zones_centre(zones):
+    return (sum(z['x'] + z['w'] / 2 for z in zones) / len(zones),
+            sum(z['y'] + z['h'] / 2 for z in zones) / len(zones))
+
+
+def test_scan_order_starts_where_the_bias_says():
+    box_w, box_h, step = 30.0, 20.0, 2.0
+    args = (10.0, 20.0, 131.0, 101.0, box_w, box_h, step, 70.0, 60.0)
+    first = {b: se._zone_scan_order(b, *args)[0] for b in ALL_BIASES}
+    left, right, top, bottom = 10.0, 131.0 - box_w, 20.0, 101.0 - box_h
+    assert first['nw'] == (left, top) and first['n'] == (left, top) and first['w'] == (left, top), first
+    assert first['ne'] == (right, top) and first['e'] == (right, top), first
+    assert first['sw'] == (left, bottom) and first['s'] == (left, bottom), first
+    assert first['se'] == (right, bottom), first
+    cx, cy = first['center'][0] + box_w / 2, first['center'][1] + box_h / 2
+    assert abs(cx - 70.0) <= step and abs(cy - 60.0) <= step, f"center starts at {first['center']}"
+    # "n" is the scan there always was: rows from the top, left to right.
+    xs = [left + i * step for i in range(int((131.0 - 10.0 - box_w) // step) + 1)]
+    ys = [top + j * step for j in range(int((101.0 - 20.0 - box_h) // step) + 1)]
+    assert se._zone_scan_order('n', *args) == [(x, y) for y in ys for x in xs]
+    # every bias tries the same number of spots, each once, all inside the bounds
+    for b in ALL_BIASES:
+        spots = se._zone_scan_order(b, *args)
+        assert len(spots) == len(xs) * len(ys) and len(set(spots)) == len(spots), b
+        assert all(left - 1e-9 <= x <= right + 1e-9 and top - 1e-9 <= y <= bottom + 1e-9 for x, y in spots), b
+    assert se._zone_scan_order('sw', 0.0, 0.0, 20.0, 20.0, 30.0, 10.0, 2.0, 10.0, 10.0) == [], "a box wider than the bounds"
+    assert se._zone_scan_order('nonsense', *args)[0] == first['center'], "an unknown bias is center"
+
+
+def test_polygon_groups_sit_on_the_bias_side():
+    min_x, min_y, max_x, max_y = se._polygon_bbox(OFFCUT)
+    mid_x, mid_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+    centres = {}
+    for bias in ALL_BIASES:
+        placed, zones, fp, ft = se.nest_with_zones(BIAS_PADS, 'felt', 0, 0, _biased(bias), polygon=OFFCUT)
+        assert fp == ft and len(zones) == 3, f"{bias}: {fp} of {ft} placed, {len(zones)} groups"
+        assert _overlaps(placed) == 0, bias
+        for z in zones:
+            assert se._rect_fits_in_polygon(z['x'], z['y'], z['x'] + z['w'], z['y'] + z['h'], OFFCUT, 0.0), \
+                f"{bias}: the {z['label']} group's border leaves the scrap"
+        centres[bias] = _zones_centre(zones)
+    for bias, (cx, cy) in centres.items():
+        if 'n' in bias:
+            assert cy < mid_y, f"{bias}: the groups' centre is at y={cy:.1f}, below the middle {mid_y:.1f}"
+        if 's' in bias:
+            assert cy > mid_y, f"{bias}: the groups' centre is at y={cy:.1f}, above the middle {mid_y:.1f}"
+        if 'w' in bias:
+            assert cx < mid_x, f"{bias}: the groups' centre is at x={cx:.1f}, right of the middle {mid_x:.1f}"
+        if 'e' in bias and bias != 'center':
+            assert cx > mid_x, f"{bias}: the groups' centre is at x={cx:.1f}, left of the middle {mid_x:.1f}"
+    # center: nearer the outline's centroid than any corner's groups are
+    cen_x = sum(q[0] for q in OFFCUT) / len(OFFCUT)
+    cen_y = sum(q[1] for q in OFFCUT) / len(OFFCUT)
+
+    def off(b):
+        return math.hypot(centres[b][0] - cen_x, centres[b][1] - cen_y)
+    assert all(off('center') < off(b) for b in ('nw', 'ne', 'sw', 'se')), {b: round(off(b), 1) for b in centres}
+
+
+def test_polygon_groups_and_loose_pads_start_on_the_same_side():
+    min_x, min_y, max_x, max_y = se._polygon_bbox(OFFCUT)
+    mid_x, mid_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+    for bias, want_left, want_low in (('sw', True, True), ('ne', False, False), ('se', False, True), ('nw', True, False)):
+        placed, zones, _, _ = se.nest_with_zones(BIAS_PADS, 'felt', 0, 0, _biased(bias), polygon=OFFCUT)
+        loose = [(x, y) for size, x, y, _r in placed if size == 24.0]
+        assert len(loose) == 3, bias
+        lx, ly = sum(x for x, _y in loose) / 3, sum(y for _x, y in loose) / 3
+        zx, zy = _zones_centre(zones)
+        for what, x, y in (("loose pads", lx, ly), ("groups", zx, zy)):
+            assert (x < mid_x) is want_left and (y > mid_y) is want_low, \
+                f"{bias}: the {what} are centred at ({x:.0f}, {y:.0f}); the middle is ({mid_x:.0f}, {mid_y:.0f})"
+
+
+def test_sheet_band_follows_the_bias():
+    edges = {}
+    for bias in ALL_BIASES:
+        placed, zones, fp, ft = se.nest_with_zones(PADS, 'card', W, H, _biased(bias))
+        assert fp == ft and zones, f"{bias}: {fp} of {ft}"
+        assert _overlaps(placed) == 0, bias
+        for _size, x, y, r in placed:
+            assert r - 1e-9 <= x <= W - r + 1e-9 and r - 1e-9 <= y <= H - r + 1e-9, f"{bias}: a disc leaves the sheet"
+        top, bottom = min(z['y'] for z in zones), max(z['y'] + z['h'] for z in zones)
+        zoned = {z['size'] for z in zones}
+        loose = [(y, r) for size, _x, y, r in placed if size not in zoned]
+        assert loose, bias
+        if bias in ('n', 'nw', 'ne'):
+            assert top < H / 4, f"{bias}: the band starts at y={top:.2f}, not at the top"
+            assert all(y - r >= bottom - 1e-9 for y, r in loose), f"{bias}: a loose pad is in the band"
+        else:
+            assert bottom > H * 3 / 4, f"{bias}: the band ends at y={bottom:.2f}, not at the bottom"
+            assert all(y + r <= top + 1e-9 for y, r in loose), f"{bias}: a loose pad is in the band"
+        left, right = min(z['x'] for z in zones), max(z['x'] + z['w'] for z in zones)
+        edges[bias] = (left, right, top, bottom)
+        if bias in ('e', 'ne', 'se'):
+            assert W - right < left, f"{bias}: the band ends at x={right:.2f}, not at the right"
+        else:
+            assert left <= W - right + 1e-9, f"{bias}: the band starts at x={left:.2f}, not at the left"
+        for z in zones:
+            for cx, cy in se.zone_disc_positions(z):
+                assert any(abs(cx - x) < 1e-9 and abs(cy - y) < 1e-9 for _s, x, y, _r in placed), \
+                    f"{bias}: the {z['label']} group's discs are not where its box is"
+    # a mirrored band is the same band: as far from its edge as the bottom-left one is from its own
+    l0, r0, t0, b0 = edges['s']
+    assert abs(edges['n'][2] - (H - b0)) < 1e-6 and abs(edges['n'][3] - (H - t0)) < 1e-6, (edges['n'], edges['s'])
+    assert abs(edges['se'][1] - (W - l0)) < 1e-6 and abs(edges['se'][0] - (W - r0)) < 1e-6, (edges['se'], edges['s'])
+    assert edges['center'] == edges['s'] == edges['w'] == edges['sw'], "center, s, w and sw keep the band there always was"
+
+
 if __name__ == '__main__':
     print("Labeled zones")
     print("=" * 60)

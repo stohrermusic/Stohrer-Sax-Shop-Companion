@@ -1696,14 +1696,63 @@ def _cover_rect_with_circles(x0, y0, x1, y1, target_r=12.0):
     return out
 
 
+def _zone_scan_order(bias, min_x, min_y, max_x, max_y, box_w, box_h, step,
+                     centre_x, centre_y):
+    """Where a group's box is tried in a traced outline, first to last, as
+    (x0, y0) of the box's top-left corner: the Edge Bias decides, so the
+    labeled groups start where the loose pads start.
+
+    Until 2026-11-11 the scan was always rows from the top, left to right,
+    whatever the bias, so with "sw" the groups sat top-left and the pads
+    bottom-left, and with the default "center" the pads clustered in the
+    middle away from a group in the corner (Matt, on the User Guide's
+    figure: "it looks like the zone got nested with a top left bias and
+    the other pads nested with another type of bias").
+
+    - "n" is that old scan exactly; "s" is rows from the bottom; "w" and
+      "e" are columns from that side.
+    - A corner is nearest-to-the-corner first, the grid anchored on the
+      corner so a box can sit flush in it.
+    - "center" (and anything unknown) is the box's centre nearest the
+      outline's centroid first, the centroid the pad nester uses.
+
+    Ties keep the row order from the bias side, so the result is the same
+    on every run.
+    """
+    nx = int(math.floor((max_x - min_x - box_w + 1e-9) / step)) + 1
+    ny = int(math.floor((max_y - min_y - box_h + 1e-9) / step)) + 1
+    if nx < 1 or ny < 1:
+        return []
+    if bias in ("e", "ne", "se"):
+        xs = [max_x - box_w - i * step for i in range(nx)]
+    else:
+        xs = [min_x + i * step for i in range(nx)]
+    if bias in ("s", "se", "sw"):
+        ys = [max_y - box_h - j * step for j in range(ny)]
+    else:
+        ys = [min_y + j * step for j in range(ny)]
+    if bias in ("w", "e"):
+        return [(x, y) for x in xs for y in ys]
+    spots = [(x, y) for y in ys for x in xs]
+    if bias in ("n", "s"):
+        return spots
+    if bias in ("nw", "ne", "sw", "se"):
+        corner_x, corner_y = xs[0], ys[0]
+        spots.sort(key=lambda q: (q[0] - corner_x) ** 2 + (q[1] - corner_y) ** 2)
+    else:
+        half_w, half_h = box_w / 2, box_h / 2
+        spots.sort(key=lambda q: (q[0] + half_w - centre_x) ** 2 + (q[1] + half_h - centre_y) ** 2)
+    return spots
+
+
 def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
     """Nest labeled GROUPS into a traced outline.
 
     Each zoned size becomes one group: a compact grid of its pads with a
     rectangle drawn round it and the size engraved on it. The groups are
-    then nested into the scrap as units — first-fit, scanning top-left to
-    bottom-right — so they tuck in wherever they fit rather than each
-    claiming a full-width horizontal band.
+    then nested into the scrap as units — first-fit, scanning from the
+    Edge Bias side (_zone_scan_order) — so they tuck in wherever they fit
+    rather than each claiming a full-width horizontal band.
 
     This replaced a one-band-per-size layout that stacked full-width
     strips down the scrap. Stacking was ruinous once the pads were
@@ -1734,6 +1783,10 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
     clearance = spacing_mm + edge_margin
     min_x, min_y, max_x, max_y = _polygon_bbox(polygon)
     step = ZONE_GRID_SEARCH_STEP_MM
+    bias = nest_edge_bias(material, settings)
+    # The centroid the pad nester biases "center" toward (_nest_discs_polygon).
+    centre_x = sum(pt[0] for pt in polygon) / len(polygon)
+    centre_y = sum(pt[1] for pt in polygon) / len(polygon)
 
     # Biggest first: the roomy parts of a scrap get claimed before the
     # small groups fill in around them.
@@ -1757,35 +1810,29 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
             if box_w > (max_x - min_x) or box_h > (max_y - min_y):
                 continue
 
-            y0 = min_y
-            while y0 + box_h <= max_y + 1e-9 and spot is None:
-                x0 = min_x
-                while x0 + box_w <= max_x + 1e-9:
-                    # Cheap rejections first: the disc test is the
-                    # expensive one and rarely needs to run.
-                    if any(not (x0 + box_w + group_gap <= t[0]
-                                or t[2] + group_gap <= x0
-                                or y0 + box_h + group_gap <= t[1]
-                                or t[3] + group_gap <= y0)
-                           for t in taken):
-                        x0 += step
-                        continue
-                    if not _rect_fits_in_polygon(x0, y0, x0 + box_w,
-                                                 y0 + box_h, polygon,
-                                                 spacing_mm):
-                        x0 += step
-                        continue
-                    gx = x0 + (box_w - grid_w) / 2
-                    gy = y0 + label_h
-                    pts = _grid_positions(cols, rows, qty, disc_d, gutter,
-                                          gx, gy)
-                    if all(_circle_fits_in_polygon(px, py, disc_d / 2,
-                                                   polygon, clearance)
-                           for px, py in pts):
-                        spot = (pts, cols, rows, x0, y0, box_w, box_h)
-                        break
-                    x0 += step
-                y0 += step
+            for x0, y0 in _zone_scan_order(bias, min_x, min_y, max_x, max_y,
+                                           box_w, box_h, step, centre_x, centre_y):
+                # Cheap rejections first: the disc test is the
+                # expensive one and rarely needs to run.
+                if any(not (x0 + box_w + group_gap <= t[0]
+                            or t[2] + group_gap <= x0
+                            or y0 + box_h + group_gap <= t[1]
+                            or t[3] + group_gap <= y0)
+                       for t in taken):
+                    continue
+                if not _rect_fits_in_polygon(x0, y0, x0 + box_w,
+                                             y0 + box_h, polygon,
+                                             spacing_mm):
+                    continue
+                gx = x0 + (box_w - grid_w) / 2
+                gy = y0 + label_h
+                pts = _grid_positions(cols, rows, qty, disc_d, gutter,
+                                      gx, gy)
+                if all(_circle_fits_in_polygon(px, py, disc_d / 2,
+                                               polygon, clearance)
+                       for px, py in pts):
+                    spot = (pts, cols, rows, x0, y0, box_w, box_h)
+                    break
             if spot is not None:
                 break
 
@@ -1843,9 +1890,11 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
 
     Two layouts, chosen by sheet shape:
       - rectangular sheet: grid blocks shelf-packed into a band along the
-        bottom, which keeps the leftover region a plain rectangle.
+        bottom, or along the top for a north Edge Bias (n, nw, ne), filled
+        from the left, or from the right for an east one (e, ne, se). A
+        band keeps the leftover region a plain rectangle.
       - traced polygon: grid blocks first-fit into the outline as units,
-        tucking in wherever they land.
+        scanning from the Edge Bias side (_zone_scan_order).
 
     Both emit identical shape='rect' zone dicts and take their box
     geometry from _group_metrics, so the same job draws the same boxes
@@ -1896,6 +1945,18 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     # can_all_pads_fit() surface the shortfall instead.
     dropped_qty = sum(spec['qty'] for spec in dropped)
 
+    # The band follows the Edge Bias (2026-11-11): _shelf_pack_zones builds
+    # it along the bottom from the left; a north bias mirrors it to the top
+    # and an east bias to the right, so the groups sit on the side the
+    # loose pads start from. "center", "w" and "s" keep the layout it
+    # always had.
+    bias = nest_edge_bias(material, settings)
+    band_on_top = bias in ("n", "nw", "ne")
+    if band_on_top:
+        zones = [dict(z, y=height_mm - z['y'] - z['h']) for z in zones]
+    if bias in ("e", "ne", "se"):
+        zones = [dict(z, x=width_mm - z['x'] - z['w']) for z in zones]
+
     placed = []
     zoned_total = 0
     for zone in zones:
@@ -1904,12 +1965,15 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
             placed.append((zone['size'], cx, cy, r))
         zoned_total += zone['qty']
 
-    # Free pads nest in the rectangle above the band. No translation is
-    # needed because the band sits at the bottom.
+    # Free pads nest in the rectangle the band leaves: as it stands with
+    # the band at the bottom, moved down by the band's height with the
+    # band on top. The nester only ever sees the smaller rectangle.
     free_h = height_mm - band_h
     if free_pads and free_h > 0:
         free_placed, fp, ft = _nest_discs(free_pads, material, width_mm,
                                           free_h, settings, spacing_mm)
+        if band_on_top:
+            free_placed = [(sz, cx, cy + band_h, r) for sz, cx, cy, r in free_placed]
         placed.extend(free_placed)
     else:
         # No room above the band (it can consume the sheet exactly).

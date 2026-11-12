@@ -94,6 +94,7 @@ Opt-in (Sizing Rules > Lesser-used settings): pads in a size range (default 7.0 
 - `placed` keeps its `(pad_size, cx, cy, r)` shape; zones travel as a separate list of `shape: 'rect'` dicts. A new zone shape goes into all three renderers (SVG, G-code, preview) together, with a parity test.
 - Nothing touches the parity-pinned scan functions. Zones work by giving the nester a smaller region or `preplaced` seeds, never obstacles.
 - A zoned size is never cut without its group, on either path; `max` on a zoned size is refused; zones stand down in scrap mode and for `ZONE_FREE_MATERIALS`.
+- The groups follow the Edge Bias (2026-11-11): on a traced shape the first-fit scan starts from the bias side (`_zone_scan_order`; "n" is the old top-left scan, "center" starts at the centroid); on a sheet the band is along the top for n / nw / ne, else the bottom, and filled from the right for e / ne / se, else the left (mirrored in `nest_with_zones`; the nester still only sees the smaller rectangle).
 - `zone_grid_candidates` and `_group_metrics` are the single source for both sheet types. Borders and labels are engraved, never cut, before any disc.
 - On a camera-captured scrap, groups are placed against the inset `custom_polygon`, not the outline. Do not switch it.
 - When `SIZING_PRESET_KEYS` grows, backfill with `config.normalize_sizing_preset()`.

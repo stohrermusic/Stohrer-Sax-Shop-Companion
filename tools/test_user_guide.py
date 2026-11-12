@@ -427,16 +427,16 @@ def gui():
     check("Help > User Guide opens the whole guide at the current tab's section; the Welcome link at the top "
           "with the cursor in the search box", help_opens_at_the_current_tab)
 
-    def the_quick_start_guides_last_line_opens_the_guide():
+    def the_quick_start_guides_link_opens_the_guide():
         win = app.open_quick_start()
         try:
             root.update()
-            assert win.guide_link is not None, "the last line is not a link"
-            assert str(win.guide_link.cget("text")) == "The rest is in Help > User Guide."
-            assert win.guide_link is win.line_labels[-1]
+            assert win.guide_link is not None, "no line is a link"
+            assert str(win.guide_link.cget("text")) == "See Help > User Guide for the full rundown."
+            assert win.guide_link is win.line_labels[1]
             assert str(win.guide_link.cget("cursor")) == "hand2"
             del opened[:]
-            assert win.guide_link.bind("<Button-1>"), "the last line is not bound to a click"
+            assert win.guide_link.bind("<Button-1>"), "the link is not bound to a click"
             win._open_user_guide()              # what the click does
             root.update()
             assert len(opened) == 1 and opened[0].opened_at is None, "the link did not open the whole guide"
@@ -448,7 +448,7 @@ def gui():
         finally:
             win.destroy()
             del opened[:]
-    check("the Quick Start Guide's last line opens the User Guide", the_quick_start_guides_last_line_opens_the_guide)
+    check("the Quick Start Guide's User Guide line opens the User Guide", the_quick_start_guides_link_opens_the_guide)
 
     def the_tour_stop_opens_at_the_pad_maker():
         src = inspect.getsource(main_mod.run_tour)

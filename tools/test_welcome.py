@@ -270,19 +270,26 @@ def gui():
         full = [t for _k, t in ui_dialogs.QuickStartWindow.lines(True)]
         short = [t for _k, t in ui_dialogs.QuickStartWindow.lines(False)]
         assert full == [
-            "Three ways to cut",
-            "SD card: Generate G-code, save it to the card, run it on the laser.",
-            "LightBurn: Generate SVG, open it in LightBurn, set speed and power for each color.",
-            "Frame & Cut: laser on USB, jog to the corner, frame, cut. Switch it on in File > Feature Set.",
-            "Before you cut",
-            "Speeds and powers are in Options > G-code Settings (Pad Maker) and Options > Settings (Tooling).",
-            "Test on the material you will really cut.",
-            "Die inserts and holders use the Acrylic settings.",
-            "The rest is in Help > User Guide.",
+            "Welcome. This is a complex, many-featured program.",
+            "See Help > User Guide for the full rundown.",
+            "Quick start",
+            "Pad Maker outputs pads ready to cut, per material. Three ways to do it:",
+            "SD card: Enter pads, click Generate G-code, save it to the SD card, run it on the laser.",
+            "LightBurn: Enter pads, click Generate SVG, save them, open them in LightBurn, "
+            "set speed and power for each color, export to SD or direct laser control.",
+            "Direct laser control: Sax Shop Companion controls your laser. Enter your pads, click Frame & Cut, "
+            "frame, cut. Switch it on in File > Feature Set. Can be manual, or set it up to be camera-assisted "
+            "for a very quick and automated workflow.",
+            "Before you cut!",
+            "Speeds and powers are in Options > G-code Settings (Pad Maker) and Options > Settings (Tooling). "
+            "Defaults are for a 40 W diode laser.",
+            "Test first. Don't start a fire.",
         ], full
-        assert short == [t for t in full if not t.startswith("Frame & Cut")], \
-            "a build that cannot drive a laser does not get the Frame & Cut line"
-        assert [k for k, _t in ui_dialogs.QuickStartWindow.lines(True)].count("h") == 2
+        assert short == [t.replace("Three ways", "Two ways") for t in full
+                         if not t.startswith("Direct laser control")], \
+            "a build that cannot drive a laser gets two ways and no direct laser control line"
+        kinds = [k for k, _t in ui_dialogs.QuickStartWindow.lines(True)]
+        assert kinds.count("h") == 2 and kinds.count("link") == 1 and kinds[1] == "link", kinds
         win = ui_dialogs.QuickStartWindow(root, show_frame_cut=False)
         try:
             assert [str(lab.cget("text")) for lab in win.line_labels] == short
@@ -304,12 +311,12 @@ def gui():
             for supported in (True, False):
                 main_mod.machine_supported = lambda s=supported: s
                 q = app.open_quick_start()
-                has = any(str(lab.cget("text")).startswith("Frame & Cut") for lab in q.line_labels)
+                has = any(str(lab.cget("text")).startswith("Direct laser control") for lab in q.line_labels)
                 q.destroy()
                 assert has is supported
         finally:
             main_mod.machine_supported = keep
-    check("Quick Start Guide: its nine lines (eight without Frame & Cut on a build that cannot drive a laser), no scrolling",
+    check("Quick Start Guide: its ten lines (nine, and two ways, on a build that cannot drive a laser), no scrolling",
           the_quick_start_guide)
 
     def help_menu_on_every_tab():
@@ -412,7 +419,7 @@ def gui():
         assert w <= r["screen"][0] and h <= r["screen"][1]
         assert r["widest_line"] <= r["wrap"] + 120, "a welcome line is far wider than its wrap width"
         qw, qh = r["quick"]
-        assert r["quick_lines"] == 9 and qw <= 560 and qh <= 620, f"the German Quick Start Guide is {qw} x {qh}"
+        assert r["quick_lines"] == 10 and qw <= 560 and qh <= 620, f"the German Quick Start Guide is {qw} x {qh}"
         assert qh <= r["screen"][1] - 80, "the German Quick Start Guide would need scrolling on this screen"
     check("in German both windows fit: the Welcome window stays small and the guide needs no scrolling",
           both_windows_fit_in_german)
