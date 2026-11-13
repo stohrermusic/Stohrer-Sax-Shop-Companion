@@ -88,7 +88,7 @@ SAX selector sets both the break frequency and the displayed note names. Written
 
 ## Coverage Summary
 
-Dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers.
+Dialog appears after stopping a capture session, showing a bar chart of note distribution colored by register (low/mid/high), gap assessment, and a "Resume Capturing" button to fill underrepresented registers. The registers are the horn's own written ones (`toner_tab.coverage_band`, over `intonation.written_band`: low to written C#5, the octave key's from D5, the palm keys' from D6), by the session's horn type; never fixed concert pitches (2026-11-13: a baritone never had a high note). **The IN TUNE lamp** needs the eased needle and the frame's own reading both inside `IN_TUNE_CENTS_THRESHOLD`; the needle alone lit it on the first frame of a sharp note. Gated in `test_toner_live`.
 
 ## Fingerprinting
 

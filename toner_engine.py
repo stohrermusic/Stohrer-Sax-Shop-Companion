@@ -2189,8 +2189,8 @@ def load_tone_presets(filepath):
     """
     if os.path.exists(filepath):
         try:
-            with open(filepath, 'r') as f:
-                data = json.load(f)
+            from config import read_json
+            data = read_json(filepath)
             if not isinstance(data, dict):
                 return {DEFAULT_LIBRARY: {}}
 

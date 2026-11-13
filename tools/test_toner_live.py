@@ -633,6 +633,50 @@ def main():
     check("a free run on Bass carries one line on the progress label (from the first frame, in front of the "
           "counts); Tenor and guided mode carry none", bass_free_run_carries_the_note)
 
+    def the_summarys_registers_are_the_horns_own():
+        """2026-11-13: the capture summary's low / mid / high were fixed concert pitches (below C3,
+        C3 to B4, C5 up), so a baritone never had a high note and a soprano never a low one, and
+        each run's summary said so. They are the horn's written registers: low to written C#5, the
+        octave key's from D5, the palm keys' from D6 (intonation.written_band)."""
+        band = toner_tab.coverage_band
+        for horn, shift in (("Soprano", 2), ("Alto", 9), ("Tenor", 14), ("Baritone", 21), ("Bass", 26)):
+            def concert(written_midi):
+                m = written_midi - shift
+                return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][m % 12] + str(m // 12 - 1)
+            got = [band(concert(w), horn) for w in (58, 73, 74, 85, 86, 89)]      # Bb3 C#5 D5 C#6 D6 F6, written
+            assert got == ["low", "low", "mid", "mid", "high", "high"], (horn, got)
+        # a horn type nobody transposes (a sandbox preset): the note as it sounds
+        assert band("A#3", "Kazoo") == "low" and band("D6", None) == "high"
+        assert band("", "Alto") == "low" and band("??", "Alto") == "low"          # unreadable: never a crash
+    check("the capture summary's registers are the horn's written ones: a baritone's palm keys are high, "
+          "a soprano's low Bb is low", the_summarys_registers_are_the_horns_own)
+
+    def the_lamp_needs_the_frames_own_reading():
+        """2026-11-13: IN TUNE read the eased needle alone, which starts each note at the middle:
+        a note 22 cents sharp lit it on its first frame."""
+        cv, lamp = app._toner_intune_canvas, app._toner_intune_lamp
+        lit = lambda: cv.itemcget(lamp, "fill").upper() == "#00CC00"
+        app._toner_smooth_cents = 0.0
+        app._toner_update_intonation(22.0)
+        assert abs(app._toner_smooth_cents) < toner_tab.IN_TUNE_CENTS_THRESHOLD, app._toner_smooth_cents
+        assert not lit(), "IN TUNE lit on the first frame of a note 22 cents sharp"
+        # from sharp to flat the needle passes the middle: no flash on the way
+        app._toner_smooth_cents = 20.0
+        seen = []
+        for _i in range(12):
+            app._toner_update_intonation(-20.0)
+            seen.append(lit())
+        assert not any(seen), "IN TUNE flashed while the needle crossed from sharp to flat"
+        # a note that is in tune still lights it, once the needle is there
+        app._toner_smooth_cents = 20.0
+        for _i in range(40):
+            app._toner_update_intonation(1.0)
+        assert lit(), "IN TUNE stays dark on a note 1 cent sharp"
+        app._toner_smooth_cents = 0.0
+        app._toner_update_intonation(0.0)
+    check("IN TUNE needs the frame's own reading inside the threshold, not the eased needle alone",
+          the_lamp_needs_the_frames_own_reading)
+
     check("no-mic: 'Audio error' stays on the spectrum canvas after a rebuild", no_mic_error_survives_rebuild)
     root.destroy()
 

@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 import json
 
 from config import (
+    read_json,
     ALL_KEY_HEIGHT_FIELDS, SCREW_SPECS_FILE, KEY_PRESET_FILE,
     save_presets, DEFAULT_SETTINGS, get_ssl_context
 )
@@ -459,8 +460,7 @@ class LibraryFeaturesMixin:
         if not filepath:
             return
         try:
-            with open(filepath, 'r') as f:
-                imported_presets = json.load(f)
+            imported_presets = read_json(filepath)
             if not isinstance(imported_presets, dict):
                 raise TypeError("File is not a valid key height set file.")
             
@@ -900,8 +900,7 @@ class LibraryFeaturesMixin:
             return
             
         try:
-            with open(filepath, 'r') as f:
-                imported_data = json.load(f)
+            imported_data = read_json(filepath)
             
             if not isinstance(imported_data, dict):
                 raise TypeError("Invalid JSON structure")

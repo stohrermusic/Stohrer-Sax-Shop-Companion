@@ -814,6 +814,52 @@ def test_rescan_input_devices():
 # TESTS: Edge cases for settings merge
 # ============================================================================
 
+def test_json_files_read_as_utf8():
+    """A JSON file written as UTF-8 by another program, or by hand, keeps its accented and
+    non-Latin names (2026-11-13: read in the Windows system encoding, a key height set named
+    in French came in garbled). A file in the system encoding still reads, as it always did."""
+    import locale
+    names = ["Selmer S\u00e9rie II", "\u30e4\u30ca\u30ae\u30b5\u30ef T-902", "Plain"]
+    data = {"My Presets": {n: {"heights": {"B": "8.0"}} for n in names}}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "key_height_library.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        got = config.load_presets(path, "Key Height Set")
+        assert sorted(got["My Presets"]) == sorted(names), [ascii(n) for n in got["My Presets"]]
+        assert config.read_json(path) == data
+        # with a byte order mark, as Notepad saves "UTF-8 with BOM"
+        with open(path, "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, ensure_ascii=False)
+        assert config.read_json(path) == data, "a file with a byte order mark did not read"
+        # this app's own files are plain ASCII and read the same
+        with open(path, "w") as f:
+            json.dump(data, f)
+        assert config.read_json(path) == data
+        # a file in the system's own encoding that is not UTF-8 reads as it did before
+        system = locale.getpreferredencoding(False)
+        try:
+            raw = '{"S\u00e9rie": 1}'.encode(system)
+            raw.decode("utf-8")
+            not_utf8 = False
+        except UnicodeError:
+            not_utf8 = True
+        if not_utf8:
+            with open(path, "wb") as f:
+                f.write(raw)
+            assert config.read_json(path) == {"S\u00e9rie": 1}, "a file in the system encoding no longer reads"
+        # settings: a UTF-8 path with an accent survives the load
+        spath = os.path.join(tmpdir, "app_settings.json")
+        with open(spath, "w", encoding="utf-8") as f:
+            json.dump({"last_output_dir": "C:/p\u00e9dales"}, f, ensure_ascii=False)
+        orig = config.SETTINGS_FILE
+        config.SETTINGS_FILE = spath
+        try:
+            assert config.load_settings()["last_output_dir"] == "C:/p\u00e9dales"
+        finally:
+            config.SETTINGS_FILE = orig
+
+
 def test_deeply_nested_engraving_location_merge():
     """engraving_location (dict of dicts) merges correctly."""
     tmpdir = tempfile.mkdtemp()
@@ -940,6 +986,7 @@ def main():
             ("Presets round-trip", test_presets_roundtrip),
             ("Presets missing file", test_presets_missing_file),
             ("Presets corrupt JSON", test_presets_corrupt_json),
+            ("JSON files read as UTF-8 first, the system encoding after", test_json_files_read_as_utf8),
         ]),
         ("get_input_devices", [
             ("Filters Bluetooth and sound mapper", test_input_devices_filters_bluetooth),

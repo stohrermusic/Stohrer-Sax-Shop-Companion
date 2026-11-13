@@ -11,6 +11,7 @@ import math
 
 # --- Local Imports ---
 from config import (
+    read_json,
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
@@ -2881,8 +2882,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if not filepath:
             return
         try:
-            with open(filepath, 'r') as f:
-                imported_presets = json.load(f)
+            imported_presets = read_json(filepath)
             if not isinstance(imported_presets, dict):
                 raise TypeError("File is not a valid preset dictionary.")
 

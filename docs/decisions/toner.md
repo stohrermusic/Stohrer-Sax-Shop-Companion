@@ -289,3 +289,13 @@ Matt, with a picture of the Export Tone Presets window running off the bottom of
 The list is in a scrolled canvas, as tall as its rows up to 55 % of the screen, so the Export button is always on it. Each library has a tick of its own above its presets: it takes or clears all of them, and it shows ticked only while all of them are. All and None act on both. The rows keep their text ("[library] name (N captures)"), so there is no new string. The file was already `{library: {preset: data}}` and Import already merged each preset into the library of that name (a preset there already gains only the sessions it lacks): that is the "carries its library name", and it is now pinned.
 
 Gate: `test_analyzer_tab`, "Export presets": sixty-five presets in three libraries scroll and fit the screen; a library's tick and a preset's tick through the widgets' own commands; everything, one whole library by its tick, and two single items from two libraries each written and imported back under their own library; a second import of the same file changes nothing.
+
+## The capture summary's registers and the IN TUNE lamp (2026-11-13)
+
+Two faults found by reading what a sibling program, which took this tab's code, had since fixed. Matt: "fix all three" (the third is in `settings.md`).
+
+*The registers.* The summary's low / mid / high were fixed concert pitches: below C3, C3 to B4, C5 and up (the code's comments said C4 and C6; `_note_sort_key` is MIDI). A baritone's whole range is under concert A4, so it never had a high note and every baritone or bass run's summary said "No high register notes captured"; an alto's and a soprano's lowest notes are above C3, so theirs said there were no low ones. They are the horn's written registers now, `toner_tab.coverage_band` over `intonation.written_band`, the bands the chart's data already had: low to written C#5, the octave key's notes from D5 (shown as mid), the palm keys' from D6 (shown as high). The horn type is the session's, else the preset's, else the selector's; a type with no transposition is read as it sounds. The colours, the legend and the three sentences are unchanged.
+
+*The lamp.* IN TUNE lit while the eased needle was within 4 cents of the middle. The needle moves 18 % of the way each frame, rests at the middle in silence and passes it between a sharp note and a flat one, so the lamp lit on the first frame of a note 22 cents sharp (0.18 x 22 = 3.96) and for two frames of one 10 cents sharp. It needs the frame's own reading inside the threshold as well. Not changed: in silence the needle is fed zero, so the lamp is lit and the readout says 0 with nothing playing, as it always has; Matt has been told.
+
+Gates: `test_toner_live`, two checks, each failing on the old code.

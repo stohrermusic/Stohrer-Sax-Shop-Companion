@@ -131,6 +131,19 @@ def _note_sort_key(note_name):
         return 0
 
 
+def coverage_band(concert_note, sax_type):
+    """'low', 'mid' or 'high': the register of a captured note on this horn, for the capture
+    summary. The horn's own written registers (intonation.written_band: low to written C#5, the
+    octave key's notes from D5, the palm keys' from D6), not fixed concert pitches: until
+    2026-11-13 the bands were concert C3 and C5, so a baritone never had a high note, a soprano
+    never a low one, and each run's summary said so. A horn type with no transposition (a
+    sandbox preset) is read as it sounds; a note nobody can read counts as low and never raises."""
+    import intonation
+    from toner_engine import SAX_TRANSPOSITIONS
+    midi = _note_sort_key(concert_note) + SAX_TRANSPOSITIONS.get(sax_type, 0)
+    return {"low": "low", "octave_key": "mid", "palm_keys": "high"}[intonation.written_band(midi)]
+
+
 def _format_preset_info(p, key_presets=None):
     """Format a preset dict into a readable info string. With the Key Heights library
     given, a link whose entry is not in it is said to be missing."""
@@ -870,7 +883,11 @@ class TonerTabMixin:
                   gauge['cx'], gauge['cy'], nx, ny)
 
         # Update cents readout + in-tune lamp
-        in_tune = abs(self._toner_smooth_cents) < IN_TUNE_CENTS_THRESHOLD
+        # Both the needle and this frame's own reading: the needle is eased, starts each note
+        # at the middle and passes it between a sharp note and a flat one, so by itself it lit
+        # the lamp on the first frame of a note 22 cents sharp (2026-11-13).
+        in_tune = (abs(self._toner_smooth_cents) < IN_TUNE_CENTS_THRESHOLD
+                   and abs(cents) < IN_TUNE_CENTS_THRESHOLD)
         if hasattr(self, '_toner_intune_lamp'):
             if in_tune:
                 self._toner_intune_canvas.itemconfigure(
@@ -3854,6 +3871,9 @@ class TonerTabMixin:
         if self._toner_active_library and self._toner_active_preset:
             lib = self._toner_presets.get(self._toner_active_library, {})
             _cov_preset = lib.get(self._toner_active_preset)
+        # the horn the run was played on: the session's own, else the preset's, else the selector's
+        _cov_horn = (session.get('horn_type') or (_cov_preset or {}).get('horn_type')
+                     or self._toner_sax_var.get())
 
         dlg = tk.Toplevel(self.root)
         dlg.title(_("Capture Summary"))
@@ -3914,14 +3934,8 @@ class TonerTabMixin:
                 x = start_x + i * (bar_w + 2)
                 bar_h = (count / max(1, max_count)) * ch
 
-                # Register coloring
-                key = _note_sort_key(note)
-                if key < 48:    # Below C4
-                    color = "#4477CC"
-                elif key < 72:  # C4 to B5
-                    color = "#44AA44"
-                else:           # C6+
-                    color = "#CC7744"
+                # Register coloring: the horn's own registers (coverage_band)
+                color = {"low": "#4477CC", "mid": "#44AA44", "high": "#CC7744"}[coverage_band(note, _cov_horn)]
 
                 chart_cv.create_rectangle(
                     x, margin_t + ch - bar_h,
@@ -3950,9 +3964,8 @@ class TonerTabMixin:
 
         # Coverage assessment
         assessment = []
-        low_count = sum(1 for n in note_counts if _note_sort_key(n) < 48)
-        mid_count = sum(1 for n in note_counts if 48 <= _note_sort_key(n) < 72)
-        high_count = sum(1 for n in note_counts if _note_sort_key(n) >= 72)
+        bands = [coverage_band(n, _cov_horn) for n in note_counts]
+        low_count, mid_count, high_count = bands.count("low"), bands.count("mid"), bands.count("high")
 
         if low_count == 0:
             assessment.append("No low register notes captured")
@@ -6960,7 +6973,6 @@ class TonerTabMixin:
     def _toner_import_presets(self):
         """Import tone profiles from a JSON file, merging into existing libraries."""
         from tkinter import filedialog
-        import json
 
         filepath = filedialog.askopenfilename(
             title=_("Import Tone Presets"),
@@ -6970,8 +6982,8 @@ class TonerTabMixin:
             return
 
         try:
-            with open(filepath, 'r') as f:
-                imported = json.load(f)
+            from config import read_json
+            imported = read_json(filepath)
         except Exception as e:
             messagebox.showerror(_("Import Error"), _("Could not read file:\n{e}").format(e=e))
             return

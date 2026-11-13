@@ -1384,87 +1384,107 @@ DEFAULT_SETTINGS = {
 # IO FUNCTIONS
 # ==========================================
 
+def read_json(path):
+    """The JSON in a file: read as UTF-8 (with or without a byte order mark),
+    and when it is not UTF-8, in the system's encoding, as every file was read
+    until 2026-11-13.
+
+    This app writes its JSON as plain ASCII, which reads the same either way.
+    A file another program wrote, or a person edited and saved, is usually
+    UTF-8; read in the Windows system encoding, a name with an accent came in
+    garbled ("S\u00e9rie" as "S\u00c3\u00a9rie") and a Japanese one as noise. Every JSON
+    file the app loads or imports goes through here. Raises what open() and
+    json.load() raise."""
+    with open(path, 'rb') as f:
+        raw = f.read()
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        import locale
+        text = raw.decode(locale.getpreferredencoding(False))
+    return json.loads(text)
+
+
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
         try:
-            with open(SETTINGS_FILE, 'r') as f:
-                loaded_settings = json.load(f)
-                settings = copy.deepcopy(DEFAULT_SETTINGS)
+            loaded_settings = read_json(SETTINGS_FILE)
+            settings = copy.deepcopy(DEFAULT_SETTINGS)
 
-                # Deep copy key_layout to avoid shared references
-                if "key_layout" not in loaded_settings:
-                    loaded_settings["key_layout"] = settings["key_layout"].copy()
+            # Deep copy key_layout to avoid shared references
+            if "key_layout" not in loaded_settings:
+                loaded_settings["key_layout"] = settings["key_layout"].copy()
 
-                # Merge loaded settings into default structure
-                for key, default_value in DEFAULT_SETTINGS.items():
-                    if key in loaded_settings:
-                        if isinstance(default_value, dict):
-                            # Only merge if loaded value is also a dict; otherwise keep default
-                            if not isinstance(loaded_settings[key], dict):
-                                continue
-                            settings[key] = {}
-                            for sub_key, sub_default in default_value.items():
-                                if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
-                                    # Two-level deep merge (e.g. gcode_settings.felt).
-                                    # Filter nulls so old configs can't smuggle None
-                                    # past the defaults (same rule as top level).
-                                    settings[key][sub_key] = sub_default.copy()
-                                    settings[key][sub_key].update(
-                                        {k: v for k, v in loaded_settings[key][sub_key].items() if v is not None})
-                                elif sub_key in loaded_settings[key] and loaded_settings[key][sub_key] is not None:
-                                    settings[key][sub_key] = loaded_settings[key][sub_key]
-                                else:
-                                    settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
-                        else:
-                            # Don't replace defaults with None — old configs may have nulls
-                            if loaded_settings[key] is not None:
-                                settings[key] = loaded_settings[key]
+            # Merge loaded settings into default structure
+            for key, default_value in DEFAULT_SETTINGS.items():
+                if key in loaded_settings:
+                    if isinstance(default_value, dict):
+                        # Only merge if loaded value is also a dict; otherwise keep default
+                        if not isinstance(loaded_settings[key], dict):
+                            continue
+                        settings[key] = {}
+                        for sub_key, sub_default in default_value.items():
+                            if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
+                                # Two-level deep merge (e.g. gcode_settings.felt).
+                                # Filter nulls so old configs can't smuggle None
+                                # past the defaults (same rule as top level).
+                                settings[key][sub_key] = sub_default.copy()
+                                settings[key][sub_key].update(
+                                    {k: v for k, v in loaded_settings[key][sub_key].items() if v is not None})
+                            elif sub_key in loaded_settings[key] and loaded_settings[key][sub_key] is not None:
+                                settings[key][sub_key] = loaded_settings[key][sub_key]
+                            else:
+                                settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
+                    else:
+                        # Don't replace defaults with None — old configs may have nulls
+                        if loaded_settings[key] is not None:
+                            settings[key] = loaded_settings[key]
 
-                # Validate layer_colors: old versions used LightBurn codes (C10, C15)
-                # instead of hex colors. Replace any non-hex values with defaults.
-                if "layer_colors" in settings and isinstance(settings["layer_colors"], dict):
-                    default_colors = DEFAULT_SETTINGS["layer_colors"]
-                    for key, val in settings["layer_colors"].items():
-                        if not isinstance(val, str) or not val.startswith("#"):
-                            settings["layer_colors"][key] = default_colors.get(key, "#000000")
+            # Validate layer_colors: old versions used LightBurn codes (C10, C15)
+            # instead of hex colors. Replace any non-hex values with defaults.
+            if "layer_colors" in settings and isinstance(settings["layer_colors"], dict):
+                default_colors = DEFAULT_SETTINGS["layer_colors"]
+                for key, val in settings["layer_colors"].items():
+                    if not isinstance(val, str) or not val.startswith("#"):
+                        settings["layer_colors"][key] = default_colors.get(key, "#000000")
 
-                # Migrate dart_shape_factor from the old sine→square spectrum
-                # (0.0=sine, 1.0=square) to the new triangle→sine→square one
-                # (0.0=triangle, 0.5=sine, 1.0=square). Old value v maps to
-                # 0.5 + 0.5*v. Run once, gated on dart_shape_v2.
-                if not loaded_settings.get("dart_shape_v2"):
-                    if "dart_shape_factor" in loaded_settings:
+            # Migrate dart_shape_factor from the old sine→square spectrum
+            # (0.0=sine, 1.0=square) to the new triangle→sine→square one
+            # (0.0=triangle, 0.5=sine, 1.0=square). Old value v maps to
+            # 0.5 + 0.5*v. Run once, gated on dart_shape_v2.
+            if not loaded_settings.get("dart_shape_v2"):
+                if "dart_shape_factor" in loaded_settings:
+                    try:
+                        old_v = float(loaded_settings["dart_shape_factor"])
+                        settings["dart_shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
+                    except (TypeError, ValueError):
+                        pass
+                for r in settings.get("dart_ranges", []):
+                    if "shape_factor" in r:
                         try:
-                            old_v = float(loaded_settings["dart_shape_factor"])
-                            settings["dart_shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
+                            old_v = float(r["shape_factor"])
+                            r["shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
                         except (TypeError, ValueError):
                             pass
-                    for r in settings.get("dart_ranges", []):
-                        if "shape_factor" in r:
-                            try:
-                                old_v = float(r["shape_factor"])
-                                r["shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
-                            except (TypeError, ValueError):
-                                pass
-                    settings["dart_shape_v2"] = True
+                settings["dart_shape_v2"] = True
 
-                # Validation at the door (settings_schema.py, 2026-11-10): a value of
-                # the wrong type or outside its declared values goes back to its
-                # default, logged once with the key, the value and the file. After
-                # the merge and the migrations above, which stay as they were. It
-                # must never cost a user their file: a fault in the check itself is
-                # logged and the merged values are used as they are.
-                try:
-                    from settings_schema import validate_settings
-                    for path, bad, field in validate_settings(settings, DEFAULT_SETTINGS):
-                        logging.getLogger("ssc.settings").warning(
-                            "%s: %s was %.80r, not %s; the default is used",
-                            SETTINGS_FILE, path, bad, field.describe())
-                except Exception:
-                    logging.getLogger("ssc.settings").exception(
-                        "settings validation failed; the loaded values are used as they are")
+            # Validation at the door (settings_schema.py, 2026-11-10): a value of
+            # the wrong type or outside its declared values goes back to its
+            # default, logged once with the key, the value and the file. After
+            # the merge and the migrations above, which stay as they were. It
+            # must never cost a user their file: a fault in the check itself is
+            # logged and the merged values are used as they are.
+            try:
+                from settings_schema import validate_settings
+                for path, bad, field in validate_settings(settings, DEFAULT_SETTINGS):
+                    logging.getLogger("ssc.settings").warning(
+                        "%s: %s was %.80r, not %s; the default is used",
+                        SETTINGS_FILE, path, bad, field.describe())
+            except Exception:
+                logging.getLogger("ssc.settings").exception(
+                    "settings validation failed; the loaded values are used as they are")
 
-                return settings
+            return settings
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError, ValueError):
             _preserve_corrupt_file(SETTINGS_FILE)
             return copy.deepcopy(DEFAULT_SETTINGS)
@@ -1510,8 +1530,7 @@ def load_presets(file_path, preset_type_name="Preset"):
     data = {}
     if os.path.exists(file_path):
         try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
+            data = read_json(file_path)
             if not isinstance(data, dict):
                 data = {}
         except (json.JSONDecodeError, TypeError):
@@ -1557,8 +1576,7 @@ def load_job_history():
     if not os.path.exists(JOB_HISTORY_FILE):
         return []
     try:
-        with open(JOB_HISTORY_FILE, 'r') as f:
-            data = json.load(f)
+        data = read_json(JOB_HISTORY_FILE)
     except (json.JSONDecodeError, TypeError, ValueError, OSError):
         _preserve_corrupt_file(JOB_HISTORY_FILE)
         return []

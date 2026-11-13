@@ -2111,8 +2111,8 @@ class OptionsWindow:
         if not path:
             return
         try:
-            with open(path, 'r') as f:
-                data = json.load(f)
+            from config import read_json
+            data = read_json(path)
         except Exception as e:
             messagebox.showerror(_("Import Error"), _("Could not read file:\n{e}").format(e=e))
             return
