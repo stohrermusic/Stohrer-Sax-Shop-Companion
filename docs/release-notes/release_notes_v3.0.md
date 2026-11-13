@@ -7,9 +7,12 @@
 - **Plug the laser in whenever.** The app notices it being connected, switched off or moved to another USB socket while it is running.
 - **Adhesive rings (beta).** A ring of double-sided tape per pad, for silicone wraps. Sizing Rules > Lesser-used settings.
 - **The Toner is now the Analyzer.** It opens on an intonation chart: play your horn and see how sharp or flat each note is, compare runs from your library, export as PNG or PDF. The harmonic analysis is still there, behind a switch, and experimental.
-- **A new User Guide.** Shorter, with a clickable contents list, search and figures. Help > User Guide. There is also a one-page Quick Start Guide.
+- **A new User Guide.** Shorter, with a clickable contents list, search and figures. Help > User Guide. A Welcome window after each update links to it and to a one-page Quick Start.
 - **Tooling jobs are in Job History.**
 - **G-code files are for the laser, not LightBurn.** LightBurn ignores the speeds and powers a G-code file carries; for LightBurn, use Generate SVG. The app now says so when it writes one.
 - Die inserts now nest from the bottom-left corner of the sheet, largest first, and fit more per sheet.
+- Labeled Zones are placed on the Edge Bias side, with the other pads nested against them.
+- A warning when an SD card would hold more than one G-code file (the Falcon runs only a card with one).
+- A microphone plugged in after the app started is found, and remembered by name.
 - In German, Spanish, French or Italian, the Kerf Test and Speed & Power Test now use the material's own settings.
 - Bug fixes.
