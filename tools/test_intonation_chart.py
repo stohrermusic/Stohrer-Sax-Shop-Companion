@@ -393,6 +393,27 @@ check("the footnote (what was left out) is one plain line under the notes, in ev
       "plot's left edge, only when asked for", the_footnote_is_one_line_under_the_notes)
 
 
+def the_note_under_a_pixel():
+    """Every point marker carries its note, and note_at finds the note whose column a pixel is in:
+    the height does not matter, a pixel between columns or off the plot finds none, and the legend's
+    markers (which carry no note) are never found."""
+    prims = C.chart_primitives(OV, W, H, title="Two horns")
+    points = [p for p in of("marker", prims) if "note" in p]
+    legend = [p for p in of("marker", prims) if "note" not in p]
+    assert points and legend, (len(points), len(legend))
+    assert {p["note"] for p in points} == set(OV["notes"]), {p["note"] for p in points}
+    for p in points:
+        assert C.note_at(prims, p["x"], p["y"]) == p["note"]
+        assert C.note_at(prims, p["x"] + 3, 5) == p["note"] == C.note_at(prims, p["x"] - 3, H - 5)
+    xs = sorted({p["x"] for p in points})
+    gap = min(b - a for a, b in zip(xs, xs[1:]))
+    assert gap > 2 * C.NOTE_TOLERANCE_PX + 2, f"the fixture's columns are too close to test a miss: {gap}"
+    assert C.note_at(prims, xs[0] + gap / 2, H / 2) is None, "a pixel between two columns found a note"
+    assert C.note_at(prims, 1, H / 2) is None and C.note_at([], 10, 10) is None
+check("every point carries its note; note_at finds the note of a pixel's column at any height, none between "
+      "columns, never a legend marker", the_note_under_a_pixel)
+
+
 print("=" * 60)
 print(f"{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

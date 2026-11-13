@@ -299,3 +299,11 @@ Two faults found by reading what a sibling program, which took this tab's code, 
 *The lamp.* IN TUNE lit while the eased needle was within 4 cents of the middle. The needle moves 18 % of the way each frame, rests at the middle in silence and passes it between a sharp note and a flat one, so the lamp lit on the first frame of a note 22 cents sharp (0.18 x 22 = 3.96) and for two frames of one 10 cents sharp. It needs the frame's own reading inside the threshold as well. Not changed: in silence the needle is fed zero, so the lamp is lit and the readout says 0 with nothing playing, as it always has; Matt has been told.
 
 Gates: `test_toner_live`, two checks, each failing on the old code.
+
+## A note left out of the chart by hand (2026-11-13)
+
+Matt: "plus leave a note out by hand", after reading that a sibling program has it (there for the F mezzo's F#6, a key the horn has not got, where two stray takes were filed). Here: a right-click on the chart offers "Leave out <note>" for the note whose column the pointer is in, and "Put back the notes left out". The note goes from every run shown, from the axis and from the export; the line under the chart says "Left out by hand: C5, E5."; nothing on disk changes.
+
+Choices made without asking, each the plainest one: a right-click menu (the chart had no other free gesture: a click highlights a run); the note goes from every run on the chart, not from one; the list is in memory and belongs to the runs shown, so a load, an unload or a new comparison starts clean, as the highlight does. Not done, and offered to Matt: saving the list with the preset, so a horn's stray note stays out for good.
+
+Gates: `test_intonation` (`without_notes`), `test_intonation_chart` (`note_at`), `test_analyzer_tab` (the menu's items, two notes, the export, a redraw, put back, a change of runs, the presets untouched).

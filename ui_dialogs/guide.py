@@ -1154,6 +1154,8 @@ class UserGuideWindow(tk.Toplevel):
         self._bullet(_("Click a run's line, a point or its legend entry to bring it to the front; the "
                     "others go grey. Click it again, or an empty spot, to let it go."))
         self._bullet(_("Export chart... in the Preset Library writes the chart as a PNG or a PDF."))
+        self._bullet(_("Right-click a note on the chart (Control-click on a Mac) to leave it out, and again "
+                       "to put the notes back. Nothing is deleted."))
         self._bullet(_("Low notes on the left or on the right: Options > Settings... > General."))
         self._bullet(_("The TUNER switch shows a needle meter with the note and an IN TUNE lamp beside "
                     "the chart. The chart stays in view in every arrangement, so you can watch it "

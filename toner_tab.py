@@ -53,6 +53,7 @@ try:
         key_heights_link, key_heights_entry, key_heights_snapshot,
     )
     from intonation import IntonationError, run_from_captures, overlay as intonation_overlay
+    from intonation import without_notes as intonation_without_notes
     import intonation_chart
     _TONER_IMPORTS_OK = True
 except ImportError:
@@ -336,6 +337,10 @@ class TonerTabMixin:
         # the hit test and the drawing both go through the chart's primitives
         self._toner_chart_canvas.bind("<Button-1>", self._toner_chart_click)
         self._toner_chart_canvas.bind("<Motion>", self._toner_chart_motion)
+        # a right-click on a note: leave it out of the chart, or put the notes back
+        for sequence in (("<Button-2>", "<Control-Button-1>") if IS_MACOS else ("<Button-3>",)):
+            self._toner_chart_canvas.bind(sequence, self._toner_chart_context)
+        self._toner_chart_left_out = None         # (the runs' names, {written note: its MIDI}) left out by hand
         self._toner_chart_highlight = None        # (the runs' names, the index) while a run is highlighted
         self._toner_chart_last_prims = []         # what the canvas shows, for the hit test
         self._toner_chart_last_runs = 0
@@ -2076,6 +2081,13 @@ class TonerTabMixin:
         if held is not None and (held[0] != key or len(runs) < 2):
             self._toner_chart_highlight = held = None
         self._toner_chart_last_key, self._toner_chart_last_runs = key, len(runs)
+        # the notes left out by hand, while the chart still shows the runs they were left out of
+        self._toner_chart_note_midi = {r.note: r.written_midi for run in runs for r in run.readings}
+        out = getattr(self, '_toner_chart_left_out', None)
+        if out is not None and out[0] != key:
+            self._toner_chart_left_out = out = None
+        if out:
+            runs = intonation_without_notes(runs, out[1])
         # the title is the runs' own: the loaded preset's name, or the compared runs' names joined
         # (Matt, 2026-11-11), made in the primitives so the canvas, the PNG and the PDF agree
         prims = intonation_chart.chart_primitives(intonation_overlay(runs), width, height,
@@ -2099,6 +2111,9 @@ class TonerTabMixin:
         if other:
             parts.append(ngettext("{n} take left out: out of range or unreadable.",
                                   "{n} takes left out: out of range or unreadable.", other).format(n=other))
+        out = getattr(self, '_toner_chart_left_out', None)
+        if out and out[1]:
+            parts.append(_("Left out by hand: {notes}.").format(notes=", ".join(sorted(out[1], key=out[1].get))))
         return "  ".join(parts)
 
     def _toner_draw_chart(self):
@@ -2138,6 +2153,54 @@ class TonerTabMixin:
         if new == current:
             return
         self._toner_chart_highlight = (self._toner_chart_last_key, new) if new is not None else None
+        if self._toner_chart_redraw_id is not None:
+            try:
+                self.root.after_cancel(self._toner_chart_redraw_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._toner_chart_redraw_id = None
+        self._toner_draw_chart()
+
+    def _toner_chart_menu_items(self, x, y):
+        """What a right-click at this pixel of the chart offers, as (label, command): leaving out
+        the note whose column it is in, and putting back the notes left out, each only when it
+        would do something."""
+        items = []
+        note = intonation_chart.note_at(getattr(self, '_toner_chart_last_prims', []), x, y)
+        if note is not None:
+            items.append((_("Leave out {note}").format(note=note), lambda: self._toner_chart_leave_out(note)))
+        out = self._toner_chart_left_out
+        if out and out[1]:
+            items.append((_("Put back the notes left out"), self._toner_chart_put_back))
+        return items
+
+    def _toner_chart_context(self, event):
+        items = self._toner_chart_menu_items(event.x, event.y)
+        if not items:
+            return
+        menu = tk.Menu(self._toner_chart_canvas, tearoff=0)
+        for label, command in items:
+            menu.add_command(label=label, command=command)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _toner_chart_leave_out(self, note):
+        """Leave a written note out of the chart and its export, for every run shown (Matt,
+        2026-11-13). In memory only, and only while the chart shows these runs: a load, an unload
+        or a new comparison puts everything back, and so does the menu. No capture is touched."""
+        held = self._toner_chart_left_out
+        notes = dict(held[1]) if held else {}
+        notes[note] = getattr(self, '_toner_chart_note_midi', {}).get(note, 0)
+        self._toner_chart_left_out = (self._toner_chart_last_key, notes)
+        self._toner_chart_redraw_now()
+
+    def _toner_chart_put_back(self):
+        self._toner_chart_left_out = None
+        self._toner_chart_redraw_now()
+
+    def _toner_chart_redraw_now(self):
         if self._toner_chart_redraw_id is not None:
             try:
                 self.root.after_cancel(self._toner_chart_redraw_id)

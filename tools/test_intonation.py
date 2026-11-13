@@ -288,6 +288,25 @@ check("the March 2026 labels (exactly two transpositions low, corrected note in 
       "on read and counted; the guards: in range, within the bound, not an octave above; the fingerprint's filter "
       "still applies; a good take is never touched", the_march_labels_are_corrected_on_read)
 
+def a_note_left_out_by_hand():
+    """Matt, 2026-11-13: leave a note out of the chart by hand. without_notes gives copies without
+    the named written notes; the runs given, and every other field, are as they were."""
+    run = I.run_from_captures([{"captures": [cap("C4", detuned(60, 5)), cap("D4", detuned(62, -8)),
+                                             cap("D4", detuned(62, -6)), cap("E4", detuned(64, 3))]}], "Alto")
+    names = [r.note for r in run.readings]
+    assert names == ["A4", "B4", "C#5"], names
+    (less,) = I.without_notes([run], {"B4"})
+    assert [r.note for r in less.readings] == ["A4", "C#5"], [r.note for r in less.readings]
+    assert [r.note for r in run.readings] == names, "the run given was changed"
+    assert (less.name, less.sax_type, less.reference_hz, less.left_out, less.captures_used) == \
+        (run.name, run.sax_type, run.reference_hz, run.left_out, run.captures_used)
+    assert I.overlay([less])["notes"] == ["A4", "C#5"]
+    assert I.without_notes([run], set())[0] is run and I.without_notes([run], {"F#6"})[0].readings == run.readings
+    both = I.without_notes([run, run], {"A4", "C#5"})
+    assert [[r.note for r in x.readings] for x in both] == [["B4"], ["B4"]]
+check("a note left out by hand: the runs without it are copies, nothing else changes, the overlay follows",
+      a_note_left_out_by_hand)
+
 print("=" * 60)
 print(f"{sum(results)}/{len(results)} passed")
 sys.exit(0 if all(results) else 1)

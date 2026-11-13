@@ -1030,6 +1030,58 @@ def main():
         assert app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
         click(cv.winfo_width() - 3, cv.winfo_height() - 3)   # empty area: cleared
         assert app._toner_chart_highlight is None, app._toner_chart_highlight
+        # a note left out by hand (Matt, 2026-11-13): a right-click in its column offers it; it goes
+        # from every run, the axis and the export, the line under the chart names it, a redraw keeps
+        # it, the menu puts everything back, a change of runs drops it, and no capture is touched
+        import copy
+        before = copy.deepcopy(app._toner_presets)
+
+        def point(note):
+            return [p for p in app._toner_chart_last_prims if p["kind"] == "marker" and p.get("note") == note]
+
+        def labels(x, y):
+            return [label for label, _command in app._toner_chart_menu_items(x, y)]
+        assert app._toner_chart_left_out is None and labels(2, 40) == [], labels(2, 40)
+        c5 = point("C5")[0]
+        items = app._toner_chart_menu_items(c5["x"], 30)
+        assert [label for label, _c in items] == ["Leave out C5"], items
+        items[0][1]()
+        run(50)
+        assert not point("C5") and "C5" not in chart_texts(), "C5 is still on the chart"
+        assert point("D5") and "D5" in chart_texts(), "leaving one note out took another"
+        assert any(t.endswith("Left out by hand: C5.") for t in chart_texts()), chart_texts()
+        _runs, big = app._toner_chart_prims(toner_tab.CHART_W, toner_tab.CHART_H)
+        assert not [p for p in big if p.get("note") == "C5"], "the export still has the note left out"
+        assert any(p["kind"] == "text" and p["text"].endswith("Left out by hand: C5.") for p in big)
+        app._toner_chart_changed()
+        run(250)
+        assert not point("C5"), "a redraw put the note back"
+        e5 = point("E5")[0]
+        assert labels(e5["x"], e5["y"]) == ["Leave out E5", "Put back the notes left out"], labels(e5["x"], e5["y"])
+        app._toner_chart_menu_items(e5["x"], e5["y"])[0][1]()
+        run(50)
+        assert any(t.endswith("Left out by hand: C5, E5.") for t in chart_texts()), chart_texts()   # low to high
+        assert labels(2, 40) == ["Put back the notes left out"], labels(2, 40)
+        app._toner_chart_menu_items(2, 40)[0][1]()
+        run(50)
+        assert point("C5") and point("E5") and app._toner_chart_left_out is None
+        assert not any("Left out by hand" in t for t in chart_texts()), chart_texts()
+        # other runs on the chart: what was left out of these is not left out of those
+        app._toner_chart_menu_items(point("C5")[0]["x"], 30)[0][1]()
+        run(50)
+        compared = list(app._toner_compare_runs)
+        app._toner_compare_runs = [("My Presets", "Other", None)]
+        chart_now()
+        try:
+            assert app._toner_chart_left_out is None, "a note left out of one chart is out of another"
+            assert not any("Left out by hand" in t for t in chart_texts()), chart_texts()
+        finally:
+            app._toner_compare_runs = compared
+            chart_now()
+        assert point("C5"), "back on the first chart, the note is still out"
+        assert app._toner_presets == before, "leaving a note out changed the presets"
+        # the right mouse button is bound, and never the popup itself in a suite
+        assert cv.bind("<Control-Button-1>" if toner_tab.IS_MACOS else "<Button-3>"), "no right-click on the chart"
         click(t1["x"] + 8, t1["y"])                          # held into the Load below
         assert app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
         # the pooled rule, on the chart's own runs: a preset row is every session of it pooled (a note's

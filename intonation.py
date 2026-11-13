@@ -23,7 +23,7 @@ export shows them.
 """
 import math
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from toner_engine import (  # noqa: F401  (A4_HZ, OFF_NOTE_CENTS, cents_from_equal_temperament, corrected_label
     A4_HZ, OFF_NOTE_CENTS, SAX_TRANSPOSITIONS, _capture_is_plausible,  # and midi_to_hz lived
@@ -252,6 +252,17 @@ def overlay(runs):
     return {"notes": notes, "registers": registers, "lines": lines}
 
 
+def without_notes(runs, notes):
+    """The runs without the written notes named (as `NoteReading.note` spells them): copies,
+    every other field as it was, the runs given untouched. For a note left out of the chart
+    by hand (Matt, 2026-11-13): a stray take filed under a key the horn has not got. Nothing
+    is decided here and nothing on disk changes."""
+    notes = set(notes)
+    if not notes:
+        return list(runs)
+    return [replace(run, readings=[r for r in run.readings if r.note not in notes]) for run in runs]
+
+
 def register_changes(notes, registers):
     """The indexes i where the register changes between notes[i-1] and notes[i]
     (the chart's dashed lines sit between them)."""
@@ -302,5 +313,5 @@ __all__ = [
     "cents_from_equal_temperament", "corrected_capture", "corrected_label", "low_register_offset", "midi_to_hz",
     "note_spreads", "offset_and_shape",
     "overlay", "register_changes", "register_of_written", "run_from_captures", "run_from_preset",
-    "written_band", "written_midi",
+    "without_notes", "written_band", "written_midi",
 ]

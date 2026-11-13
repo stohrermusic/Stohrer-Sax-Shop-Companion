@@ -50,6 +50,7 @@ LINE_WIDTH = 2        # a run's line
 HIGHLIGHT_WIDTH = 4   # the highlighted run's line (Matt, 2026-11-11: click a spot, the line is highlighted)
 DIM = "#D0D0D0"       # every other run while one is highlighted: lines, markers, spread bars, legend
 HIT_TOLERANCE_PX = 6  # how near a click must come to a run's line, marker or legend entry
+NOTE_TOLERANCE_PX = 10  # how near, sideways, a right-click must come to a note's column of points
 
 
 def y_range(values):
@@ -214,7 +215,7 @@ def chart_primitives(overlay, width, height, *, title="", low_left=True, font_px
                           "width": HIGHLIGHT_WIDTH if i == highlight else LINE_WIDTH, "run": i})
         for x, p in pts:
             prims.append({"kind": "marker", "shape": marker, "x": x, "y": y_of(p.cents), "size": MARKER_PX,
-                          "color": color, "run": i})
+                          "color": color, "run": i, "note": p.note})
     return prims
 
 
@@ -257,6 +258,20 @@ def run_at(prims, x, y, tolerance=HIT_TOLERANCE_PX):
         if d <= best_d and (best_run is None or d < best_d):
             best_run, best_d = run, d
     return best_run
+
+
+def note_at(prims, x, y, tolerance=NOTE_TOLERANCE_PX):
+    """The note whose column of points the pixel's x is nearest, within `tolerance`, or None.
+    Read from the "note" the point markers carry, so only a note the chart shows can be found;
+    the height does not matter (the note's name under the axis counts as its column)."""
+    best, best_d = None, float(tolerance)
+    for p in prims:
+        if p["kind"] != "marker" or p.get("note") is None:
+            continue
+        d = abs(x - p["x"])
+        if d <= best_d and (best is None or d < best_d):
+            best, best_d = p["note"], d
+    return best
 
 
 def marker_polygon(shape, x, y, size):
