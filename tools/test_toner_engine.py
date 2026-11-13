@@ -180,13 +180,13 @@ test("condenser mic returns base threshold",
 test("unknown mic returns base threshold",
      get_rolloff_threshold("") == ROLLOFF_WARN_THRESHOLD)
 
-# Alto + dynamic gets the bump (Foster Conn 6M data — 2.99 to 3.49)
-test("alto + dynamic returns 3.5 (bumped for Foster Conn 6M)",
+# Alto + dynamic gets the bump (contributed Conn 6M data — 2.99 to 3.49)
+test("alto + dynamic returns 3.5 (bumped for a contributed Conn 6M)",
      get_rolloff_threshold("dynamic", "Alto") == 3.5)
 test("alto + dynamic case-insensitive",
      get_rolloff_threshold("DYNAMIC", "alto") == 3.5)
 
-# Other sax + dynamic: still 2.8 (Foster bari maxed at 2.31)
+# Other sax + dynamic: still 2.8 (the same player's bari maxed at 2.31)
 test("tenor + dynamic still 2.8",
      get_rolloff_threshold("dynamic", "Tenor") == 2.8)
 test("baritone + dynamic still 2.8",

@@ -171,7 +171,7 @@ def get_rolloff_threshold(mic_type, sax_type=None):
     are conservative — bumped only enough to stop legitimately-rolloff-
     heavy combinations from false-firing the warning. NOT calibrated
     against a population:
-      - alto + dynamic: 3.5 (Foster's Conn 6M with RE20 reads 2.99–3.49
+      - alto + dynamic: 3.5 (a contributed Conn 6M with RE20 reads 2.99–3.49
         across 8 mpcs; same mic on his bari reads 1.5–2.3)
     Refine as more sax-type × mic-type combinations come in.
 
@@ -185,7 +185,7 @@ def get_rolloff_threshold(mic_type, sax_type=None):
         return 3.5
     if mt == 'dynamic':
         # Alto reads ~1 dB/H higher than tenor/bari with the same dynamic
-        # mic — Foster's two shootouts are the only data point so far.
+        # mic — one player's two shootouts are the only data point so far.
         if st == 'alto':
             return 3.5
         return 2.8

@@ -30,7 +30,8 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.path.join(ROOT, "tools")
-WAV_CORPUS = r"C:\sax shop companion\recordings"
+# The description of the recordings corpus, on the machine that has one (git ignores it).
+WAV_CORPUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local", "descriptor_corpus.json")
 # Per suite. The slowest suite takes about 135 s locally and 150 s on CI's
 # Intel Mac; a suite past this is hung, not slow. SSC_SUITE_TIMEOUT_S
 # overrides it (a slow machine, a profiling run). Until 2026-11-10 this was
@@ -197,7 +198,7 @@ def main(argv):
         name = fname[:-3]
         if only and not any(o in name for o in only):
             continue
-        if name == "test_descriptor_validity" and not os.path.isdir(WAV_CORPUS):
+        if name == "test_descriptor_validity" and not os.path.isfile(WAV_CORPUS):
             skipped.append(name)
             print(f"skip {name:34s}        WAV corpus not on this machine")
             continue
