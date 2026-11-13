@@ -153,6 +153,19 @@ def build():
         '--noconfirm',        # Overwrite without asking
     ]
 
+    # certifi's CA bundle: the web data imports verify stohrermusic.com
+    # against it (config.get_ssl_context). PyInstaller's certifi hook packs
+    # cacert.pem once the module is bundled; the hidden import makes sure it
+    # is. Every build ships it, the Intel Mac build since 2026-11-10 (its
+    # frozen OpenSSL has no bundle of its own on a user's Mac). The frozen-
+    # build probe (--selftest) checks the bundle is found.
+    try:
+        import certifi  # noqa: F401  (capability check)
+        cmd.extend(['--hidden-import', 'certifi'])
+    except ImportError:
+        print("  WARNING: certifi is not installed: the web data imports will not be able "
+              "to verify the server in this build")
+
     # Platform-specific options
     if sys.platform == 'darwin':
         # macOS: onedir mode (.app bundle) — onefile+windowed is deprecated
@@ -193,9 +206,12 @@ def build():
 
     # Hidden imports for optional audio dependencies (tuner/toner)
     # Only include if numpy/sounddevice are installed (not present in legacy Mac build)
-    try:
-        import numpy  # noqa: F401  (capability check)
-        import sounddevice  # noqa: F401  (capability check)
+    # Looked for, never imported: importing sounddevice starts PortAudio, and on a build
+    # machine whose sound server is not answering that raises PortAudioError and ended
+    # the build (CI, Linux, 2026-11-12: "PulseAudio_Initialize: Can't connect to server").
+    # Whether the library is installed is all this needs to know.
+    import importlib.util
+    if importlib.util.find_spec('numpy') is not None and importlib.util.find_spec('sounddevice') is not None:
         cmd.extend([
             '--hidden-import', 'numpy',
             '--hidden-import', 'sounddevice',
@@ -203,7 +219,7 @@ def build():
             '--collect-data', 'sounddevice',
         ])
         print("  Audio libraries found — including tuner/toner support")
-    except ImportError:
+    else:
         print("  Audio libraries not found — building without tuner/toner")
 
     # Hidden import for PIL (used by strobe tuner wheel rendering)

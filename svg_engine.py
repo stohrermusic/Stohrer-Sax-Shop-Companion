@@ -1,5 +1,6 @@
 import math
 import os
+import re
 import struct
 import sys
 import svgwrite
@@ -119,9 +120,29 @@ def get_felt_thickness_mm(settings, sizing=None):
         return thickness * 25.4
     return thickness
 
+def leather_wrap_for_size(pad_size, settings, sizing=None):
+    """The back wrap the leather disc gets for this pad size, in mm: the
+    size's base wrap, plus the dart wrap bonus when the size has darts,
+    times the wrap multiplier. One place, because the leather disc and the
+    adhesive ring are both built from it and must not drift apart."""
+    if sizing is None:
+        sizing = get_sizing_for_size(pad_size, settings)
+    dart_cfg = get_dart_settings_for_size(pad_size, settings)
+    if dart_cfg:
+        bonus = dart_cfg.get("wrap_bonus", 0.75)
+        return leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"], extra_base=bonus)
+    return leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"])
+
+
 def get_disc_diameter(pad_size, material, settings):
     if material == 'die_ring':
         return 70.0 if pad_size >= 40.0 else 50.0
+
+    # The NESTING diameter of an adhesive ring, not its cut: the ring plus
+    # the number engraved beside it when that number doesn't fit in the
+    # hole. Renderers take the cut from adhesive_ring_geometry.
+    if material == ADHESIVE_RING:
+        return adhesive_ring_geometry(pad_size, settings)["footprint_r"] * 2
 
     sizing = get_sizing_for_size(pad_size, settings)
 
@@ -130,18 +151,130 @@ def get_disc_diameter(pad_size, material, settings):
     if material == 'exact_size': return pad_size
 
     if material == 'leather':
-        dart_cfg = get_dart_settings_for_size(pad_size, settings)
-        if dart_cfg:
-            bonus = dart_cfg.get("wrap_bonus", 0.75)
-            wrap = leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"], extra_base=bonus)
-        else:
-            wrap = leather_back_wrap(pad_size, sizing["leather_wrap_multiplier"])
-
+        wrap = leather_wrap_for_size(pad_size, settings, sizing)
         felt_thickness_mm = get_felt_thickness_mm(settings, sizing)
         diameter = pad_size + 2 * (felt_thickness_mm + wrap)
         return round(diameter * 2) / 2
 
     return 0
+
+
+# --- Adhesive rings ---------------------------------------------------------
+# A ring of double-sided tape per pad, for sticking a thin silicone wrap to
+# the back of the card (beta, Matt 2026-11-05). Opt-in fifth Pad Maker
+# material. A plain ring: no engraving settings, no center-hole option, no
+# darts. Its pad size is traced as single-stroke digits on the ring's own
+# cut layer -- in the hole (on the waste plug) when the hole is big enough
+# to read it, otherwise on the scrap just under the ring.
+ADHESIVE_RING = 'adhesive_ring'
+# Materials Labeled Zones never groups, whatever the Pad Maker's setting:
+# adhesive rings, and Tooling's die inserts (see nest_with_zones).
+ZONE_FREE_MATERIALS = (ADHESIVE_RING, 'die_ring')
+ADHESIVE_RING_SOLID_MAX_PAD_MM = 9.5   # pads this size and under are solid discs, no inner cut (Matt)
+ADHESIVE_RING_MIN_HOLE_MM = 2.0        # above that size, an inner diameter under this is dropped too
+ADHESIVE_RING_MIN_WIDTH_MM = 0.5       # a trim can't thin the ring below this
+ADHESIVE_RING_LEGIBLE_FONT_MM = 2.5    # smallest number height worth tracing; decides inside vs outside
+ADHESIVE_RING_MAX_FONT_MM = 5.0        # cap for a number in a big hole
+ADHESIVE_RING_HOLE_CLEARANCE_MM = 1.0  # inside number to the inner cut, all round
+ADHESIVE_RING_OUTSIDE_GAP_MM = 1.0     # outer cut to the top of an outside number
+
+
+def adhesive_ring_geometry(pad_size, settings):
+    """Everything about one adhesive ring, relative to its center.
+
+    The single source for the SVG renderer, the G-code engine, the pad
+    preview and the nesting preview, and (through get_disc_diameter) for
+    the nester's footprint.
+
+      outer_r      cut radius = the card disc's radius for this pad size.
+      inner_r      inner cut radius, or 0.0 when the part is a solid disc:
+                   every pad of ADHESIVE_RING_SOLID_MAX_PAD_MM (9.5) and
+                   under (Matt, 2026-11-05), and any larger pad whose inner
+                   diameter would come out under ADHESIVE_RING_MIN_HOLE_MM.
+      width        outer_r - inner_r wanted: the leather disc's back wrap
+                   for this size (dart wrap bonus included) plus
+                   settings["adhesive_ring_trim_mm"], never under
+                   ADHESIVE_RING_MIN_WIDTH_MM.
+      text, font   the pad size as the other materials print it, and its
+                   height in mm.
+      placement    'inside': centered in the hole at the largest height
+                   that keeps ADHESIVE_RING_HOLE_CLEARANCE_MM to the inner
+                   cut, capped at ADHESIVE_RING_MAX_FONT_MM. Chosen when
+                   that height is at least ADHESIVE_RING_LEGIBLE_FONT_MM.
+                   'outside': at the legible height on the scrap, centered
+                   under the ring, ADHESIVE_RING_OUTSIDE_GAP_MM below the
+                   outer cut. Small rings and solid discs.
+      strokes      the number as stroke-font polylines (never filled),
+                   in Y-DOWN coordinates relative to the ring center, so
+                   "under" is +y. adhesive_ring_number_strokes() places
+                   them for either output.
+      box          (x0, y0, x1, y1) around the strokes, same frame.
+      footprint_r  radius of the circle, centered on the ring, that holds
+                   the ring and the number's box. Equal to outer_r for an
+                   inside number. This is what nests; see get_disc_diameter.
+
+    Returns the same keys with no strokes when the card disc itself has no
+    size (outer_r <= 0), so callers never have to special-case it.
+    """
+    outer_r = get_disc_diameter(pad_size, 'card', settings) / 2
+    try:
+        trim = float(settings.get("adhesive_ring_trim_mm", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        trim = 0.0
+    width = max(leather_wrap_for_size(pad_size, settings) + trim, ADHESIVE_RING_MIN_WIDTH_MM)
+    text = zone_label_text(pad_size)
+
+    if outer_r <= 0:
+        return {"outer_r": 0.0, "inner_r": 0.0, "width": width, "text": text,
+                "font": 0.0, "placement": "outside", "strokes": [],
+                "box": (0.0, 0.0, 0.0, 0.0), "footprint_r": 0.0}
+
+    inner_d = 2 * (outer_r - width)
+    solid = (pad_size <= ADHESIVE_RING_SOLID_MAX_PAD_MM + 1e-9
+             or inner_d < ADHESIVE_RING_MIN_HOLE_MM)
+    inner_r = 0.0 if solid else inner_d / 2
+
+    # The number at height 1, centered on its own stroke box (Y-up, as the
+    # stroke font is drawn). The font cell carries side bearings; centering
+    # the strokes themselves is what makes "centered" true on the material.
+    from gcode_engine import get_text_strokes
+    unit = get_text_strokes(text, 1.0, 0.0, 0.0)
+    pts = [p for stroke in unit for p in stroke]
+    ux0, ux1 = min(p[0] for p in pts), max(p[0] for p in pts)
+    uy0, uy1 = min(p[1] for p in pts), max(p[1] for p in pts)
+    mx, my = (ux0 + ux1) / 2, (uy0 + uy1) / 2
+    unit = [[(x - mx, y - my) for x, y in stroke] for stroke in unit]
+    half_w, half_h = (ux1 - ux0) / 2, (uy1 - uy0) / 2
+    reach = max(math.hypot(x, y) for stroke in unit for x, y in stroke)
+
+    placement, font, dy = "outside", ADHESIVE_RING_LEGIBLE_FONT_MM, 0.0
+    if inner_r > 0:
+        fit = (inner_r - ADHESIVE_RING_HOLE_CLEARANCE_MM) / reach
+        if fit >= ADHESIVE_RING_LEGIBLE_FONT_MM:
+            placement, font = "inside", min(fit, ADHESIVE_RING_MAX_FONT_MM)
+    if placement == "outside":
+        dy = outer_r + ADHESIVE_RING_OUTSIDE_GAP_MM + half_h * font
+
+    # Y-up font -> Y-down frame: the glyphs' tops point at -y, so the
+    # number reads upright in the SVG as it is, and in the G-code once the
+    # whole frame is flipped (adhesive_ring_number_strokes, y_up=True).
+    strokes = [[(x * font, dy - y * font) for x, y in stroke] for stroke in unit]
+    box = (-half_w * font, dy - half_h * font, half_w * font, dy + half_h * font)
+    footprint_r = outer_r
+    if placement == "outside":
+        footprint_r = max(outer_r, max(math.hypot(bx, by)
+                                       for bx in (box[0], box[2]) for by in (box[1], box[3])))
+    return {"outer_r": outer_r, "inner_r": inner_r, "width": width, "text": text,
+            "font": font, "placement": placement, "strokes": strokes,
+            "box": box, "footprint_r": footprint_r}
+
+
+def adhesive_ring_number_strokes(geom, cx, cy, y_up=False):
+    """The ring's number as absolute polylines around a ring centered at
+    (cx, cy). y_up=False for SVG and canvases; y_up=True for G-code, where
+    cy is the already-flipped center -- the same physical points."""
+    sign = -1.0 if y_up else 1.0
+    return [[(cx + x, cy + sign * y) for x, y in stroke] for stroke in geom["strokes"]]
 
 # --- Leather locator marks -------------------------------------------------
 # Engraved guides on the leather showing where the felt sits, so a pad with
@@ -274,6 +407,9 @@ def check_for_oversized_engravings(pads, material_vars, settings):
     oversized = {}
     for material, var in material_vars.items():
         if not var.get(): continue
+        # Adhesive rings carry no engraving settings; their number sizes
+        # itself (adhesive_ring_geometry), so there is nothing to warn about.
+        if material == ADHESIVE_RING: continue
 
         oversized_sizes = set()
         for pad in pads:
@@ -534,6 +670,35 @@ def _scan_linear(*args, **kwargs):
     return _scan_linear_python(*args, **kwargs)
 
 
+# Die inserts always nest in rows from the sheet's bottom-left corner as
+# drawn: the bottom row left to right, then the next row up, largest first
+# (the "s" scan). That corner is the G-code origin and where the head is
+# jogged to for Frame & Cut. Not the corner scan ("sw"), which also starts
+# there: it places smallest first, so a mixed list leaves its 70 mm rings
+# for the last sheets and needs more of them (the full set 7 to 60 on a
+# 12 x 12 in sheet: 6 sheets from the corner scan, 5 by rows).
+DIE_NEST_EDGE_BIAS = "s"
+
+
+def nest_edge_bias(material, settings):
+    """The edge bias a nest of `material` scans with.
+
+    Pads use the Pad Maker's Edge Bias setting. Tooling's die inserts do
+    not: they share the settings dict, so they used to inherit whatever the
+    Pad Maker was set to, and its default ("center") starts in the middle
+    of the sheet, which is the worst start for rings that are 50 and 70 mm
+    across (seven dies, 30 to 44, on a 130 x 130 mm sheet: 1 placed from
+    the centre, 3 by rows, and the job done in two sheets where the centre
+    took three). Both nesters read the bias here and nowhere else,
+    so every die path (SVG, G-code, Frame & Cut, the fit check, Scrap
+    Mode) nests the same layout, and the Pad Maker's setting is never
+    written to.
+    """
+    if material == 'die_ring':
+        return DIE_NEST_EDGE_BIAS
+    return settings.get("edge_bias", "center")
+
+
 def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, polygon=None, preplaced=None):
     """
     Greedy circle-packing algorithm. Returns list of placed discs as (pad_size, cx, cy, r).
@@ -570,7 +735,7 @@ def _nest_discs(pads, material, width_mm, height_mm, settings, spacing_mm=1.0, p
     fixed_placed = 0
 
     # Edge bias scan direction
-    edge_bias = settings.get("edge_bias", "center")
+    edge_bias = nest_edge_bias(material, settings)
 
     # Corner bias: smallest first (small discs nestle into corners efficiently).
     # All others: largest first (standard greedy circle packing).
@@ -1103,7 +1268,7 @@ def _nest_discs_polygon(pads, material, settings, polygon, spacing_mm=1.0, prepl
         size_threshold = settings.get("dart_threshold", 18.0)
 
     # Edge bias: compute a target point that pulls discs toward the biased edge/corner
-    edge_bias = settings.get("edge_bias", "center")
+    edge_bias = nest_edge_bias(material, settings)
     # Map bias direction to a target point on/near the polygon bounding box
     _bias_targets = {
         "center": (centroid_x, centroid_y),
@@ -1531,14 +1696,63 @@ def _cover_rect_with_circles(x0, y0, x1, y1, target_r=12.0):
     return out
 
 
+def _zone_scan_order(bias, min_x, min_y, max_x, max_y, box_w, box_h, step,
+                     centre_x, centre_y):
+    """Where a group's box is tried in a traced outline, first to last, as
+    (x0, y0) of the box's top-left corner: the Edge Bias decides, so the
+    labeled groups start where the loose pads start.
+
+    Until 2026-11-11 the scan was always rows from the top, left to right,
+    whatever the bias, so with "sw" the groups sat top-left and the pads
+    bottom-left, and with the default "center" the pads clustered in the
+    middle away from a group in the corner (Matt, on the User Guide's
+    figure: "it looks like the zone got nested with a top left bias and
+    the other pads nested with another type of bias").
+
+    - "n" is that old scan exactly; "s" is rows from the bottom; "w" and
+      "e" are columns from that side.
+    - A corner is nearest-to-the-corner first, the grid anchored on the
+      corner so a box can sit flush in it.
+    - "center" (and anything unknown) is the box's centre nearest the
+      outline's centroid first, the centroid the pad nester uses.
+
+    Ties keep the row order from the bias side, so the result is the same
+    on every run.
+    """
+    nx = int(math.floor((max_x - min_x - box_w + 1e-9) / step)) + 1
+    ny = int(math.floor((max_y - min_y - box_h + 1e-9) / step)) + 1
+    if nx < 1 or ny < 1:
+        return []
+    if bias in ("e", "ne", "se"):
+        xs = [max_x - box_w - i * step for i in range(nx)]
+    else:
+        xs = [min_x + i * step for i in range(nx)]
+    if bias in ("s", "se", "sw"):
+        ys = [max_y - box_h - j * step for j in range(ny)]
+    else:
+        ys = [min_y + j * step for j in range(ny)]
+    if bias in ("w", "e"):
+        return [(x, y) for x in xs for y in ys]
+    spots = [(x, y) for y in ys for x in xs]
+    if bias in ("n", "s"):
+        return spots
+    if bias in ("nw", "ne", "sw", "se"):
+        corner_x, corner_y = xs[0], ys[0]
+        spots.sort(key=lambda q: (q[0] - corner_x) ** 2 + (q[1] - corner_y) ** 2)
+    else:
+        half_w, half_h = box_w / 2, box_h / 2
+        spots.sort(key=lambda q: (q[0] + half_w - centre_x) ** 2 + (q[1] + half_h - centre_y) ** 2)
+    return spots
+
+
 def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
     """Nest labeled GROUPS into a traced outline.
 
     Each zoned size becomes one group: a compact grid of its pads with a
     rectangle drawn round it and the size engraved on it. The groups are
-    then nested into the scrap as units — first-fit, scanning top-left to
-    bottom-right — so they tuck in wherever they fit rather than each
-    claiming a full-width horizontal band.
+    then nested into the scrap as units — first-fit, scanning from the
+    Edge Bias side (_zone_scan_order) — so they tuck in wherever they fit
+    rather than each claiming a full-width horizontal band.
 
     This replaced a one-band-per-size layout that stacked full-width
     strips down the scrap. Stacking was ruinous once the pads were
@@ -1569,6 +1783,10 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
     clearance = spacing_mm + edge_margin
     min_x, min_y, max_x, max_y = _polygon_bbox(polygon)
     step = ZONE_GRID_SEARCH_STEP_MM
+    bias = nest_edge_bias(material, settings)
+    # The centroid the pad nester biases "center" toward (_nest_discs_polygon).
+    centre_x = sum(pt[0] for pt in polygon) / len(polygon)
+    centre_y = sum(pt[1] for pt in polygon) / len(polygon)
 
     # Biggest first: the roomy parts of a scrap get claimed before the
     # small groups fill in around them.
@@ -1592,35 +1810,29 @@ def _nest_polygon_groups(pads, material, settings, polygon, spacing_mm):
             if box_w > (max_x - min_x) or box_h > (max_y - min_y):
                 continue
 
-            y0 = min_y
-            while y0 + box_h <= max_y + 1e-9 and spot is None:
-                x0 = min_x
-                while x0 + box_w <= max_x + 1e-9:
-                    # Cheap rejections first: the disc test is the
-                    # expensive one and rarely needs to run.
-                    if any(not (x0 + box_w + group_gap <= t[0]
-                                or t[2] + group_gap <= x0
-                                or y0 + box_h + group_gap <= t[1]
-                                or t[3] + group_gap <= y0)
-                           for t in taken):
-                        x0 += step
-                        continue
-                    if not _rect_fits_in_polygon(x0, y0, x0 + box_w,
-                                                 y0 + box_h, polygon,
-                                                 spacing_mm):
-                        x0 += step
-                        continue
-                    gx = x0 + (box_w - grid_w) / 2
-                    gy = y0 + label_h
-                    pts = _grid_positions(cols, rows, qty, disc_d, gutter,
-                                          gx, gy)
-                    if all(_circle_fits_in_polygon(px, py, disc_d / 2,
-                                                   polygon, clearance)
-                           for px, py in pts):
-                        spot = (pts, cols, rows, x0, y0, box_w, box_h)
-                        break
-                    x0 += step
-                y0 += step
+            for x0, y0 in _zone_scan_order(bias, min_x, min_y, max_x, max_y,
+                                           box_w, box_h, step, centre_x, centre_y):
+                # Cheap rejections first: the disc test is the
+                # expensive one and rarely needs to run.
+                if any(not (x0 + box_w + group_gap <= t[0]
+                            or t[2] + group_gap <= x0
+                            or y0 + box_h + group_gap <= t[1]
+                            or t[3] + group_gap <= y0)
+                       for t in taken):
+                    continue
+                if not _rect_fits_in_polygon(x0, y0, x0 + box_w,
+                                             y0 + box_h, polygon,
+                                             spacing_mm):
+                    continue
+                gx = x0 + (box_w - grid_w) / 2
+                gy = y0 + label_h
+                pts = _grid_positions(cols, rows, qty, disc_d, gutter,
+                                      gx, gy)
+                if all(_circle_fits_in_polygon(px, py, disc_d / 2,
+                                               polygon, clearance)
+                       for px, py in pts):
+                    spot = (pts, cols, rows, x0, y0, box_w, box_h)
+                    break
             if spot is not None:
                 break
 
@@ -1678,9 +1890,11 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
 
     Two layouts, chosen by sheet shape:
       - rectangular sheet: grid blocks shelf-packed into a band along the
-        bottom, which keeps the leftover region a plain rectangle.
+        bottom, or along the top for a north Edge Bias (n, nw, ne), filled
+        from the left, or from the right for an east one (e, ne, se). A
+        band keeps the leftover region a plain rectangle.
       - traced polygon: grid blocks first-fit into the outline as units,
-        tucking in wherever they land.
+        scanning from the Edge Bias side (_zone_scan_order).
 
     Both emit identical shape='rect' zone dicts and take their box
     geometry from _group_metrics, so the same job draws the same boxes
@@ -1689,7 +1903,18 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     Scrap mode passes zones=[] from the caller — a scrap only takes part of
     a size's count, so a group would have to be re-sized per piece.
     """
-    if not settings.get("zone_labels_enabled", False):
+    # Adhesive rings never group: a ring's number travels with the ring
+    # (in its hole or just under it), and a zone's border and label are an
+    # engraving layer, which this material doesn't have.
+    #
+    # Tooling's die inserts never group either. Labeled Zones is a Pad
+    # Maker setting, and the die generators nest plainly (_nest_discs), but
+    # the die FIT CHECK comes through here (can_all_pads_fit) with the
+    # shared settings: with zones switched on for pads it grouped the 7 to
+    # 12.5 mm die sizes, which are 50 mm rings, and refused jobs that fit
+    # (nine dies 7 to 11 on 160 x 160 mm: refused, where the nest places
+    # all nine).
+    if material in ZONE_FREE_MATERIALS or not settings.get("zone_labels_enabled", False):
         placed, fp, ft = _nest_discs(pads, material, width_mm, height_mm,
                                      settings, spacing_mm, polygon)
         return placed, [], fp, ft
@@ -1720,6 +1945,18 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
     # can_all_pads_fit() surface the shortfall instead.
     dropped_qty = sum(spec['qty'] for spec in dropped)
 
+    # The band follows the Edge Bias (2026-11-11): _shelf_pack_zones builds
+    # it along the bottom from the left; a north bias mirrors it to the top
+    # and an east bias to the right, so the groups sit on the side the
+    # loose pads start from. "center", "w" and "s" keep the layout it
+    # always had.
+    bias = nest_edge_bias(material, settings)
+    band_on_top = bias in ("n", "nw", "ne")
+    if band_on_top:
+        zones = [dict(z, y=height_mm - z['y'] - z['h']) for z in zones]
+    if bias in ("e", "ne", "se"):
+        zones = [dict(z, x=width_mm - z['x'] - z['w']) for z in zones]
+
     placed = []
     zoned_total = 0
     for zone in zones:
@@ -1728,12 +1965,15 @@ def nest_with_zones(pads, material, width_mm, height_mm, settings,
             placed.append((zone['size'], cx, cy, r))
         zoned_total += zone['qty']
 
-    # Free pads nest in the rectangle above the band. No translation is
-    # needed because the band sits at the bottom.
+    # Free pads nest in the rectangle the band leaves: as it stands with
+    # the band at the bottom, moved down by the band's height with the
+    # band on top. The nester only ever sees the smaller rectangle.
     free_h = height_mm - band_h
     if free_pads and free_h > 0:
         free_placed, fp, ft = _nest_discs(free_pads, material, width_mm,
                                           free_h, settings, spacing_mm)
+        if band_on_top:
+            free_placed = [(sz, cx, cy + band_h, r) for sz, cx, cy, r in free_placed]
         placed.extend(free_placed)
     else:
         # No room above the band (it can consume the sheet exactly).
@@ -1755,6 +1995,12 @@ def can_all_pads_fit(pads, material, width_mm, height_mm, settings, polygon=None
 
 def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatibility_mode, stroke_w):
     """Render placed discs (outlines, holes, engravings) into an SVG drawing."""
+    if material == ADHESIVE_RING:
+        # Its own renderer: none of the hole / dart / label-placement /
+        # auto-fit / locator logic below applies to a ring of tape.
+        _render_svg_adhesive_rings(dwg, placed, settings, compatibility_mode, stroke_w)
+        return
+
     layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
 
     for pad_size, cx, cy, r in placed:
@@ -1901,6 +2147,39 @@ def _render_svg_discs(dwg, placed, material, hole_dia_preset, settings, compatib
                                  text_anchor="middle",
                                  font_size=f"{font_size}mm",
                                  fill=layer_colors[f'{material}_engraving']))
+
+
+def _render_svg_adhesive_rings(dwg, placed, settings, compatibility_mode, stroke_w):
+    """Draw adhesive rings: number, inner cut, outer cut, all on the ring's
+    one layer color (the number is part of the cut layer; this material has
+    no engraving settings).
+
+    The radius in `placed` is the nesting footprint, which is larger than
+    the ring whenever the number sits outside it, so the cut radius comes
+    from adhesive_ring_geometry, never from `placed`. The number is emitted
+    as polylines of the stroke font rather than a <text> element, so it
+    arrives in LightBurn as single lines, the same points the G-code traces.
+    """
+    layer_colors = settings.get("layer_colors", DEFAULT_SETTINGS["layer_colors"])
+    color = layer_colors.get('adhesive_ring_cut', DEFAULT_SETTINGS["layer_colors"]['adhesive_ring_cut'])
+
+    def _u(v):
+        return v if compatibility_mode else f"{v}mm"
+
+    for pad_size, cx, cy, _footprint_r in placed:
+        geom = adhesive_ring_geometry(pad_size, settings)
+        if geom["outer_r"] <= 0:
+            continue
+        # Raw numbers (no unit suffix) so svgwrite's Tiny 1.2 polyline
+        # validator accepts them; the viewBox maps one unit to one mm.
+        for stroke in adhesive_ring_number_strokes(geom, cx, cy):
+            dwg.add(dwg.polyline(points=[(round(x, 4), round(y, 4)) for x, y in stroke],
+                                 stroke=color, fill='none', stroke_width=stroke_w))
+        if geom["inner_r"] > 0:
+            dwg.add(dwg.circle(center=(_u(cx), _u(cy)), r=_u(geom["inner_r"]),
+                               stroke=color, fill='none', stroke_width=stroke_w))
+        dwg.add(dwg.circle(center=(_u(cx), _u(cy)), r=_u(geom["outer_r"]),
+                           stroke=color, fill='none', stroke_width=stroke_w))
 
 
 def _render_svg_locator(dwg, cx, cy, loc, color, compatibility_mode, stroke_w):
@@ -2474,10 +2753,17 @@ def generate_die_organizer_svg(variant, filename, settings=None):
     """Copy the bundled die-organizer template SVG to ``filename``.
 
     Static design (Matt's CAD output): three Upper plates plus one Lower
-    glue together with the four corner alignment holes. The asset ships
-    as-is — users open the file in LightBurn (or similar) to cut.
+    glue together with the four corner alignment holes. The SVG ships
+    as-is, byte for byte, for LightBurn or other laser software. The G-code
+    path reads the same drawing (read_die_organizer_drawing below).
     ``settings`` is accepted for API symmetry but unused.
     """
+    import shutil
+    shutil.copyfile(die_organizer_asset_path(variant), filename)
+
+
+def die_organizer_asset_path(variant):
+    """The bundled drawing for an organizer plate ('upper' or 'lower')."""
     if variant not in ('upper', 'lower'):
         raise ValueError(f"variant must be 'upper' or 'lower', got {variant!r}")
     if getattr(sys, 'frozen', False):
@@ -2487,8 +2773,233 @@ def generate_die_organizer_svg(variant, filename, settings=None):
     asset = os.path.join(base, 'tooling_assets', f'die_organizer_{variant}.svg')
     if not os.path.exists(asset):
         raise FileNotFoundError(f"Die organizer template missing: {asset}")
-    import shutil
-    shutil.copyfile(asset, filename)
+    return asset
+
+
+# ---- Die organizer: reading the drawing for G-code -------------------------
+#
+# The organizer is two CAD drawings, not something this app computes, and
+# for years it was SVG only. Since 2026-11-09 it has a G-code path too
+# (Matt: "building a gcode path for what needs it sounds like the right
+# call"; the aim is that nobody needs LightBurn). That path reads the same
+# bundled file the SVG button copies.
+#
+# The drawings are simple and the reader is deliberately no more than they
+# need: `rect` (some with `rx`), `circle` and `ellipse`, each a direct
+# child of <svg>, each moved by `translate(x,y)` or by a `matrix(...)` that
+# is a pure rotation plus a move (the upper plate's finger slot is an
+# ellipse turned 89 degrees that way). ANYTHING ELSE RAISES. A replacement
+# drawing with a path, a group, a scale or a unit suffix must fail loudly
+# here, never be half read and mis-cut.
+
+ORGANIZER_MARGIN_MM = 2.0     # plate to the sheet's left and bottom edges, in the G-code
+# How far a chord of a linearized arc may sag from the true curve, for the
+# G-code toolpaths computed here (organizer plates, tonehole crescents).
+TOOLPATH_ARC_TOLERANCE_MM = 0.002
+
+_ORG_NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'
+_ORG_TRANSLATE = re.compile(rf'^\s*translate\(\s*({_ORG_NUMBER})\s*[, ]\s*({_ORG_NUMBER})\s*\)\s*$')
+_ORG_MATRIX = re.compile(r'^\s*matrix\(\s*' + r'\s*[, ]\s*'.join([f'({_ORG_NUMBER})'] * 6) + r'\s*\)\s*$')
+
+
+class OrganizerDrawingError(ValueError):
+    """The organizer drawing holds something the G-code path does not
+    read, or a feature too small to cut with this kerf."""
+
+
+class OrganizerKerfError(OrganizerDrawingError):
+    """The organizer plate cannot be cut with this kerf: it is negative
+    (`opening` is None), or wider than one of the plate's openings
+    (`opening` is that opening's size as text, "60.6 x 15.5" for a slot or
+    an oval, "6.5" for a hole). The tab turns it into a translated message,
+    as it does for the crescent's kerf; str() is plain English."""
+
+    def __init__(self, kerf_mm, opening=None, what="opening"):
+        self.kerf_mm, self.opening, self.what = kerf_mm, opening, what
+        if opening is None:
+            super().__init__("the kerf cannot be negative")
+        else:
+            super().__init__(f"a {opening} mm {what} is too small for a kerf of {kerf_mm:g} mm")
+
+
+def read_die_organizer_drawing(variant=None, path=None):
+    """Read an organizer plate drawing into shapes.
+
+    Returns {'width', 'height', 'outer', 'inner'}: the plate size in mm,
+    its outer boundary and its openings (slots, holes, the finger slot) in
+    file order. Each shape is a dict with 'kind' ('rect', 'circle' or
+    'ellipse'), its own numbers in its own frame ('x','y','w','h','r' /
+    'cx','cy','r' / 'cx','cy','rx','ry'), and 'angle', 'tx', 'ty': the
+    turn (radians) and move that put it on the plate, in mm with the
+    plate's top-left corner at (0, 0) and y down, as in the file.
+
+    Raises OrganizerDrawingError for anything it does not read (see the
+    note above), and when the drawing has no single rectangle that is the
+    whole plate.
+    """
+    import xml.etree.ElementTree as ET
+    source = path or die_organizer_asset_path(variant)
+    try:
+        root = ET.parse(source).getroot()
+    except ET.ParseError as e:
+        raise OrganizerDrawingError(f"the organizer drawing is not readable XML: {e}")
+
+    def num(el, name, default=None):
+        raw = el.get(name)
+        if raw is None:
+            if default is None:
+                raise OrganizerDrawingError(f"<{tag(el)}> has no {name}")
+            return default
+        if not re.fullmatch(_ORG_NUMBER, raw.strip()):
+            raise OrganizerDrawingError(f"<{tag(el)}> {name}={raw!r} is not a plain number in mm")
+        return float(raw)
+
+    def tag(el):
+        return el.tag.split('}')[-1]
+
+    if tag(root) != 'svg':
+        raise OrganizerDrawingError("the organizer drawing is not an SVG")
+    try:
+        min_x, min_y, width, height = (float(v) for v in root.get('viewBox', '').replace(',', ' ').split())
+    except ValueError:
+        raise OrganizerDrawingError("the organizer drawing has no usable viewBox")
+
+    shapes = []
+    for el in root:
+        kind = tag(el)
+        if kind not in ('rect', 'circle', 'ellipse'):
+            raise OrganizerDrawingError(
+                f"the organizer drawing holds a <{kind}>; only rect, circle and ellipse are read")
+        if len(el):
+            raise OrganizerDrawingError(f"<{kind}> has child elements")
+        transform = el.get('transform', 'translate(0,0)')
+        m = _ORG_TRANSLATE.match(transform)
+        if m:
+            angle, tx, ty = 0.0, float(m.group(1)), float(m.group(2))
+        else:
+            m = _ORG_MATRIX.match(transform)
+            if not m:
+                raise OrganizerDrawingError(f"<{kind}> transform {transform!r} is not a translate or a matrix")
+            a, b, c, d, tx, ty = (float(v) for v in m.groups())
+            # A turn and a move, nothing else: no scale, skew or mirror.
+            if (abs(a - d) > 1e-4 or abs(b + c) > 1e-4 or abs(a * a + b * b - 1.0) > 1e-4):
+                raise OrganizerDrawingError(f"<{kind}> transform {transform!r} scales, skews or mirrors")
+            angle = math.atan2(b, a)
+        shape = {'kind': kind, 'angle': angle, 'tx': tx - min_x, 'ty': ty - min_y}
+        if kind == 'rect':
+            r = num(el, 'rx', 0.0)
+            if el.get('ry') is not None and abs(num(el, 'ry') - r) > 1e-9:
+                raise OrganizerDrawingError("<rect> has different rx and ry")
+            shape.update(x=num(el, 'x', 0.0), y=num(el, 'y', 0.0),
+                         w=num(el, 'width'), h=num(el, 'height'), r=r)
+            if shape['w'] <= 0 or shape['h'] <= 0 or r < 0 or 2 * r > min(shape['w'], shape['h']) + 1e-9:
+                raise OrganizerDrawingError("<rect> has an impossible size or corner radius")
+        elif kind == 'circle':
+            shape.update(cx=num(el, 'cx', 0.0), cy=num(el, 'cy', 0.0), r=num(el, 'r'))
+            if shape['r'] <= 0:
+                raise OrganizerDrawingError("<circle> has no radius")
+        else:
+            shape.update(cx=num(el, 'cx', 0.0), cy=num(el, 'cy', 0.0), rx=num(el, 'rx'), ry=num(el, 'ry'))
+            if shape['rx'] <= 0 or shape['ry'] <= 0:
+                raise OrganizerDrawingError("<ellipse> has no size")
+        shapes.append(shape)
+
+    def is_plate(s):
+        if s['kind'] != 'rect' or abs(s['angle']) > 1e-9:
+            return False
+        return (abs(s['tx'] + s['x']) < 1e-6 and abs(s['ty'] + s['y']) < 1e-6
+                and abs(s['w'] - width) < 1e-6 and abs(s['h'] - height) < 1e-6)
+
+    plates = [s for s in shapes if is_plate(s)]
+    if len(plates) != 1:
+        raise OrganizerDrawingError(
+            f"the organizer drawing should have one rectangle that is the whole plate; found {len(plates)}")
+    return {'width': width, 'height': height, 'outer': plates[0],
+            'inner': [s for s in shapes if s is not plates[0]]}
+
+
+def organizer_shape_path(shape, grow_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
+    """The closed outline of one organizer shape on the plate (mm, y down,
+    first == last), moved `grow_mm` outward along its whole length (inward
+    when negative): its exact parallel curve, for kerf.
+
+    A rectangle's corners keep their centres and their radius changes by
+    grow_mm (a square corner stays square going inward and gets a radius
+    going outward); a circle's radius changes; an ellipse is offset along
+    its normals, since a grown ellipse is not an ellipse. Corner arcs are
+    true arcs, linearized to `tol`. Raises OrganizerDrawingError when the
+    shape is too small to survive the offset (a slot narrower than the
+    kerf).
+    """
+    g = float(grow_mm)
+    kind = shape['kind']
+    if kind == 'rect':
+        x, y, w, h = shape['x'] - g, shape['y'] - g, shape['w'] + 2 * g, shape['h'] + 2 * g
+        if w <= 1e-9 or h <= 1e-9:
+            raise OrganizerKerfError(abs(2 * g), f"{shape['w']:g} x {shape['h']:g}", "slot")
+        r = max(0.0, shape['r'] + g)
+        r = min(r, w / 2, h / 2)
+        pts = []
+        # Clockwise on screen (y down), starting on the top edge.
+        for cx, cy, a0 in ((x + w - r, y + r, -math.pi / 2), (x + w - r, y + h - r, 0.0),
+                           (x + r, y + h - r, math.pi / 2), (x + r, y + r, math.pi)):
+            corner = _arc_points(cx, cy, r, a0, a0 + math.pi / 2, tol)
+            pts += corner if not pts else [p for p in corner if p != pts[-1]]
+        pts.append(pts[0])
+    elif kind == 'circle':
+        r = shape['r'] + g
+        if r <= 1e-9:
+            raise OrganizerKerfError(abs(2 * g), f"{2 * shape['r']:g}", "hole")
+        # Quarter by quarter, so the four extreme points are on the path and
+        # the hole measures exactly its diameter across.
+        pts = []
+        for q in range(4):
+            quarter = _arc_points(shape['cx'], shape['cy'], r, q * math.pi / 2, (q + 1) * math.pi / 2, tol)
+            pts += quarter if not pts else quarter[1:]
+        pts[-1] = pts[0]
+    else:
+        a, b = shape['rx'], shape['ry']
+        # Tightest curve of an ellipse is at the end of its long axis.
+        if g < 0 and -g >= min(a * a / b, b * b / a) - 1e-9:
+            raise OrganizerKerfError(abs(2 * g), f"{2 * a:g} x {2 * b:g}", "oval")
+        step = 2.0 * math.acos(max(-1.0, 1.0 - tol / max(a, b)))
+        n = max(16, math.ceil(2 * math.pi / step))
+        pts = []
+        for i in range(n):
+            t = 2 * math.pi * i / n
+            nx, ny = b * math.cos(t), a * math.sin(t)          # outward normal, not yet unit length
+            length = math.hypot(nx, ny)
+            pts.append((shape['cx'] + a * math.cos(t) + g * nx / length,
+                        shape['cy'] + b * math.sin(t) + g * ny / length))
+        pts.append(pts[0])
+    ca, sa = math.cos(shape['angle']), math.sin(shape['angle'])
+    return [(shape['tx'] + ca * px - sa * py, shape['ty'] + sa * px + ca * py) for px, py in pts]
+
+
+def die_organizer_toolpaths(variant, kerf_mm=0.0, path=None):
+    """Everything the laser traces to cut an organizer plate, compensated
+    for kerf so the plate and its openings come out at drawn size:
+    openings moved half a kerf inward, the plate's own edge half a kerf
+    outward. Returns {'width', 'height', 'inner': [path, ...], 'outer':
+    path, 'counts': {kind: n}} in plate mm, y down."""
+    kerf_mm = float(kerf_mm)
+    if kerf_mm < 0:
+        raise OrganizerKerfError(kerf_mm)
+    drawing = read_die_organizer_drawing(variant, path=path)
+    counts = {}
+    for s in drawing['inner'] + [drawing['outer']]:
+        counts[s['kind']] = counts.get(s['kind'], 0) + 1
+    return {'width': drawing['width'], 'height': drawing['height'],
+            'inner': [organizer_shape_path(s, -kerf_mm / 2) for s in drawing['inner']],
+            'outer': organizer_shape_path(drawing['outer'], kerf_mm / 2),
+            'counts': counts}
+
+
+def die_organizer_min_sheet(variant='upper'):
+    """(width, height) in mm of the smallest sheet an organizer plate fits
+    on: the plate plus ORGANIZER_MARGIN_MM all round."""
+    drawing = read_die_organizer_drawing(variant)
+    return drawing['width'] + 2 * ORGANIZER_MARGIN_MM, drawing['height'] + 2 * ORGANIZER_MARGIN_MM
 
 
 def generate_kerf_test_svg(material_name, filename, settings):
@@ -2579,6 +3090,7 @@ CRESCENT_MAX_QTY = 50            # per list entry
 CRESCENT_GAP_MM = 3.0            # between parts in a file with more than one
 CRESCENT_LABEL_FONT_MM = 3.0     # list number engraved under each part
 CRESCENT_LABEL_GAP_MM = 1.0      # part to top of its number
+CRESCENT_MAX_KERF_MM = 1.0       # G-code: beyond this a kerf is a typo, and half of it would reach the number
 
 
 def _circle_overlap_area(r1, r2, d):
@@ -2708,6 +3220,86 @@ def tonehole_crescent_svg_path(geom, cx, cy):
     return (f"M {lx:.8f},{ty:.8f} "
             f"A {R:.8f},{R:.8f} 0 {large_outer} 1 {rx:.8f},{ty:.8f} "
             f"A {Rc:.8f},{Rc:.8f} 0 {large_inner} 0 {lx:.8f},{ty:.8f} Z")
+
+
+class CrescentKerfError(ValueError):
+    """This crescent cannot be cut with this kerf. `reason` is 'kerf' (the
+    kerf itself is out of range), 'gap' (the opening between the horns is
+    narrower than the kerf) or 'inner' (the inner edge's radius is). The
+    tab turns it into a translated message; str() is plain English."""
+
+    def __init__(self, reason, size_mm, kerf_mm):
+        self.reason, self.size_mm, self.kerf_mm = reason, size_mm, kerf_mm
+        what = {'kerf': "the kerf must be between 0 and {m:g} mm".format(m=CRESCENT_MAX_KERF_MM),
+                'gap': f"the opening between the horns ({size_mm:.2f} mm) is narrower than the kerf",
+                'inner': f"the inner edge's radius ({size_mm:.2f} mm) is smaller than half the kerf"}[reason]
+        super().__init__(f"cannot cut this crescent with a {kerf_mm:g} mm kerf: {what}")
+
+
+def _arc_points(cx, cy, r, a0, a1, tol=TOOLPATH_ARC_TOLERANCE_MM):
+    """Points along a circular arc from angle a0 to a1 (radians, either
+    direction, y down like everything here), both ends included, close
+    enough together that no chord sags more than `tol` from the true arc.
+    A zero radius or a zero sweep is the single point."""
+    if r <= 1e-12 or abs(a1 - a0) < 1e-12:
+        return [(cx + r * math.cos(a0), cy + r * math.sin(a0))]
+    step = 2.0 * math.acos(max(-1.0, 1.0 - tol / r)) if r > tol else math.pi / 2
+    n = max(1, math.ceil(abs(a1 - a0) / step))
+    return [(cx + r * math.cos(a0 + (a1 - a0) * i / n),
+             cy + r * math.sin(a0 + (a1 - a0) * i / n)) for i in range(n + 1)]
+
+
+def tonehole_crescent_toolpath(geom, kerf_mm=0.0, tol=TOOLPATH_ARC_TOLERANCE_MM):
+    """The closed laser path that cuts a crescent to its designed outline:
+    the curve half a kerf outside the design, all the way round.
+
+    The beam removes half its kerf on each side of the line it follows, so
+    a part cut on its own outline comes out small. This is the outline's
+    exact parallel curve, not a scaled copy: the outer edge is the tonehole
+    circle with its radius grown by kerf/2, the inner edge is the inner
+    circle with its radius shrunk by kerf/2 (same centres), and each horn
+    is wrapped by an arc of radius kerf/2 centred on the horn's tip. The
+    tip is then exactly half a kerf from the path on both sides, so the
+    horns come out as sharp as the beam can make them and where the design
+    put them.
+
+    The two offset circles are NOT run on to where they cross (a mitred
+    corner). The part would be the same, but on a thin crescent the edges
+    meet at a shallow angle and that crossing is far away: 6 mm past the
+    horns on a 43 mm tonehole at 2 % with a 0.2 mm kerf, straight through
+    the number engraved under the part and into its neighbour. The round
+    wrap never leaves the design by more than kerf/2.
+
+    With kerf 0 this is the design outline itself. Returns points (mm,
+    tonehole-centred, y down), first == last. Raises CrescentKerfError when
+    the kerf is out of range or wider than the opening between the horns:
+    a gap narrower than the kerf cannot be cut, the beam would bridge it.
+    Compensation never thins the part (the path only moves away from it),
+    so a thin crescent is never refused for being thin.
+    """
+    kerf_mm = float(kerf_mm)
+    if not (0.0 <= kerf_mm <= CRESCENT_MAX_KERF_MM):
+        raise CrescentKerfError('kerf', kerf_mm, kerf_mm)
+    h = kerf_mm / 2.0
+    R, Rc, off = geom['radius'], geom['inner_radius'], geom['offset']
+    tx, ty = geom['tip_x'], geom['tip_y']
+    if h > 0:
+        if 2.0 * tx <= kerf_mm:
+            raise CrescentKerfError('gap', 2.0 * tx, kerf_mm)
+        if Rc <= h:
+            raise CrescentKerfError('inner', Rc, kerf_mm)
+    a_r = math.atan2(ty, tx)                  # right horn, seen from the tonehole centre
+    b_r = math.atan2(ty - off, tx)            # right horn, seen from the inner circle's centre
+    # Outer edge, left horn to right horn over the mouthpiece side.
+    pts = _arc_points(0.0, 0.0, R + h, math.pi - a_r, 2 * math.pi + a_r, tol)
+    if h > 0:                                 # round the right horn, on its far side
+        pts += _arc_points(tx, ty, h, a_r, math.pi + b_r, tol)[1:]
+    # Inner edge back, right horn to left horn over the mouthpiece side.
+    pts += _arc_points(0.0, off, Rc - h, 2 * math.pi + b_r, math.pi - b_r, tol)[1:]
+    if h > 0:                                 # round the left horn
+        pts += _arc_points(-tx, ty, h, -b_r, math.pi - a_r, tol)[1:]
+    pts[-1] = pts[0]
+    return pts
 
 
 def layout_tonehole_crescents(entries, numbered=None):

@@ -23,6 +23,14 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-scrap-live-list-")
+
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 import main  # noqa: E402
 
 results = []
@@ -31,10 +39,11 @@ results = []
 def check(name, fn):
     try:
         fn()
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -63,7 +72,6 @@ def main_test():
     main.messagebox.showinfo = lambda *a_, **k: info_msgs.append((a_, k))
     main.messagebox.showwarning = lambda *a_, **k: None
     main.messagebox.showerror = lambda *a_, **k: None
-    main.messagebox.askyesno = lambda *a_, **k: False
 
     def reset_session():
         # Deliberately the OLD dict shape (no 'done'): the helpers must

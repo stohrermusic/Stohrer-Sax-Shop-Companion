@@ -67,6 +67,7 @@ print()
 print("--- start/stop recording lifecycle ---")
 engine = TonerEngine.__new__(TonerEngine)
 engine._recording_chunks = None
+engine._samples_in = 0      # the audio clock the constructor gives; the recording's clock starts from it (2026-11-10)
 
 # Before start, stop returns None
 result = engine.stop_recording()

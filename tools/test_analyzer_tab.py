@@ -1,0 +1,2036 @@
+"""The Analyzer tab (2026-11-10): the Toner tab turned round so the intonation chart
+comes first and the harmonic analyzer stands behind the HARMONICS switch.
+
+What is pinned, on a profile that has NEVER unlocked the harmonics (so the tab's own
+migration and the switch's terms run as a new user sees them):
+  - the one-time migration (config.migrate_analyzer_tab) from each starting state:
+    never unlocked (the old startup rule had hidden the tab), unlocked and visible,
+    unlocked and hidden on purpose, a fresh profile; run once only; in memory at the
+    build (which writes nothing) and on disk with the next regular save
+  - the tab is called Analyzer, shows by default, opens on the chart with the
+    HARMONICS switch off and the MODE switch at free (labels free / guided), with
+    Compare... and Export... under the chart; Feature Set lists it as Analyzer
+  - the HARMONICS switch: declined terms put it back to off and unlock nothing;
+    accepted terms unlock (saved) and show the spectrum view, which says
+    "experimental"; once unlocked the terms are not asked again
+  - the required fields both ways: horn type, make, model, player and mouthpiece
+    for an intonation run; the mic fields only while HARMONICS is on, and the
+    "Mic Type Required" stop at Capture likewise
+  - a free run and a guided run through the synthetic source (the real engine
+    and animate loop), each producing a chart with the notes played
+  - the free readout: the frame count a capture would keep, turning green at the
+    34th frame (the shortest note kept), and a note let go sooner named too short
+  - Compare...: sessions picked from two presets draw together, legend and markers;
+    a click on a run's legend entry highlights it (the other grey), survives a redraw,
+    moves, clears on the same again or on empty area; Clear goes back to the loaded
+    preset and drops it; a single run ignores clicks
+  - Export...: a PNG (opens, twice the chart's size) and a one-page PDF with the title
+  - the Settings dialog's "Low notes on the left" tick, saved and flipping the axis
+  - the tour's stop for the tab
+  - the window (Matt, 2026-11-10: "have it resize itself"): the start-up width is the
+    old rule's (tab labels and the Tooling tab, never the Analyzer's strip); selecting
+    the tab widens a narrower window to the strip (Capture on the page), never past the
+    screen; leaving puts the width back; coming back within the restore's check leaves
+    the new widening standing; a size the user chose while on the tab and a window
+    already wide enough are left alone; a maximized window is never resized, and on a
+    screen too narrow for one row its strip still goes to two rows; a narrow screen puts
+    the strip on two rows with Capture on the page. Every window check stands the
+    screen's width in (wide or narrow), so the runner's own display decides nothing
+  - the HARMONICS switch remembers its position across launches, but "on" in a profile
+    that never unlocked counts as off
+  - in every language, in a child process each: the tab builds, the start-up width is
+    not the strip's, the select widens and the leave restores; German labels translated
+  - the Key heights link (Matt, 2026-11-11): picked on the preset form, never required,
+    saved and reloaded with the preset, carried by Mutate; Enter heights... saves a new set
+    into the Key Heights library through its store and the tab sees it; a link whose entry
+    is gone reads as missing and breaks nothing; a session keeps a copy of the heights
+  - the tour's four Analyzer stops (chart, comparison, preset form, harmonics) raise
+    nothing and write nothing; the HARMONICS slider is drawn at "on" with the spectrum
+Nothing waits a fixed time for the window manager: each geometry change is awaited
+with a bounded poll under the mainloop (settle), so Aqua's late geometry cannot fail a
+check. Frames run under a real mainloop with a quit timer (see test_tuner_canvas for
+why a root.update() loop can't be used). Self-skips without a display or the audio stack.
+"""
+import json
+import os
+import re
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PROFILE = tempfile.mkdtemp(prefix="ssc-analyzer-test-")
+os.environ["SAXSHOP_CONFIG_DIR"] = _PROFILE
+# A user who never saw the harmonics terms: nothing about the toner in the profile.
+with open(os.path.join(_PROFILE, "app_settings.json"), "w", encoding="utf-8") as _f:
+    json.dump({"toner_record_wav": False, "seen_calibration_tutorial": True, "capture_threshold": 5}, _f)
+from i18n import init_translation  # noqa: E402
+init_translation("en")
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
+F0 = 233.08             # concert A#3
+HARM = [0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0]
+
+
+def _capture(note, f0, **extra):
+    return {"note": note, "fundamental_freq": f0, "harmonics_db": list(HARM),
+            "harmonic_cents": [0.0] * len(HARM), "timestamp": "2026-11-01 10:00:00", "n_frames": 30,
+            "method": "free", "signal_level": 0.5, "spectral_centroid": 900.0, **extra}
+
+
+# Two presets with captures: Bench (Tenor, one session, a mic) and Other (Alto, two
+# sessions, no mic anywhere: the backfill leaves it without one).
+SEEDED = {
+    "My Presets": {
+        "Bench": {"horn_type": "Tenor", "horn_make": "Selmer", "horn_model": "Mark VI", "serial": "", "player": "Matt",
+                  "mouthpiece": "Link 7*", "reed": "", "ligature": "", "mic_position": "", "room": "", "preamp": "",
+                  "mic_type": "condenser", "mic_model": "AT2020", "notes": "", "created": "2026-11-01",
+                  "sessions": [{"date": "2026-11-01 10:00:00", "mic_type": "condenser", "mic_model": "AT2020",
+                                "horn_type": "Tenor", "captures": [_capture("A#3", 233.5), _capture("C4", 261.0)]}]},
+        "Other": {"horn_type": "Alto", "horn_make": "Conn", "horn_model": "6M", "player": "Matt", "mouthpiece": "Meyer 5",
+                  "notes": "", "created": "2026-10-01",
+                  "sessions": [{"date": "2026-10-01 10:00:00", "captures": [_capture("A#3", 232.5)]},
+                               {"date": "2026-10-02 10:00:00", "captures": [_capture("D4", 294.5), _capture("E4", 329.0)]}]},
+        # a preset from the Toner's first weeks: its labels sit two transpositions (28 semitones on a
+        # tenor) below the sounding pitch, the storage mistake found in Matt's library (2026-11-10)
+        "Old": {"horn_type": "Tenor", "horn_make": "Selmer", "horn_model": "SBA", "player": "Matt", "mouthpiece": "Link",
+                "notes": "", "created": "2026-03-23",
+                "sessions": [{"date": "2026-03-23 11:56:47", "captures": [
+                    _capture("A#0", 146.83, method="calibration"), _capture("C1", 164.81, method="calibration"),
+                    _capture("D1", 185.0, method="calibration"), _capture("F1", 220.0, method="calibration"),
+                    # and one the detector slipped a semitone on: not its note, nothing to correct
+                    _capture("C4", 277.18, method="calibration")]}]},
+    }
+}
+with open(os.path.join(_PROFILE, "toner_data.json"), "w", encoding="utf-8") as _f:
+    json.dump(SEEDED, _f, indent=1)
+
+results = []
+
+
+def check(name, fn):
+    try:
+        if fn() is False:
+            raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
+        print(f"  PASS  {name}")
+        results.append(True)
+    except Exception as e:
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
+        traceback.print_exc()
+        results.append(False)
+
+
+class FakeClock:
+    """Stands in for toner_tab's `time`: time() under the test's control, the rest real."""
+
+    def __init__(self, start=1_000_000.0):
+        self.t = start
+
+    def time(self):
+        return self.t
+
+    def strftime(self, fmt, when=None):
+        return time.strftime(fmt, time.localtime(self.t) if when is None else when)
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+def frame(f0, note, level=0.8, harm=HARM):
+    from toner_engine import HarmonicInfo, TonerResult
+    r = TonerResult()
+    r.fundamental_freq = f0
+    r.fundamental_note = note
+    r.harmonics = [HarmonicInfo(i + 1, f0 * (i + 1), f0 * (i + 1), db, 0.0) for i, db in enumerate(harm)]
+    r.signal_level = level
+    r.spectral_centroid = 900.0
+    return r
+
+
+def silence():
+    from toner_engine import TonerResult
+    return TonerResult()
+
+
+def settings_on_disk():
+    with open(os.path.join(_PROFILE, "app_settings.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------- the migration, on dicts
+def migration_from_each_state():
+    from config import migrate_analyzer_tab
+    # never unlocked: the old startup rule had forced the tab hidden; it comes back
+    s = {"toner_unlocked": False, "visible_tabs": {"Toner": False, "Tuner": True}}
+    assert migrate_analyzer_tab(s) is True, "migrate_analyzer_tab(s) is True"
+    assert s["visible_tabs"]["Toner"] is True and s["visible_tabs"]["Tuner"] is True and s["analyzer_tab_shown_v3"] is True, "s[\"visible_tabs\"][\"Toner\"] is True and s[\"visible_tabs\"][\"Tuner\"] is True and s[\"analyzer_tab_shown_v3\"] is..."
+    # unlocked and visible: nothing to change but the flag
+    s = {"toner_unlocked": True, "visible_tabs": {"Toner": True}}
+    assert migrate_analyzer_tab(s) is True and s["visible_tabs"]["Toner"] is True and s["analyzer_tab_shown_v3"], "migrate_analyzer_tab(s) is True and s[\"visible_tabs\"][\"Toner\"] is True and s[\"analyzer_tab_shown_v3\"]"
+    # unlocked and hidden: the user hid it on purpose, and that stands
+    s = {"toner_unlocked": True, "visible_tabs": {"Toner": False}}
+    assert migrate_analyzer_tab(s) is True and s["visible_tabs"]["Toner"] is False and s["analyzer_tab_shown_v3"], "migrate_analyzer_tab(s) is True and s[\"visible_tabs\"][\"Toner\"] is False and s[\"analyzer_tab_shown_v3\"]"
+    # a fresh profile: the default (visible) applies; the flag is set
+    s = {}
+    assert migrate_analyzer_tab(s) is True and "Toner" not in s["visible_tabs"] and s["analyzer_tab_shown_v3"], "migrate_analyzer_tab(s) is True and \"Toner\" not in s[\"visible_tabs\"] and s[\"analyzer_tab_shown_v3\"]"
+    # once only: a second run changes nothing and says so
+    s = {"toner_unlocked": False, "visible_tabs": {"Toner": False}, "analyzer_tab_shown_v3": True}
+    before = json.dumps(s, sort_keys=True)
+    assert migrate_analyzer_tab(s) is False and json.dumps(s, sort_keys=True) == before, "migrate_analyzer_tab(s) is False and json.dumps(s, sort_keys=True) == before"
+
+
+def main():
+    import tkinter as tk
+    try:
+        root = tk.Tk()
+    except tk.TclError as e:
+        print(f"Skipping: no display available ({e})")
+        return 0
+    from toner_engine import AUDIO_AVAILABLE
+    if not AUDIO_AVAILABLE:
+        print("Skipping: audio libraries not installed (numpy/sounddevice) — no Analyzer tab on this build")
+        root.destroy()
+        return 0
+
+    print("The Analyzer tab")
+    print("=" * 60)
+    check("the migration from each starting state, once only", migration_from_each_state)
+
+    import config
+    import toner_tab
+    import intonation_chart
+    from toner_engine import FREE_MIN_FRAMES, SAMPLE_RATE, whole_window, load_tone_presets, note_to_freq
+    from config import TONER_DATA_FILE
+    check("profile override is in effect",
+          lambda: os.path.normcase(config.get_config_dir()) == os.path.normcase(_PROFILE))
+
+    from main import PadSVGGeneratorApp
+    root.geometry("+0+0")                  # the app's own size: the window-fit rule is under test too
+    app = PadSVGGeneratorApp(root)
+    root.update()
+    assert getattr(app, "_toner_engine", None) is not None, "Analyzer tab not built (audio libs missing?)"
+    app._toner_mic_checked = True          # the first-start mic notice is a modal
+    app._toner_show_coverage_summary = lambda: None    # a Toplevel with buttons; not under test here
+
+    def run(ms):
+        root.after(ms, root.quit)
+        root.mainloop()
+
+    def settle(pred, timeout=6.0, what="the window"):
+        """Run the mainloop in slices until pred() holds (a geometry change applied by the
+        window manager, late on Aqua) or the bound passes; never a fixed wait. Always at least
+        one slice: a predicate that is already true must not let a check read layout state
+        nobody has laid out yet (a page is 1 x 1 and nothing on it mapped until an idle pass
+        runs after the tab is selected; CI, Spanish on Linux and Aqua, 2026-11-11)."""
+        deadline = time.time() + timeout
+        run(100)
+        while not pred() and time.time() < deadline:
+            run(100)
+        assert pred(), f"{what} did not settle within {timeout:.0f} s {where()}"
+
+    W = {}      # the window's sizes as the checks find them
+    REAL_SCREEN = root.winfo_screenwidth()
+
+    def screen(width):
+        """Stand the screen's width in for the app and the checks: the runner's own decides nothing."""
+        root.winfo_screenwidth = lambda: width
+        W["screen"] = width
+
+    def where():
+        """The evidence every window message carries: the screen stood in (and this display's), one
+        row's need, the strip's rows, the window, what was widened, the restore's record."""
+        try:
+            rec = getattr(app, "_analyzer_restore", None)
+            return (f"[screen {W.get('screen', 'not stood in')} (this display {REAL_SCREEN}), one-row need "
+                    f"{W.get('need')}, strip rows {getattr(app, '_toner_strip_rows', None)}, window "
+                    f"{root.winfo_width()}x{root.winfo_height()} state {root.state()}, start {W.get('start')}, "
+                    f"widened {getattr(app, '_analyzer_widened', None)}, restore {rec}, restore check pending "
+                    f"{getattr(app, '_analyzer_restore_after', None) is not None}]")
+        except tk.TclError as e:
+            return f"[no window: {e}]"
+
+    def chart_now():
+        """Draw the chart now, as the tab's debounced redraw would 100 ms later: a check that only
+        wants the chart's current state reads it after this, never after a wait (on a fast runner the
+        geometry settles in one mainloop slice and the pending redraw has not fired yet)."""
+        root.update_idletasks()
+        if app._toner_chart_redraw_id is not None:
+            root.after_cancel(app._toner_chart_redraw_id)
+            app._toner_chart_redraw_id = None
+        app._toner_draw_chart()
+
+    def toplevels():
+        return [w for w in root.winfo_children() if isinstance(w, tk.Toplevel)]
+
+    def widgets(top, cls):
+        out = []
+
+        def walk(w):
+            for c in w.winfo_children():
+                if isinstance(c, cls):
+                    out.append(c)
+                walk(c)
+        walk(top)
+        return out
+
+    def chart_texts():
+        cv = app._toner_chart_canvas
+        return [cv.itemcget(i, "text") for i in cv.find_withtag("chart") if cv.type(i) == "text"]
+
+    def chart_markers():
+        cv = app._toner_chart_canvas
+        return [cv.type(i) for i in cv.find_withtag("chart") if cv.type(i) in ("oval", "polygon")]
+
+    # ---------------------------------------------------------------- the tab as built
+    def the_tab_as_built():
+        assert app.notebook.tab(app.toner_tab_frame, "text") == "Analyzer", "app.notebook.tab(app.toner_tab_frame, \"text\") == \"Analyzer\""
+        assert str(app.toner_tab_frame) in app.notebook.tabs(), "str(app.toner_tab_frame) in app.notebook.tabs()"
+        assert app.notebook.tab(app.toner_tab_frame, "state") == "normal", "the tab is hidden on a fresh profile"
+        assert app.settings.get("toner_unlocked") in (None, False), "app.settings.get(\"toner_unlocked\") in (None, False)"
+        # the migration ran in memory; building the app writes nothing (the flag goes to
+        # disk with the next regular save: the terms' accept below is one)
+        assert app.settings.get("analyzer_tab_shown_v3") is True, "the build did not run the migration"
+        assert "analyzer_tab_shown_v3" not in settings_on_disk(), "building the app wrote the settings file"
+        assert app._toner_harmonics_var.get() == "off" and app._toner_mode_var.get() == "free", "app._toner_harmonics_var.get() == \"off\" and app._toner_mode_var.get() == \"free\""
+        # the start-up width is the old rule's, not the strip's: the window is narrower than the
+        # strip needs (the Pad Maker is the first tab; nothing has selected the Analyzer yet)
+        root.update_idletasks()
+        W["start"] = (root.winfo_width(), root.winfo_height())
+        W["need"] = app._analyzer_strip_need_px()
+        assert getattr(app, "_analyzer_widened", None) is None, where()
+        screen(W["need"] + 300)            # a screen with room for one row: the runner's own decides nothing
+        app.notebook.select(app.toner_tab_frame)
+        # selecting the tab: a window narrower than the strip needs is widened to it (never past the
+        # screen), one already wide enough is left as it is; either way the height is unchanged. Under
+        # xvfb's fonts some languages open wider than the strip already, so both branches are the rule.
+        want_w = max(W["start"][0], min(W["need"], root.winfo_screenwidth()))
+        settle(lambda: root.winfo_width() == want_w, what="the window on select")
+        W["widened"] = root.winfo_width()
+        assert root.winfo_height() == W["start"][1], (root.winfo_height(), W["start"][1])
+        if W["start"][0] < W["need"]:
+            assert app._analyzer_widened == (W["start"][0], want_w), where()
+        else:
+            print(f"        (the window opened {W['start'][0]} px wide, already past the strip's {W['need']}: nothing to widen)")
+            assert getattr(app, "_analyzer_widened", None) is None, where()
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), \
+            "the chart alone: the spectrum is not shown"
+        assert app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget("bg") == "#FFFFFF", "app._toner_chart_canvas.winfo_width() > 300 and app._toner_chart_canvas.cget(\"bg\") == \"#FFFFFF\""
+        # the whole control strip is on the page: the Capture button, packed last and rightmost
+        strip, btn = app._toner_ctrl_frame, app._toner_capture_btn
+        settle(lambda: strip.winfo_reqwidth() <= app._toner_main_frame.winfo_width(), what="the page's width")
+
+        def strip_report():
+            cols = []
+            for col in strip.winfo_children():
+                cols.append((col.winfo_reqwidth(), col.winfo_width(), col.winfo_x(), col.winfo_ismapped(),
+                             [((c.cget("text") if "text" in c.keys() else c.winfo_class()), c.winfo_reqwidth(),
+                               c.winfo_width(), c.winfo_x(), c.winfo_ismapped()) for c in col.winfo_children()]))
+            return (f"window {root.winfo_width()}x{root.winfo_height()}, page {app._toner_main_frame.winfo_width()}x"
+                    f"{app._toner_main_frame.winfo_height()}, strip req {strip.winfo_reqwidth()} w {strip.winfo_width()} "
+                    f"h {strip.winfo_height()} y {strip.winfo_y()}, need {W['need']}, columns {cols}")
+        assert btn.winfo_ismapped(), f"the Capture button is off the page: {strip_report()}"
+        assert btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), "btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width()"
+        texts = [w.cget("text") for w in widgets(app._toner_main_frame, tk.Label)]
+        for label in ("HARMONICS", "off", "on", "MODE", "free", "guided"):
+            assert label in texts, f"{label!r} not on the control strip: {texts}"
+        assert "cal" not in texts, "\"cal\" not in texts"
+        btns = [w.cget("text") for w in widgets(app._toner_library_row, tk.Button)]
+        assert btns == ["Preset Library"], btns      # Compare and Export chart live in the library now
+        assert not widgets(app._toner_chart_frame, tk.Button), "the button is in the chart's frame again"
+        # nothing loaded: the chart says what to do
+        chart_now()
+        assert any("Load a preset" in t for t in chart_texts()), chart_texts()
+        app._toner_stop()
+    check("the tab is called Analyzer, shows on a never-unlocked profile (the migration recorded on disk), opens on "
+          "the chart with HARMONICS off and MODE at free (labels free/guided), Compare... and Export... under it",
+          the_tab_as_built)
+
+    def feature_set_lists_the_analyzer():
+        before = set(toplevels())
+        app._open_feature_set()
+        dlg = [w for w in toplevels() if w not in before][0]
+        texts = [c.cget("text") for c in widgets(dlg, tk.Checkbutton)]
+        dlg.destroy()
+        assert "Analyzer" in texts and "Toner" not in texts and "Tuner" in texts, texts
+    check("Feature Set offers the tab as Analyzer, in the main list", feature_set_lists_the_analyzer)
+
+    # ---------------------------------------------------------------- the window, case by case
+    # Every check here says which screen it is about by standing the screen's width in: a wide
+    # one for the one-row checks, a narrow one for the two-row checks. The runner's own display
+    # decides nothing, so the suite reads the same on a 1024 px runner as here (CI, 2026-11-11).
+    # Each check starts from the same place (the Pad Maker tab, the start-up width, no restore
+    # pending), so one failure cannot run into the next: on CI one did, and read as five.
+    WIDE, NARROW = W["need"] + 300, W["need"] - 40
+
+    def width_is(w):
+        return lambda: root.winfo_width() == w
+
+    def restore_settled():
+        rec = getattr(app, "_analyzer_restore", None)
+        return rec is None or rec["outcome"] != "pending"
+
+    def from_the_start(screen_w):
+        screen(screen_w)
+        app.notebook.select(app.pad_tab)
+        settle(restore_settled, what="the last restore's record")
+        start_w, start_h = W["start"]
+        root.geometry(f"{start_w}x{start_h}")
+        settle(width_is(start_w), what="the start width back")
+        assert getattr(app, "_analyzer_widened", None) is None, f"a widening left over from the last check {where()}"
+
+    def the_harmonics_only_switches():
+        """VIEW, SCALE and FPS are on the strip only while HARMONICS is on (Matt, 2026-11-12:
+        "the bottom shows controls as if we should be seeing the tuner, but the main screen is
+        just the chart"); SENS and HARMONICS always; the strip is as wide either way."""
+        frames = app._toner_switch_frames
+        assert sorted(frames) == [0, 1, 2, 3, 4, 5], sorted(frames)
+
+        def label(col):
+            return str(frames[col].winfo_children()[0].cget("text"))
+        assert [label(c) for c in range(6)] == ["SENS", "HARMONICS", "TUNER", "VIEW", "SCALE", "FPS"], \
+            [label(c) for c in range(6)]
+        was_on = app._toner_harmonics_on()
+        widths = {}
+        # this profile has not accepted the harmonics terms; showing the spectrum from code moves
+        # the switch, which would ask them (a modal window nobody answers). Unlocked for the
+        # length of this check, in memory only, and put back.
+        was_unlocked = app.settings.get("toner_unlocked")
+        app.settings["toner_unlocked"] = True
+        try:
+            for on in (False, True, False):
+                app._toner_show_harmonics(on)
+                run(60)
+                shown = [c for c in range(6) if frames[c].winfo_manager()]
+                assert shown == ([0, 1, 2, 3, 4, 5] if on else [0, 1, 2]), (on, shown)
+                widths[on] = app._toner_ctrl_frame.winfo_reqwidth()
+            assert widths[True] == widths[False], f"the strip is {widths[False]} px with them hidden, {widths[True]} shown"
+        finally:
+            app._toner_show_harmonics(was_on)
+            run(60)
+            app.settings["toner_unlocked"] = was_unlocked
+    check("VIEW, SCALE and FPS show only while HARMONICS is on; SENS, HARMONICS and TUNER always; the strip keeps "
+          "its width", the_harmonics_only_switches)
+
+    def the_chart_is_in_every_view():
+        """Matt, 2026-11-12: "harmonics button stays the same, add new tuner button and that shows
+        the VU meter. user can have both on or both off. both off: chart view. chart always stays
+        visible." And the Preset Library button "needs to not" disappear."""
+        chart, harm, gauge = app._toner_chart_frame, app._toner_harmonics_frame, app._toner_gauge_frame
+        was_h, was_t = app._toner_harmonics_on(), app._toner_tuner_on()
+        was_unlocked = app.settings.get("toner_unlocked")
+        app.settings["toner_unlocked"] = True        # as above: no terms asked from a check
+
+        def place(pane):
+            g = pane.grid_info()
+            return (int(g["row"]), int(g["column"]), int(g["rowspan"]), int(g["columnspan"])) if g else None
+        want = {
+            (False, False): {"chart": (0, 0, 2, 2), "harm": None, "gauge": None},
+            (True, False): {"harm": (0, 0, 2, 1), "chart": (0, 1, 2, 1), "gauge": None},
+            (False, True): {"chart": (0, 0, 2, 1), "gauge": (0, 1, 2, 1), "harm": None},
+            (True, True): {"harm": (0, 0, 2, 1), "gauge": (0, 1, 1, 1), "chart": (1, 1, 1, 1)},
+        }
+        try:
+            for (h, t), places in want.items():
+                app._toner_show_harmonics(h)
+                app._toner_show_tuner(t)
+                run(150)
+                got = {"chart": place(chart), "harm": place(harm), "gauge": place(gauge)}
+                assert got == places, ((h, t), got)
+                assert chart.winfo_ismapped(), f"the chart is not shown with HARMONICS {h}, TUNER {t}"
+                assert app._toner_library_btn.winfo_ismapped(), f"no Preset Library button with HARMONICS {h}, TUNER {t}"
+                assert app._toner_chart_canvas.winfo_width() > 80 and app._toner_chart_canvas.winfo_height() > 80, \
+                    ((h, t), app._toner_chart_canvas.winfo_width(), app._toner_chart_canvas.winfo_height())
+                if h:       # the spectrum has the left two thirds, give or take the gap between the panes
+                    share = harm.winfo_width() / max(1, app._toner_top_area.winfo_width())
+                    assert 0.60 < share < 0.70, ((h, t), share)
+                if h and t:     # the meter over the chart, a half each
+                    assert abs(gauge.winfo_height() - chart.winfo_height()) <= 4, (gauge.winfo_height(), chart.winfo_height())
+                assert app._toner_tuner_int.get() == (1 if t else 0) and app._toner_tuner_var.get() == ("on" if t else "off")
+                assert app.settings["toner_settings"]["tuner_on"] is t
+            # in the narrow chart the empty-state line is wrapped inside it, and the guided prompt
+            # is on the chart only while the spectrum (which carries it too) is not shown
+            cv = app._toner_chart_canvas
+            for h in (True, False):
+                app._toner_show_harmonics(h)
+                app._toner_show_tuner(False)
+                run(150)
+                chart_now()
+                lines = [i for i in cv.find_withtag("chart") if cv.type(i) == "text"
+                         and "intonation" in cv.itemcget(i, "text")]
+                assert lines, "no empty-state line on the chart"
+                wrap = int(float(cv.itemcget(lines[0], "width")))
+                assert 0 < wrap <= cv.winfo_width(), (h, wrap, cv.winfo_width())
+                x0, _y0, x1, _y1 = cv.bbox(lines[0])
+                assert x0 >= 0 and x1 <= cv.winfo_width(), f"the line runs off the chart: {x0}..{x1} of {cv.winfo_width()}"
+                app._toner_update_cal_prompt("A4", "3 s")
+                shown = bool(cv.find_withtag("calprompt"))
+                app._toner_update_cal_prompt("")
+                assert shown is (not h), f"HARMONICS {h}: the guided prompt on the chart is {shown}"
+            # the TUNER switch itself, as a user moves it; it asks no terms
+            app._toner_show_tuner(False)
+            app._toner_tuner_int.set(1)
+            run(100)
+            assert app._toner_tuner_on() and gauge.winfo_ismapped(), "the TUNER switch did not show the meter"
+            app._toner_tuner_int.set(0)
+            run(100)
+            assert not app._toner_tuner_on() and not gauge.winfo_ismapped()
+        finally:
+            app._toner_show_harmonics(was_h)
+            app._toner_show_tuner(was_t)
+            run(100)
+            app.settings["toner_unlocked"] = was_unlocked
+    check("the four views: the chart alone; spectrum | chart; chart | meter; spectrum | meter over chart; the chart and "
+          "the Preset Library button in every one; TUNER remembered", the_chart_is_in_every_view)
+
+    def the_sax_slider_follows_the_type():
+        """The SAX slider shows the horn the tab is working in, whoever set it (a preset at the
+        start of a capture, a run attached to a preset, an audio import): four of those set
+        the type and left the slider where it was."""
+        visible = app._toner_visible_sax
+        keep = app._toner_sax_var.get()
+        try:
+            for stype in ("Tenor", "Baritone", "Alto", "Soprano"):
+                app._toner_sax_var.set(stype)
+                assert app._toner_sax_idx_var.get() == visible.index(stype), \
+                    f"the type is {stype}, the slider is on {visible[app._toner_sax_idx_var.get()]}"
+            # and the slider still sets the type
+            app._toner_sax_idx_var.set(visible.index("Tenor"))
+            assert app._toner_sax_var.get() == "Tenor"
+            assert app._toner_engine is None or app._toner_engine.sax_type == "Tenor"
+        finally:
+            app._toner_sax_var.set(keep)
+    check("the SAX slider follows the horn type whoever sets it, and still sets it", the_sax_slider_follows_the_type)
+
+    def leaving_puts_the_width_back():
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the widening")
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width going back on leaving")
+        assert root.winfo_height() == start_h and getattr(app, "_analyzer_widened", None) is None, where()
+        # the restore is asked for, checked after idle and recorded (retried on Aqua if it applies late)
+        if W["start"][0] < W["need"]:
+            settle(restore_settled, what="the restore's record")
+            rec = app._analyzer_restore
+            assert rec["outcome"] == "restored" and rec["before"] == start_w and rec["widened_to"] == W["widened"], where()
+            assert rec["attempts"] >= 1 and rec["state"] == "normal", where()
+        # and again: select widens, leave restores
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the second widening")
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the second restore")
+        settle(restore_settled, what="the second restore's record")
+    check("leaving the tab puts the width back to what it was, height unchanged", leaving_puts_the_width_back)
+
+    def back_within_the_restores_check():
+        """Leave and come back within the 100 ms the restore's check waits before it looks (a
+        user can; the suite did, between two checks). The check must never run after the new
+        widening and take it for the old one not yet undone. On CI it did (Windows and Linux, no
+        audio device so the leave was instant, 2026-11-11): the window went back to its start
+        width with the tab selected, and every check after that failed on the window it left."""
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the widening")
+        app._toner_stop()                    # the engine out of the way: the leave is as instant as on CI
+        # The restore's check is held back for this check (HOLD_MS, not its 100 ms), so "back
+        # before it looks" does not depend on how fast the runner turns two 30 ms slices: on a
+        # loaded Apple Silicon runner the check had already run before the return (CI,
+        # 2026-11-12), which failed this check's own precondition, not the app.
+        HOLD_MS = 1500
+        real_after = root.after
+
+        def after_with_the_check_held(ms, func=None, *args):
+            if ms == 100 and getattr(func, "__name__", "") == "check":
+                ms = HOLD_MS
+            return real_after(ms, func, *args)
+        root.after = after_with_the_check_held
+        try:
+            app.notebook.select(app.pad_tab)
+            run(30)                              # the leave runs; the restore's check is due
+            assert not restore_settled(), f"the restore's check already ran {where()}"
+            assert getattr(app, "_analyzer_restore_after", None) is not None, f"the leave scheduled no check {where()}"
+            app.notebook.select(app.toner_tab_frame)
+            run(30)                              # back before the check looks
+        finally:
+            del root.after
+        settle(width_is(W["widened"]), what="the widening after an early return")
+        run(HOLD_MS + 500)                   # past when the held check would have looked, had it not been dropped
+        assert root.winfo_width() == W["widened"], f"the restore's check took the new widening back {where()}"
+        assert app._analyzer_widened == (start_w, W["widened"]), where()
+        rec = app._analyzer_restore
+        assert rec["attempts"] == 1 and rec["outcome"] == "superseded: the Analyzer was selected again", where()
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width going back on leaving")
+    check("coming back within the restore's check: the new widening stands and the check is dropped",
+          back_within_the_restores_check)
+
+    def a_size_the_user_chose_stays():
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(W["widened"]), what="the widening")
+        chosen = W["widened"] + 40
+        root.geometry(f"{chosen}x{start_h}")              # the user drags the window wider while on the tab
+        settle(width_is(chosen), what="the user's resize")
+        app.notebook.select(app.pad_tab)
+        settle(restore_settled, what="the leave's record")
+        run(300)
+        assert root.winfo_width() == chosen, f"the app took back a width the user chose {where()}"
+        assert getattr(app, "_analyzer_widened", None) is None, where()
+        assert app._analyzer_restore["outcome"] == "left alone: resized by the user", where()
+    check("a size the user chose while on the tab is left alone on leaving", a_size_the_user_chose_stays)
+
+    def a_window_already_wide_enough_is_left_alone():
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        wide = W["need"] + 60
+        root.geometry(f"{wide}x{start_h}")
+        settle(width_is(wide), what="the wide window")
+        app.notebook.select(app.toner_tab_frame)
+        run(400)
+        assert root.winfo_width() == wide and getattr(app, "_analyzer_widened", None) is None, where()
+        assert app._toner_strip_rows == 1 and app._toner_capture_btn.winfo_ismapped(), where()
+        app.notebook.select(app.pad_tab)
+        run(400)
+        assert root.winfo_width() == wide, where()
+    check("a window already wide enough is left alone, on select and on leave", a_window_already_wide_enough_is_left_alone)
+
+    def a_maximized_window_is_left_alone():
+        from_the_start(WIDE)
+        start_w, start_h = W["start"]
+        right, row1 = app._toner_strip_right, app._toner_strip_row1
+        # the guard itself, on every platform: a window that says it is zoomed is never resized,
+        # however narrow (here: the start-up width, with state() stood in)
+        root.state = lambda *a, **k: "zoomed"
+        try:
+            app.notebook.select(app.toner_tab_frame)
+            run(400)
+            assert root.winfo_width() == start_w, f"a zoomed window was resized {where()}"
+            assert getattr(app, "_analyzer_widened", None) is None and app._toner_strip_rows == 1, where()
+            app.notebook.select(app.pad_tab)
+            run(400)
+            assert root.winfo_width() == start_w, where()
+            # on a screen too narrow for one row the strip still goes to two rows (it is re-packed,
+            # not resized): a maximized window on that screen must not lose Capture either
+            screen(NARROW)
+            app.notebook.select(app.toner_tab_frame)
+            settle(lambda: app._toner_strip_rows == 2, what="two rows on a zoomed window")
+            run(200)
+            assert root.winfo_width() == start_w and getattr(app, "_analyzer_widened", None) is None, \
+                f"a zoomed window on a narrow screen was resized {where()}"
+            assert right.winfo_ismapped() and right.winfo_y() >= row1.winfo_y() + row1.winfo_height(), \
+                f"the right column not under the first row {where()}"
+            if app._analyzer_strip_need_px() <= root.winfo_width():
+                assert app._toner_capture_btn.winfo_ismapped(), f"Capture off the page on two rows {where()}"
+            app.notebook.select(app.pad_tab)
+            run(200)
+            assert root.winfo_width() == start_w, where()
+            screen(WIDE)
+        finally:
+            del root.state
+        # and a really maximized window, where the window manager has one
+        try:
+            root.state("zoomed")
+        except tk.TclError as e:
+            print(f"        (skipped: this window manager has no zoomed state: {e})")
+            return
+        run(400)
+        if root.state() != "zoomed":
+            print("        (skipped: the window manager did not maximize the window; no WM under xvfb)")
+            root.state("normal")
+            return
+        w = root.winfo_width()
+        app.notebook.select(app.toner_tab_frame)
+        run(400)
+        assert root.state() == "zoomed" and root.winfo_width() == w, f"a maximized window was touched {where()}"
+        assert getattr(app, "_analyzer_widened", None) is None, where()
+        app.notebook.select(app.pad_tab)
+        run(400)
+        assert root.state() == "zoomed" and root.winfo_width() == w, where()
+        root.state("normal")
+        settle(width_is(start_w), what="the window back from maximized")
+    check("a maximized window is never resized, on select and on leave; on a narrow screen its strip still goes "
+          "to two rows", a_maximized_window_is_left_alone)
+
+    def a_screen_too_narrow_for_one_row():
+        """A screen narrower than one row of the strip needs (German on CI's 1024 px Mac, 2026-11-11):
+        the strip goes to two rows, the right column (Load / MODE / Capture) under the rest, Capture
+        is on the page, the window is never wider than the screen, and a wide screen gets one row
+        again. With the window narrower than even two rows need, it widens to that and goes back."""
+        from_the_start(NARROW)
+        start_w, start_h = W["start"]
+        right, row1 = app._toner_strip_right, app._toner_strip_row1
+        btn = app._toner_capture_btn
+        app.notebook.select(app.toner_tab_frame)
+        settle(lambda: app._toner_strip_rows == 2, what="the strip going to two rows")
+        root.update_idletasks()
+        two_row_need = app._analyzer_strip_need_px()
+        assert two_row_need < NARROW and two_row_need < W["need"] - 200, f"two rows need {two_row_need} {where()}"
+        assert root.winfo_width() <= NARROW, f"wider than the screen {where()}"
+        assert right.winfo_ismapped() and right.winfo_y() >= row1.winfo_y() + row1.winfo_height(), \
+            f"the right column not under the first row (y {right.winfo_y()}, row1 {row1.winfo_y()}+{row1.winfo_height()}) {where()}"
+        assert btn.winfo_ismapped() and btn.winfo_rootx() + btn.winfo_width() <= root.winfo_rootx() + root.winfo_width(), \
+            f"Capture off the page on two rows {where()}"
+        assert all(c.winfo_ismapped() for c in right.winfo_children() if c is not app._toner_load_unload_btn), \
+            f"a right-column control unmapped {where()}"        # Unload shows only with a preset loaded
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width after leaving")
+        settle(restore_settled, what="the leave's record")
+        # narrower than two rows need: the window widens to exactly that, then goes back
+        root.geometry(f"{two_row_need - 80}x{start_h}")
+        settle(width_is(two_row_need - 80), what="the narrow window")
+        app.notebook.select(app.toner_tab_frame)
+        settle(width_is(two_row_need), what="the widening to two rows' need")
+        assert app._analyzer_widened == (two_row_need - 80, two_row_need) and app._toner_strip_rows == 2, where()
+        assert btn.winfo_ismapped(), f"Capture off the page after the two-row widening {where()}"
+        app.notebook.select(app.pad_tab)
+        settle(width_is(two_row_need - 80), what="the restore from two rows' need")
+        settle(restore_settled, what="the restore's record")
+        assert app._analyzer_restore["outcome"] == "restored", where()
+        root.geometry(f"{start_w}x{start_h}")
+        settle(width_is(start_w), what="the start width back")
+        # a wide screen again: one row, the right column back on the first row
+        screen(WIDE)
+        app.notebook.select(app.toner_tab_frame)
+        settle(lambda: app._toner_strip_rows == 1 and right.winfo_y() == row1.winfo_y(), what="one row on a wide screen")
+        assert app._analyzer_strip_need_px() == W["need"], f"one row's need changed {where()}"
+        app.notebook.select(app.pad_tab)
+        settle(width_is(start_w), what="the width after leaving")
+    check("a screen too narrow for one row: the strip goes to two rows with Capture on the page, the window never "
+          "wider than the screen; narrower than two rows need, it widens to that and goes back; a wide screen "
+          "gets one row again", a_screen_too_narrow_for_one_row)
+    from_the_start(WIDE)                     # the rest of the suite runs on the tab, on a wide screen
+    app.notebook.select(app.toner_tab_frame)
+    settle(width_is(W["widened"]), what="the tab back for the rest")
+
+    # ---------------------------------------------------------------- the switch and the terms
+    def the_switch_and_the_terms():
+        asked = []
+
+        def decline():
+            asked.append("declined")
+            return False
+
+        app._toner_show_harmonics_terms = decline
+        app._toner_harmonics_var.set("on")
+        run(300)
+        assert asked == ["declined"], asked
+        assert app._toner_harmonics_var.get() == "off" and app._toner_harmonics_int.get() == 0, "app._toner_harmonics_var.get() == \"off\" and app._toner_harmonics_int.get() == 0"
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), \
+            "the chart alone: the spectrum is not shown"
+        assert not app.settings.get("toner_unlocked") and not settings_on_disk().get("toner_unlocked"), "not app.settings.get(\"toner_unlocked\") and not settings_on_disk().get(\"toner_unlocked\")"
+
+        app._toner_show_harmonics_terms = lambda: asked.append("accepted") or True
+        app._toner_harmonics_var.set("on")
+        run(300)
+        assert asked == ["declined", "accepted"], asked
+        assert app._toner_harmonics_frame.winfo_ismapped() and app._toner_chart_frame.winfo_ismapped(), \
+            "HARMONICS on: the spectrum is shown and the chart stays"
+        assert app._toner_library_btn.winfo_ismapped(), "the Preset Library button went away with HARMONICS on"
+        assert app.settings["toner_unlocked"] is True and settings_on_disk()["toner_unlocked"] is True, "app.settings[\"toner_unlocked\"] is True and settings_on_disk()[\"toner_unlocked\"] is True"
+        assert settings_on_disk().get("analyzer_tab_shown_v3") is True, "the save did not carry the migration's flag"
+        cv = app._toner_spectrum_canvas
+        texts = [cv.itemcget(i, "text") for i in cv.find_all() if cv.type(i) == "text"]
+        assert "experimental" in texts, texts
+
+        app._toner_harmonics_var.set("off")
+        run(200)
+        assert app._toner_chart_frame.winfo_ismapped() and not app._toner_harmonics_frame.winfo_ismapped(), \
+            "the chart alone: the spectrum is not shown"
+
+        def never():
+            raise AssertionError("the terms were asked again after unlocking")
+        app._toner_show_harmonics_terms = never
+        app._toner_harmonics_var.set("on")
+        run(200)
+        assert app._toner_harmonics_frame.winfo_ismapped(), "app._toner_harmonics_frame.winfo_ismapped()"
+        # the position is remembered in the settings (written with the next regular save)
+        assert app.settings["toner_settings"]["harmonics_on"] is True, "app.settings[\"toner_settings\"][\"harmonics_on\"] is True"
+        app._toner_save_settings()
+        assert app.settings["toner_settings"]["harmonics_on"] is True, "app.settings[\"toner_settings\"][\"harmonics_on\"] is True"
+        app._toner_harmonics_var.set("off")
+        run(200)
+        assert app.settings["toner_settings"]["harmonics_on"] is False, "app.settings[\"toner_settings\"][\"harmonics_on\"] is False"
+    check("HARMONICS: declined terms put the switch back and unlock nothing; accepted terms unlock (saved) and show "
+          "the spectrum beside the chart, marked experimental; off again the chart alone; unlocked, the terms are not asked again; "
+          "the position is remembered in the settings", the_switch_and_the_terms)
+
+    # ---------------------------------------------------------------- required fields both ways
+    def required_fields_both_ways():
+        def form(**values):
+            keys = ("name", "horn_type", "horn_make", "horn_model", "player", "mouthpiece", "mic_type", "mic_model")
+            return {k: tk.StringVar(value=values.get(k, "")) for k in keys}
+        full = dict(name="P", horn_type="Alto", horn_make="Conn", horn_model="6M", player="Me", mouthpiece="M5")
+        app._toner_harmonics_var.set("off")
+        assert app._toner_validate_required_fields(form(**full), root) is True, "no mic is fine for intonation"
+        assert app._toner_validate_required_fields(form(**dict(full, player="")), root) is False, "app._toner_validate_required_fields(form(**dict(full, player=\"\")), root) is False"
+        assert app._toner_validate_required_fields(form(**dict(full, horn_type="")), root) is False, "app._toner_validate_required_fields(form(**dict(full, horn_type=\"\")), root) is False"
+        app._toner_harmonics_var.set("on")
+        run(150)
+        assert app._toner_validate_required_fields(form(**full), root) is False, "harmonics on: the mic is required"
+        assert app._toner_validate_required_fields(form(**dict(full, mic_type="condenser", mic_model="AT2020")),
+                                                   root) is True, "app._toner_validate_required_fields(form(**dict(full, mic_type=\"condenser\", mic_model=\"AT2020\")), root) is ..."
+        app._toner_harmonics_var.set("off")
+        run(150)
+        # the same rule at Capture on a preset with no mic type
+        app._toner_active_library, app._toner_active_preset = "My Presets", "Other"
+        app._toner_active_session = None
+        app._toner_update_preset_label()
+        assert not app._toner_presets["My Presets"]["Other"].get("mic_type"), "the seed grew a mic type"
+        app._toner_harmonics_var.set("on")
+        run(150)
+        app._toner_toggle_capture()
+        assert app._toner_active_session is None and app._toner_capture_state is None, "harmonics on: a mic is needed"
+        app._toner_harmonics_var.set("off")
+        run(150)
+        app._toner_toggle_capture()
+        assert app._toner_active_session is not None and app._toner_capture_state == "free_listening", "app._toner_active_session is not None and app._toner_capture_state == \"free_listening\""
+        app._toner_stop_capture()
+        app._toner_unload_preset()
+    check("required fields both ways: horn type, make, model, player, mouthpiece for a run; the mic fields and the "
+          "'Mic Type Required' stop at Capture only while HARMONICS is on", required_fields_both_ways)
+
+    # ---------------------------------------------------------------- the runs through the synthetic source
+    clock = FakeClock()
+    toner_tab.time = clock                         # the session dates, under the test's control
+
+    def load(name):
+        if app._toner_capture_state is not None:
+            app._toner_free_accumulator = []
+            app._toner_stop_capture()
+        clock.t += 60.0
+        preset = app._toner_presets["My Presets"][name]
+        app._toner_active_library, app._toner_active_preset = "My Presets", name
+        app._toner_active_session = None
+        app._toner_sax_var.set(preset["horn_type"])
+        app._toner_update_preset_label()
+
+    def free_run_on_the_synthetic_source():
+        load("Bench")
+        e = app._toner_engine
+        e.synthetic_hz = 293.66         # D4 first: a note the seeded library does not have (written E5 on a tenor)
+        app._toner_start()
+        app._toner_mode_var.set("free")
+        app._toner_toggle_capture()
+        assert app._toner_capture_state == "free_listening", "app._toner_capture_state == \"free_listening\""
+        chart_now()
+        assert "E5" not in chart_texts(), "the seeded chart already shows the note about to be played"
+        # D4 held: the synthetic source hands over 1024 samples a frame, at whatever rate the
+        # loop manages here, so wait for the readout to turn green rather than a fixed time
+        deadline = time.time() + 12.0
+        while app._toner_capture_label.cget("fg") != toner_tab.CAPTURE_READY_FG and time.time() < deadline:
+            run(300)
+        assert app._toner_capture_label.cget("fg") == toner_tab.CAPTURE_READY_FG, \
+            (app._toner_capture_label.cget("text"), app._toner_capture_label.cget("fg"))
+        first = app._toner_engine.audio_time_s
+        e.synthetic_hz = F0             # A#3: the note changes (silence would stop the synthetic stream)
+        deadline = time.time() + 12.0
+        while app._toner_engine.audio_time_s - first < 1.6 and time.time() < deadline:
+            run(300)
+        # the first note was saved when the second began, and the chart drew it while the run goes on
+        # (nothing resized: the redraw comes from the capture itself)
+        assert len(app._toner_active_session["captures"]) == 1, app._toner_active_session["captures"]
+        settle(lambda: "E5" in chart_texts(), what="the chart drawing the captured note during the run")
+        app._toner_toggle_capture()     # Stop: the last note is saved
+        app._toner_stop()
+        notes = [c["note"] for c in app._toner_active_session["captures"]]
+        assert notes == ["D4", "A#3"], notes
+        for c in app._toner_active_session["captures"]:
+            assert c["method"] == "free" and c["n_frames"] >= FREE_MIN_FRAMES, c
+        chart_now()
+        texts = chart_texts()
+        # Tenor: concert A#3 is written C5, D4 is written E5; the seeded C4 is written D5
+        for written in ("C5", "E5", "D5"):
+            assert written in texts, (written, texts)
+        assert "Bench" in texts, texts                     # the title
+        assert len(chart_markers()) >= 3, chart_markers()
+        disk = load_tone_presets(TONER_DATA_FILE)["My Presets"]["Bench"]
+        assert len(disk["sessions"]) == 2 and [c["note"] for c in disk["sessions"][1]["captures"]] == ["D4", "A#3"], "len(disk[\"sessions\"]) == 2 and [c[\"note\"] for c in disk[\"sessions\"][1][\"captures\"]] == [\"D4\", \"A#3\"]"
+    check("a free run on the synthetic source: two notes held, each kept, the readout green on a held note, the "
+          "chart with the written notes and the preset's name, the session on disk", free_run_on_the_synthetic_source)
+
+    def guided_run_on_the_synthetic_source():
+        load("Other")                                   # Alto
+        e = app._toner_engine
+        old = toner_tab.CAL_COUNTDOWN_S, toner_tab.CALIBRATION_DURATION_S
+        toner_tab.CAL_COUNTDOWN_S, toner_tab.CALIBRATION_DURATION_S = 0.4, 1.0    # the shape of the run, shorter
+        try:
+            # the first guided note is written A#3; on an alto that sounds C#3
+            e.synthetic_hz = note_to_freq("C#3")
+            app._toner_start()
+            app._toner_mode_var.set("calibration")
+            app._toner_toggle_capture()
+            assert app._toner_capture_state == "cal_countdown", "app._toner_capture_state == \"cal_countdown\""
+            # the loop's frame rate is whatever this machine manages: wait for each state, bounded
+            settle(lambda: app._toner_capture_state == "calibration", timeout=15.0, what="the countdown")
+            prompt = [app._toner_chart_canvas.itemcget(i, "text")
+                      for i in app._toner_chart_canvas.find_withtag("calprompt")]
+            # the large note name, as a player writes it, whether still waiting or already recording
+            assert prompt and prompt[0] == "Bb3", prompt
+            settle(lambda: app._toner_capture_state == "cal_pause", timeout=20.0, what="the recording")
+            prompt = [app._toner_chart_canvas.itemcget(i, "text")
+                      for i in app._toner_chart_canvas.find_withtag("calprompt")]
+            assert "A#3" not in prompt, prompt
+            assert "Bb3" in app._toner_capture_label.cget("text"), app._toner_capture_label.cget("text")
+            caps = app._toner_active_session["captures"]
+            assert len(caps) == 1 and caps[0]["method"] == "calibration", caps
+            assert caps[0]["written_note"] == "A#3" and caps[0]["note"] == "C#3", caps[0]
+            assert caps[0]["n_frames"] >= FREE_MIN_FRAMES, "caps[0][\"n_frames\"] >= FREE_MIN_FRAMES"
+            app._toner_toggle_capture()
+            app._toner_stop()
+            chart_now()
+            texts = chart_texts()
+            assert "Bb3" in texts and "A#3" not in texts and "Other" in texts, texts
+            assert len(chart_markers()) >= 1, "len(chart_markers()) >= 1"
+        finally:
+            toner_tab.CAL_COUNTDOWN_S, toner_tab.CALIBRATION_DURATION_S = old
+    check("a guided run on the synthetic source: countdown, the note asked for (shown large on the chart canvas), "
+          "recorded and filed under the asked note, the chart with it", guided_run_on_the_synthetic_source)
+
+    # ---------------------------------------------------------------- the readout, frame by frame
+    STEP_SAMPLES = 1455
+    STEP = STEP_SAMPLES / SAMPLE_RATE
+
+    def tick():
+        clock.t += STEP
+        app._toner_engine._samples_in += STEP_SAMPLES
+
+    def feed(n, f0=F0, note="A#3"):
+        for _ in range(n):
+            tick()
+            app._toner_process_capture_frame(frame(f0, note))
+
+    def kept_of(n):
+        times = [k * STEP for k in range(1, n + 1)]
+        return sum(whole_window(times, times[0], times[-1]))
+
+    SHORTEST = next(n for n in range(FREE_MIN_FRAMES, 200) if kept_of(n) >= FREE_MIN_FRAMES)
+
+    def the_readout_turns_green_at_the_right_frame():
+        assert SHORTEST == 34, SHORTEST
+        load("Bench")
+        app._toner_mode_var.set("free")
+        app._toner_toggle_capture()
+        label = app._toner_capture_label
+        feed(SHORTEST - 1)
+        assert label.cget("fg") == "#FFCC00" and label.cget("text") == f"Free: C5 ({kept_of(SHORTEST - 1)} frames)", \
+            (label.cget("text"), label.cget("fg"))
+        assert kept_of(SHORTEST - 1) < FREE_MIN_FRAMES, "kept_of(SHORTEST - 1) < FREE_MIN_FRAMES"
+        feed(1)
+        assert label.cget("fg") == "#00CC00" and label.cget("text") == f"Free: C5 ({FREE_MIN_FRAMES} frames)", \
+            (label.cget("text"), label.cget("fg"))
+        app._toner_process_capture_frame(silence())
+        assert label.cget("fg") == "#FFCC00", "label.cget(\"fg\") == \"#FFCC00\""
+        assert len(app._toner_active_session["captures"]) == 1, "len(app._toner_active_session[\"captures\"]) == 1"
+        assert "too short" not in app._toner_capture_progress.cget("text"), "\"too short\" not in app._toner_capture_progress.cget(\"text\")"
+        # a note let go before green
+        feed(20, f0=293.66, note="D4")
+        assert label.cget("fg") == "#FFCC00", "label.cget(\"fg\") == \"#FFCC00\""
+        app._toner_process_capture_frame(silence())
+        assert len(app._toner_active_session["captures"]) == 1, "len(app._toner_active_session[\"captures\"]) == 1"
+        assert app._toner_capture_progress.cget("text").endswith("E5 too short to keep"), \
+            app._toner_capture_progress.cget("text")
+        feed(SHORTEST)
+        app._toner_process_capture_frame(silence())
+        assert "too short" not in app._toner_capture_progress.cget("text"), "a kept note clears the words"
+        app._toner_stop_capture()
+    check("the readout counts the frames a capture would keep and turns green at the 34th frame; a note let go "
+          "sooner is named too short until the next note is kept", the_readout_turns_green_at_the_right_frame)
+
+    # ---------------------------------------------------------------- Compare and Export
+    def library():
+        """The Preset Library window, open (one window: a second call lifts it), its Library
+        box on All Libraries: these checks pick rows across libraries. The box itself is
+        checked in the_library_box."""
+        app._toner_open_preset_dialog()
+        run(50)
+        win = app._toner_library_win
+        app._toner_library_filter = None
+        app._toner_refresh_preset_list()
+        return win, app._preset_listbox, {b.cget("text"): b for b in widgets(win, tk.Button)}
+
+    def row_index(lb, text):
+        rows = list(lb.get(0, "end"))
+        hits = [i for i, t in enumerate(rows) if t.strip() == text or t.strip().startswith(text + "  (")]
+        assert hits, (text, rows)
+        return hits[0]
+
+    def compare_two_presets():
+        load("Bench")
+        run(200)
+        win, lb, buttons = library()
+        # the list: a heading per library, each preset as "Horn type — name (status)", the sessions of a
+        # preset with several under it; Compare asks for two or more rows
+        rows = list(lb.get(0, "end"))
+        assert any(r.strip().startswith("Tenor — Bench  (") and r.strip().endswith("notes)") for r in rows), rows
+        assert any(r.strip().startswith("2026-10-02 10:00:00") for r in rows), rows
+        assert str(buttons["Compare"].cget("state")) == "disabled", "Compare enabled with nothing selected"
+        lb.selection_clear(0, "end")
+        lb.selection_set(row_index(lb, "Tenor — Bench"))
+        lb.selection_set(row_index(lb, "2026-10-02 10:00:00"))
+        lb.event_generate("<<ListboxSelect>>")
+        run(50)
+        assert str(buttons["Compare"].cget("state")) == "normal", "Compare disabled with two rows selected"
+        buttons["Compare"].invoke()
+        run(100)
+        assert app._toner_library_win is None, "the library stayed open after Compare"
+        assert app._toner_compare_runs == [("My Presets", "Bench", None), ("My Presets", "Other", "2026-10-02 10:00:00")], app._toner_compare_runs
+        chart_now()
+        texts = chart_texts()
+        assert "Bench" in texts and "Other — 2026-10-02 10:00:00" in texts, texts
+        # no title on a comparison (Matt, 2026-11-11: "no title, just list the presets involved"): the
+        # legend is the heading
+        assert "Bench · Other — 2026-10-02 10:00:00" not in texts, texts
+        assert not [p for p in app._toner_chart_last_prims if p["kind"] == "text" and p["y"] == 8 and p["anchor"] == "n"], \
+            "a title primitive on a comparison"
+        kinds = chart_markers()
+        assert "oval" in kinds and "polygon" in kinds, kinds        # a circle for the first run, squares for the second
+        # Other's second session, an alto: D4 and E4 sound, written B4 and C#5
+        for written in ("B4", "C#5", "C5", "D5", "E5"):
+            assert written in texts, (written, texts)
+        # a click on a run's legend entry highlights that run (Matt, 2026-11-11): the other goes grey;
+        # a redraw keeps it; a click on the other moves it; the same again, or empty area, clears it
+        cv = app._toner_chart_canvas
+
+        def legend_of(i):
+            return [p for p in app._toner_chart_last_prims if p["kind"] == "text" and p.get("run") == i][0]
+
+        def line_colours():
+            return {p["run"]: p["color"] for p in app._toner_chart_last_prims if p["kind"] == "polyline"}
+
+        def order():
+            return [p["run"] for p in app._toner_chart_last_prims if p["kind"] == "polyline"]
+
+        def click(x, y):
+            cv.event_generate("<Button-1>", x=int(x), y=int(y))
+            run(50)
+        t0, t1 = legend_of(0), legend_of(1)
+        click(t1["x"] + 8, t1["y"])
+        assert app._toner_chart_highlight and app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
+        assert line_colours()[0] == intonation_chart.DIM and line_colours()[1] != intonation_chart.DIM, line_colours()
+        greys = [i for i in cv.find_withtag("chart") if cv.type(i) == "line" and cv.itemcget(i, "fill") == intonation_chart.DIM]
+        assert greys, "the canvas shows no grey line"
+        app._toner_chart_changed()
+        run(250)                                             # the debounced redraw keeps it
+        assert app._toner_chart_highlight[1] == 1 and line_colours()[0] == intonation_chart.DIM, "a redraw lost the highlight"
+        click(t0["x"] + 8, t0["y"])                          # the other run: the highlight moves
+        assert app._toner_chart_highlight[1] == 0 and line_colours()[1] == intonation_chart.DIM and order() == [1, 0], \
+            (app._toner_chart_highlight, line_colours(), order())
+        click(t0["x"] + 8, t0["y"])                          # the same again: cleared
+        assert app._toner_chart_highlight is None and intonation_chart.DIM not in line_colours().values(), line_colours()
+        click(t1["x"] + 8, t1["y"])
+        assert app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
+        click(cv.winfo_width() - 3, cv.winfo_height() - 3)   # empty area: cleared
+        assert app._toner_chart_highlight is None, app._toner_chart_highlight
+        # a note left out by hand (Matt, 2026-11-13): a right-click in its column offers it; it goes
+        # from every run, the axis and the export, the line under the chart names it, a redraw keeps
+        # it, the menu puts everything back, a change of runs drops it, and no capture is touched
+        import copy
+        before = copy.deepcopy(app._toner_presets)
+
+        def point(note):
+            return [p for p in app._toner_chart_last_prims if p["kind"] == "marker" and p.get("note") == note]
+
+        def labels(x, y):
+            return [label for label, _command in app._toner_chart_menu_items(x, y)]
+        assert app._toner_chart_left_out is None and labels(2, 40) == [], labels(2, 40)
+        c5 = point("C5")[0]
+        items = app._toner_chart_menu_items(c5["x"], 30)
+        assert [label for label, _c in items] == ["Leave out C5"], items
+        items[0][1]()
+        run(50)
+        assert not point("C5") and "C5" not in chart_texts(), "C5 is still on the chart"
+        assert point("D5") and "D5" in chart_texts(), "leaving one note out took another"
+        assert any(t.endswith("Left out by hand: C5.") for t in chart_texts()), chart_texts()
+        _runs, big = app._toner_chart_prims(toner_tab.CHART_W, toner_tab.CHART_H)
+        assert not [p for p in big if p.get("note") == "C5"], "the export still has the note left out"
+        assert any(p["kind"] == "text" and p["text"].endswith("Left out by hand: C5.") for p in big)
+        app._toner_chart_changed()
+        run(250)
+        assert not point("C5"), "a redraw put the note back"
+        e5 = point("E5")[0]
+        assert labels(e5["x"], e5["y"]) == ["Leave out E5", "Put back the notes left out"], labels(e5["x"], e5["y"])
+        app._toner_chart_menu_items(e5["x"], e5["y"])[0][1]()
+        run(50)
+        assert any(t.endswith("Left out by hand: C5, E5.") for t in chart_texts()), chart_texts()   # low to high
+        assert labels(2, 40) == ["Put back the notes left out"], labels(2, 40)
+        app._toner_chart_menu_items(2, 40)[0][1]()
+        run(50)
+        assert point("C5") and point("E5") and app._toner_chart_left_out is None
+        assert not any("Left out by hand" in t for t in chart_texts()), chart_texts()
+        # other runs on the chart: what was left out of these is not left out of those
+        app._toner_chart_menu_items(point("C5")[0]["x"], 30)[0][1]()
+        run(50)
+        compared = list(app._toner_compare_runs)
+        app._toner_compare_runs = [("My Presets", "Other", None)]
+        chart_now()
+        try:
+            assert app._toner_chart_left_out is None, "a note left out of one chart is out of another"
+            assert not any("Left out by hand" in t for t in chart_texts()), chart_texts()
+        finally:
+            app._toner_compare_runs = compared
+            chart_now()
+        assert point("C5"), "back on the first chart, the note is still out"
+        assert app._toner_presets == before, "leaving a note out changed the presets"
+        # the right mouse button is bound, and never the popup itself in a suite
+        assert cv.bind("<Control-Button-1>" if toner_tab.IS_MACOS else "<Button-3>"), "no right-click on the chart"
+        click(t1["x"] + 8, t1["y"])                          # held into the Load below
+        assert app._toner_chart_highlight[1] == 1, app._toner_chart_highlight
+        # the pooled rule, on the chart's own runs: a preset row is every session of it pooled (a note's
+        # cents the median of all its takes), a session row that session alone (Matt, 2026-11-11)
+        from intonation import run_from_preset
+        other = app._toner_presets["My Presets"]["Other"]
+        runs = app._toner_chart_runs()
+        session_run = [r for r in runs if r.name.startswith("Other")][0]
+        alone = run_from_preset(other, session_indices=[1], name="x")
+        assert [(r.note, round(r.cents, 6)) for r in session_run.readings] == [(r.note, round(r.cents, 6)) for r in alone.readings], \
+            "a session row is not that session alone"
+        app._toner_compare_runs = [("My Presets", "Other", None)]
+        pooled = [r for r in app._toner_chart_runs() if r.name == "Other"][0]
+        whole = run_from_preset(other, name="x")
+        assert [(r.note, round(r.cents, 6)) for r in pooled.readings] == [(r.note, round(r.cents, 6)) for r in whole.readings], \
+            "a preset row is not every session pooled"
+        assert len(pooled.readings) > len(session_run.readings), "the pooled run should hold both sessions' notes"
+        # Load from the library goes back to one preset alone, dropping the comparison and the highlight;
+        # a single run ignores clicks
+        app._toner_compare_runs = [("My Presets", "Bench", None), ("My Presets", "Other", "2026-10-02 10:00:00")]
+        chart_now()
+        win, lb, buttons = library()
+        lb.selection_clear(0, "end")
+        lb.selection_set(row_index(lb, "Tenor — Bench"))
+        lb.event_generate("<<ListboxSelect>>")
+        run(50)
+        assert str(buttons["Load"].cget("state")) == "normal", "Load disabled with one row selected"
+        buttons["Load"].invoke()
+        run(100)
+        assert app._toner_compare_runs == [] and app._toner_active_preset == "Bench", (app._toner_compare_runs, app._toner_active_preset)
+        chart_now()
+        assert "B4" not in chart_texts() and "Bench" in chart_texts(), "\"B4\" not in chart_texts() and \"Bench\" in chart_texts()"
+        assert app._toner_chart_highlight is None, app._toner_chart_highlight
+        t = legend_of(0)
+        click(t["x"] + 8, t["y"])
+        assert app._toner_chart_highlight is None and intonation_chart.DIM not in line_colours().values(), "a single run took a highlight"
+        assert app._toner_load_unload_btn.winfo_ismapped() and app._toner_load_unload_btn.cget("text") == "Unload", "Unload not on the strip with a preset loaded"
+    check("Compare from the Preset Library: two rows (a preset, one session of another) drawn together, each with "
+          "its name and marker, no title; a preset row is every session pooled and a session row that session alone; "
+          "the highlight by clicks; Load from the library goes back to one preset and shows Unload", compare_two_presets)
+
+
+    def march_labels_corrected_and_the_rest_left_out_and_said():
+        load("Old")
+        chart_now()
+        texts = chart_texts()
+        # the four March labels are corrected on read and drawn under the notes they are (D3, E3, F#3 and A3
+        # sounding, written E4, F#4, G#4 and B4 on a tenor); the semitone slip is left out; both are said
+        foot = [t for t in texts if "corrected" in t or "left out" in t]
+        assert len(foot) == 1, foot
+        assert foot[0].startswith("4 takes corrected: their labels were two transpositions low.") and \
+            "1 take left out: its pitch did not match its note." in foot[0], foot
+        assert "No take matched its note." not in texts, "\"No take matched its note.\" not in texts"
+        for written in ("E4", "F#4", "G#4", "B4"):
+            assert written in texts, (written, texts)
+        assert not any(t in ("C2", "D2", "E2", "G2", "C#5") for t in texts), texts     # neither the bogus labels nor the slip
+        cv = app._toner_chart_canvas
+        in_plot = [i for i in cv.find_withtag("chart") if cv.type(i) in ("oval", "polygon") and cv.coords(i)[1] > 60]
+        assert len(in_plot) == 4, f"{len(in_plot)} points in the plot, wanted the four corrected takes"
+        # the export carries the same line
+        runs, prims = app._toner_chart_prims(toner_tab.CHART_W, toner_tab.CHART_H)
+        assert runs[0].corrected == 4 and runs[0].left_out["off_note"] == 1 and len(runs[0].readings) == 4, "runs[0].corrected == 4 and runs[0].left_out[\"off_note\"] == 1 and len(runs[0].readings) == 4"
+        exported = [p["text"] for p in prims if p["kind"] == "text" and p.get("anchor") == "sw"]
+        assert exported == foot, (exported, foot)
+        # a good preset says nothing of the kind
+        load("Bench")
+        chart_now()
+        assert not any("left out" in t or "corrected" in t for t in chart_texts()), chart_texts()
+    check("a preset from March 2026 (labels two transpositions low) is charted under the notes it is, the chart "
+          "saying how many takes were corrected and how many left out, on screen and in the export; a good preset "
+          "says nothing", march_labels_corrected_and_the_rest_left_out_and_said)
+
+    def export_png_and_pdf():
+        import tkinter.filedialog as fd
+        out = tempfile.mkdtemp(prefix="ssc-analyzer-export-")
+        asked = []
+
+        def save_as(**kw):
+            asked.append(kw)
+            return asked[-1]["_path"] if "_path" in kw else target[0]
+
+        target = [os.path.join(out, "bench.png")]
+        fd.asksaveasfilename = save_as
+        load("Bench")
+        app._toner_export_chart()
+        assert asked and asked[-1]["initialfile"] == "Bench.png", asked
+        with open(target[0], "rb") as f:
+            head = f.read(24)
+        assert head[:8] == b"\x89PNG\r\n\x1a\n", head
+        w, h = struct.unpack(">II", head[16:24])
+        assert (w, h) == (2 * toner_tab.CHART_W, 2 * toner_tab.CHART_H), (w, h)
+        if intonation_chart.PNG_AVAILABLE:
+            from PIL import Image
+            img = Image.open(target[0]).convert("RGB")
+            colours = {img.getpixel((x, y)) for x in range(0, img.width, 25) for y in range(0, img.height, 25)}
+            assert len(colours) > 1, "a blank image"
+        target[0] = os.path.join(out, "bench.pdf")
+        app._toner_export_chart()
+        with open(target[0], "rb") as f:
+            pdf = f.read()
+        assert pdf.startswith(b"%PDF-1.4") and pdf.rstrip().endswith(b"%%EOF"), pdf[:20]
+        assert pdf.count(b"/Type /Page\n") == 1 or pdf.count(b"/Type /Page ") == 1 or b"/Count 1" in pdf, "not one page"
+        assert b"(Bench)" in pdf, "the title is not in the PDF"
+        # nothing to export: no file dialog
+        app._toner_unload_preset()
+        asked.clear()
+        app._toner_export_chart()
+        assert asked == [], "a save dialog with nothing to save"
+    check("Export...: a PNG at twice the chart's size with something drawn, and a one-page PDF carrying the title; "
+          "nothing to export asks for no file", export_png_and_pdf)
+
+    # ---------------------------------------------------------------- the Settings tick
+    def low_notes_left_setting():
+        load("Bench")
+        chart_now()
+
+        def x_of(text):
+            cv = app._toner_chart_canvas
+            xs = [cv.coords(i)[0] for i in cv.find_withtag("chart") if cv.type(i) == "text" and cv.itemcget(i, "text") == text]
+            assert xs, text
+            return xs[0]
+        assert x_of("C5") < x_of("D5"), "low notes on the left by default"     # the seeded A#3 and C4, written
+        before = set(toplevels())
+        app._toner_open_settings()
+        dlg = [w for w in toplevels() if w not in before][0]
+        boxes = {c.cget("text"): c for c in widgets(dlg, tk.Checkbutton)}
+        assert "Low notes on the left" in boxes, sorted(boxes)
+        boxes["Low notes on the left"].invoke()
+        {b.cget("text"): b for b in widgets(dlg, tk.Button)}["OK"].invoke()
+        assert not dlg.winfo_exists(), "not dlg.winfo_exists()"
+        assert app.settings["toner_settings"]["chart_low_notes_left"] is False, "app.settings[\"toner_settings\"][\"chart_low_notes_left\"] is False"
+        assert settings_on_disk()["toner_settings"]["chart_low_notes_left"] is False, "settings_on_disk()[\"toner_settings\"][\"chart_low_notes_left\"] is False"
+        chart_now()
+        assert x_of("C5") > x_of("D5"), "the axis did not flip"
+        app.settings["toner_settings"]["chart_low_notes_left"] = True
+        chart_now()
+        assert x_of("C5") < x_of("D5"), "x_of(\"C5\") < x_of(\"D5\")"
+    check("Settings > General: 'Low notes on the left' is saved and flips the axis", low_notes_left_setting)
+
+    toner_tab.time = time
+    app._toner_unload_preset()
+
+    # ---------------------------------------------------------------- the Key heights link (round 11)
+    def the_key_heights_link():
+        """Matt, 2026-11-11: a preset links to one Key Heights library entry, picked on the form, with
+        a button to enter the heights without leaving it; the link belongs to the preset; each session
+        keeps a copy of the heights; a link whose entry is gone reads as missing and breaks nothing."""
+        from config import KEY_PRESET_FILE, load_presets
+        from tkinter import ttk
+        from toner_engine import key_heights_link
+        # the library as the Key Heights tab holds it, one set to start with
+        app.key_presets = {"My Presets": {"Mark VI 145xxx": {"make": "Selmer", "model": "Mark VI", "size": "Alto",
+                                                              "serial": "", "notes": "", "units": "mm",
+                                                              "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}}}
+        app.update_key_library_dropdown()
+        top = tk.Toplevel(root)
+        frame = tk.Frame(top)
+        frame.pack()
+        # 1. the form: the picker at "(none)", the set listed; a link is never required
+        fields, lib_var, notes_text, sandbox_var = app._toner_build_preset_fields(frame, "#F0EAD6", "black")
+        kh = fields["key_heights"]
+        assert kh.get() == "(none)" and "Mark VI 145xxx (My Presets)" in kh.kh_choices, (kh.get(), list(kh.kh_choices))
+        assert app._toner_kh_link_from(fields) is None, app._toner_kh_link_from(fields)
+        for k, v in dict(name="KH", horn_type="Alto", horn_make="Selmer", horn_model="Mark VI", player="Me",
+                         mouthpiece="M5").items():
+            fields[k].set(v)
+        assert app._toner_validate_required_fields(fields, top) is True, "the link must never be required"
+        kh.set("Mark VI 145xxx (My Presets)")
+        data = app._toner_collect_preset_data(fields, notes_text)
+        assert data["key_heights"] == {"library": "My Presets", "set": "Mark VI 145xxx"}, data["key_heights"]
+        # 2. saved and reloaded with the preset
+        app._toner_presets.setdefault("My Presets", {})["KH"] = data
+        toner_tab.save_tone_presets(app._toner_presets, TONER_DATA_FILE)
+        on_disk = load_tone_presets(TONER_DATA_FILE)
+        assert key_heights_link(on_disk["My Presets"]["KH"]) == data["key_heights"], on_disk["My Presets"]["KH"]
+        # 3. Mutate pre-fills the link like every other field (the builder reads it from defaults)
+        fields2 = app._toner_build_preset_fields(frame, "#F0EAD6", "black",
+                                                 defaults=dict(on_disk["My Presets"]["KH"], name=""))[0]
+        assert fields2["key_heights"].get() == "Mark VI 145xxx (My Presets)", fields2["key_heights"].get()
+        # 4. Enter heights...: a NEW set into the Key Heights library through its store, the tab sees
+        #    it without a restart, the picker selects it; the units convert as on the tab
+        fields["horn_model"].set("Mark VII")
+        combo = [w for w in widgets(frame, ttk.Combobox) if str(w.cget("textvariable")) == str(kh)][0]
+        app._toner_enter_key_heights(top, fields, combo, kh)
+        dlg = app._toner_kh_dialog
+        entries = [e for e in widgets(dlg, tk.Entry) if not isinstance(e, ttk.Combobox)]   # a Combobox is an Entry too
+        assert entries[0].get() == "Selmer Mark VII", entries[0].get()        # the set name, from make and model
+        heights = entries[3:]                                                 # B, F, Low C: the layout's fields
+        assert len(heights) == 3, [e.get() for e in entries]
+        heights[0].delete(0, "end")
+        heights[0].insert(0, "2.6")
+        radios = widgets(dlg, tk.Radiobutton)
+        radios[1].invoke()                                                    # inches
+        assert heights[0].get() == "0.1024", heights[0].get()
+        radios[0].invoke()                                                    # and back to mm
+        assert heights[0].get() == "2.60", heights[0].get()
+        [b for b in widgets(dlg, tk.Button) if b.cget("text") == "Save"][0].invoke()
+        assert not dlg.winfo_exists(), "the dialog stayed open"
+        saved = app.key_presets["My Presets"]["Selmer Mark VII"]
+        assert saved["heights"] == {"B": "2.60", "F": "", "Low C": ""} and saved["units"] == "mm", saved
+        assert saved["make"] == "Selmer" and saved["model"] == "Mark VII" and saved["size"] == "Alto", saved
+        assert load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")["My Presets"]["Selmer Mark VII"] == saved, \
+            "the set is not in key_height_library.json"
+        assert "Selmer Mark VII" in app.key_preset_menu["values"], app.key_preset_menu["values"]   # the tab's list
+        assert kh.get() == "Selmer Mark VII (My Presets)", kh.get()
+        assert app._toner_collect_preset_data(fields, notes_text)["key_heights"] == {"library": "My Presets",
+                                                                                     "set": "Selmer Mark VII"}
+        # 5. a link whose entry is gone: shown as missing, kept, nothing raised
+        del app.key_presets["My Presets"]["Mark VI 145xxx"]
+        fields3 = app._toner_build_preset_fields(frame, "#F0EAD6", "black", defaults=on_disk["My Presets"]["KH"])[0]
+        assert fields3["key_heights"].get() == "Mark VI 145xxx (My Presets) \u2014 missing", fields3["key_heights"].get()
+        assert app._toner_kh_link_from(fields3) == {"library": "My Presets", "set": "Mark VI 145xxx"}
+        info = toner_tab._format_preset_info(on_disk["My Presets"]["KH"], app.key_presets)
+        assert "Key heights: Mark VI 145xxx (My Presets) \u2014 missing" in info, info
+        app.key_presets["My Presets"]["Mark VI 145xxx"] = {"make": "Selmer", "model": "Mark VI", "size": "Alto",
+                                                           "serial": "", "notes": "", "units": "mm",
+                                                           "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}
+        top.destroy()
+        # 6. a session snapshots the link and a copy of the heights; an edit of the entry later
+        #    changes nothing in the run
+        load("KH")
+        app._toner_toggle_capture()
+        s = app._toner_active_session
+        assert s is not None and s["key_heights"] == {"library": "My Presets", "set": "Mark VI 145xxx", "units": "mm",
+                                                      "heights": {"B": "2.5", "F": "7.0", "Low C": "9.0"}}, s
+        app.key_presets["My Presets"]["Mark VI 145xxx"]["heights"]["B"] = "9.9"
+        assert s["key_heights"]["heights"]["B"] == "2.5", "the session's copy followed the library"
+        # a session is kept at Stop only with a capture whose rolloff rate can be computed (8+ harmonics)
+        s["captures"].append(_capture("A3", 220.0, harmonics_db=[0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0, -26.0, -30.0]))
+        app._toner_stop_capture()
+        kept = load_tone_presets(TONER_DATA_FILE)["My Presets"]["KH"]
+        assert kept["key_heights"] == {"library": "My Presets", "set": "Mark VI 145xxx"}, kept["key_heights"]
+        assert kept["sessions"] and kept["sessions"][-1]["key_heights"]["heights"]["B"] == "2.5", kept["sessions"][-1]
+        app._toner_unload_preset()
+    check("the Key heights link: picked on the form (never required), saved and reloaded, pre-filled by Mutate; Enter "
+          "heights... saves a new set into the Key Heights library (units converting as on the tab), the tab lists "
+          "it and the picker selects it; a gone entry reads as missing; a session keeps a copy of the heights that "
+          "a later edit of the entry does not touch", the_key_heights_link)
+
+    # ---------------------------------------------------------------- the Preset Library (round 13)
+    def the_library_box():
+        """Matt, 2026-11-12: "I would like the libraries for the analyzer to be the same style as
+        the padmaker and key heights. currently they are all mixed together in a long list." A
+        Library box above the list: one library's presets with no heading, or All Libraries."""
+        from tkinter import ttk
+        app._toner_unload_preset()
+        old = getattr(app, "_toner_library_win", None)
+        if old is not None and old.winfo_exists():
+            old.destroy()
+        keep = app._toner_presets
+        cap_a = {"date": "2026-10-10 10:00:00", "captures": [_capture("A3", 220.0)]}
+        app._toner_presets = {
+            "My Presets": {"Mine": {"horn_type": "Alto", "sessions": [dict(cap_a)]}},
+            "Shop": {"One": {"horn_type": "Tenor", "sessions": [dict(cap_a)]},
+                     "Two": {"horn_type": "Tenor", "sessions": [dict(cap_a)]}},
+            "Empty": {},
+        }
+        try:
+            # opens on My Presets, as the Pad Maker's does, with nothing picked before and nothing loaded
+            app._toner_library_filter = False
+            app._toner_open_preset_dialog()
+            run(50)
+            win, lb = app._toner_library_win, app._preset_listbox
+            combos = widgets(win, ttk.Combobox)
+            assert len(combos) == 1, len(combos)
+            box = combos[0]
+            assert list(box.cget("values")) == ["All Libraries", "My Presets", "Shop"], list(box.cget("values"))
+            assert box.get() == "My Presets" and str(box.cget("state")) == "readonly"
+            rows = [t.strip() for t in lb.get(0, "end")]
+            assert rows == ["Alto \u2014 Mine  (1 notes)"], rows                  # one library, no heading
+            assert app._preset_list_keys == [("My Presets", "Mine", None)]
+
+            def pick(name):
+                box.set(name)
+                box.event_generate("<<ComboboxSelected>>")
+                run(50)
+                return [t.strip() for t in lb.get(0, "end")]
+            rows = pick("Shop")
+            assert rows == ["Tenor \u2014 One  (1 notes)", "Tenor \u2014 Two  (1 notes)"], rows
+            assert app._toner_library_filter == "Shop"
+            rows = pick("All Libraries")
+            assert len(rows) == 5 and rows[0].strip("\u2500 ") == "My Presets" and rows[2].strip("\u2500 ") == "Shop", rows
+            assert app._toner_library_filter is None and app._preset_list_keys[0] is None
+            # the choice is kept while the app runs: close, open, still the last library picked
+            pick("Shop")
+            win.destroy()
+            app._toner_open_preset_dialog()
+            run(50)
+            assert widgets(app._toner_library_win, ttk.Combobox)[0].get() == "Shop"
+            # a library that is gone falls back to All Libraries, and the box loses it
+            del app._toner_presets["Shop"]
+            app._toner_refresh_preset_list()
+            box = widgets(app._toner_library_win, ttk.Combobox)[0]
+            assert box.get() == "All Libraries" and list(box.cget("values")) == ["All Libraries", "My Presets"]
+            # with a preset loaded and nothing picked, it opens on that preset's library
+            app._toner_library_win.destroy()
+            app._toner_presets["Shop"] = {"One": {"horn_type": "Tenor", "sessions": [dict(cap_a)]}}
+            app._toner_library_filter = False
+            app._toner_active_library, app._toner_active_preset = "Shop", "One"
+            assert app._toner_library_default_filter() == "Shop"
+            app._toner_active_library = app._toner_active_preset = None
+            # with no My Presets and nothing loaded: All Libraries
+            del app._toner_presets["My Presets"]
+            assert app._toner_library_default_filter() is None
+        finally:
+            app._toner_active_library = app._toner_active_preset = None
+            app._toner_presets = keep
+            app._toner_library_filter = None
+            w = getattr(app, "_toner_library_win", None)
+            if w is not None and w.winfo_exists():
+                w.destroy()
+    check("the Preset Library's Library box: one library with no heading or All Libraries; opens on My Presets or "
+          "the loaded preset's; the choice is kept; a library that is gone falls back", the_library_box)
+
+    def export_and_import_keep_the_libraries():
+        """Matt, 2026-11-12: "export library needs a scroll bar and an ability to export an entire
+        library, or just items. each exported item should carry its library name with it", and
+        "test exporting and importing"."""
+        import copy
+        keep = app._toner_presets
+        keep_save = toner_tab.save_tone_presets
+        from tkinter import filedialog
+
+        def preset(horn, n):
+            return {"horn_type": horn, "horn_make": "M", "horn_model": f"model {n}", "player": "P", "mouthpiece": "MP",
+                    "key_heights": None,
+                    "sessions": [{"date": f"2026-10-{10 + n:02d} 10:00:00", "horn_type": horn,
+                                  "captures": [_capture("A3", 220.0 + n), _capture("C4", 261.6)]}]}
+        library = {
+            "Shop": {f"shop horn {i}": preset("Tenor", i) for i in range(3)},
+            "A customer": {f"customer horn {i}": preset("Alto", i) for i in range(2)},
+            "Big": {f"big {i:03d}": preset("Alto", i % 9) for i in range(60)},
+        }
+        out_dir = tempfile.mkdtemp(prefix="ssc-export-")
+        files, saved = [], []
+        keep_saveas, keep_openname = filedialog.asksaveasfilename, filedialog.askopenfilename
+        filedialog.asksaveasfilename = lambda **k: files[-1]
+        filedialog.askopenfilename = lambda **k: files[-1]
+        toner_tab.save_tone_presets = lambda presets, path: saved.append(copy.deepcopy(presets))
+
+        def export(pick):
+            """Open the window, apply `pick(window)`, click Export; the file's contents."""
+            app._toner_presets = copy.deepcopy(library)
+            files.append(os.path.join(out_dir, f"export{len(files)}.json"))
+            app._toner_export_presets()
+            run(80)
+            win = app._toner_export_win
+            pick(win)
+            next(b for b in widgets(win, tk.Button) if b.cget("text") == "Export").invoke()
+            run(80)
+            with open(files[-1], encoding="utf-8") as f:
+                return json.load(f)
+
+        def import_into(start):
+            app._toner_presets = copy.deepcopy(start)
+            app._toner_import_presets()
+            run(50)
+            return app._toner_presets
+        try:
+            # the window: a tick per library and per preset, everything ticked, and it scrolls
+            app._toner_presets = copy.deepcopy(library)
+            files.append(os.path.join(out_dir, "unused.json"))
+            app._toner_export_presets()
+            run(80)
+            win = app._toner_export_win
+            assert sorted(win._export_library_vars) == ["A customer", "Big", "Shop"], sorted(win._export_library_vars)
+            assert len(win._export_check_vars) == 65 and all(v.get() for v in win._export_check_vars)
+            cv = win._export_canvas
+            region = [float(x) for x in str(cv.cget("scrollregion")).split()]
+            assert region[3] > cv.winfo_height() + 200, f"sixty-five rows do not need to scroll? {region} in {cv.winfo_height()}"
+            assert win.winfo_reqheight() <= win.winfo_screenheight(), "the window is taller than the screen"
+            assert widgets(win, tk.Scrollbar), "no scroll bar"
+            assert all(b.winfo_y() + b.winfo_height() <= win.winfo_reqheight() for b in widgets(win, tk.Button)), \
+                "a button is below the window's own height"
+            first, last = cv.yview()
+            cv.yview_moveto(1.0)
+            run(30)
+            assert cv.yview()[1] == 1.0 and cv.yview()[0] > first, (first, last, cv.yview())
+            # a library's tick takes all its presets; a preset's tick clears its library's
+            lib_var, members = win._export_library_vars["Shop"]
+            head = next(c for c in widgets(win, tk.Checkbutton) if c.cget("text") == "Shop")
+            head.invoke()                                   # through the widget's own command: off
+            assert not lib_var.get() and not any(m.get() for m in members), "the library's tick did not clear its presets"
+            head.invoke()                                   # on again
+            assert lib_var.get() and all(m.get() for m in members), "the library's tick did not take its presets"
+            head.invoke()                                   # and off, for what follows
+            assert not lib_var.get() and not any(m.get() for m in members), "the library's tick did not clear its presets"
+            row = next(c for c in widgets(win, tk.Checkbutton) if "shop horn 1" in c.cget("text"))
+            row.invoke()
+            assert members[1].get() and not lib_var.get(), "one preset of three ticked the library"
+            for c in widgets(win, tk.Checkbutton):
+                if "shop horn 0" in c.cget("text") or "shop horn 2" in c.cget("text"):
+                    c.invoke()
+            assert lib_var.get(), "all its presets ticked, the library's tick is still clear"
+            win.destroy()
+
+            # everything: the file holds every preset under its library, and imports back the same
+            whole = export(lambda w: None)
+            assert whole == library, "the export of everything is not the library"
+            assert import_into({}) == library and saved, "export then import into an empty library lost something"
+
+            # one whole library, by its tick alone
+            def only_shop(w):
+                next(b for b in widgets(w, tk.Button) if b.cget("text") == "None").invoke()
+                next(c for c in widgets(w, tk.Checkbutton) if c.cget("text") == "Shop").invoke()
+            one = export(only_shop)
+            assert one == {"Shop": library["Shop"]}, sorted(one)
+            got = import_into({"Shop": {"already": preset("Tenor", 5)}, "Other": {"x": preset("Alto", 1)}})
+            assert sorted(got) == ["Other", "Shop"] and sorted(got["Shop"]) == ["already"] + sorted(library["Shop"]), \
+                {k: sorted(v) for k, v in got.items()}
+
+            # single items from two libraries: each goes back under its own library's name
+            def two_items(w):
+                next(b for b in widgets(w, tk.Button) if b.cget("text") == "None").invoke()
+                for c in widgets(w, tk.Checkbutton):
+                    if "customer horn 1" in c.cget("text") or "big 007" in c.cget("text"):
+                        c.invoke()
+            few = export(two_items)
+            assert few == {"A customer": {"customer horn 1": library["A customer"]["customer horn 1"]},
+                           "Big": {"big 007": library["Big"]["big 007"]}}, {k: sorted(v) for k, v in few.items()}
+            got = import_into({})
+            assert got == few
+            # the same file again adds nothing: a preset there already keeps its sessions once
+            app._toner_presets = copy.deepcopy(few)
+            app._toner_import_presets()
+            run(50)
+            assert app._toner_presets == few, "a second import of the same file changed the library"
+        finally:
+            filedialog.asksaveasfilename, filedialog.askopenfilename = keep_saveas, keep_openname
+            toner_tab.save_tone_presets = keep_save
+            app._toner_presets = keep
+            w = getattr(app, "_toner_export_win", None)
+            if w is not None and w.winfo_exists():
+                w.destroy()
+    check("Export presets: the list scrolls and fits the screen; a library's tick takes its presets; a whole library, "
+          "or single items, go to the file under their library's name and import back into it", export_and_import_keep_the_libraries)
+
+    def the_preset_library():
+        """Matt, 2026-11-11: one window for everything done with presets, and "click capture and go
+        record, and enter the preset info after". Buttons by selection count; Load and Capture from
+        the list; Unload on the strip only with a preset loaded and no capture running; Rename; the
+        old Load dialog and Compare picker gone."""
+        app._toner_unload_preset()
+        win, lb, buttons = library()
+        for name in ("Load", "Capture", "Record first", "Compare", "Export chart...", "New Preset...", "Mutate...",
+                     "Rename", "Edit Notes...", "Delete", "Import Audio File...", "Import presets...",
+                     "Export presets...", "Close"):
+            assert name in buttons, (name, sorted(buttons))
+        one_only = ("Load", "Capture", "Mutate...", "Rename", "Edit Notes...", "Delete")
+        # no Analyze button: it opened the harmonic comparison and asked for the horns again
+        # (Matt, 2026-11-12); that is File > Harmonic Analysis (experimental)... now
+        assert "Analyze..." not in buttons, sorted(buttons)
+        labels = [app.toner_menu.nametowidget(app.toner_menu.entrycget(i, "menu")).entrycget(j, "label")
+                  for i in range(app.toner_menu.index("end") + 1) if app.toner_menu.type(i) == "cascade"
+                  for m in [app.toner_menu.nametowidget(app.toner_menu.entrycget(i, "menu"))]
+                  for j in range(m.index("end") + 1) if m.type(j) == "command"]
+        assert "Harmonic Analysis (experimental)..." in labels and "Analyze..." not in labels, labels
+        always = ("Record first", "New Preset...", "Import Audio File...", "Import presets...", "Export presets...", "Close")
+
+        def states():
+            return {n: str(b.cget("state")) for n, b in buttons.items()}
+
+        def select(*texts):
+            lb.selection_clear(0, "end")
+            for t in texts:
+                lb.selection_set(row_index(lb, t))
+            lb.event_generate("<<ListboxSelect>>")
+            run(50)
+        select()
+        s = states()
+        assert all(s[n] == "disabled" for n in one_only) and s["Compare"] == "disabled" and all(s[n] == "normal" for n in always), s
+        select("Tenor — Bench")
+        s = states()
+        assert all(s[n] == "normal" for n in one_only) and s["Compare"] == "disabled", s
+        select("Tenor — Bench", "Alto — Other")
+        s = states()
+        assert all(s[n] == "disabled" for n in one_only) and s["Compare"] == "normal", s
+        # eight rows: Compare stays disabled past seven
+        try:
+            app._toner_presets["Tmp"] = {f"T{i}": {"horn_type": "Alto", "sessions": [{"date": f"2026-10-{10 + i} 10:00:00", "captures": [_capture("A3", 220.0)]}]} for i in range(8)}
+            app._toner_refresh_preset_list()
+            select(*[f"Alto — T{i}" for i in range(8)])
+            assert states()["Compare"] == "disabled", "Compare enabled with eight rows"
+            select(*[f"Alto — T{i}" for i in range(7)])
+            assert states()["Compare"] == "normal", "Compare disabled with seven rows"
+        finally:
+            del app._toner_presets["Tmp"]
+            app._toner_refresh_preset_list()
+        # Rename: in place, sessions and all; empty and duplicate names refused by their warnings
+        select("Tenor — Old")
+        keys_before = list(app._toner_presets["My Presets"])
+        buttons["Rename"].invoke()
+        run(50)
+        dlg = app._toner_rename_dialog
+        entry = widgets(dlg, tk.Entry)[0]
+        rename_btn = {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Rename"]
+        entry.delete(0, "end")
+        rename_btn.invoke()
+        assert dlg.winfo_exists() and box_guard.GUARD.shown[-1][1] == "Required Field", box_guard.GUARD.shown[-1]
+        entry.insert(0, "Bench")
+        rename_btn.invoke()
+        assert dlg.winfo_exists() and box_guard.GUARD.shown[-1][1] == "Duplicate Name", box_guard.GUARD.shown[-1]
+        entry.delete(0, "end")
+        entry.insert(0, "Old renamed")
+        rename_btn.invoke()
+        run(50)
+        assert not dlg.winfo_exists(), "the rename dialog stayed open"
+        keys_after = list(app._toner_presets["My Presets"])
+        assert "Old renamed" in keys_after and "Old" not in keys_after and keys_after.index("Old renamed") == keys_before.index("Old"), (keys_before, keys_after)
+        assert load_tone_presets(TONER_DATA_FILE)["My Presets"]["Old renamed"]["sessions"], "the renamed preset lost its sessions or was not saved"
+        # Capture from the library: loads and starts; Unload hides while capturing, shows after Stop
+        select("Tenor — Bench")
+        buttons["Capture"].invoke()
+        run(100)
+        assert app._toner_library_win is None and app._toner_active_preset == "Bench", (app._toner_library_win, app._toner_active_preset)
+        assert app._toner_capture_state == "free_listening", app._toner_capture_state
+        assert not app._toner_load_unload_btn.winfo_ismapped(), "Unload shown while capturing"
+        app._toner_free_accumulator = []
+        app._toner_stop_capture()
+        run(50)
+        assert app._toner_load_unload_btn.winfo_ismapped(), "Unload not back after Stop"
+        app._toner_load_unload_btn.invoke()
+        run(50)
+        assert app._toner_active_preset is None and not app._toner_load_unload_btn.winfo_ismapped(), "Unload did not unload"
+        # Capture on the strip with nothing loaded opens the library (no box)
+        app._toner_toggle_capture()
+        run(50)
+        assert app._toner_library_win is not None and app._toner_library_win.winfo_exists(), "Capture with no preset did not open the library"
+        assert app._toner_capture_state is None, app._toner_capture_state
+        app._toner_library_close()
+        # the old dialogs are gone
+        assert not hasattr(app, "_toner_load_preset_quick") and not hasattr(app, "_toner_open_compare_dialog"), "an old dialog is still there"
+    check("the Preset Library: every button, enabled by the selection count (one, two to seven, none); Rename in "
+          "place with its refusals; Capture from it loads and starts, Unload hides while capturing and shows after; "
+          "Capture with nothing loaded opens it; the Load dialog and the Compare picker are gone", the_preset_library)
+
+    def record_first_and_the_unsaved_run():
+        """Matt: "they can select a preset or click new or click record first". A run with no preset is
+        held in memory and shown as Unsaved run; at Stop the question; each ending; each way out asks
+        the same and Cancel stays put."""
+        from intonation import run_from_captures
+        answers = []
+        app._toner_ask_unsaved_run = lambda reason: answers.pop(0) if answers else "keep"
+        app._toner_unload_preset()
+        app._toner_sax_var.set("Alto")
+        rec_dir = tempfile.mkdtemp(prefix="ssc-rec13-")
+        app.settings["toner_recording_dir"] = rec_dir
+
+        def capture_one(note="A3", hz=220.0):
+            cap = _capture(note, hz, harmonics_db=[0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0, -26.0, -30.0])
+            app._toner_active_session["captures"].append(cap)
+
+        # Record first from the library: no preset, a session of the selector's horn type
+        win, lb, buttons = library()
+        buttons["Record first"].invoke()
+        run(100)
+        assert app._toner_library_win is None and app._toner_active_preset is None, "Record first loaded something"
+        assert app._toner_capture_state == "free_listening" and app._toner_active_session["horn_type"] == "Alto", \
+            (app._toner_capture_state, app._toner_active_session)
+        assert app._toner_preset_label.cget("text") == "Unsaved run", app._toner_preset_label.cget("text")
+        # the horn type cannot change under a capture: the slider is locked while it runs
+        assert str(app._toner_sax_scale_widget.cget("state")) == "disabled", "the sax slider is free during a capture"
+        capture_one()
+        chart_now()
+        assert "Unsaved run" in chart_texts(), chart_texts()
+        assert app._toner_preset_label.cget("text") == "Unsaved run", app._toner_preset_label.cget("text")
+        # Stop: Keep for now keeps it in memory, the chart still showing it; Capture resumes it
+        answers[:] = ["keep"]
+        app._toner_free_accumulator = []
+        app._toner_stop_capture()
+        run(50)
+        assert app._toner_has_unsaved_run() and app._toner_capture_state is None and not answers, "Keep for now did not keep the run"
+        # stopped, with no preset: the slider is free again
+        assert str(app._toner_sax_scale_widget.cget("state")) == "normal", "the sax slider stayed locked after Stop"
+        chart_now()
+        assert "Unsaved run" in chart_texts(), chart_texts()
+        app._toner_toggle_capture()
+        run(50)
+        assert app._toner_capture_state == "free_listening" and len(app._toner_active_session["captures"]) == 1, "Capture did not resume the kept run"
+        assert str(app._toner_sax_scale_widget.cget("state")) == "disabled", "the sax slider is free during a resumed capture"
+        # the four ways out, each with Cancel staying put
+        app._toner_free_accumulator = []
+        app._toner_stop_capture()      # the question again: keep
+        run(50)
+        assert app._toner_has_unsaved_run(), "the run went"
+        answers[:] = ["keep"]
+        app.notebook.select(app.pad_tab)
+        run(300)
+        assert app.notebook.select() == str(app.toner_tab_frame) and app._toner_has_unsaved_run() and not answers, \
+            ("leaving the tab did not ask, or did not stay put", app.notebook.select())
+        answers[:] = ["keep"]
+        app.on_exit()
+        run(50)
+        assert root.winfo_exists() and app._toner_has_unsaved_run() and not answers, "quitting did not ask, or did not stay"
+        win, lb, buttons = library()
+        select_bench = lambda: (lb.selection_clear(0, "end"), lb.selection_set(row_index(lb, "Tenor — Bench")), lb.event_generate("<<ListboxSelect>>"), run(50))
+        select_bench()
+        answers[:] = ["keep"]
+        buttons["Load"].invoke()
+        run(50)
+        assert app._toner_active_preset is None and app._toner_has_unsaved_run() and not answers and app._toner_library_win is not None, "Load did not ask, or did not stay"
+        answers[:] = ["keep"]
+        buttons["Record first"].invoke()
+        run(50)
+        assert app._toner_capture_state is None and app._toner_has_unsaved_run() and not answers, "Record first did not ask, or started anyway"
+        app._toner_library_close()
+        # ending 1: an existing preset (the pick stood in): the run becomes a session of it, the setup copied in
+        app._toner_pick_preset_for_run = lambda: ("My Presets", "Other")
+        answers[:] = ["existing"]
+        assert app._toner_settle_unsaved_run("load") is True and not answers, "the existing-preset ending did not settle"
+        assert app._toner_active_preset == "Other" and not app._toner_has_unsaved_run(), (app._toner_active_preset, app._toner_has_unsaved_run())
+        saved = load_tone_presets(TONER_DATA_FILE)["My Presets"]["Other"]["sessions"][-1]
+        assert saved["captures"] and saved["horn_type"] == "Alto" and saved["player"] == "Matt", saved
+        app._toner_unload_preset()
+        # ending 2: a new preset (the form stood in by what it does: a preset made, the run attached)
+        app._toner_record_first()
+        capture_one("D4", 293.66)
+        app._toner_free_accumulator = []
+
+        def new_preset_for_run():
+            app._toner_presets["My Presets"]["Recorded"] = {"horn_type": "Alto", "horn_make": "Conn", "horn_model": "6M", "player": "Me",
+                                                           "mouthpiece": "M5", "mic_type": "", "mic_model": "", "notes": "", "sessions": []}
+            return app._toner_attach_run_to_preset("My Presets", "Recorded")
+        app._toner_new_preset_for_run = new_preset_for_run
+        answers[:] = ["new"]
+        app._toner_stop_capture()
+        run(50)
+        assert app._toner_active_preset == "Recorded" and not answers, app._toner_active_preset
+        assert load_tone_presets(TONER_DATA_FILE)["My Presets"]["Recorded"]["sessions"][0]["captures"], "the new preset did not get the run"
+        app._toner_unload_preset()
+        # ending 3: discard, confirmed, with its recording deleted
+        app._toner_record_first()
+        capture_one()
+        wav = os.path.join(rec_dir, "session_2026-11-11_10-00-00.wav")
+        with open(wav, "wb") as f:
+            f.write(b"RIFF")
+        app._toner_active_session["recording_file"] = os.path.basename(wav)
+        app._toner_free_accumulator = []
+        answers[:] = ["discard"]
+        box_guard.GUARD.expect("Discard run", answer=True)
+        app._toner_stop_capture()
+        run(50)
+        assert app._toner_active_session is None and not answers, "discard did not clear the run"
+        assert "recording" in box_guard.GUARD.asked[-1][2] and not os.path.exists(wav), (box_guard.GUARD.asked[-1], os.path.exists(wav))
+        # a declined discard keeps the run
+        app._toner_record_first()
+        capture_one()
+        app._toner_free_accumulator = []
+        answers[:] = ["discard", "keep"]
+        box_guard.GUARD.expect("Discard run", answer=False)
+        app._toner_stop_capture()
+        run(50)
+        assert app._toner_has_unsaved_run() and not answers, "a declined discard lost the run"
+        # the mic rule at save, not at start: with HARMONICS on, a preset without a mic type is refused
+        app._toner_harmonics_var.set("on")
+        run(150)
+        app._toner_pick_preset_for_run = lambda: ("My Presets", "Other")     # Other has no mic type
+        answers[:] = ["existing", "keep"]
+        assert app._toner_settle_unsaved_run("load") is False and not answers, "the mic rule did not refuse"
+        assert box_guard.GUARD.shown[-1][1] == "Mic Type Required", box_guard.GUARD.shown[-1]
+        app._toner_harmonics_var.set("off")
+        run(150)
+        # the run's chart is the session alone, named Unsaved run, of the selector's horn type
+        runs = app._toner_chart_runs()
+        assert [r.name for r in runs] == ["Unsaved run"], [r.name for r in runs]
+        alone = run_from_captures([app._toner_active_session], "Alto", 440.0, "x")
+        assert [(r.note, round(r.cents, 6)) for r in runs[0].readings] == [(r.note, round(r.cents, 6)) for r in alone.readings]
+        # clean up: discard it
+        answers[:] = ["discard"]
+        box_guard.GUARD.expect("Discard run", answer=True)
+        assert app._toner_settle_unsaved_run("load") is True
+        del app._toner_ask_unsaved_run, app._toner_pick_preset_for_run, app._toner_new_preset_for_run
+        app._toner_unload_preset()
+    check("Record first: a run with no preset, shown as Unsaved run; Keep for now, then Capture resumes it; leaving "
+          "the tab, quitting, Load and Record first each ask and Cancel stays put; the three endings (an existing "
+          "preset with the setup copied in, a new preset, discard with its recording deleted; a declined discard "
+          "keeps it); the mic rule at save with HARMONICS on; the run's chart is the session alone",
+          record_first_and_the_unsaved_run)
+
+    # ---------------------------------------------------------------- the audio import (round 12)
+    def the_audio_import_dialog():
+        """File > Presets > Import Audio File: the existing-preset list shows the horn type and maps by
+        index; the new-preset path is the one preset form (the required fields as everywhere, the Key
+        heights picker there), the import following the save. A generated WAV stands in for the file
+        dialog; no native dialog opens."""
+        import tkinter.filedialog as fd
+        import wave
+        from tkinter import ttk
+        import numpy as np
+        path = os.path.join(_PROFILE, "import.wav")
+        sr, f0 = 44100, 233.08
+        t = np.arange(int(sr * 3.0)) / sr
+        sig = sum(np.sin(2 * np.pi * f0 * k * t) * (0.5 / k) for k in range(1, 6)) * 0.6
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            w.writeframes((np.clip(sig, -1, 1) * 32767).astype("<i2").tobytes())
+        app._toner_harmonics_var.set("off")
+        run(150)
+        guard_open = fd.askopenfilename
+        fd.askopenfilename = lambda **kw: path
+        try:
+            # path 1: an existing preset, picked by index from a list that shows the horn type
+            before = set(toplevels())
+            app._toner_import_audio_file()
+            dlg = [w for w in toplevels() if w not in before][0]
+            combo = app._toner_import_preset_combo
+            values = list(combo["values"])
+            assert "[My Presets] Alto — KH" in values and "[My Presets] Tenor — Bench" in values, values
+            combo.current(values.index("[My Presets] Alto — KH"))
+            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import & Analyze"].invoke()
+            run(200)
+            assert not dlg.winfo_exists(), "the import dialog stayed open"
+            s = app._toner_presets["My Presets"]["KH"]["sessions"][-1]
+            assert s["method"] == "file" and s["captures"] and s["horn_type"] == "Alto", s
+            assert s["key_heights"]["set"] == "Mark VI 145xxx" and s["key_heights"]["heights"], s.get("key_heights")
+            app._toner_unload_preset()
+            # path 2: a new preset through the one form, required fields enforced, the import after
+            before = set(toplevels())
+            app._toner_import_audio_file()
+            dlg = [w for w in toplevels() if w not in before][0]
+            [r for r in widgets(dlg, tk.Radiobutton) if r.cget("text") == "Create new preset..."][0].invoke()
+            {b.cget("text"): b for b in widgets(dlg, tk.Button)}["Import & Analyze"].invoke()
+            run(100)
+            assert not dlg.winfo_exists(), "the import dialog stayed open"
+            form = [w for w in toplevels() if w not in before and w.winfo_exists()][0]
+            assert form.title() == "New Tone Preset", form.title()
+            fbuttons = {b.cget("text"): b for b in widgets(form, tk.Button)}
+            assert "Create & Import" in fbuttons, sorted(fbuttons)
+            assert any(c.get() == "(none)" for c in widgets(form, ttk.Combobox)), "no Key heights picker on the import's form"
+            fbuttons["Create & Import"].invoke()
+            run(50)
+            assert form.winfo_exists(), "the form accepted an empty preset"
+            assert box_guard.GUARD.shown[-1][1] == "Required Field", box_guard.GUARD.shown[-1]
+            entries = [e for e in widgets(form, tk.Entry) if not isinstance(e, ttk.Combobox)]
+            for e, v in zip(entries, ("Imported", "Conn", "6M", "Me", "M5")):      # name, make, model, player, mouthpiece
+                e.delete(0, "end")
+                e.insert(0, v)
+            fbuttons["Create & Import"].invoke()
+            run(300)
+            assert not form.winfo_exists(), "the form stayed open with the required fields filled"
+            p = app._toner_presets["My Presets"]["Imported"]
+            assert p["horn_type"] == "Alto" and p["mic_type"] == "" and p["key_heights"] is None and "notes" in p, p
+            assert p["sessions"] and p["sessions"][-1]["method"] == "file" and p["sessions"][-1]["captures"], p["sessions"]
+            assert load_tone_presets(TONER_DATA_FILE)["My Presets"]["Imported"]["sessions"], "the import was not saved"
+        finally:
+            fd.askopenfilename = guard_open
+            app._toner_unload_preset()
+    check("Import Audio File: the existing-preset list shows the horn type and maps by index (the session carries the "
+          "setup and the Key heights snapshot); the new-preset path is the one form, required fields enforced, Key "
+          "heights picker present, the import following the save; no native dialog", the_audio_import_dialog)
+
+    # ---------------------------------------------------------------- the tour's stops
+    def the_tours_stops():
+        import main as main_mod
+        files = ("toner_data.json", "key_height_library.json")
+
+        def stamps():
+            return {f: (os.path.getmtime(os.path.join(_PROFILE, f)) if os.path.exists(os.path.join(_PROFILE, f))
+                        else None) for f in files}
+        before = stamps()
+        log, errors = main_mod.run_tour(root, app, shots_dir=None, step_ms=150, on_done=root.quit)
+        root.after(90000, root.quit)
+        root.mainloop()
+        for stop in ("analyzer-chart", "analyzer-compare", "analyzer-preset-library", "analyzer-preset-form", "analyzer-harmonics"):
+            assert stop in log, (stop, log)
+        assert "toner" not in log, log
+        assert not errors, "\n".join(errors)
+        # unlocked by the terms check above: the last stop showed the spectrum, and the switch's slider
+        # is drawn at "on" with it (before 2026-11-11 the var moved and the slider stayed at "off")
+        assert app._toner_harmonics_var.get() == "on" and app._toner_harmonics_frame.winfo_ismapped(), \
+            (app._toner_harmonics_var.get(), app._toner_harmonics_frame.winfo_ismapped())
+        assert app._toner_harmonics_int.get() == 1, "the HARMONICS slider is drawn at off while the spectrum shows"
+        # side-effect free: the comparison's library is gone from memory, nothing picked, nothing written
+        assert main_mod.TOUR_LIBRARY not in app._toner_presets and app._toner_compare_runs == [], \
+            (sorted(app._toner_presets), app._toner_compare_runs)
+        assert stamps() == before, (before, stamps())
+        assert app._toner_library_win is None, "the tour left the Preset Library open"
+        app._toner_stop()
+    check("the tour's four Analyzer stops (chart, comparison, preset form, harmonics) raise nothing and write "
+          "nothing; unlocked, the last shows the spectrum with the slider drawn at on", the_tours_stops)
+
+    root.destroy()
+
+    # ---------------------------------------------------------------- in German, in a child
+    CHILD = r'''
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+from i18n import init_translation
+init_translation(sys.argv[2])
+import tkinter as tk
+import time
+import tkinter as tk
+from tkinter import font as tkfont, ttk
+root = tk.Tk()
+root.geometry("+0+0")
+import main as main_mod
+from main import PadSVGGeneratorApp
+app = PadSVGGeneratorApp(root)
+app._toner_mic_checked = True
+
+def run(ms):
+    root.after(ms, root.quit); root.mainloop()
+
+def settle(pred, timeout=6.0):
+    deadline = time.time() + timeout
+    run(100)                          # at least one slice: layout state is read only after an idle pass
+    while not pred() and time.time() < deadline:
+        run(100)
+    return pred()
+
+root.update()
+run(400)                              # the window-fit rule runs after_idle
+# the old rule's own measure: the tab labels and the Tooling tab, never the strip
+style = ttk.Style(root)
+spec = style.lookup("TNotebook.Tab", "font") or "TkDefaultFont"
+font = tkfont.nametofont(spec) if spec in tkfont.names(root) else tkfont.Font(root, font=spec)
+visible = [t for t in app.notebook.tabs() if app.notebook.tab(t, "state") != "hidden"]
+formula = sum(font.measure(app.notebook.tab(t, "text")) for t in visible) + main_mod.TAB_LABEL_PADDING_PX * len(visible) + 40
+formula = max(formula, app.tooling_tab_frame.winfo_reqwidth() + app._notebook_page_chrome_px())
+start_w, start_h = root.winfo_width(), root.winfo_height()
+need = app._analyzer_strip_need_px()
+screen_w = root.winfo_screenwidth()
+app.notebook.select(app.toner_tab_frame)
+root.update()                         # the select's layout (the page is 1 x 1 until this)
+run(200)
+# what the app did: widened to a width it recorded, or nothing (already wide, or two rows made it fit)
+widened = app._analyzer_widened
+want = widened[1] if widened else start_w
+settled = settle(lambda: root.winfo_width() == want)
+need_after = app._analyzer_strip_need_px()        # one row's need, or two rows' where the screen is too narrow
+after_select = (root.winfo_width(), root.winfo_height())
+harm_mapped = app._toner_harmonics_frame.winfo_ismapped()
+chart_mapped = app._toner_chart_frame.winfo_ismapped()
+capture_mapped = app._toner_capture_btn.winfo_ismapped()
+page_w = app._toner_main_frame.winfo_width()
+page_h = app._toner_main_frame.winfo_height()
+strip = app._toner_ctrl_frame
+strip_evidence = {"req": strip.winfo_reqwidth(), "w": strip.winfo_width(), "h": strip.winfo_height(),
+                  "y": strip.winfo_y(), "mapped": strip.winfo_ismapped(), "columns": []}
+for col in strip.winfo_children():
+    strip_evidence["columns"].append({
+        "req": col.winfo_reqwidth(), "w": col.winfo_width(), "x": col.winfo_x(), "mapped": col.winfo_ismapped(),
+        "children": [((c.cget("text") if "text" in c.keys() else c.winfo_class()), c.winfo_reqwidth(), c.winfo_width(),
+                      c.winfo_x(), c.winfo_ismapped()) for c in col.winfo_children()]})
+labels = []
+def walk(w):
+    for c in w.winfo_children():
+        if isinstance(c, tk.Label):
+            labels.append(c.cget("text"))
+        walk(c)
+walk(app._toner_ctrl_frame)
+buttons = [b.cget("text") for b in app._toner_library_row.winfo_children()]
+app.notebook.select(app.pad_tab)
+settled_back = settle(lambda: root.winfo_width() == start_w)
+settle(lambda: getattr(app, "_analyzer_restore", None) is None or app._analyzer_restore["outcome"] != "pending")
+after_leave = (root.winfo_width(), root.winfo_height())
+out = {"tab": app.notebook.tab(app.toner_tab_frame, "text"), "labels": labels, "buttons": buttons,
+       "library_btn": _("Preset Library"),            # the one button under the chart, in this language
+       "formula_w": formula, "start": [start_w, start_h], "need": need, "screen_w": screen_w,
+       "settled": settled, "after_select": list(after_select), "page_w": page_w, "page_h": page_h,
+       "chrome": app._notebook_page_chrome_px(), "strip": strip_evidence,
+       "harm_mapped": harm_mapped, "chart_mapped": chart_mapped, "capture_mapped": capture_mapped,
+       "settled_back": settled_back, "after_leave": list(after_leave),
+       "widened": list(widened) if widened else None, "need_after": need_after,
+       "restore": getattr(app, "_analyzer_restore", None), "state_after_leave": root.state(),
+       "strip_rows": app._toner_strip_rows, "maxsize": list(root.wm_maxsize()),
+       "harmonics_var": app._toner_harmonics_var.get()}
+app._toner_stop()
+root.destroy()
+print("REPORT " + json.dumps(out))
+'''
+
+    CASES = [
+        ("en", {"language": "en"}), ("es", {"language": "es"}), ("de", {"language": "de"}),
+        ("fr", {"language": "fr"}), ("it", {"language": "it"}),
+        # the switch remembered on, with the terms accepted; and "on" in a profile that never
+        # unlocked (a hand edit), which counts as off
+        ("en-remembered-on", {"language": "en", "toner_unlocked": True, "toner_settings": {"harmonics_on": True}}),
+        ("en-hand-edited-on", {"language": "en", "toner_settings": {"harmonics_on": True}}),
+    ]
+
+    def in_every_language_and_the_remembered_switch():
+        reports = {}
+        for case, profile in CASES:
+            folder = tempfile.mkdtemp(prefix=f"ssc-analyzer-{case}-")
+            with open(os.path.join(folder, "app_settings.json"), "w", encoding="utf-8") as f:
+                json.dump(dict(profile, toner_record_wav=False), f)
+            env = dict(os.environ, SAXSHOP_CONFIG_DIR=folder, PYTHONIOENCODING="utf-8")
+            p = subprocess.run([sys.executable, "-c", CHILD, REPO, profile["language"]], capture_output=True,
+                               text=True, env=env, timeout=240, cwd=REPO, encoding="utf-8")
+            line = [ln for ln in (p.stdout or "").splitlines() if ln.startswith("REPORT ")]
+            assert p.returncode == 0 and line, (case, p.returncode, (p.stdout or "")[-300:], (p.stderr or "")[-1200:])
+            reports[case] = json.loads(line[0][7:])
+        for case, r in reports.items():
+            start_w, start_h = r["start"]
+            # the start-up width is the old rule's: at least its measure, and never the strip's
+            assert start_w >= r["formula_w"], f"{case}: opened {start_w} px, the tab/Tooling rule asks {r['formula_w']}"
+            # the start-up width is whatever the tab-row and Tooling rules make it (under xvfb's fonts some
+            # languages already open wider than the strip, in which case the select has nothing to widen)
+            # after the select: widened to what the app recorded (never past the screen), or left as it was
+            want = r["widened"][1] if r["widened"] else start_w
+            assert want <= max(start_w, r["screen_w"]), (case, want, r["screen_w"])
+            assert r["settled"] and r["after_select"] == [want, start_h], (case, r["after_select"], want, start_h, r["widened"])
+            if r["strip_rows"] == 2:
+                # two rows only where one row cannot fit the screen, and then two rows do
+                assert r["need"] > r["screen_w"] and r["need_after"] <= r["screen_w"], (case, r["need"], r["need_after"], r["screen_w"])
+            else:
+                assert r["need"] <= r["screen_w"] and r["need_after"] == r["need"], (case, r["need"], r["need_after"], r["screen_w"])
+            assert r["after_select"][0] >= min(r["need_after"], r["screen_w"]), (case, r["after_select"], r["need_after"])
+            # the evidence, as the section-button check gives it: each column's children (text, request,
+            # width, x, mapped), the page, the strip, the need and the chrome
+            # Capture is on the page whatever the screen: one row where it fits, two rows where it does not
+            assert r["capture_mapped"], (
+                f"{case}: Capture off the page at window {r['after_select']}, page {r['page_w']}x{r['page_h']}, "
+                f"need {r['need']} (chrome {r['chrome']}), strip {json.dumps(r['strip'])}")
+            # leaving: back to the start width (the restore asked, checked and retried; its record says what happened)
+            assert r["settled_back"] and r["after_leave"] == [start_w, start_h], (
+                f"{case}: after leaving {r['after_leave']}, started {r['start']}, settled back {r['settled_back']}, "
+                f"widened {r['widened']}, restore {r['restore']}, state {r['state_after_leave']}, screen {r['screen_w']}, "
+                f"wm maxsize {r['maxsize']}, strip rows {r['strip_rows']}")
+            # one button under the chart, "Preset Library" in the child's own language (translated outside English)
+            assert r["buttons"] == [r["library_btn"]], (case, r["buttons"], r["library_btn"])
+            if case == "en":
+                assert r["library_btn"] == "Preset Library", r["library_btn"]
+            elif "-" not in case:
+                assert r["library_btn"] != "Preset Library", (case, "the Preset Library button is untranslated")
+        plain = {c: r for c, r in reports.items() if "-" not in c}
+        for case, r in plain.items():
+            assert r["chart_mapped"] and not r["harm_mapped"] and r["harmonics_var"] == "off", case
+        en, de = reports["en"], reports["de"]
+        assert "HARMONICS" in en["labels"] and "guided" in en["labels"], en["labels"]
+        assert len(de["labels"]) == len(en["labels"]), (de["labels"], en["labels"])
+        changed = [a for a, b in zip(en["labels"], de["labels"]) if a != b and re.search(r"[A-Za-z]{3,}", a)]
+        assert changed, "no control-strip label is translated in German"
+        on = reports["en-remembered-on"]
+        assert on["harm_mapped"] and on["chart_mapped"] and on["harmonics_var"] == "on", on   # the chart stays
+        hand = reports["en-hand-edited-on"]
+        assert hand["chart_mapped"] and not hand["harm_mapped"] and hand["harmonics_var"] == "off", hand
+    check("in every language (a child process each): the start-up width is the old rule's, selecting the tab widens "
+          "to the strip and leaving restores, German labels translated; the switch remembered on shows the spectrum "
+          "on an unlocked profile and counts as off on one that never unlocked",
+          in_every_language_and_the_remembered_switch)
+
+    print("=" * 60)
+    print(f"{sum(results)}/{len(results)} passed")
+    return 0 if all(results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -7,15 +7,18 @@ import subprocess
 import time
 import datetime
 import logging
+import math
 
 # --- Local Imports ---
 from config import (
+    read_json,
     load_settings, save_settings, load_presets, save_presets,
     PAD_PRESET_FILE, KEY_PRESET_FILE, SCREW_SPECS_FILE, SIZING_PRESET_FILE,
     GCODE_PRESET_FILE, GCODE_PRESET_MATERIALS,
     append_job_history, load_job_history, save_job_history,
     find_config_files_in_directory, import_config_files,
-    get_ssl_context, get_input_devices,
+    get_ssl_context, get_input_devices, migrate_analyzer_tab,
+    rescan_input_devices, set_input_device, input_device_for,
     setup_logging, get_log_file,
     settings_to_sizing_preset, settings_to_gcode_presets,
 )
@@ -35,12 +38,14 @@ from ui_dialogs import (  # noqa: E402
     ImportPresetsWindow, ExportPresetsWindow, WebImportPresetsWindow, ImportTargetWindow,
     PolygonDrawWindow, GcodeSettingsWindow,
     UserGuideWindow, AboutDialog, PadNotesWindow, NestingPreviewWindow,
-    JobHistoryWindow
+    JobHistoryWindow, gcode_file_note, WelcomeWindow, QuickStartWindow
 )
 from library_features import LibraryFeaturesMixin  # noqa: E402
 from tooling_tab import ToolingTabMixin  # noqa: E402
 from tuner_tab import TunerTabMixin  # noqa: E402
 from toner_tab import TonerTabMixin  # noqa: E402
+# The three constants moved to machine_control.py with the machine methods; the suites read them from main.
+from machine_control import MachineControlMixin, MACHINE_MENU_LASER_ITEMS, MACHINE_MENU_CAMERA_ITEMS, LASER_WATCH_PERIOD_MS  # noqa: E402, F401
 
 # ==========================================
 # MAIN APP CLASS
@@ -94,7 +99,37 @@ def reveal_in_file_manager_command(path, platform=None):
     return ['xdg-open', os.path.dirname(path) or '.']
 
 
-class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, TonerTabMixin):
+# What counts as a G-code file on an SD card (gcode_files_after_save).
+GCODE_FILE_EXTENSIONS = (".gcode", ".gc", ".nc", ".ngc", ".g")
+
+
+def gcode_files_after_save(folder, new_names, root=None):
+    """How many G-code files a card would hold once `new_names` are written
+    into `folder`: the ones already in the folder and in the card's top
+    folder `root`, less any the save overwrites, plus the new ones. Top
+    level only; a folder that cannot be listed counts nothing."""
+    folder = os.path.abspath(folder)
+    new = {name.lower() for name in new_names}
+    places = [folder]
+    if root and os.path.abspath(root) != folder:
+        places.append(os.path.abspath(root))
+    count = 0
+    for place in places:
+        try:
+            names = os.listdir(place)
+        except OSError:
+            continue
+        for name in names:
+            if not name.lower().endswith(GCODE_FILE_EXTENSIONS):
+                continue
+            if place == folder and name.lower() in new:
+                continue                    # overwritten by this save
+            if os.path.isfile(os.path.join(place, name)):
+                count += 1
+    return count + len(new)
+
+
+class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, TonerTabMixin, MachineControlMixin):
     def __init__(self, root):
         self.root = root
         self.root.title("Stohrer Sax Shop Companion")
@@ -129,12 +164,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         from ui_dialogs import set_tooltips_enabled
         set_tooltips_enabled(self.settings.get("tooltips_enabled", True))
 
-        # Ensure Toner is hidden unless explicitly unlocked
-        if not self.settings.get("toner_unlocked"):
-            visible = self.settings.get("visible_tabs", {})
-            if visible.get("Toner"):
-                visible["Toner"] = False
-                save_settings(self.settings)
+        # The Analyzer tab is on by default (2026-11-10); the one-time migration
+        # turns it on for a user whose toner was forced hidden, once. The beta
+        # terms go on gating the tab's Harmonics switch, not the tab. In memory
+        # only: building the app writes nothing (--selftest, --tour, the suites);
+        # the flag goes to disk with the next regular save.
+        migrate_analyzer_tab(self.settings)
 
         self.pad_presets = load_presets(PAD_PRESET_FILE, preset_type_name="Pad Preset")
         self.key_presets = load_presets(KEY_PRESET_FILE, preset_type_name="Key Height")
@@ -286,6 +321,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                     _("You have {remaining} pads remaining in your scrap session.\n\n"
                     "Exit anyway? (Session will be lost)").format(remaining=remaining)):
                     return
+
+        # An unsaved record-first run on the Analyzer: where does it go? Cancel keeps the app open.
+        # Both ways out come here: the window's close box and the macOS Quit (::tk::mac::Quit).
+        if hasattr(self, '_toner_settle_unsaved_run') and not self._toner_settle_unsaved_run("quit"):
+            return
 
         # Save settings from pad generator tab
         self.settings["sheet_width"] = self.width_entry.get()
@@ -500,8 +540,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         toner_file_menu = tk.Menu(self.toner_menu, tearoff=0)
         self.toner_menu.add_cascade(label=_("File"), menu=toner_file_menu)
-        toner_file_menu.add_command(label=_("Presets..."), command=self._toner_open_preset_dialog)
-        toner_file_menu.add_command(label=_("Analyze..."), command=self._toner_open_analyze_dialog)
+        toner_file_menu.add_command(label=_("Preset Library..."), command=self._toner_open_preset_dialog)
+        # Named for what it is (Matt, 2026-11-12): it opens the harmonic comparison, which is
+        # experimental, and is no longer a button in the Preset Library, where it dropped the
+        # selection and asked for the horns again.
+        toner_file_menu.add_command(label=_("Harmonic Analysis (experimental)..."), command=self._toner_open_analyze_dialog)
         toner_file_menu.add_separator()
         toner_transfer_menu = tk.Menu(toner_file_menu, tearoff=0)
         toner_file_menu.add_cascade(label=_("Transfer Data"), menu=toner_transfer_menu)
@@ -517,6 +560,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         for menu in (self.pad_menu, self.key_menu, self.screw_menu, self.serial_menu, self.tooling_menu, self.tuner_menu, self.toner_menu):
             help_menu = tk.Menu(menu, tearoff=0)
             menu.add_cascade(label=_("Help"), menu=help_menu)
+            # No Quick Start Guide entry (Matt, 2026-11-11: "keep quick start
+            # out of the menu ... if they want it again they can click welcome
+            # and then click it"): Welcome has the link to it.
+            help_menu.add_command(label=_("Welcome"), command=self.open_welcome)
             help_menu.add_command(label=_("User Guide..."), command=self.open_user_guide)
             help_menu.add_separator()
             help_menu.add_command(label=_("Open Log File"), command=self._open_log_file)
@@ -524,7 +571,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             help_menu.add_command(label=_("About"), command=self.open_about)
 
     def _fit_window_to_tabs(self):
-        """Widen the window so every visible tab label fits.
+        """Widen the window so every visible tab label fits, and so the
+        Tooling tab's rows of section buttons are never squeezed.
 
         Aqua's ttk notebook clips tab labels instead of growing the tab
         row: at the 640 px default, seven tabs read "Pad Mak / Toner
@@ -532,6 +580,32 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         the row, so there this is a no-op in practice. Measures the labels
         with the notebook's own font rather than trusting a requested
         width that Aqua may not report.
+
+        The Tooling tab's selector rows cannot shrink: three buttons to a
+        row, 22 characters each, is about 500 px on Windows but about 720
+        px in Aqua, so with fewer tabs shown a Mac or Linux window stayed
+        at the 640 px it starts at and cut the buttons down (CI, 2026-11-09;
+        with all seven tabs the tab row happened to widen the window
+        enough). Only that tab is counted, not the notebook's whole
+        request: the library and audio tabs ask for 850 px and more on
+        every platform and are built to live in less.
+
+        The Analyzer's control strip (about 910 px in English, 1040 in
+        German, which pack clips from the right when the page is narrower)
+        is NOT counted here: the window widens for it when that tab is
+        selected and goes back when the user leaves it
+        (_widen_for_analyzer / _unwiden_after_analyzer; Matt, 2026-11-10:
+        "have it resize itself" rather than a wider start-up).
+
+        The room between the window's width and a notebook page's width
+        (the pack padx round the notebook, its own border and inset) is
+        MEASURED on the page that is mapped, not assumed: it is the same
+        for every page, and on Aqua it is more than the 24 px it is on
+        Windows. With the constant, the Apple Silicon picture of c671b33
+        had the window 15 px wider than the released build's and the
+        third column of section buttons still running past the page's
+        right edge, clipped there (CI run 42719069476). The constant is
+        only the fallback for a window that has no size yet.
         """
         try:
             self.root.update_idletasks()
@@ -541,6 +615,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             visible = [t for t in self.notebook.tabs() if self.notebook.tab(t, 'state') != 'hidden']
             need = sum(font.measure(self.notebook.tab(t, 'text')) for t in visible)
             need += TAB_LABEL_PADDING_PX * len(visible) + 40
+            tooling = getattr(self, 'tooling_tab_frame', None)
+            if tooling is not None and str(tooling) in visible:
+                need = max(need, tooling.winfo_reqwidth() + self._notebook_page_chrome_px())
             cur_w = self.root.winfo_width()
             if cur_w <= 1:
                 cur_w = 640
@@ -550,8 +627,180 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except tk.TclError:
             pass
 
+    def _analyzer_strip_need_px(self):
+        """The window width the Analyzer's control strip needs: its request,
+        the strip's own padx (5 a side inside the tab's main frame) and the
+        notebook's chrome; 0 while the tab has no strip (the fallback UI)."""
+        strip = getattr(self, '_toner_ctrl_frame', None)
+        if strip is None:
+            return 0
+        return int(strip.winfo_reqwidth() + 10 + self._notebook_page_chrome_px())
+
+    def _widen_for_analyzer(self):
+        """On selecting the Analyzer tab: a window narrower than its control
+        strip (pack would drop the Capture button off the page) is widened
+        to fit, never past the screen, height and position unchanged. When
+        even the screen cannot take one row of the strip, the strip goes to
+        two rows first (the right column under the rest) and the window is
+        widened to what two rows need. A maximized window gets its rows
+        decided the same way (it is as wide as the screen) but is never
+        resized, and a window already wide enough is left as it is. What was
+        widened is remembered for _unwiden_after_analyzer. A restore still
+        pending from the last leave is dropped first: it must never run
+        after this widening and take it for the old one (it did: CI, Windows
+        and Linux, 2026-11-11)."""
+        try:
+            dropped = self._cancel_width_restore("superseded: the Analyzer was selected again")
+            if getattr(self, '_analyzer_widened', None):
+                return
+            screen_w = self.root.winfo_screenwidth()
+            # the decision is by what ONE row needs, whatever the strip stands at now
+            self._toner_strip_two_rows(False)
+            self.root.update_idletasks()
+            one_row_need = self._analyzer_strip_need_px()
+            if one_row_need > screen_w:
+                self._toner_strip_two_rows(True)
+                self.root.update_idletasks()
+            if self.root.state() == 'zoomed':
+                return
+            need = self._analyzer_strip_need_px()
+            cur_w, h = self.root.winfo_width(), self.root.winfo_height()
+            if dropped:
+                cur_w = dropped["before"]   # the restore to it is on its way, whatever the window reads now
+            if cur_w <= 1 or h <= 1 or need <= cur_w:
+                return
+            new_w = min(need, screen_w)
+            if new_w <= cur_w:
+                return
+            self.root.geometry(f"{new_w}x{h}")
+            self._analyzer_widened = (cur_w, new_w)
+        except tk.TclError:
+            pass
+
+    def _unwiden_after_analyzer(self):
+        """On leaving the Analyzer tab: the width goes back to what it was
+        before _widen_for_analyzer, but only if the app did the widening and
+        the window is still exactly that wide (a size the user chose since,
+        or a maximize, is theirs and stays). Height and position unchanged.
+        The geometry is asked for, checked after idle and asked again while
+        the window still reads the widened width (Aqua applies a geometry
+        late, or drops one); what happened is kept in `_analyzer_restore`."""
+        record = getattr(self, '_analyzer_widened', None)
+        self._analyzer_widened = None
+        if not record:
+            return
+        before, widened_to = record
+        self._cancel_width_restore("superseded: left again")
+        try:
+            state = self.root.state()
+            self.root.update_idletasks()
+            cur = self.root.winfo_width()
+            self._analyzer_restore = {"before": before, "widened_to": widened_to, "found": cur, "state": state,
+                                      "screen": (self.root.winfo_screenwidth(), self.root.winfo_screenheight()),
+                                      "attempts": 0, "outcome": "pending"}
+            if state == 'zoomed':
+                self._analyzer_restore["outcome"] = "left alone: maximized"
+                return
+            if cur != widened_to:
+                self._analyzer_restore["outcome"] = "left alone: resized by the user"
+                return
+            self._restore_width(before, widened_to, tries=8)
+        except tk.TclError:
+            pass
+
+    def _restore_width(self, width, from_width, tries):
+        """geometry(width) now, then after idle: done if the window reads
+        `width`; left alone if it reads something else (the user's); asked
+        again, up to `tries` times 100 ms apart, while it still reads
+        `from_width` (the geometry not yet applied, or dropped)."""
+        info = self._analyzer_restore
+        try:
+            info["attempts"] += 1
+            self.root.geometry(f"{width}x{self.root.winfo_height()}")
+        except tk.TclError:
+            return
+
+        def check():
+            self._analyzer_restore_after = None
+            if self._analyzer_restore is not info or info["outcome"] != "pending":
+                return          # a newer restore owns the window now, or this one was closed
+            try:
+                self.root.update_idletasks()
+                w = self.root.winfo_width()
+            except tk.TclError:
+                return
+            if w == width:
+                info["outcome"] = "restored"
+            elif w != from_width:
+                info["outcome"] = f"left at {w}: not the widened width any more"
+            elif tries > 1:
+                self._restore_width(width, from_width, tries - 1)
+            else:
+                info["outcome"] = f"gave up at {w} after {info['attempts']} attempts"
+        try:
+            self._analyzer_restore_after = self.root.after(100, check)
+        except tk.TclError:
+            pass
+
+    def _cancel_width_restore(self, reason):
+        """Drop the restore check still pending from the last leave, if any,
+        and close its record with `reason`; returns the record it closed, or
+        None. The check is scheduled 100 ms after the leave; a select within
+        that time (a test does it, a user can) would otherwise have it read
+        the new widening as the old one not yet undone and take it back (CI,
+        Windows and Linux, 2026-11-11: the window went back to its start
+        width with the tab selected). The record's `before` is the width the
+        window is on its way to, which is what a new widening starts from
+        (on Aqua the window may still read the old width)."""
+        after_id = getattr(self, '_analyzer_restore_after', None)
+        self._analyzer_restore_after = None
+        if after_id is not None:
+            try:
+                self.root.after_cancel(after_id)
+            except (tk.TclError, ValueError):
+                pass
+        info = getattr(self, '_analyzer_restore', None)
+        if info is not None and info.get("outcome") == "pending":
+            info["outcome"] = reason
+            return info                  # the dropped restore: its `before` is where the window is going
+        return None
+
+    def _notebook_page_chrome_px(self):
+        """How much wider the window is than a notebook page: the window's
+        width less the mapped page's, measured once on whichever page is
+        selected (the inset is the same for every page) and kept, since
+        the notebook's padding and border never change while the app runs.
+        Measured once, not every time: right after a geometry() call the
+        window's width is already the new one while the page is still laid
+        out for the old, and the difference is meaningless (found on
+        Windows with Aqua's chrome planted). TOOLING_CONTENT_MARGIN_PX
+        while there is no consistent pair to measure (the window not
+        mapped: both read 1) and whenever the reading is not credible."""
+        cached = getattr(self, '_page_chrome_px', None)
+        if cached is not None:
+            return cached
+        try:
+            page = self.notebook.nametowidget(self.notebook.select())
+            win_w, page_w = self.root.winfo_width(), page.winfo_width()
+        except (tk.TclError, KeyError):
+            return TOOLING_CONTENT_MARGIN_PX
+        chrome = win_w - page_w
+        if win_w > 1 and page_w > 1 and 0 < chrome <= PAGE_CHROME_MAX_PX:
+            self._page_chrome_px = chrome
+            return chrome
+        return TOOLING_CONTENT_MARGIN_PX
+
     def on_tab_changed(self, event):
         selected = self.notebook.select()
+        # Leaving the Analyzer with an unsaved record-first run asks where it goes first;
+        # Cancel stays put (the tab is selected again, and this handler runs for it).
+        before = getattr(self, '_tab_before', None)
+        toner = str(getattr(self, 'toner_tab_frame', ''))
+        if before == toner and selected != toner and hasattr(self, '_toner_settle_unsaved_run'):
+            if not self._toner_settle_unsaved_run("leave"):
+                self.notebook.select(self.toner_tab_frame)
+                return
+        self._tab_before = selected
 
         # Look up menu for the selected tab
         menu = self._tab_menus.get(selected)
@@ -567,12 +816,15 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         # Start/stop audio tabs
         if selected == str(self.tuner_tab_frame):
+            self._unwiden_after_analyzer()
             self._toner_stop()
             self._tuner_start()
         elif selected == str(self.toner_tab_frame):
             self._tuner_stop()
+            self._widen_for_analyzer()
             self._toner_start()
         else:
+            self._unwiden_after_analyzer()
             self._tuner_stop()
             self._toner_stop()
 
@@ -608,9 +860,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self.notebook.add(self.tuner_tab_frame, text=_('Tuner'))
         self.create_tuner_tab(self.tuner_tab_frame)
 
-        # --- Create Tab 7: Toner ---
+        # --- Create Tab 7: Analyzer (the Toner until 2026-11-10; the attribute and keys keep the name) ---
         self.toner_tab_frame = ttk.Frame(self.notebook, style='App.TFrame')
-        self.notebook.add(self.toner_tab_frame, text=_('Toner (beta)'))
+        self.notebook.add(self.toner_tab_frame, text=_('Analyzer'))
         self.create_toner_tab(self.toner_tab_frame)
 
         self.notebook.pack(expand=True, fill="both", padx=5, pady=5)
@@ -761,6 +1013,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
         mat_frame = tk.LabelFrame(mat_hole_row, text=_("Materials"), bg=self.root.cget('bg'), padx=5, pady=5)
         mat_frame.pack(side="left", fill="y")
+        self._mat_frame = mat_frame
         material_list = list(self.material_vars.items())
         for i, (m, var) in enumerate(material_list):
             row, col = i // 2, i % 2
@@ -768,6 +1021,8 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                                variable=var, bg=self.root.cget('bg'))
             cb.grid(row=row, column=col, sticky='w', padx=(0, 10))
             self.material_checkboxes[m] = cb
+        # Adhesive rings join the list only while the feature is on.
+        self._refresh_adhesive_ring_ui()
 
         hole_frame = tk.LabelFrame(mat_hole_row, text=_("Center Hole"), bg=self.root.cget('bg'), padx=5, pady=5)
         hole_frame.pack(side="left", fill="both", expand=True, padx=(10, 0))
@@ -1042,6 +1297,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if unit == "mm":
             unit = "cm"  # Use cm for the grid when mm is selected
 
+        # The shape dialog's overlay and its "Get from camera" open the
+        # camera; the app's own live preview must not be holding it.
+        self._release_live_camera()
         dialog = PolygonDrawWindow(self.root, unit=unit,
                                      settings=self.settings)
         # Camera-captured / overlay-traced polygons come back in
@@ -1072,136 +1330,21 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self._custom_polygon_lb_machine = None
         self._update_shape_status()
 
-    def _camera_capture_ready(self):
-        """True iff the experimental toggle is on AND OpenCV is installed
-        AND a camera calibration file exists. Toggle-off short-circuits
-        so the 'Re-capture from camera' button in the scrap-continue
-        dialog (and any other caller using this helper) hides when the
-        user has opted out of machine integration or is on a platform
-        we don't support."""
-        if not self._machine_enabled():
-            return False
-        try:
-            import camera_capture
-        except ImportError:
-            return False
-        if not camera_capture.HAS_OPENCV:
-            return False
-        return camera_capture.load_calibration(
-            camera_capture.default_calibration_path()) is not None
+    def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count,
+                                    gcode_file=False):
+        """Show scrap continue dialog. If a polygon is loaded, offer to unload it.
 
-    def _frame_cut_anchor(self):
-        """The G92 X/Y for Frame & Cut: the outline's anchor vertex
-        (svg_engine.polygon_anchor_vertex) in framing's Y-up frame,
-        relative to the outline's bounding box. (0, 0) without a
-        polygon. Try Auto Locate drives the head to the same vertex."""
-        from svg_engine import polygon_anchor_vertex
-        offset_source = (self.custom_polygon_outline
-                         or self.custom_polygon)
-        if not offset_source:
-            return 0.0, 0.0
-        y_max_storage = max(p[1] for p in offset_source)
-        flipped = [(x, y_max_storage - y) for (x, y) in offset_source]
-        x, y = polygon_anchor_vertex(flipped)
-        return float(x), float(y)
-
-    def _adopt_camera_polygon(self, machine_polygon):
-        """Adopt an ABSOLUTE machine-Y-up polygon (from the camera's
-        pixel→machine homography) as the active scrap shape.
-
-        Stores BOTH:
-          - self.custom_polygon: the INSET shape (safety-shrunk),
-            used for pad nesting so cuts land safely inside the
-            actual scrap edges.
-          - self.custom_polygon_outline: the ORIGINAL un-insetted
-            shape, used for Frame & Cut's framing trace so the trace
-            visually matches the scrap edge.
-
-        Both are normalized to the OUTLINE's bbox-BL so they share a
-        coordinate origin — pad placements (in custom_polygon coords)
-        land at the right machine positions during cuts even though
-        the framing trace uses the outline.
-
-        Also captures the polygon's LB-vertex MACHINE COORDINATE on
-        self._custom_polygon_lb_machine for Frame & Cut's "Try Auto
-        Locate" button.
-
-        Used by:
-          - File menu / standalone "Get from camera" flow
-          - The polygon dialog's "Capture from camera" sub-action
-          - The polygon dialog's overlay-traced path (via
-            get_machine_polygon_mm)
-        """
-        if not machine_polygon:
-            return
-        # Capture the LB-vertex BEFORE inset shrinks the polygon — the
-        # user is going to jog to the visible bottom-left corner of
-        # their material, not the inset corner.
-        from svg_engine import polygon_anchor_vertex
-        self._custom_polygon_lb_machine = tuple(
-            polygon_anchor_vertex(machine_polygon))
-        outline = list(machine_polygon)
-        inset_polygon = outline
-        try:
-            import camera_capture
-            inset_mm = float(
-                self.settings.get("camera_polygon_inset_mm", 3.0))
-            if inset_mm > 0:
-                try:
-                    inset_polygon = camera_capture.inset_polygon_mm(
-                        outline, inset_mm)
-                except Exception:
-                    pass  # fall back to uninsetted on failure
-        except ImportError:
-            pass
-        # Pass BOTH to the shared adopter so the inset polygon (for
-        # nesting) and the outline (for framing) share an origin.
-        self._set_custom_polygon_from_y_up(
-            inset_polygon, outline_y_up_mm=outline)
-
-    def _set_custom_polygon_from_y_up(self, points_y_up_mm,
-                                        outline_y_up_mm=None):
-        """Single boundary crossing into custom_polygon storage.
-
-        Input:
-          - points_y_up_mm: the polygon used for NESTING (the inset
-            shape when there is one).
-          - outline_y_up_mm (optional): the polygon used for FRAMING
-            (the un-inset original). When None, frame and nest use
-            the same shape — appropriate for plain hand-drawn
-            polygons where no inset was applied.
-
-        Both polygons are normalized to the OUTLINE's bbox-BL so they
-        share a coordinate origin. The framing trace then matches the
-        scrap edge while pad placements still land inside the inset
-        boundary.
-
-        Output:
-          - self.custom_polygon: Y-DOWN, nesting boundary
-          - self.custom_polygon_outline: Y-DOWN, framing trace
-            (= self.custom_polygon when no separate outline)
-        """
-        if not points_y_up_mm:
-            return
-        outline = (outline_y_up_mm if outline_y_up_mm is not None
-                    else points_y_up_mm)
-        min_x = min(p[0] for p in outline)
-        max_y = max(p[1] for p in outline)
-        # Both polygons get the same translation + Y-flip so they
-        # share an origin.
-        self.custom_polygon = [(x - min_x, max_y - y)
-                               for (x, y) in points_y_up_mm]
-        self.custom_polygon_outline = [(x - min_x, max_y - y)
-                                        for (x, y) in outline]
-        self._update_shape_status()
-
-    def _show_scrap_continue_dialog(self, placed_count, scrap_num, remaining_count):
-        """Show scrap continue dialog. If a polygon is loaded, offer to unload it."""
+        gcode_file: this scrap was just written as a G-code file, so the
+        message ends with the shared "send this file to the laser as it
+        is" line (ui_dialogs.gcode_file_note). Not for an SVG scrap, and
+        not for Frame & Cut, which writes no file."""
         msg = _("Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
                 "{remaining_count} pads remaining.\n"
                 "Adjust dimensions and click Generate again.").format(
                     placed_count=placed_count, scrap_num=scrap_num,
                     remaining_count=remaining_count)
+        if gcode_file:
+            msg += "\n\n" + gcode_file_note()
 
         if not self.custom_polygon:
             messagebox.showinfo(_("Scrap Generated"), msg)
@@ -1586,30 +1729,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         self._scrap_set_pending(placed)
         return placed, remaining
 
-    def _frame_cut_scrap_advance(self, placed_count, remaining):
-        """Post-cut scrap bookkeeping for Frame & Cut, mirroring the tail
-        of _generate_gcode_scrap_mode: bump the scrap count, record what's
-        left for the next scrap, refresh the status UI, and either
-        announce session completion or show the continue/recapture dialog.
-
-        Called only after a cut has streamed to completion — if the user
-        stopped the cut or it errored, the session is left untouched so
-        the scrap can be re-cut.
-        """
-        self.scrap_session['scrap_count'] += 1
-        scrap_num = self.scrap_session['scrap_count']
-        self._scrap_record_result(remaining)
-        self._update_scrap_status_display()
-        self._update_remaining_pads_window()
-
-        remaining_count = self._count_remaining_pads()
-        if remaining_count == 0:
-            messagebox.showinfo(_("Session Complete!"),
-                                _("All pads have been placed!"))
-        else:
-            self._show_scrap_continue_dialog(
-                placed_count, scrap_num, remaining_count)
-
     def _open_remaining_pads_window(self):
         """Open or update the floating window showing remaining and done pads."""
         if self.scrap_remaining_window is not None:
@@ -1774,6 +1893,42 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 pass
             self.scrap_remaining_window = None
 
+    def _adhesive_ring_enabled(self):
+        """True when the opt-in adhesive ring material is switched on
+        (Sizing Rules > Lesser-used settings)."""
+        return bool(self.settings.get("adhesive_ring_enabled", False))
+
+    def _refresh_adhesive_ring_ui(self):
+        """Add or remove the Adhesive rings material to match the setting.
+
+        The material is not merely hidden while the feature is off: its
+        entry leaves self.material_vars altogether, so every flow that
+        walks the checked materials (Generate, Frame & Cut, scrap mode,
+        job reload) can't pick it up from a checkbox nobody can see.
+        Called when the tab is built and whenever Sizing Rules is applied.
+        """
+        enabled = self._adhesive_ring_enabled()
+        present = 'adhesive_ring' in self.material_vars
+        session = getattr(self, 'scrap_session', None) or {}
+        if enabled and not present:
+            var = tk.BooleanVar(value=False)
+            i = len(self.material_checkboxes)
+            cb = tk.Checkbutton(self._mat_frame, text=_("Adhesive rings"),
+                                variable=var, bg=self._mat_frame.cget('bg'))
+            cb.grid(row=i // 2, column=i % 2, sticky='w', padx=(0, 10))
+            if session.get('active'):
+                cb.config(state='disabled')   # materials are locked for the session
+            self.material_vars['adhesive_ring'] = var
+            self.material_checkboxes['adhesive_ring'] = cb
+        elif present and not enabled:
+            # A scrap session cutting rings can't outlive the material.
+            if session.get('active') and session.get('material') == 'adhesive_ring':
+                self._clear_scrap_session()
+                self.scrap_mode_var.set(False)
+                self._update_scrap_status_display()
+            self.material_checkboxes.pop('adhesive_ring').destroy()
+            del self.material_vars['adhesive_ring']
+
     def _lock_material_selection(self, locked_material):
         """Disable material checkboxes during scrap session, keeping only the selected one checked."""
         for mat, cb in self.material_checkboxes.items():
@@ -1842,7 +1997,11 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         # loose and unlabeled, which is the exact confusion zones exist
         # to prevent. Filling the leftover space with an ungrouped size
         # still works; it's only a max on a GROUPED size that can't.
-        if self.settings.get("zone_labels_enabled", False) and max_pads:
+        # Adhesive rings never group (nest_with_zones), so a job that is
+        # only rings has nothing to clash with.
+        zoned_materials = [m for m, v in self.material_vars.items()
+                           if v.get() and m != 'adhesive_ring']
+        if self.settings.get("zone_labels_enabled", False) and max_pads and zoned_materials:
             lo = float(self.settings.get("zone_label_min_size", 7.0))
             hi = float(self.settings.get("zone_label_max_size", 12.5))
             clash = [p['size'] for p in max_pads if lo <= p['size'] <= hi]
@@ -1911,40 +2070,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             return card_paper_dims[0], card_paper_dims[1], None
         return width_mm, height_mm, self.custom_polygon
 
-    def _keep_last_cut_gcode(self, lines, material, scrap_num, g92, flip_height,
-                             polygon, disc_count):
-        """Keep a copy of the G-code Frame & Cut actually streamed, plus one
-        log line describing its frame.
-
-        The temp file the cut is generated into is deleted as soon as it's
-        read, which left nothing to audit when a user reported labels
-        landing outside their discs (2026-09-20). This is app.log for the
-        machine: the exact lines the Falcon received, overwritten on every
-        cut, at <config dir>/last_frame_cut.gcode. Swallows every error;
-        bookkeeping must never stop a cut.
-        """
-        import logging
-        try:
-            from config import get_config_dir
-            path = os.path.join(get_config_dir(), "last_frame_cut.gcode")
-            with open(path, "w") as f:
-                f.write("\n".join(lines))
-            if polygon:
-                xs = [p[0] for p in polygon]
-                ys = [p[1] for p in polygon]
-                bbox = f"{max(xs) - min(xs):.1f}x{max(ys) - min(ys):.1f}"
-            else:
-                bbox = "none"
-            logging.warning(
-                "frame&cut %s scrap %s: %d discs, %d lines, G92 X%.3f Y%.3f, "
-                "flip %s, polygon bbox %s, kept at %s",
-                material, scrap_num if scrap_num else "-", disc_count, len(lines),
-                g92[0], g92[1],
-                f"{flip_height:.1f}" if flip_height is not None else "sheet",
-                bbox, path)
-        except Exception:
-            logging.exception("could not keep the last cut G-code")
-
     def _record_job(self, output, materials, pads, params, placed_count=None,
                     scrap_num=None, save_dir=None, status="complete"):
         """Log a job that reached an output stage to the history file.
@@ -1997,6 +2122,51 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         except Exception:
             logging.getLogger(__name__).exception("Could not record job history")
 
+    def _record_tooling_job(self, job, output, status="complete", save_dir=None):
+        """Log a Tooling job that reached an output stage (Matt,
+        2026-11-09: "tooling runs go into job history if easy").
+
+        `job` carries the fields ToolingTabMixin._tooling_history builds
+        (tool, description, material, count, sheet in mm, base, scrap
+        number); `output` is "svg", "gcode", "stl" or "laser". The entry
+        has the same shape as _record_job's so the storage, the list and
+        delete work untouched, with `tool` added and the description where
+        the pad list goes. The dialog shows the tool's name on these rows
+        and does not load them into the Pad Maker's form. Swallows every
+        error, for the same reason _record_job does.
+        """
+        try:
+            count = job.get('count')
+            entry = {
+                "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                "output": output,
+                "status": status,
+                "materials": [job['material']] if job.get('material') else [],
+                "tool": job['tool'],
+                "pad_text": job.get('description') or "",
+                "pads": [],
+                "requested_count": count,
+                "has_max": False,
+                "placed_count": count,
+                "base": job.get('base'),
+                "units": None,
+                "sheet_w": None,
+                "sheet_h": None,
+                "sheet_w_mm": job.get('sheet_w_mm'),
+                "sheet_h_mm": job.get('sheet_h_mm'),
+                "card_paper": False,
+                "hole_option": None,
+                "custom_hole": "",
+                "scrap_num": job.get('scrap_num'),
+                "save_dir": save_dir,
+                "preset_library": None,
+                "preset_name": None,
+                "polygon_vertices": 0,
+            }
+            append_job_history(entry)
+        except Exception:
+            logging.getLogger(__name__).exception("Could not record job history")
+
     def open_job_history(self):
         """File > Job History — browse past jobs, optionally reload one."""
         dlg = JobHistoryWindow(self.root, load_job_history(), save_job_history)
@@ -2013,6 +2183,10 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         camera-captured polygon is anchored to a scrap that no longer
         exists.
         """
+        # A Tooling entry has no pad list to put back; the dialog refuses
+        # it before it gets here, this is the backstop.
+        if job.get("tool"):
+            return
         # A live scrap session owns its own pad list and locks the
         # material checkboxes; loading over the top would desync them.
         if self.scrap_session.get('active'):
@@ -2133,7 +2307,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon, zones=zones)
+                        polygon=mat_polygon, zones=zones, settings=self.settings)
                     if preview.result != "save":
                         return  # User clicked Adjust — go back for this material
 
@@ -2228,7 +2402,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if self.preview_var.get():
                 preview = NestingPreviewWindow(
                     self.root, {material: placed}, mat_w, mat_h,
-                    polygon=mat_polygon)
+                    polygon=mat_polygon, settings=self.settings)
                 if preview.result != "save":
                     return
 
@@ -2269,1012 +2443,6 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             messagebox.showerror(_("An Error Occurred"), _("Something went wrong:\n\n{error}").format(error=e))
         finally:
             # A nest that never became a file is not "on this scrap".
-            self._scrap_abandon_pending()
-
-    def _detect_falcon_async(self):
-        """Probe USB serial ports for a Grbl controller; show the button if found.
-
-        Runs in a background thread (Probe takes ~1-2 seconds per port) and
-        marshals the result back to the Tk main thread. Safe to call any
-        time the user wants to re-scan.
-        """
-        if self._falcon_detect_attempted:
-            return
-        self._falcon_detect_attempted = True
-        try:
-            import falcon_sender
-            if not falcon_sender.HAS_PYSERIAL:
-                return
-        except ImportError:
-            return
-
-        import threading
-
-        def _worker():
-            try:
-                port = falcon_sender.auto_detect_falcon()
-            except Exception:
-                port = None
-            self.root.after(0, self._on_falcon_detected, port)
-
-        threading.Thread(target=_worker, name='falcon-detect', daemon=True).start()
-
-    def _on_falcon_detected(self, port):
-        """Called on the Tk main thread once detection finishes."""
-        if port:
-            self.falcon_port = port
-            # Frame & Cut button is gated on calibration as well as
-            # Falcon detection — _refresh_machine_ui_state checks both.
-            self._refresh_machine_ui_state()
-            return
-        # Not found this round. Auto-retry in 10s so users who started
-        # SSC before powering on the Falcon get the button as soon as
-        # the controller comes online — without having to restart the
-        # app or click a Machine menu item to manually retrigger
-        # detection. Stops retrying once a port is found.
-        self._falcon_detect_attempted = False
-        self.root.after(10000, self._detect_falcon_async)
-
-    def _machine_enabled(self):
-        """True iff the user has opted into machine integration.
-
-        The underlying Falcon serial path (pyserial + Grbl 1.1
-        character-counting protocol) is cross-platform — Linux and
-        macOS users with a Falcon on USB can use it via `/dev/ttyUSB*`
-        or `/dev/tty.usbserial-*`. The Falcon-camera auto-detect
-        heuristic is per-platform (PowerShell on Windows,
-        system_profiler on macOS, /sys/class/video4linux on Linux);
-        wherever it fails, _resolve_camera_index falls through to the
-        last-enumerated camera and the user can Switch camera in any
-        dialog if that picks wrong.
-
-        Single source of truth used by every gating site. Tested on
-        Windows; the macOS/Linux paths are best-effort and the user
-        is opting in via the experimental toggle."""
-        return (machine_supported()
-                and bool(self.settings.get("experimental_machine_menu", False)))
-
-    def _camera_calibration_present(self):
-        """True iff a usable (non-legacy) camera calibration is on disk."""
-        try:
-            import camera_capture
-        except ImportError:
-            return False
-        if not camera_capture.HAS_OPENCV:
-            return False
-        return camera_capture.load_calibration(
-            camera_capture.default_calibration_path()) is not None
-
-    def _refresh_machine_ui_state(self):
-        """Single source of truth for which machine UI is enabled.
-
-        Two levels of gating:
-          - experimental_machine_menu OFF → nothing machine-related
-            visible (Machine menu wasn't built at all)
-          - experimental_machine_menu ON + no calibration → Machine
-            menu visible with only Camera Calibration enabled; rest
-            disabled, Frame & Cut hidden
-          - experimental_machine_menu ON + calibration → all Machine
-            items enabled; Frame & Cut shown when Falcon detected
-
-        Safe to call any time; idempotent. Wired into:
-          - app startup (after menu construction)
-          - _on_falcon_detected (Falcon comes online)
-          - after CameraCalibrationDialog returns saved (live un-grey)
-        """
-        toggle_on = self._machine_enabled()
-        has_cal = self._camera_calibration_present()
-
-        # Machine menu item states. Only meaningful if the cascade was
-        # actually built (toggle was on at startup).
-        if (toggle_on and hasattr(self, '_machine_menu')
-                and self._machine_menu_indices):
-            # Camera Calibration is ALWAYS enabled when the cascade
-            # exists — it's the gateway. Everything else depends on
-            # whether a calibration is on disk.
-            other_state = "normal" if has_cal else "disabled"
-            menu = self._machine_menu
-            indices = self._machine_menu_indices
-            try:
-                menu.entryconfig(indices['camera_cal'], state="normal")
-                for key in ('inset', 'framing_power', 'home', 'test',
-                            'clear', 'reset'):
-                    if key in indices:
-                        menu.entryconfig(indices[key], state=other_state)
-            except tk.TclError:
-                pass
-
-        # Frame & Cut button visibility: needs toggle ON + calibration
-        # AND a Falcon detected on USB. The packing happens here so
-        # all three gates resolve through one helper.
-        btn = getattr(self, '_frame_cut_btn', None)
-        if btn is not None:
-            should_show = bool(
-                toggle_on and has_cal and self.falcon_port)
-            try:
-                is_packed = bool(btn.winfo_manager())
-            except tk.TclError:
-                is_packed = False
-            if should_show and not is_packed:
-                try:
-                    btn.pack(side="left", padx=5)
-                except tk.TclError:
-                    pass
-            elif not should_show and is_packed:
-                try:
-                    btn.pack_forget()
-                except tk.TclError:
-                    pass
-
-        # Live camera preview checkbox: same gate as the camera-capture
-        # features (toggle + calibration). Falcon doesn't need to be
-        # detected — the checkbox is a setting consumed by Frame & Cut
-        # only when that button is also packed (which DOES need Falcon),
-        # but the user can preset it any time post-calibration.
-        chk = getattr(self, '_live_camera_chk', None)
-        if chk is not None:
-            should_show_chk = bool(toggle_on and has_cal)
-            try:
-                is_packed = bool(chk.winfo_manager())
-            except tk.TclError:
-                is_packed = False
-            if should_show_chk and not is_packed:
-                try:
-                    chk.pack(side="left", padx=(0, 15))
-                except tk.TclError:
-                    pass
-            elif not should_show_chk and is_packed:
-                try:
-                    chk.pack_forget()
-                except tk.TclError:
-                    pass
-
-    # ==================================================================
-    # Machine menu handlers (Pad Maker > Machine cascade)
-    # ==================================================================
-
-    def _machine_require_falcon(self):
-        """Common pre-flight: ensure Falcon is detected. Returns True
-        if good, False (with an error popup) if not."""
-        if not self.falcon_port:
-            messagebox.showerror(
-                _("Falcon Not Detected"),
-                _("No Grbl controller detected. Plug in the Falcon "
-                  "over USB and try again."))
-            self._falcon_detect_attempted = False
-            self._detect_falcon_async()
-            return False
-        return True
-
-    def _resolve_camera_index(self):
-        """Pick a camera index for the camera dialogs.
-
-        Order: persisted override → Falcon-name heuristic → highest
-        enumerated index. Returns None if no camera is available or
-        OpenCV isn't installed.
-
-        Persist a working index after a successful calibration save (via
-        _persist_camera_index) so subsequent runs skip the guess.
-        """
-        try:
-            import camera_capture
-        except ImportError:
-            return None
-        if not camera_capture.HAS_OPENCV:
-            return None
-        override = self.settings.get("camera_index_override")
-        if override is not None:
-            try:
-                return int(override)
-            except (TypeError, ValueError):
-                pass
-        idx = camera_capture.find_falcon_camera_index()
-        if idx is not None:
-            return idx
-        cams = camera_capture.enumerate_cameras()
-        if cams:
-            return cams[-1]['index']
-        return None
-
-    def _persist_camera_index(self, index):
-        """Save a known-working camera index to settings so future
-        camera dialogs open it directly without re-guessing. Called
-        from the calibration dialog after a successful save."""
-        if index is None:
-            return
-        try:
-            current = self.settings.get("camera_index_override")
-            if current == int(index):
-                return
-            self.settings["camera_index_override"] = int(index)
-            from config import save_settings
-            save_settings(self.settings)
-        except Exception:
-            pass  # never block on settings save
-
-    def _run_blocking_home(self, sender):
-        """Send $H on a worker thread, show the homing-status modal,
-        block the caller until homing completes (or fails). Returns
-        True on success, False on failure (with an error popup
-        already shown).
-
-        Uses an after()-poll loop on the Tk thread instead of the
-        older `while t.is_alive(): root.update()` pattern — root.update()
-        pumps the full Tk event loop including WM_DELETE_WINDOW, which
-        could destroy root mid-loop during the 60s home and produce a
-        TclError on the next iteration.
-        """
-        import threading
-        result = {}
-
-        def _worker():
-            try:
-                ok, m = sender.home(timeout_s=60.0)
-                result['ok'] = ok
-                result['msg'] = m
-            except Exception as exc:
-                result['ok'] = False
-                result['msg'] = str(exc)
-
-        self._show_homing_status()
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
-        # after()-poll until the worker finishes. wait_variable lets
-        # the Tk event loop keep running (status modal stays painted,
-        # other dialogs respond) without burning CPU in a tight loop.
-        done_var = tk.BooleanVar(value=False)
-
-        def _check():
-            if t.is_alive():
-                self.root.after(50, _check)
-            else:
-                done_var.set(True)
-
-        self.root.after(50, _check)
-        self.root.wait_variable(done_var)
-        self._hide_homing_status()
-        if result.get('ok'):
-            self._falcon_homed_this_session = True
-            return True
-        messagebox.showerror(
-            _("Homing Failed"),
-            _("Falcon returned: {m}").format(
-                m=result.get('msg', 'no response')))
-        return False
-
-    def _on_machine_home_falcon(self):
-        """Standalone $H. Same flow as Frame & Cut's home prompt."""
-        if not self._machine_require_falcon():
-            return
-        try:
-            import falcon_sender
-        except ImportError as e:
-            messagebox.showerror(_("Missing Dependency"),
-                                  _("Home needs pyserial: {e}").format(e=e))
-            return
-        if not messagebox.askyesno(
-                _("Home Laser?"),
-                _("Send the laser home? The head will travel to the "
-                  "home corner at full speed. Make sure nothing is "
-                  "in its path.")):
-            return
-        sender = falcon_sender.FalconSender(port=self.falcon_port)
-        try:
-            sender.connect()
-            sender.unlock()
-        except Exception as e:
-            messagebox.showerror(_("Connection Failed"),
-                                  _("Couldn't connect: {e}").format(e=e))
-            try:
-                sender.disconnect()
-            except Exception:
-                pass
-            return
-        success = self._run_blocking_home(sender)
-        try:
-            sender.disconnect()
-        except Exception:
-            pass
-        if success:
-            messagebox.showinfo(_("Homed"),
-                                 _("Laser homed. Head is parked at "
-                                   "the home corner."))
-
-    def _on_machine_test_connection(self):
-        """Quick Falcon ping: connect, read status, disconnect, report."""
-        if not self._machine_require_falcon():
-            return
-        try:
-            import falcon_sender
-        except ImportError as e:
-            messagebox.showerror(_("Missing Dependency"),
-                                  _("Test needs pyserial: {e}").format(e=e))
-            return
-        sender = falcon_sender.FalconSender(port=self.falcon_port)
-        try:
-            sender.connect()
-            status = sender.get_status(timeout=0.5)
-        except Exception as e:
-            messagebox.showerror(
-                _("Connection Failed"),
-                _("Couldn't connect to the Falcon at {p}: {e}").format(
-                    p=self.falcon_port, e=e))
-            try:
-                sender.disconnect()
-            except Exception:
-                pass
-            return
-        finally:
-            pass
-        try:
-            sender.disconnect()
-        except Exception:
-            pass
-        logging.getLogger("ssc.machine").info(
-            "Machine > Test Connection on %s: %s", self.falcon_port,
-            status.get('raw') if status else "no status reply")
-        if not status:
-            messagebox.showwarning(
-                _("Connected, no response"),
-                _("Port opened at {p}, but Grbl didn't reply to a "
-                  "status query. Try the Reset Falcon menu item, "
-                  "then test again.").format(p=self.falcon_port))
-            return
-        mpos = status.get('mpos') or [0, 0, 0]
-        messagebox.showinfo(
-            _("Connection OK"),
-            _("Falcon connected on {p}.\n\n"
-              "State: {s}\n"
-              "MPos: X={x:.2f}  Y={y:.2f}  Z={z:.2f}").format(
-                p=self.falcon_port, s=status.get('state', '?'),
-                x=mpos[0], y=mpos[1], z=mpos[2]))
-
-    def _on_machine_clear_errors(self):
-        """Send $X to unlock motion after an alarm. Doesn't reset
-        position info, just clears the alarm state."""
-        if not self._machine_require_falcon():
-            return
-        try:
-            import falcon_sender
-        except ImportError as e:
-            messagebox.showerror(_("Missing Dependency"),
-                                  _("Clear needs pyserial: {e}").format(e=e))
-            return
-        sender = falcon_sender.FalconSender(port=self.falcon_port)
-        try:
-            sender.connect()
-            sender.unlock()
-        except Exception as e:
-            messagebox.showerror(_("Connection Failed"),
-                                  _("Couldn't connect: {e}").format(e=e))
-            try:
-                sender.disconnect()
-            except Exception:
-                pass
-            return
-        finally:
-            pass
-        try:
-            sender.disconnect()
-        except Exception:
-            pass
-        messagebox.showinfo(
-            _("Errors Cleared"),
-            _("Sent $X unlock. Motion is allowed again. If the "
-              "Falcon was in an alarm state, it should now be Idle "
-              "— check with Test Connection."))
-
-    def _on_machine_reset_falcon(self):
-        """Send Ctrl-X (RT_SOFT_RESET) to reboot the controller's
-        firmware state. Stops any in-progress motion immediately,
-        clears alarms, resets the planner buffer."""
-        if not self._machine_require_falcon():
-            return
-        if not messagebox.askyesno(
-                _("Reset Falcon?"),
-                _("Send a soft-reset (Ctrl-X) to the Falcon. This:\n"
-                  "  • Immediately stops any motion in progress\n"
-                  "  • Clears alarm + error states\n"
-                  "  • Resets the planner buffer\n"
-                  "  • Loses the machine's known position (you'll "
-                  "need to home again)\n\n"
-                  "Only use this when the Falcon is stuck in a bad "
-                  "state and Clear Errors didn't help.\n\n"
-                  "Continue?")):
-            return
-        try:
-            import falcon_sender
-        except ImportError as e:
-            messagebox.showerror(_("Missing Dependency"),
-                                  _("Reset needs pyserial: {e}").format(e=e))
-            return
-        logging.getLogger("ssc.machine").info(
-            "Machine > Reset Falcon: soft-reset on %s", self.falcon_port)
-        sender = falcon_sender.FalconSender(port=self.falcon_port)
-        try:
-            sender.connect()
-            sender.send_realtime(falcon_sender.RT_SOFT_RESET)
-            time.sleep(1.0)  # let firmware reboot
-        except Exception as e:
-            messagebox.showerror(_("Reset Failed"),
-                                  _("Couldn't reset: {e}").format(e=e))
-        try:
-            sender.disconnect()
-        except Exception:
-            pass
-        # Soft-reset loses machine position — clear the homed flag so
-        # the next Frame & Cut auto-homes again.
-        self._falcon_homed_this_session = False
-        messagebox.showinfo(
-            _("Falcon Reset"),
-            _("Soft-reset sent. The Falcon is now in alarm state — "
-              "use Home Laser to recover, then jog as needed."))
-
-    def _on_machine_recalibrate(self):
-        """Open Camera Calibration with a strong warning since the
-        engrave + capture flow takes the better part of an hour."""
-        try:
-            import camera_capture
-        except ImportError:
-            messagebox.showerror(
-                _("OpenCV Required"),
-                _("Camera calibration needs OpenCV:\n\n"
-                  "    pip install opencv-python Pillow"))
-            return
-        cal_path = camera_capture.default_calibration_path()
-        existing = camera_capture.load_calibration(cal_path) is not None
-        if existing:
-            if not messagebox.askyesno(
-                    _("Recalibrate Camera?"),
-                    _("⚠ This will REPLACE your existing calibration. "
-                      "⚠\n\n"
-                      "The full calibration takes ~60 minutes — the "
-                      "calibration card has to be engraved on fresh "
-                      "basswood, then you take 12+ photos.\n\n"
-                      "Only recalibrate if:\n"
-                      "  • The camera was bumped / re-mounted\n"
-                      "  • Cuts are landing in the wrong spot\n"
-                      "  • You're sure the existing one is wrong\n\n"
-                      "Proceed?")):
-                return
-        # Delegate to the existing handler (inherited from
-        # ToolingTabMixin) — same dialog, same flow.
-        self._open_camera_calibration()
-
-    def _on_machine_framing_power(self):
-        """Per-material framing power (Grbl S, 0-1000 scale).
-
-        Framing traces the outline so you can see where the head will go
-        without marking anything. How low "visible but harmless" is
-        depends on the material — 1% reads fine on card and is invisible
-        on dark leather. Framing always uses M4 dynamic power whatever
-        the value, so the beam still drops to zero when the head stalls
-        at a vertex.
-        """
-        from config import (GCODE_PRESET_MATERIALS, FRAMING_POWER_S_MAX,
-                            get_framing_power_s, save_settings)
-
-        dlg = tk.Toplevel(self.root)
-        dlg.title(_("Framing Power"))
-        dlg.transient(self.root)
-        dlg.grab_set()
-        dlg.resizable(False, False)
-        bg = self._get_theme_color() if hasattr(
-            self, '_get_theme_color') else None
-        if bg:
-            dlg.configure(bg=bg)
-
-        max_pct = FRAMING_POWER_S_MAX / 10.0
-        tk.Label(dlg, justify='left', wraplength=440, bg=bg,
-                 text=_("Laser power used for the framing pass, per "
-                        "material. Framing shows you where the cut will "
-                        "land — it should be bright enough to follow by "
-                        "eye without marking the material.\n\n"
-                        "Dark materials like leather need more than card "
-                        "does. Raise it a little at a time: the power "
-                        "that becomes visible is usually close to the "
-                        "power that starts leaving a mark.")
-                 ).pack(padx=20, pady=(15, 10))
-
-        grid = tk.Frame(dlg, bg=bg)
-        grid.pack(padx=20, pady=(0, 10))
-        vars_by_mat = {}
-        for row, mat in enumerate(GCODE_PRESET_MATERIALS):
-            tk.Label(grid, text=mat.replace('_', ' ').title() + ":",
-                     bg=bg, anchor='e', width=12).grid(
-                row=row, column=0, sticky='e', pady=2)
-            # Shown and entered as a percentage, like every other power
-            # field in the app. Stored as a Grbl S value (percent x 10) —
-            # see _ok() for why the stored unit doesn't change.
-            # One decimal always shown ("1.0", not "1") so it's obvious a
-            # fractional percent is accepted — the useful range is narrow
-            # and S values are integers, so 0.1% is exactly the precision
-            # available.
-            pct_now = get_framing_power_s(mat, self.settings) / 10.0
-            var = tk.StringVar(value=f"{pct_now:.1f}")
-            vars_by_mat[mat] = var
-            tk.Entry(grid, textvariable=var, width=8,
-                     font=("Helvetica", 11)).grid(
-                row=row, column=1, sticky='w', padx=6, pady=2)
-            tk.Label(grid, text="%", bg=bg).grid(row=row, column=2,
-                                                 sticky='w')
-
-        tk.Label(dlg, bg=bg, fg="#666666", font=("Helvetica", 8),
-                 text=_("Range: 0 to {max}%. Cutting power is typically "
-                        "35-100%, so framing stays well below it.").format(
-                            max=f"{max_pct:.1f}")
-                 ).pack(padx=20, pady=(0, 8))
-
-        def _ok():
-            parsed = {}
-            for mat, var in vars_by_mat.items():
-                try:
-                    pct = float(var.get())
-                    if not (0 <= pct <= max_pct):
-                        raise ValueError("out of range")
-                except (ValueError, TypeError):
-                    messagebox.showerror(
-                        _("Invalid"),
-                        _("{mat}: framing power must be a number from "
-                          "0 to {max}%.").format(
-                              mat=mat, max=f"{max_pct:.1f}"),
-                        parent=dlg)
-                    return
-                # Store as Grbl S (percent x 10). Kept in S rather than
-                # migrating the setting to percent because the existing
-                # key already holds S values: reinterpreting a stored 10
-                # as 10% would silently raise everyone's framing power
-                # tenfold, and a botched migration here burns material.
-                parsed[mat] = int(round(pct * 10))
-            self.settings["laser_framing_power_by_material"] = parsed
-            try:
-                save_settings(self.settings)
-            except Exception as e:
-                messagebox.showerror(_("Save Failed"), str(e), parent=dlg)
-                return
-            dlg.destroy()
-
-        btn_row = tk.Frame(dlg, bg=bg)
-        btn_row.pack(pady=(0, 15))
-        tk.Button(btn_row, text=_("OK"), command=_ok, width=10).pack(
-            side='left', padx=5)
-        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy,
-                  width=10).pack(side='left', padx=5)
-
-    def _on_machine_inset_settings(self):
-        """Small dialog: edit camera_polygon_inset_mm."""
-        dlg = tk.Toplevel(self.root)
-        dlg.title(_("Camera-Polygon Inset Margin"))
-        dlg.transient(self.root)
-        dlg.grab_set()
-        dlg.resizable(False, False)
-        bg = self._get_theme_color() if hasattr(
-            self, '_get_theme_color') else None
-        if bg:
-            dlg.configure(bg=bg)
-
-        tk.Label(dlg, justify='left', wraplength=420,
-                  text=_("Camera-captured polygons are shrunk by this "
-                          "many millimeters on every edge before "
-                          "nesting. This safety margin compensates "
-                          "for camera measurement error near the "
-                          "edges of its view — keeps pads from "
-                          "landing where a chunk of leather might "
-                          "actually be missing.\n\n"
-                          "Typical: 2-5mm. Set to 0 to disable.")
-                  ).pack(padx=20, pady=(15, 10))
-
-        row = tk.Frame(dlg)
-        row.pack(pady=(0, 15))
-        tk.Label(row, text=_("Inset margin (mm):")).pack(side='left',
-                                                            padx=5)
-        var = tk.StringVar(
-            value=str(self.settings.get("camera_polygon_inset_mm", 3.0)))
-        entry = tk.Entry(row, textvariable=var, width=8,
-                          font=("Helvetica", 11))
-        entry.pack(side='left', padx=5)
-        entry.focus_set()
-
-        def _ok():
-            try:
-                v = float(var.get())
-                if v < 0 or v > 50:
-                    raise ValueError("out of range")
-            except (ValueError, TypeError):
-                messagebox.showerror(_("Invalid"),
-                                      _("Inset must be a number 0-50."),
-                                      parent=dlg)
-                return
-            self.settings["camera_polygon_inset_mm"] = v
-            from config import save_settings
-            try:
-                save_settings(self.settings)
-            except Exception as e:
-                messagebox.showerror(_("Save Failed"),
-                                      str(e), parent=dlg)
-                return
-            dlg.destroy()
-
-        btn_row = tk.Frame(dlg)
-        btn_row.pack(pady=(0, 15))
-        tk.Button(btn_row, text=_("Save"), command=_ok,
-                   width=10, font=("Helvetica", 10, "bold")
-                   ).pack(side='left', padx=5)
-        tk.Button(btn_row, text=_("Cancel"), command=dlg.destroy,
-                   width=10).pack(side='left', padx=5)
-
-    def _show_homing_status(self):
-        """Modal 'Homing...' window held open while $H blocks.
-
-        Created as a Toplevel rather than a messagebox so we can dismiss
-        it programmatically when homing returns. Lives in
-        self._homing_status_win.
-        """
-        win = tk.Toplevel(self.root)
-        win.title(_("Homing"))
-        win.transient(self.root)
-        win.resizable(False, False)
-        try:
-            win.grab_set()
-        except Exception:
-            pass
-        tk.Label(win, text=_("Homing the laser...\n\n"
-                              "Head is moving to the home corner."),
-                 padx=30, pady=20,
-                 font=("Helvetica", 11), justify='left').pack()
-        win.update_idletasks()
-        # Center on root window
-        try:
-            x = (self.root.winfo_x()
-                 + (self.root.winfo_width() // 2)
-                 - (win.winfo_width() // 2))
-            y = (self.root.winfo_y()
-                 + (self.root.winfo_height() // 2)
-                 - (win.winfo_height() // 2))
-            win.geometry(f"+{x}+{y}")
-        except Exception:
-            pass
-        self._homing_status_win = win
-        win.update()
-
-    def _hide_homing_status(self):
-        win = getattr(self, '_homing_status_win', None)
-        if win is not None:
-            try:
-                win.destroy()
-            except Exception:
-                pass
-            self._homing_status_win = None
-
-    def on_frame_and_cut(self):
-        """Generate G-code in memory, frame the bbox, then stream to Falcon."""
-        try:
-            import falcon_sender
-            from gcode_engine import (
-                extract_gcode_bbox,
-                generate_framing_gcode,
-                generate_polygon_framing_gcode,
-            )
-            from ui_dialogs import FalconRunDialog
-        except ImportError as e:
-            messagebox.showerror(_("Missing Dependency"),
-                                  _("Frame & Cut needs pyserial:\n\n{e}").format(e=e))
-            return
-
-        # Long cuts can run for tens of minutes; block sleep so the
-        # USB serial doesn't get killed mid-job. Released in the
-        # finally block below.
-        try:
-            import sleep_lock
-            sleep_lock.prevent_sleep()
-        except Exception:
-            pass
-
-        if not self.falcon_port:
-            messagebox.showerror(_("Falcon Not Detected"),
-                                  _("No Grbl controller detected. Plug in "
-                                    "the Falcon over USB and try again."))
-            self._falcon_detect_attempted = False
-            self._detect_falcon_async()
-            return
-
-        # No "would you like to recapture from camera?" prompt here —
-        # the Draw / Capture Shape dialog already offered both paths
-        # before the user picked one. If they drew a polygon, that's
-        # their choice; proceeding in manual mode is the right
-        # default. (An earlier two-button layout had Draw and Capture
-        # as separate top-level buttons, and this prompt was the
-        # bridge between them; with the consolidated dialog it just
-        # makes users repeat work they already chose against.)
-
-        # --- Input validation up through nesting (mirrors on_generate_gcode) ---
-        try:
-            params = self._prepare_generation()
-            if not params:
-                return
-            pads, hole_dia = params['pads'], params['hole_dia']
-            width_mm, height_mm = params['width_mm'], params['height_mm']
-            card_paper_dims = params['card_paper_dims']
-
-            supported_materials = [m for m, v in self.material_vars.items()
-                                     if v.get() and m != "exact_size"]
-            if len(supported_materials) != 1:
-                messagebox.showerror(
-                    _("Pick One Material"),
-                    _("Frame & Cut works with one material at a time. "
-                      "Please select exactly one material (not Exact Size)."))
-                return
-            material = supported_materials[0]
-            mat_w, mat_h, mat_polygon = self._get_material_dimensions(
-                material, width_mm, height_mm, card_paper_dims)
-
-            # Scrap mode places a partial batch on this scrap (one scrap
-            # per click, mirroring _generate_gcode_scrap_mode); standard
-            # mode nests the whole batch and requires it all to fit.
-            # scrap_remaining is handed to _frame_cut_scrap_advance once
-            # the cut completes; it stays None in standard mode.
-            scrap_mode = self.scrap_mode_var.get()
-            scrap_remaining = None
-            if scrap_mode:
-                result = self._scrap_begin_partial(
-                    pads, hole_dia, material, mat_w, mat_h, mat_polygon,
-                    ask_save_dir=False)
-                if result is None:
-                    return
-                placed, scrap_remaining = result
-                hole_dia = self.scrap_session['hole_dia']
-                # Labeled zones stand down in scrap mode: a zone is sized for
-                # a whole size's count, but a scrap only takes part of it, so
-                # the block would have to be re-sized per scrap.
-                zones = []
-            else:
-                # One nest; its fixed counts are the fit check.
-                placed, zones, fixed_placed, fixed_total = nest_with_zones(
-                    pads, material, mat_w, mat_h, self.settings, polygon=mat_polygon)
-                if fixed_placed != fixed_total:
-                    messagebox.showerror(
-                        _("Nesting Error"),
-                        _("Could not fit all '{m}' pieces in the available "
-                          "area.").format(m=material.replace('_', ' ')))
-                    return
-
-            # Show the nesting layout before anything runs on the machine —
-            # same as the file-export Generate flow, so the user can see what
-            # will be cut and back out if it's not what they want. In scrap
-            # mode this is the subset that fits on the current scrap; in
-            # standard mode it's the whole batch. Cancelling (Adjust) backs out
-            # cleanly: the scrap is only counted after a completed cut (in
-            # _frame_cut_scrap_advance), so nothing is consumed here.
-            preview = NestingPreviewWindow(
-                self.root, {material: placed}, mat_w, mat_h,
-                polygon=mat_polygon, proceed_label=_("Continue →"), zones=zones)
-            if preview.result != "save":
-                return
-
-            # Generate G-code to a temp file then read it back into memory.
-            import tempfile
-            import os as _os
-            with tempfile.NamedTemporaryFile(suffix='.gcode', delete=False,
-                                              mode='w') as tmp:
-                tmp_path = tmp.name
-            # The cut streams into the SAME work frame as the framing pass,
-            # and framing flips the scrap OUTLINE with the outline's height.
-            # A camera-captured polygon is inset from that outline, so the
-            # generator's default (flip with the polygon it's given, i.e.
-            # the inset) put every disc `inset` mm toward the machine front
-            # of where the frame showed it. Flip with the outline instead.
-            _flip_source = self.custom_polygon_outline or self.custom_polygon
-            flip_height_mm = (max(p[1] for p in _flip_source)
-                              if _flip_source and len(_flip_source) >= 3
-                              else None)
-            try:
-                generate_gcode_from_placed(
-                    placed, material, mat_w, mat_h, tmp_path, hole_dia,
-                    self.settings, polygon=mat_polygon, zones=zones,
-                    flip_height_mm=flip_height_mm)
-                with open(tmp_path, 'r') as f:
-                    gcode_text = f.read()
-            finally:
-                try:
-                    _os.remove(tmp_path)
-                except Exception:
-                    pass
-
-            # Framing pass. If a custom polygon is loaded (drawn or camera-
-            # captured), trace the polygon outline — on irregular scrap a
-            # bbox rectangle overhangs every concave edge and tells the user
-            # nothing about whether the cuts land on material. Fall back to
-            # the bbox rectangle for rectangular jobs (no polygon loaded).
-            from config import get_framing_power_s
-            power_s = get_framing_power_s(material, self.settings)
-            feed = self.settings.get("laser_framing_feed", 2000)
-            framing_lines = []
-            # Frame the OUTLINE polygon (un-insetted) so the trace
-            # matches the actual scrap edge. Cuts still use the inset
-            # polygon for placement — both share a coordinate origin
-            # so the G92 math below works either way. Fall back to
-            # custom_polygon for plain hand-drawn polygons that don't
-            # have a separate outline.
-            framing_polygon = (self.custom_polygon_outline
-                                or self.custom_polygon)
-            if framing_polygon and len(framing_polygon) >= 3:
-                framing_lines = generate_polygon_framing_gcode(
-                    framing_polygon, power_s=power_s, feed=feed,
-                )
-            else:
-                bbox = extract_gcode_bbox(gcode_text)
-                if bbox:
-                    xmin, xmax, ymin, ymax = bbox
-                    framing_lines = generate_framing_gcode(
-                        xmin, ymin, xmax, ymax, power_s=power_s, feed=feed,
-                    )
-
-            sender = falcon_sender.FalconSender(port=self.falcon_port)
-            try:
-                sender.connect()
-            except Exception as e:
-                messagebox.showerror(_("Connection Failed"),
-                                      _("Could not connect to the Falcon at "
-                                        "{p}: {e}").format(p=self.falcon_port, e=e))
-                return
-
-            # Optional live camera window — opens alongside the run dialog
-            # so the user can watch the laser head while it works, and stays
-            # open after the cut so the user can see the finished result.
-            # Stored on self so the reference persists past this function.
-            # Only ONE window at a time: if a previous Frame & Cut left
-            # a live cam open (it intentionally outlives the cut), focus
-            # that one instead of opening a duplicate.
-            if self.live_camera_var.get():
-                try:
-                    import camera_capture
-                    from ui_dialogs import LiveCameraWindow
-                    existing = getattr(self, '_live_cam_window', None)
-                    if existing is not None and existing.winfo_exists():
-                        try:
-                            existing.lift()
-                            existing.focus_force()
-                        except Exception:
-                            pass
-                    elif camera_capture.HAS_OPENCV:
-                        cam_idx = self._resolve_camera_index()
-                        if cam_idx is not None:
-                            self._live_cam_window = LiveCameraWindow(
-                                self.root, camera_index=cam_idx,
-                                settings=self.settings)
-                except Exception:
-                    pass  # never block the cut on preview failure
-
-            # After our connect+soft-reset, Grbl is in alarm state
-            # (homing required). $X clears that so motion is allowed.
-            # We don't $H here — that would fly the head to the homing
-            # switches and override whatever position the user manually
-            # set as their material origin.
-            sender.unlock()
-
-            # Manual positioning step: jog dialog stays open so the
-            # user can fine-tune with the arrow buttons. They can ALSO
-            # have positioned the head physically (open lid → push head
-            # to material's lower-left → close lid → click Start Frame),
-            # so the Start Frame button is enabled immediately — no
-            # forced jog click. If the head's already where they want,
-            # they just click Start Frame straight through.
-            # If the polygon has a known machine LB-vertex, offer
-            # "Try Auto Locate" — drives the head directly there so
-            # the user doesn't have to jog manually. Only enabled once
-            # the laser is homed (otherwise MPos drift could put the
-            # auto-drive somewhere wrong).
-            auto_locate_target = self._custom_polygon_lb_machine
-            jog_dlg = FalconRunDialog(
-                self.root, sender, [],  # nothing to stream
-                title=_("Position the head at your material's "
-                         "bottom-left corner (jog here OR open the "
-                         "lid and physically move it), then click "
-                         "Start Frame"),
-                show_pause_resume=False, show_cut_button=False,
-                stop_needs_confirm=False,
-                done_button_label=_("Start Frame →"),
-                remind_lid_on_advance=True,
-                auto_locate_target=auto_locate_target,
-                is_homed=self._falcon_homed_this_session)
-            if jog_dlg._final_reason != "complete":
-                return
-
-            # Compute the polygon's leftmost-lowest vertex in framing's
-            # Y-UP frame. This is the corner the user intuitively jogs
-            # to ("BL of the scrap"). Computed from the OUTLINE (not
-            # the inset) so the LB-vertex sits on an actual scrap
-            # edge — for axis-aligned scraps this is bbox-(0,0); for
-            # tilted scraps it's the visible bottom-left corner.
-            #
-            # The inset polygon shares the same coordinate origin
-            # (see _set_custom_polygon_from_y_up), so cut placements
-            # remain correctly anchored even though the G92 offset
-            # comes from the outline.
-            g92_x, g92_y = self._frame_cut_anchor()
-
-            # Both modes share the same framing-loop recipe:
-            # G92 X{lb_x} Y{lb_y} sets work coords such that the
-            # polygon's bbox-BL ends up at work (0, 0) when the head
-            # is physically at the polygon's LB vertex — what the
-            # user thinks of as "BL of the material."
-            prefix = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}']
-            if framing_lines:
-                framing_lines = prefix + framing_lines
-
-            try:
-                if framing_lines:
-                    # Framing always runs when there's something to
-                    # frame — the user's escape hatch is clicking
-                    # "Looks Good — Cut!" immediately in the loop
-                    # dialog to skip to the cut. Loop mode lets them
-                    # take their time verifying alignment and nudge
-                    # the head with the jog buttons between/during
-                    # passes.
-                    fdlg = FalconRunDialog(
-                        self.root, sender, framing_lines,
-                        title=_("Framing — verify cut area, jog if "
-                                 "needed, click Cut when ready"),
-                        loop=True)
-                    if fdlg._final_reason != "complete":
-                        return  # user stopped or error during framing
-                    # No "Frame Looks Good?" prompt — the user already
-                    # confirmed by clicking Cut Now.
-
-                # Cut uses the same G92 offset as framing so the cut
-                # placements align with the LB-vertex jog convention.
-                cut_lines = [f'G92 X{g92_x:.3f} Y{g92_y:.3f}'] + gcode_text.splitlines()
-                self._keep_last_cut_gcode(
-                    cut_lines, material,
-                    (self.scrap_session['scrap_count'] + 1) if scrap_mode else None,
-                    (g92_x, g92_y), flip_height_mm, mat_polygon, len(placed))
-                cut_dlg = FalconRunDialog(
-                    self.root, sender, cut_lines,
-                    title=_("Cutting — {m}").format(m=material))
-
-                # Log it before the scrap bookkeeping below, which can
-                # sit on a modal dialog. Stopped and errored cuts are
-                # logged too, with their status — the material still
-                # went under the laser, and knowing a job was cut short
-                # is exactly what you want when pads come up missing.
-                # scrap_count is bumped by _frame_cut_scrap_advance, so
-                # the number this cut belongs to is one past it.
-                self._record_job(
-                    "laser", [material], pads, params,
-                    placed_count=len(placed),
-                    scrap_num=(self.scrap_session['scrap_count'] + 1
-                               if scrap_mode else None),
-                    status=cut_dlg._final_reason or "stopped")
-
-                # Scrap mode: commit this scrap (decrement remaining,
-                # offer continue/recapture) only once the cut has
-                # streamed to completion. A stopped or errored cut
-                # leaves the session untouched so it can be re-cut.
-                if scrap_mode and cut_dlg._final_reason == "complete":
-                    self._frame_cut_scrap_advance(len(placed), scrap_remaining)
-            finally:
-                # Intentionally don't auto-close live_cam — users want
-                # to see the finished result. They close it manually,
-                # or it dies with the app when SSC exits.
-                try:
-                    sender.disconnect()
-                except Exception:
-                    pass
-
-        except Exception as e:
-            messagebox.showerror(_("An Error Occurred"),
-                                  _("Something went wrong during Frame & Cut:\n\n"
-                                    "{error}").format(error=e))
-        finally:
-            try:
-                import sleep_lock
-                sleep_lock.allow_sleep()
-            except Exception:
-                pass
-            # Every early return above (preview Adjust, jog or framing
-            # cancelled, stopped or errored cut, exception) lands here
-            # with the scrap still pending; a completed cut has already
-            # committed it, so this is a no-op then.
             self._scrap_abandon_pending()
 
     def on_generate_gcode(self):
@@ -3326,7 +2494,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if use_preview:
                     preview = NestingPreviewWindow(
                         self.root, {material: placed}, mat_w, mat_h,
-                        polygon=mat_polygon, zones=zones)
+                        polygon=mat_polygon, zones=zones, settings=self.settings)
                     if preview.result != "save":
                         return
 
@@ -3337,6 +2505,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 if not save_dir:
                     return
                 self.settings["last_output_dir"] = save_dir
+
+            if not self._sd_card_ok(save_dir, [f"{base}_{m}.gcode" for m in all_placed]):
+                return
 
             # Show working indicator
             working_popup = tk.Toplevel(self.root)
@@ -3372,11 +2543,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 drive_letter = os.path.splitdrive(os.path.abspath(save_dir))[0]
                 eject_success = self._eject_drive(drive_letter) if drive_letter else False
                 if eject_success:
-                    messagebox.showinfo(_("Done"), _("G-code files generated successfully.\n\nSD card safely ejected — you can remove it now!"))
+                    messagebox.showinfo(_("Done"), _("G-code files generated successfully.\n\nSD card safely ejected — you can remove it now!")
+                                        + "\n\n" + gcode_file_note())
                 else:
-                    messagebox.showinfo(_("Done"), _("G-code files generated successfully.\n\nPlease safely eject the SD card before removing."))
+                    messagebox.showinfo(_("Done"), _("G-code files generated successfully.\n\nPlease safely eject the SD card before removing.")
+                                        + "\n\n" + gcode_file_note())
             else:
-                messagebox.showinfo(_("Done"), _("G-code files generated successfully."))
+                messagebox.showinfo(_("Done"), _("G-code files generated successfully.")
+                                    + "\n\n" + gcode_file_note())
 
         except Exception as e:
             print(f"An error occurred during G-code generation: {e}")
@@ -3422,7 +2596,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if self.preview_var.get():
                 preview = NestingPreviewWindow(
                     self.root, {material: placed}, mat_w, mat_h,
-                    polygon=mat_polygon)
+                    polygon=mat_polygon, settings=self.settings)
                 if preview.result != "save":
                     return
 
@@ -3454,9 +2628,12 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 messagebox.showinfo(_("Session Complete!"),
                     _("Placed {placed_count} pads on scrap #{scrap_num}.\n\n"
                     "All pads placed! Session complete.\n"
-                    "Files saved to: {save_dir}").format(placed_count=placed_count, scrap_num=scrap_num, save_dir=save_dir))
+                    "Files saved to: {save_dir}").format(placed_count=placed_count, scrap_num=scrap_num, save_dir=save_dir)
+                    + "\n\n" + gcode_file_note())
             else:
-                self._show_scrap_continue_dialog(placed_count, scrap_num, remaining_count)
+                # The flag goes by position: several suites stand in for this
+                # dialog with a `lambda *args`, which takes no keywords.
+                self._show_scrap_continue_dialog(placed_count, scrap_num, remaining_count, True)
 
         except Exception as e:
             print(f"An error occurred during scrap mode G-code generation: {e}")
@@ -3486,17 +2663,23 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 parts = line.split('x', 1)  # Split only on first 'x' (so 'max' doesn't get split)
                 if len(parts) == 2:
                     size = float(parts[0].strip())
-                    if size > 0:
+                    # inf, 1e400 and nan parse as floats but are no size and
+                    # no quantity (2026-11-10): int(inf) raised OverflowError
+                    # past this handler and reached the Unexpected Error box.
+                    if size > 0 and math.isfinite(size):
                         qty_str = parts[1].strip()
                         if qty_str == 'max':
                             pad_list.append({'size': size, 'qty': 'max'})
                             ok = True
                         else:
-                            qty = int(float(qty_str))
+                            qty_f = float(qty_str)
+                            if not math.isfinite(qty_f):
+                                raise ValueError(qty_str)
+                            qty = int(qty_f)
                             if qty > 0:
                                 pad_list.append({'size': size, 'qty': qty})
                                 ok = True
-            except ValueError:
+            except (ValueError, OverflowError):
                 pass
             if not ok and rejected is not None:
                 rejected.append(line)
@@ -3699,8 +2882,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         if not filepath:
             return
         try:
-            with open(filepath, 'r') as f:
-                imported_presets = json.load(f)
+            imported_presets = read_json(filepath)
             if not isinstance(imported_presets, dict):
                 raise TypeError("File is not a valid preset dictionary.")
 
@@ -3818,6 +3000,9 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def open_gcode_settings_window(self):
         # Show only pad materials (felt/card/leather) from the pad generator tab
         pad_materials = [("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
+        # Adhesive rings get their section only while the feature is on.
+        if self._adhesive_ring_enabled():
+            pad_materials.append(("adhesive_ring", _("Adhesive rings")))
         GcodeSettingsWindow(self.root, self.settings, lambda s: save_settings(s),
                             materials=pad_materials,
                             gcode_presets=self.gcode_presets,
@@ -3825,6 +3010,31 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
 
     def open_resonance_window(self):
         ResonanceWindow(self.root, self.settings, lambda: save_settings(self.settings), self.apply_resonance_theme)
+
+    def _rescan_audio_devices(self):
+        """Look for audio devices again (config.rescan_input_devices), with
+        the tuner's and the Analyzer's engines stopped round it and started
+        again after: a rescan invalidates every open stream and may move
+        every device index. The engines come back on the chosen device by
+        its name (config.input_device_for). Never during a capture, which
+        would lose its stream: False then, and the old list stands."""
+        if getattr(self, "_toner_capture_state", None) is not None:
+            return False
+        tuner = getattr(self, "_tuner_engine", None)
+        toner = getattr(self, "_toner_engine", None)
+        tuner_on = bool(tuner and tuner.is_running)
+        toner_on = bool(toner and toner.is_running)
+        if tuner_on:
+            self._tuner_stop()
+        if toner_on:
+            self._toner_stop()
+        try:
+            return rescan_input_devices()
+        finally:
+            if tuner_on:
+                self._tuner_start()
+            if toner_on:
+                self._toner_start()
 
     def _open_input_device_dialog(self):
         """Open a dialog to select the audio input device."""
@@ -3835,6 +3045,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                 "(PulseAudio or PipeWire)."))
             return
 
+        self._rescan_audio_devices()        # a microphone plugged in since the app started is listed
         devices = get_input_devices()
         if not devices:
             messagebox.showinfo(_("No Devices"), _("No audio input devices found."))
@@ -3856,7 +3067,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
                  "Bluetooth headsets are excluded (sample rate too low)."),
                  bg=bg, fg="#666666", font=("Helvetica", 8)).pack(pady=(0, 8))
 
-        current_dev = self.settings.get("audio_input_device")
+        current_dev = input_device_for(self.settings, devices)
         dev_names = [_("System Default")] + [name for _idx, name in devices]
         dev_indices = [None] + [idx for idx, _name in devices]
 
@@ -3888,7 +3099,7 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             if not sel:
                 return
             dev_idx = dev_indices[sel[0]]
-            self.settings["audio_input_device"] = dev_idx
+            set_input_device(self.settings, dev_idx, devices)
             save_settings(self.settings)
 
             # Restart active audio engine with new device
@@ -4069,25 +3280,14 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
             ("Screw Specs", _("Screw Specs")),
             ("Tooling", _("Tooling")),
             ("Tuner", _("Tuner")),
-        ]
-        experimental_tabs = [
-            ("Toner", _("Toner")),
+            ("Toner", _("Analyzer")),    # the storage key stays "Toner" (2026-11-10)
         ]
         if not audio_supported():
             # A build that can't run them doesn't offer them (Intel Mac).
-            main_tabs = [t for t in main_tabs if t[0] != "Tuner"]
-            experimental_tabs = []
+            main_tabs = [t for t in main_tabs if t[0] not in ("Tuner", "Toner")]
 
         check_vars = {}
         for key, display in main_tabs:
-            var = tk.BooleanVar(value=visible.get(key, True))
-            tk.Checkbutton(frame, text=display, variable=var, bg=bg,
-                           font=("Helvetica", 10)).pack(anchor="w")
-            check_vars[key] = var
-
-        tk.Label(frame, text=_("\nExperimental / In Progress"), bg=bg,
-                 font=("Helvetica", 11, "bold")).pack(anchor="w")
-        for key, display in experimental_tabs:
             var = tk.BooleanVar(value=visible.get(key, True))
             tk.Checkbutton(frame, text=display, variable=var, bg=bg,
                            font=("Helvetica", 10)).pack(anchor="w")
@@ -4103,158 +3303,19 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         machine_menu_var = tk.BooleanVar(
             value=self.settings.get("experimental_machine_menu", False))
         if machine_supported():  # not offered on a build without pyserial
+            tk.Label(frame, text=_("\nExperimental / In Progress"), bg=bg,
+                     font=("Helvetica", 11, "bold")).pack(anchor="w")
             tk.Checkbutton(
                 frame,
-                text=_("Machine menu (direct Falcon serial control)"),
+                text=_("Direct machine control (GRBL)"),
                 variable=machine_menu_var, bg=bg,
                 font=("Helvetica", 10)).pack(anchor="w")
-
-        def _show_toner_terms(parent_dlg):
-            """Show toner beta terms acceptance dialog. Returns True if accepted."""
-            terms = tk.Toplevel(parent_dlg)
-            terms.title(_("Toner — Beta Notice"))
-            terms.resizable(True, True)
-            terms.transient(parent_dlg)
-            terms.grab_set()
-            terms.minsize(460, 400)
-
-            tbg = parent_dlg.cget('bg') if not IS_MACOS else "systemWindowBackgroundColor"
-            frm = tk.Frame(terms, bg=tbg, padx=20, pady=15)
-            frm.pack(fill="both", expand=True)
-
-            tk.Label(frm, text=_("Harmonic Tone Analyzer"), bg=tbg,
-                     font=("Helvetica", 14, "bold")).pack(pady=(0, 10))
-
-            txt_frame = tk.Frame(frm, bg=tbg)
-            txt_frame.pack(fill="both", expand=True)
-            txt = tk.Text(txt_frame, wrap="word", font=("Helvetica", 10),
-                          bg=tbg, relief="flat", highlightthickness=0,
-                          padx=8, pady=8, spacing3=4)
-            txt.pack(side="left", fill="both", expand=True)
-            sb = tk.Scrollbar(txt_frame, command=txt.yview)
-            sb.pack(side="right", fill="y")
-            txt.configure(yscrollcommand=sb.set)
-
-            # Tag for the data-sharing link
-            txt.tag_configure("link",
-                              font=("Helvetica", 10, "underline"),
-                              foreground="#0066CC")
-
-            txt.insert("end",
-                _("This feature is in beta. Run it in full screen.\n\n"
-
-                "The Toner is a real-time harmonic analyzer that captures the "
-                "frequency content of your recorded sound, extracting and "
-                "analyzing the saxophone-specific content: the fundamental "
-                "and its overtones. A microphone picks up your sound, an FFT "
-                "extracts the harmonic series, and the display shows you "
-                "what's happening in real time. You can capture sessions, "
-                "save presets for different setups (horn + mouthpiece + "
-                "player + reed + mic), and compare them side by side.\n\n"
-
-                "The formulas and scaling may still shift as we gather more data. "
-                "The raw harmonic measurements are always saved, so any future "
-                "analytical improvements apply retroactively to all your "
-                "historical captures.\n\n"
-
-                "THREE WAYS TO USE IT\n\n"
-
-                "1. Instant feedback \u2014 see how you affect the sound with "
-                "your embouchure, support, voicing, mic placement, etc.\n\n"
-
-                "2. Controlled comparison \u2014 change a variable and compare "
-                "readings to see what changes in your sound. More readings, "
-                "better data.\n\n"
-
-                "3. Tracking your sound over time \u2014 same horn, same setup, "
-                "just you and your practice. Sessions are dated, so you "
-                "can see how your tone evolves week to week or month "
-                "to month.\n\n"
-
-                "BEFORE YOUR FIRST CAPTURE\n\n"
-
-                "Check Options > Settings:\n\n"
-
-                "1. Input Device \u2014 select your audio input. It should "
-                "automatically choose your default. Best practice is to have "
-                "your mic plugged in before running the program.\n\n"
-
-                "2. Recording Folder \u2014 this program does its best work by "
-                "analyzing WAV files it records during your sessions. Choose "
-                "where these WAV files are stored, and whether to keep them "
-                "after analysis or automatically delete.\n\n"
-
-                "3. Preset Fields \u2014 choose which variable fields to show when "
-                "creating presets.\n\n"
-
-                "Then create a preset in File > Presets. Six fields are always "
-                "required: Make, Model, Player, Mouthpiece, Mic Type, and "
-                "Mic Model. If you want accuracy, a high quality condenser "
-                "mic will give the most accurate readings, but you can also "
-                "use the toner to compare and learn about mic and mic "
-                "placement effects.\n\n"
-
-                "HELP IMPROVE THE TONER\n\n"
-
-                "I need more data! Please help by contributing recordings "
-                "and preset files. Every recording helps calibrate the "
-                "descriptors and uncover what they actually measure across "
-                "different horns, mouthpieces, mics, and players. If you'd "
-                "like to contribute, export your preset library via File > "
-                "Transfer Data > Export Preset Library... and make yourself "
-                "a folder and drop the resulting JSON file (and any WAV "
-                "recordings you'd like to share) in the shared folder below:\n\n")
-            )
-
-            # Clickable Google Drive link
-            import webbrowser
-            drive_url = ("https://drive.google.com/drive/folders/"
-                         "1fZndlhDv57vdr6lApOQcvvVFP6pK0sj_?usp=drive_link")
-            txt.insert("end", drive_url + "\n", "link")
-            txt.tag_bind("link", "<Button-1>",
-                         lambda e: webbrowser.open(drive_url))
-            txt.tag_bind("link", "<Enter>",
-                         lambda e: txt.config(cursor="hand2"))
-            txt.tag_bind("link", "<Leave>",
-                         lambda e: txt.config(cursor=""))
-
-            txt.insert("end",
-                _("\nThis feature is in active development. Please contact me "
-                "with suggestions, questions, problems. If you experience a "
-                "bug or problem, screenshots are super helpful.\n")
-            )
-
-            txt.configure(state="disabled")
-
-            result = {"accepted": False}
-
-            def accept():
-                result["accepted"] = True
-                terms.destroy()
-
-            btn_frame = tk.Frame(frm, bg=tbg)
-            btn_frame.pack(fill="x", pady=(10, 0))
-            tk.Button(btn_frame, text=_("I Understand — Enable Toner"),
-                      command=accept).pack(side="left", padx=(0, 5))
-            tk.Button(btn_frame, text=_("Cancel"),
-                      command=terms.destroy).pack(side="left")
-
-            terms.wait_window()
-            return result["accepted"]
 
         def apply():
             # Merge, don't replace: tabs this build doesn't offer (Tuner and
             # Toner on the Intel Mac) keep whatever was saved for them.
             new_visible = dict(self.settings.get("visible_tabs", {}))
             new_visible.update({name: var.get() for name, var in check_vars.items()})
-
-            # Toner requires terms acceptance if not previously unlocked
-            if new_visible.get("Toner") and not self.settings.get("toner_unlocked"):
-                if not _show_toner_terms(dlg):
-                    new_visible["Toner"] = False
-                    check_vars["Toner"].set(False)
-                    return
-                self.settings["toner_unlocked"] = True
 
             tabs_changed = (new_visible != self.settings.get("visible_tabs", {}))
 
@@ -4314,6 +3375,57 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
     def open_about(self):
         AboutDialog(self.root)
 
+    def open_user_guide_search(self):
+        """The whole User Guide with the cursor in its search box: where
+        the Welcome window's "Search the User Guide" link goes."""
+        guide = UserGuideWindow(self.root)
+        guide.focus_search()
+        return guide
+
+    def open_quick_start(self):
+        """The Welcome window's link (not in the Help menu since 2026-11-11). Its last
+        line opens the whole User Guide."""
+        return QuickStartWindow(self.root, show_frame_cut=machine_supported(),
+                                on_user_guide=lambda: UserGuideWindow(self.root))
+
+    def open_welcome(self):
+        """Help > Welcome, and the once-per-version showing below. One at
+        a time: a second request brings the open one forward."""
+        from config import APP_VERSION
+        existing = getattr(self, '_welcome_window', None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    existing.lift()
+                    return existing
+            except tk.TclError:
+                pass
+        self._welcome_window = WelcomeWindow(
+            self.root, APP_VERSION,
+            on_search_guide=self.open_user_guide_search,
+            on_quick_start=self.open_quick_start)
+        return self._welcome_window
+
+    def maybe_show_welcome(self):
+        """Show the Welcome window if this version has not been welcomed
+        on this install yet: the first launch after a new install or an
+        update. Returns the window, or None when there was nothing to show.
+
+        Called from the real launch path only (the __main__ block, after
+        the main window is up, on an after() so it costs startup nothing).
+        Building the app does not call it, so --selftest, --tour and every
+        test suite that constructs PadSVGGeneratorApp never see a Welcome
+        window they did not ask for. The version is recorded when the
+        window is shown, not when it is closed: a crash or a force-quit
+        must not bring it back every launch.
+        """
+        from config import APP_VERSION
+        if self.settings.get("welcomed_version") == APP_VERSION:
+            return None
+        self.settings["welcomed_version"] = APP_VERSION
+        save_settings(self.settings)
+        return self.open_welcome()
+
     def _open_log_file(self):
         """Show the log file selected in the system file manager.
 
@@ -4342,6 +3454,34 @@ class PadSVGGeneratorApp(LibraryFeaturesMixin, ToolingTabMixin, TunerTabMixin, T
         """Persist the eject SD card checkbox state."""
         self.settings["eject_sd_after_gcode"] = self.eject_sd_var.get()
         save_settings(self.settings)
+
+    def _sd_card_ok(self, folder, new_names):
+        """Before G-code is written to a removable drive: if the card would
+        then hold more than one G-code file, say so and ask (Matt,
+        2026-11-12: "the falcon literally needs the card to be empty except
+        for the one gcode file it will run", and "make a simple warning that
+        they can say 'never show this again'"). True to go on.
+
+        Asked from the Pad Maker's Generate G-code and every Tooling
+        Generate G-code that writes one file; not in the two Scrap Modes,
+        whose sessions have no clean way back from a "no" here. Windows
+        only, like the eject (_is_removable_drive)."""
+        if not self.settings.get("show_sd_card_warning", True):
+            return True
+        if not self._is_removable_drive(folder):
+            return True
+        root = os.path.splitdrive(os.path.abspath(folder))[0] + os.sep
+        n = gcode_files_after_save(folder, new_names, root)
+        if n <= 1:
+            return True
+        dialog = ConfirmationDialog(
+            self.root, _("SD Card"),
+            _("The Falcon needs its SD card empty except for the one G-code file it will run.\n\n"
+              "This would leave {n} G-code files on the card.\n\n"
+              "Do you want to proceed?").format(n=n))
+        if dialog.dont_show_again.get():
+            self.settings["show_sd_card_warning"] = False
+        return bool(dialog.result)
 
     def _is_removable_drive(self, path):
         """Check if path is on a removable drive (USB/SD). Windows only."""
@@ -4372,7 +3512,10 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
                 ["powershell", "-Command", ps_script],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                # No console window of its own: without this a windowed
+                # build flashed one for a second (Matt, 2026-11-11).
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
             )
             # Give it a moment to complete
             time.sleep(1)
@@ -4384,6 +3527,8 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
     def update_ui_from_settings(self):
         self.unit_label.config(text=_("Width ({units}):").format(units=self.settings['units']))
         self.height_label.config(text=_("Height ({units}):").format(units=self.settings['units']))
+        # Sizing Rules can switch the adhesive ring material on or off.
+        self._refresh_adhesive_ring_ui()
 
     def refresh_widgets_from_settings(self):
         """Repopulate main-tab widgets from self.settings after an import.
@@ -4413,6 +3558,42 @@ $driveEject.Namespace(17).ParseName("{drive_letter}").InvokeVerb("Eject")
 
 # Per-tab horizontal padding Aqua adds round a notebook label, plus slack.
 TAB_LABEL_PADDING_PX = 30
+# Room between the window and a notebook page (the notebook's padding and
+# border), used by _fit_window_to_tabs ONLY as the fallback when the window
+# has no size to measure yet. 14 px on Windows, more on Aqua, which is why
+# it is measured (_notebook_page_chrome_px) and not assumed; the 24 keeps a
+# little slack for the moment before the first measurement.
+TOOLING_CONTENT_MARGIN_PX = 24
+# A measured chrome above this is a window and a page read mid-resize, not
+# a notebook's padding: it is not kept.
+PAGE_CHROME_MAX_PX = 200
+
+
+TOUR_LIBRARY = "Tour"            # the in-memory library the tour's comparison stop draws from
+AUDIO_TOUR_STOPS = ("tuner-no-mic", "tuner", "analyzer-chart", "analyzer-compare", "analyzer-preset-library",
+                    "analyzer-preset-form", "analyzer-harmonics")   # the audio tabs' stops (skipped where the build has none)
+
+
+def tour_analyzer_presets():
+    """Two fabricated tenor presets with a run each, for the tour's comparison stop: enough
+    notes for a chart with both registers, cents patterns that differ, and one capture
+    that is not its note so the footnote shows. In memory only: the tour never saves."""
+    names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+    def cap(midi, cents):
+        hz = 440.0 * 2 ** ((midi - 69) / 12) * 2 ** (cents / 1200)
+        return {"note": f"{names[midi % 12]}{midi // 12 - 1}", "fundamental_freq": round(hz, 3),
+                "harmonics_db": [0.0, -3.0, -6.0, -10.0, -14.0], "n_frames": 30, "method": "free"}
+
+    def preset(model, caps):
+        return {"horn_type": "Tenor", "horn_make": "Tour", "horn_model": model, "player": "Tour",
+                "mouthpiece": "Tour", "notes": "", "created": "2026-11-11",
+                "sessions": [{"date": "2026-11-11 10:00:00", "horn_type": "Tenor", "captures": caps}]}
+
+    low_to_high = range(44, 64)                     # concert G#2 .. D#4: written Bb3 .. F5 on a tenor
+    a = [cap(m, -8 + 0.9 * (m - 44)) for m in low_to_high]              # flat low, sharp high
+    b = [cap(m, 6 - 0.6 * (m - 44)) for m in low_to_high] + [cap(50, 300)]   # the reverse; one off its note
+    return {"Tenor A": preset("A", a), "Tenor B": preset("B", b)}
 
 
 def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=None):
@@ -4523,14 +3704,53 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         placed, zones = nest_pads_with_zones(pads, 'felt', 200.0, 150.0, s)
         NestingPreviewWindow(root, {'felt': placed}, 200.0, 150.0, zones=zones)
 
-    def open_toner():
+    def analyzer_tab():
+        # the Analyzer shown and selected, its engine on the synthetic tone (no mic needed)
         engine = getattr(app, '_toner_engine', None)
         if engine is not None:
             engine.synthetic_hz = 233.08
         app._toner_mic_checked = True
-        app.notebook.add(app.toner_tab_frame)
+        app.notebook.add(app.toner_tab_frame)       # re-adding un-hides a tab a profile hid
         app._fit_window_to_tabs()
         app.notebook.select(app.toner_tab_frame)
+
+    def open_analyzer_chart():
+        # as users meet it: the chart, HARMONICS off, nothing loaded
+        if hasattr(app, '_toner_harmonics_var'):
+            app._toner_harmonics_var.set("off")
+        app._toner_compare_runs = []
+        analyzer_tab()
+
+    def open_analyzer_compare():
+        # two fabricated runs overlaid, from an in-memory library: the legend (the heading of
+        # a comparison; no title line, Matt 2026-11-11) and the footnote show. Nothing is
+        # saved; close_analyzer_compare removes it.
+        app._toner_presets[TOUR_LIBRARY] = tour_analyzer_presets()
+        app._toner_compare_runs = [(TOUR_LIBRARY, "Tenor A", None), (TOUR_LIBRARY, "Tenor B", None)]
+        analyzer_tab()
+        app._toner_chart_changed()
+
+    def close_analyzer_compare():
+        app._toner_compare_runs = []
+        app._toner_presets.pop(TOUR_LIBRARY, None)
+        app._toner_chart_changed()
+
+    def open_analyzer_preset_library():
+        analyzer_tab()
+        app._toner_open_preset_dialog()             # the one window: list, Load, Capture, Record first, Compare...
+
+    def close_analyzer_preset_library():
+        app._toner_library_close()
+        destroy_new()
+
+    def open_analyzer_preset_form():
+        analyzer_tab()
+        app._toner_new_preset_flow()                # the form, with the Key heights picker
+
+    def open_analyzer_harmonics():
+        analyzer_tab()
+        if app.settings.get("toner_unlocked") and hasattr(app, '_toner_harmonics_var'):
+            app._toner_harmonics_var.set("on")      # the spectrum on the tone; else the chart stays
 
     def open_tuner_no_mic():
         # What a user with no (or a denied) microphone sees: the real
@@ -4557,7 +3777,9 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("layer-colors", lambda: LayerColorWindow(root, app.settings, lambda: None), destroy_new),
         ("gcode-settings", lambda: GcodeSettingsWindow(
             root, app.settings, lambda s: None,
-            materials=[("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))],
+            materials=([("felt", _("Felt")), ("card", _("Card")), ("leather", _("Leather"))]
+                       # as Options > G-code Settings: the ring section while that feature is on
+                       + ([("adhesive_ring", _("Adhesive rings"))] if app._adhesive_ring_enabled() else [])),
             gcode_presets=app.gcode_presets, gcode_presets_save_callback=lambda: None), destroy_new),
         ("nesting-preview", open_nesting_preview, destroy_new),
         ("polygon-draw", lambda: PolygonDrawWindow(root, unit="in", settings=app.settings), destroy_new),
@@ -4565,6 +3787,8 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("feature-set", app._open_feature_set, destroy_new),
         ("user-guide", lambda: UserGuideWindow(root, section="pad_generator"), destroy_new),
         ("about", lambda: AboutDialog(root), destroy_new),
+        ("welcome", app.open_welcome, destroy_new),
+        ("quick-start", app.open_quick_start, destroy_new),
         ("key-heights", lambda: app.notebook.select(app.key_tab), None),
         ("key-layout", lambda: KeyLayoutWindow(root, app.settings, lambda: None, lambda: None), destroy_new),
         ("serial-lookup", lambda: app.notebook.select(app.serial_tab), None),
@@ -4572,11 +3796,15 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
         ("tooling", lambda: app.notebook.select(app.tooling_tab_frame), None),
         ("tuner-no-mic", open_tuner_no_mic, None),
         ("tuner", open_tuner, None),
-        ("toner", open_toner, None),
+        ("analyzer-chart", open_analyzer_chart, None),
+        ("analyzer-compare", open_analyzer_compare, close_analyzer_compare),
+        ("analyzer-preset-library", open_analyzer_preset_library, close_analyzer_preset_library),
+        ("analyzer-preset-form", open_analyzer_preset_form, destroy_new),
+        ("analyzer-harmonics", open_analyzer_harmonics, None),
     ]
     if not audio_supported():
         # Hidden on this build; selecting a hidden ttk tab would show it.
-        steps = [s for s in steps if s[0] not in ("tuner-no-mic", "tuner", "toner")]
+        steps = [s for s in steps if s[0] not in AUDIO_TOUR_STOPS]
 
     def run_step(i):
         if i >= len(steps):
@@ -4618,7 +3846,7 @@ def run_tour(root, app, shots_dir=None, step_ms=1500, on_done=None, appearance=N
             root.after(150, lambda: run_step(i + 1))
 
         # Audio tabs need a couple of seconds of frames before they look alive.
-        wait = step_ms * (2 if name in ("tuner-no-mic", "tuner", "toner") else 1)
+        wait = step_ms * (2 if name in ("tuner-no-mic", "tuner", "analyzer-harmonics") else 1)
         root.after(wait, finish)
         try:
             open_fn()
@@ -4672,9 +3900,14 @@ def _selftest(root):
                 raise RuntimeError(f"selftest: tab missing: {attr}")
         root.update_idletasks()
         root.update()
+        # The shipped bundle can verify stohrermusic.com: certifi's CA bundle
+        # was packed and is found (no network; the Intel Mac's only check).
+        from config import assert_tls_ready
+        n_ca = assert_tls_ready()
         from config import APP_VERSION as _ver
         _say(f"selftest ok: {_ver} on {sys.platform}, "
-             f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}")
+             f"{len(app.notebook.tabs())} tabs, frozen={getattr(sys, 'frozen', False)}, "
+             f"{n_ca} CA certificates")
     except BaseException:
         _say("selftest FAILED:\n" + traceback.format_exc())
         try:
@@ -4750,13 +3983,22 @@ if __name__ == '__main__':
     try:
         app._refresh_machine_ui_state()
     except Exception:
-        pass
+        logging.getLogger(__name__).exception(
+            "could not set up the Machine menu and Frame & Cut buttons at launch")
     # Detect the Falcon (Grbl) controller in the background only if
     # the user has opted into the experimental Machine menu — there's
     # no point probing USB serial ports for a user who never plans to
     # use direct Falcon control.
     if app._machine_enabled():
-        root.after(500, app._detect_falcon_async)
+        root.after(500, app._start_laser_watch)
+
+    # The Welcome window, on the first launch of each version. Only here,
+    # in a real launch: --selftest has exited above, a --tour has its own
+    # Welcome stop, and nothing that merely builds the app (every test
+    # suite) reaches this line. On an after(), so the main window is up
+    # first and startup is no slower.
+    if not tour:
+        root.after(600, app.maybe_show_welcome)
 
     if tour == 'all':
         # Full walk: every tab and dialog, screenshot each when --shots is
@@ -4778,13 +4020,16 @@ if __name__ == '__main__':
                         engine.synthetic_hz = 440.0
                     app.notebook.select(app.tuner_tab_frame)
                 else:
-                    # Toner: Bb3 with harmonics. The tab is hidden unless the
-                    # profile has it unlocked (SAXSHOP_CONFIG_DIR lets CI
-                    # supply one); re-adding the frame un-hides it either way.
+                    # Analyzer: Bb3 with harmonics. With the harmonics unlocked
+                    # in the profile (SAXSHOP_CONFIG_DIR lets CI supply one) the
+                    # switch goes on and the spectrum shows; else the chart.
+                    # Re-adding the frame un-hides a tab a profile hid.
                     engine = getattr(app, '_toner_engine', None)
                     if engine is not None:
                         engine.synthetic_hz = 233.08
                     app._toner_mic_checked = True   # no modal mic notice
+                    if app.settings.get("toner_unlocked") and hasattr(app, '_toner_harmonics_var'):
+                        app._toner_harmonics_var.set("on")
                     app.notebook.add(app.toner_tab_frame)
                     app._fit_window_to_tabs()
                     app.notebook.select(app.toner_tab_frame)

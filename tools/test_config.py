@@ -31,6 +31,10 @@ _fake_tk.messagebox = _fake_mb
 sys.modules.setdefault("tkinter", _fake_tk)
 sys.modules.setdefault("tkinter.messagebox", _fake_mb)
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-config-")
+
 import config
 from config import (
     DEFAULT_SETTINGS,
@@ -752,9 +756,109 @@ def test_input_devices_deduplication():
             del sys.modules["sounddevice"]
 
 
+def test_input_device_by_name():
+    """The chosen microphone is found by its name: the index moves when a device is plugged
+    in or out (Matt's AT2020 takes index 1 and pushes the built-in array to 2)."""
+    import config
+    without = [(1, "Microphone Array (AMD Audio Dev")]
+    with_usb = [(1, "Microphone (AT2020USB-X)"), (2, "Microphone Array (AMD Audio Dev")]
+    s = {"audio_input_device": None, "audio_input_device_name": None}
+    assert_equal(config.input_device_for(s, with_usb), None)                 # the system default
+    config.set_input_device(s, 1, with_usb)
+    assert_equal((s["audio_input_device"], s["audio_input_device_name"]), (1, "Microphone (AT2020USB-X)"))
+    assert_equal(config.input_device_for(s, with_usb), 1)
+    # unplugged: the system default, and the choice is kept for when it is back
+    assert_equal(config.input_device_for(s, without), None)
+    assert_equal(s["audio_input_device_name"], "Microphone (AT2020USB-X)")
+    assert_equal(config.input_device_for(s, with_usb), 1)
+    # the built-in array chosen with the USB mic out (index 1), then the USB mic plugged in:
+    # the array is found at 2, never the USB mic that now sits at 1
+    config.set_input_device(s, 1, without)
+    assert_equal(config.input_device_for(s, with_usb), 2)
+    assert_equal(s["audio_input_device"], 2)
+    # a profile from before the name was kept: its index stands, and adopts the name there
+    old = {"audio_input_device": 2, "audio_input_device_name": None}
+    assert_equal(config.input_device_for(old, with_usb), 2)
+    assert_equal(old["audio_input_device_name"], "Microphone Array (AMD Audio Dev")
+    # an old index the list does not hold is passed through as it always was
+    odd = {"audio_input_device": 37, "audio_input_device_name": None}
+    assert_equal(config.input_device_for(odd, with_usb), 37)
+    assert_equal(odd["audio_input_device_name"], None)
+    # back to the system default clears both
+    config.set_input_device(s, None, with_usb)
+    assert_equal((s["audio_input_device"], s["audio_input_device_name"]), (None, None))
+
+
+def test_rescan_input_devices():
+    """rescan_input_devices re-initialises PortAudio, terminate first; False without sounddevice."""
+    import config
+    calls = []
+    fake_sd = types.ModuleType("sounddevice")
+    fake_sd._terminate = lambda: calls.append("terminate")
+    fake_sd._initialize = lambda: calls.append("initialize")
+    orig_sd = sys.modules.get("sounddevice")
+    sys.modules["sounddevice"] = fake_sd
+    try:
+        assert_equal(config.rescan_input_devices(), True)
+        assert_equal(calls, ["terminate", "initialize"])
+        sys.modules["sounddevice"] = None
+        assert_equal(config.rescan_input_devices(), False)
+    finally:
+        if orig_sd is not None:
+            sys.modules["sounddevice"] = orig_sd
+        else:
+            del sys.modules["sounddevice"]
+
+
 # ============================================================================
 # TESTS: Edge cases for settings merge
 # ============================================================================
+
+def test_json_files_read_as_utf8():
+    """A JSON file written as UTF-8 by another program, or by hand, keeps its accented and
+    non-Latin names (2026-11-13: read in the Windows system encoding, a key height set named
+    in French came in garbled). A file in the system encoding still reads, as it always did."""
+    import locale
+    names = ["Selmer S\u00e9rie II", "\u30e4\u30ca\u30ae\u30b5\u30ef T-902", "Plain"]
+    data = {"My Presets": {n: {"heights": {"B": "8.0"}} for n in names}}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "key_height_library.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        got = config.load_presets(path, "Key Height Set")
+        assert sorted(got["My Presets"]) == sorted(names), [ascii(n) for n in got["My Presets"]]
+        assert config.read_json(path) == data
+        # with a byte order mark, as Notepad saves "UTF-8 with BOM"
+        with open(path, "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, ensure_ascii=False)
+        assert config.read_json(path) == data, "a file with a byte order mark did not read"
+        # this app's own files are plain ASCII and read the same
+        with open(path, "w") as f:
+            json.dump(data, f)
+        assert config.read_json(path) == data
+        # a file in the system's own encoding that is not UTF-8 reads as it did before
+        system = locale.getpreferredencoding(False)
+        try:
+            raw = '{"S\u00e9rie": 1}'.encode(system)
+            raw.decode("utf-8")
+            not_utf8 = False
+        except UnicodeError:
+            not_utf8 = True
+        if not_utf8:
+            with open(path, "wb") as f:
+                f.write(raw)
+            assert config.read_json(path) == {"S\u00e9rie": 1}, "a file in the system encoding no longer reads"
+        # settings: a UTF-8 path with an accent survives the load
+        spath = os.path.join(tmpdir, "app_settings.json")
+        with open(spath, "w", encoding="utf-8") as f:
+            json.dump({"last_output_dir": "C:/p\u00e9dales"}, f, ensure_ascii=False)
+        orig = config.SETTINGS_FILE
+        config.SETTINGS_FILE = spath
+        try:
+            assert config.load_settings()["last_output_dir"] == "C:/p\u00e9dales"
+        finally:
+            config.SETTINGS_FILE = orig
+
 
 def test_deeply_nested_engraving_location_merge():
     """engraving_location (dict of dicts) merges correctly."""
@@ -882,11 +986,14 @@ def main():
             ("Presets round-trip", test_presets_roundtrip),
             ("Presets missing file", test_presets_missing_file),
             ("Presets corrupt JSON", test_presets_corrupt_json),
+            ("JSON files read as UTF-8 first, the system encoding after", test_json_files_read_as_utf8),
         ]),
         ("get_input_devices", [
             ("Filters Bluetooth and sound mapper", test_input_devices_filters_bluetooth),
             ("No sounddevice returns empty list", test_input_devices_no_sounddevice),
             ("Deduplication of similar device names", test_input_devices_deduplication),
+            ("The chosen device is found by name when its index moves", test_input_device_by_name),
+            ("Rescan re-initialises PortAudio", test_rescan_input_devices),
         ]),
     ]
 

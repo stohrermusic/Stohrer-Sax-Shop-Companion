@@ -1,211 +1,122 @@
 # Stohrer Sax Shop Companion
 
-A cross-platform desktop app for saxophone repair shops and saxophonists by [Matt Stohrer](https://www.StohrerMusic.com). Generates SVG and G-code files for laser-cutting pad materials for the [Phil Noy](https://noysaxophonesupplies.com) padmaking method, provides reference databases for key heights, serial numbers, and screw specifications, includes tooling generation for Noy-style pad-making die inserts and holders, a 12 wheel chromatic strobe tuner, and a harmonic tone analyzer for studying your sound.
+A desktop app for saxophone repair shops, by [Matt Stohrer](https://www.StohrerMusic.com). It makes the laser files for pads built by the [Phil Noy](https://noysaxophonesupplies.com) method and the tooling to assemble them, and it can run the laser itself. Windows or Linux is preferred; macOS should work.
 
-## Features
+New to making pads? Start with [How to Make Saxophone Pads](https://www.stohrermusic.com/articles/how-to-make-saxophone-pads/).
 
-### Pad Maker
+## Pad Maker
 
 ![Pad Maker tab with Sizing Rules dialog](img/pad_maker.png)
 
-Generate laser-cutting files for felt, card, leather, and exact-size pad materials. **G-code generation can be exported directly to your laser — LightBurn is no longer required**, though SVG output is still available if you prefer that workflow.
+Type a list of pad sizes; get the felt, card and leather for each, nested on your material.
 
-#### Output Formats
-- G-code for Grbl-based lasers with per-material speed, power, and passes
-- SVG for LightBurn or other laser software (color layers map to operations)
-- Generate felt, card, leather, and exact size patterns
+**Three ways to the laser**
+- **G-code** to an SD card, with speed, power and passes per material. No other software needed.
+- **SVG** for LightBurn, one color layer per operation.
+- **Direct machine control (GRBL)** over USB with Frame & Cut: jog to the corner, frame at low power, cut. (Details below.)
 
-#### Nesting & Layout
-- Smart circle-packing algorithm to maximize material usage
-- Edge bias d-pad to direct packing toward a specific edge or corner
-  - Cardinal directions scan from the edge inward
-  - Corner directions radiate outward — small pads nestle in the corner, larger ones fan out
-- Nesting preview — see the layout before generating, adjust and retry
-- Custom polygon shapes for irregular leather skins and scrap pieces (free vertex placement, grid auto-sized to your laser bed)
-- Scrap mode — place pads across multiple pieces, tracking remaining between sheets
-  - Preview, edge bias, and custom polygons all work together in scrap mode
-- Max fill mode — use `18.0 x max` to fill remaining space with a size
-- **Labeled Zones (beta)** — optionally cut small pads (7.0–12.5 mm by default) in bordered blocks, one per size, with the size engraved on the sheet next to them. A 7.0 and a 7.5 disc are indistinguishable once they're off the laser, and the number engraved on the pad itself is too small to read — so the label goes on the waste instead of the part. Off by default; it trades some material for legibility.
+**Sizing**
+- Customizable sizing rules for felt, card and leather wrap, for all sizes or per size range.
+- Dart option for leather cuts, with adjustable shape, count and overwrap.
+- Center hole: none, 3.0 mm, 3.5 mm or custom.
+- Save the whole rule set as a preset and share it. Matt's own is [`presets/Matt mode.json`](presets/Matt%20mode.json).
+- Live preview of one pad's three discs as you change the rules.
 
-#### Sizing & Engraving
-- Per-size-range settings for sizing rules, dart/star cuts, engraving, and placement
-- Pad size labels on each disc, with per-material font size and position
-- Line mode (single-stroke) or filled mode (scan-line raster fill with overscan)
-- Auto-fit — shifts text toward center on small pads, scales only as last resort
-- **Sizing Rules Presets** — save the entire Sizing Rules dialog as a named preset, load presets from a dropdown, import/export to share with other techs. Matt's own rules are in [`presets/Matt mode.json`](presets/Matt%20mode.json): Options > Sizing Rules > Import
+**Nesting**
+- Packs discs tightly on a sheet, or inside a shape you trace for a skin or offcut.
+- Edge bias: push the nest toward any edge or corner.
+- Scrap Mode: spread one pad list over several pieces, tracking what is left.
+- `18.0 x max` fills the rest of the material with one size.
+- Preview the nest before anything is written.
 
-#### G-code Options
-- Air assist toggles (M8/M9) per layer
-- Cut grouping: by layer or by pad
-- Kerf compensation (enter full kerf, app splits in half automatically)
-- Auto-eject SD card after export (Windows)
+**Labels**
+- Each disc is engraved with its size, in line or filled lettering, placed where you choose.
+- Labeled Zones (opt-in): small pads cut in blocks with the size engraved on the waste beside them.
+- Locator marks (opt-in): engraved guides on leather for centering pads with no hole.
 
-#### Pad Presets & Data
-- Save and load pad size lists organized into libraries
-- Notes field for annotating presets
-- Import Matt's Pad Sets from [stohrermusic.com](https://www.stohrermusic.com/articles/pad-sets-library/)
-- Import/export for sharing with colleagues
-- **Job History** (File > Job History) — a log of every batch that reached an output stage, with its pad list, materials, and sheet size. Load a past job back into the form to re-cut it.
+**Also**
+- Adhesive rings (beta, opt-in): a ring of double-sided tape per pad, for silicone wraps.
+- Kerf compensation, air assist per step, cut order by layer or by pad.
+- Pad lists saved in libraries; import Matt's sets from [stohrermusic.com](https://www.stohrermusic.com/articles/pad-sets-library/).
+- Job History: every job written or cut, reloadable.
 
-#### Machine Integration (experimental, opt-in)
+### Direct machine control (GRBL, opt-in)
 
-![Draw / Capture Shape with live camera overlay, scrap traced with 16 free vertices](img/polygon_camera_overlay.png)
+![Draw / Capture Shape with live camera overlay](img/polygon_camera_overlay.png)
 
-Direct USB serial control of a Grbl-compatible laser (Creality Falcon2 Pro 40W tested; other Grbl machines should work — opt in via **File > Feature Set > "Experimental: machine integration"**).
+Turn it on in File > Feature Set. Tested on a Creality Falcon2 Pro 40W; other Grbl lasers should work. Plug the laser in before or after starting the app.
 
-- **Camera Calibration** — one-time ChArUco-card workflow. Engrave the card on basswood, capture 12 frames; the app then knows where the camera sees vs. where the laser cuts.
-- **Get from Camera** in the polygon-draw dialog — auto-detect a scrap outline and use it as your custom shape.
-- **Live camera overlay** in the polygon-draw dialog — trace your scrap by eye on top of the live camera image at 1:1 scale.
-- **Frame & Cut** — a third button next to Generate SVG / Generate G-code. Generates the G-code in memory, positions the head (Home Laser, jog buttons, optional "Try Auto Locate"), low-power framing pass for verification, then streams the cut. Pause / Resume / Stop in real time.
-- **Inset Margin** — adds a safety margin to placement on scraps so you don't accidentally clip an edge. Frame still traces the actual scrap outline; cuts respect the safety boundary.
-- **Machine menu** (Options > Machine): Home Laser, Test Connection, Clear Errors, Reset Falcon, Camera Calibration, Camera-Polygon Inset Margin, Framing Power.
+- **Frame & Cut** on the Pad Maker and on every Tooling tool that makes G-code, with pause, resume and stop.
+- **Camera** (optional, after a one-time calibration): capture a scrap's outline automatically, or trace it over the live image.
+- **Machine menu**: home, test connection, clear errors, reset, framing power per material.
 
-### Key Height Library
-- Store and organize key height measurements by instrument
-- Import Matt's Key Heights from [stohrermusic.com](https://www.stohrermusic.com/articles/key-heights-library/)
-- Import/export libraries for backup or sharing
+## Tooling
 
-### Serial Number Lookup
-- Reference database for saxophone serial numbers by manufacturer
-- Handles makers that restarted their numbering (Buffet, LeBlanc/Vito, Yanagisawa) — an ambiguous serial reports every matching era, and since you're holding the horn, the ambiguity resolves on sight
+Every tool here can be cut straight from the app, as G-code or with Frame & Cut.
 
-### Screw Specifications
-- OEM screw and rod specifications database
-- Import Matt's Specs from [stohrermusic.com](https://www.stohrermusic.com/articles/screw-specs-library/)
-- Import/export for sharing specs
+- **Die Inserts**: acrylic rings for each pad size (50 mm for pads to 39.5, 70 mm from 40). Single sizes, ranges or full sets; Scrap Mode for several sheets.
+- **Die Holders**: the 85 mm stack the dies sit in. 5 or 6 layers; small, large or both.
+- **Die Organizer**: a stacking rack for a full die set.
+- **Kerf Test**: three circles to measure your kerf on any material.
+- **Speed & Power Test** (beta): a sheet of numbered test discs across a range of settings, with a legend.
+- **Tonehole Crescent**: crescents that cover part of a tonehole to flatten a note. Cork by default; also SVG and 3D-printable STL.
+- **Pad Press Spacers**: 3D-printable spacers for setting press depth.
 
-### Tooling
-- **Die Inserts** — laser-cut acrylic dies (small: 50mm OD, large: 70mm OD). Enter individual sizes, ranges, or generate full sets. Scrap mode for spreading dies across multiple sheets.
-- **Die Holders** — 85mm OD stack. Pick 5-layer (solid + magnet + 2× pin + ring) or 6-layer (solid + magnet + 3× pin + ring), and variant Large / Small / Both (Both nests two complete independent holders onto a single sheet). User-defined sheet size with a clear minimum-size error if pieces don't fit.
-- **Die Organizer** — SVG templates for a stackable die organizer (230 × 330 mm). Cut three Uppers and one Lower, align the four 1/8″ corner holes, glue the stack together.
-- **Pad Press Spacers** — bundled 3D-printable STL files for setting pad press depth. Half-step set (3.0 / 3.5 / 4.0 / 4.5 mm), quarter-step set (3.25 / 3.75 / 4.25 mm), and an organizer rack.
-- **Kerf Test** — quick three-circle pattern for measuring kerf on any material.
-- **Tonehole Crescent** — crescents that cover part of a tonehole's open area to flatten that note. Set the tonehole ID, the percentage to cover, and the inner edge's curve; laser-cut as SVG or 3D print as STL, one or a whole list at a time.
-- **Speed & Power Test (beta)** — generate a sheet of small test discs at different speed / power / passes combinations to dial in laser settings on a new material. Each disc engraved with a 2-digit ID; a `legend.txt` saved alongside the G-code maps each ID to its parameters. Sweep 0–3 variables; "Also test with air off" doubles the matrix for side-by-side air-quality comparison.
-- **G-code presets** — Options > Settings on the Tooling tab exposes per-material G-code for Acrylic and Basswood. Acrylic for die holders and inserts, basswood preset feeds the camera-calibration card engrave. Defaults tuned for the Falcon2 Pro 40W; adjust to your machine.
+Materials: acrylic, basswood and cork, each with its own saved laser settings.
 
-### Chromatic Strobe Tuner
+The die inserts and holders follow Phil Noy's method, which he shares freely. Each is engraved with his name.
 
-![Chromatic Strobe Tuner](img/tuner.png)
+## Everything else
 
-- 12-wheel stroboscopic chromatic tuner
-- GPU-accelerated rendering via Rust/wgpu on Windows and Linux — 60-120 fps strobe wheels
-  - Automatic fallback to CPU canvas rendering if GPU unavailable
-  - macOS uses the canvas renderer (Tk on macOS doesn't expose a native view the GPU renderer can draw into — fully functional, just capped at canvas frame rates)
-- Per-ring octave brightness from real spectral data
-- Grouped slider panel (display, pitch, bias) and vintage backlit VU meter
-- Per-pitch-class phase tracking with temporal smoothing
-- Transposition support (Concert, Bb, Eb, F)
-- Configurable frame rate (60/90/120 fps), backlight color, and faceplate color
-- A quality microphone is recommended (e.g. Audio-Technica AT2020 USB)
+- **Key Height Library**: record key heights by instrument; import Matt's from [stohrermusic.com](https://www.stohrermusic.com/articles/key-heights-library/).
+- **Serial Lookup**: year of manufacture by maker and serial number.
+- **Screw Specs**: thread specs by model; import Matt's from [stohrermusic.com](https://www.stohrermusic.com/articles/screw-specs-library/).
+- **Strobe Tuner**: 12-wheel chromatic strobe, transposing, 60 to 120 fps.
+- **Analyzer**: charts your intonation, note by note, and compares runs from your library; export as PNG or PDF. The harmonic analyzer (experimental) measures the overtones of your sound. Needs a good microphone.
+- **In the app**: a searchable User Guide with figures, a one-page Quick Start Guide, English, Spanish, German, French and Italian, import and export of every library.
 
-### Harmonic Tone Analyzer (beta)
+## Install
 
-A real-time harmonic spectrum analyzer for saxophone. Captures the fundamental and overtones of your sound and lets you compare setups (horn, mouthpiece, reed, mic, mic placement, embouchure) over time. **A quality microphone is essential — laptop mics do not provide reliable results.**
+Download the latest build from [Releases](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases).
 
-#### Live Display
-- Detects fundamental pitch, extracts up to 20 harmonics
-- Spectrum view (full FFT) and Bars view (per-harmonic), linear or dB scale
-- Intonation gauge with cents readout and ±4¢ "in tune" lamp
-- Auto-transposition by saxophone type (alto/tenor/soprano/baritone/etc.) with concert pitch toggle
-- Spectrum overlay: load any preset as a ghost overlay on the live spectrum
+**Windows**: run the installer.
 
-#### Tone Presets
-- Capture harmonic fingerprints of individual horns and setups
-- Free capture (continuous micro-captures while playing naturally) and guided calibration modes
-- WAV file import for offline analysis (16/24/32-bit)
-- WAV recording **on by default** — captures are automatically re-analyzed offline for ~2× the harmonic resolution of live capture
-- Mic type, model, and position stored per preset for reproducibility
-- **Mutate Preset** — duplicate a preset with one variable changed (mouthpiece, mic, reed) for A/B testing
-- **Sandbox mode** — relaxes field requirements for non-sax instruments, contact mics, effects chains, or experimental setups
-- All captures stored in concert pitch for cross-instrument comparison
-- Organized into libraries, with import/export for sharing
-- Coverage summary after capture sessions — note distribution chart and gap detection
+**macOS**: should work, but Matt doesn't have a Mac for testing. Two builds. Apple Silicon has everything. Intel has everything except the Tuner, Analyzer and direct machine control.
 
-#### Analyze Tool
-- Compare two presets, view a single preset in detail, or analyze multi-preset spreads
-- Difference charts and harmonic-range interpretation: H1-H4 shifts ≈ bore, H7-H13 ≈ neck/mouthpiece, broadband ≈ mouthpiece/player
-- Population percentiles — see where your captures rank within all presets of the same sax type
-- User-configurable comparison descriptors: harmonic complexity, warmth, even/odd harmonic ratio, rolloff shape, evenness
-- Filter by make, model, mic type, search; multi-select; same-player and cross-player context notes
-- Recording-quality tracking (harmonic rolloff rate) with live warnings and cross-mismatch detection
+<details>
+<summary>macOS install steps (complicated because Mac makes it hard if you don't want to pay them $100 a year to be a "developer")</summary>
 
-#### Why beta?
-Descriptors are still being calibrated as we gather more data from different horns, mouthpieces, mics, and players. Live descriptor gauges have been removed for now because mic position alone shifts complexity 10–20% on the same horn — we want to ground the formulas in more recordings before promoting any back to live readouts. Raw harmonic measurements are always saved, so future formula improvements apply retroactively to your historical captures. The first-run dialog (File > Feature Set > Toner) explains how to contribute recordings and presets.
-
-### General
-- Feature Set (File > Feature Set) — choose which tabs to show
-- Tab-aware User Guide (Help > User Guide)
-- Runs on Windows, macOS, and Linux
-- macOS dark mode support
-- Platform-appropriate config storage with automatic migration
-- Import Settings from Folder for moving between machines
-- Error logging with Help > Open Log File for diagnostics
-
-## Installation
-
-### From Release (Recommended)
-Download the latest release for your platform from the [Releases](https://github.com/stohrermusic/Stohrer-Sax-Shop-Companion/releases) page.
-
-**macOS users**: Two builds are available — **Apple Silicon** (M1/M2/M3/M4) with full features, and **Intel** with all features except the Tuner, Tone Analyzer and machine integration (the Intel build doesn't include the audio, camera and laser-control libraries, so those features don't appear there).
-
-The app is not signed with an Apple Developer certificate (they charge $100 a year for that), so macOS will block it on first launch with either an "unidentified developer" warning or a "damaged and can't be opened" error. To unblock it:
-
-1. Double-click the downloaded `.zip` to unzip it.
-2. Drag `SaxShopCompanion.app` into your **Applications** folder.
-3. Open **Terminal** (in `/Applications/Utilities/`) and paste this one command:
+1. Unzip, and drag `SaxShopCompanion.app` to **Applications**.
+2. In Terminal, run:
    ```
    xattr -cr /Applications/SaxShopCompanion.app
    ```
-4. Open the app normally. You only need to do this once.
+3. Open it normally. Allow microphone access when the Tuner or Analyzer asks (and camera access for the camera features).
 
-This strips the quarantine flag that macOS adds to downloaded files, which is what triggers both warnings. The same command works on every macOS version.
-
-When you first use the Tuner or Tone Analyzer, macOS will ask for **microphone access** — click **OK / Allow**, or those tabs can't hear anything. (Camera access gets the same treatment if you use the camera-based laser features.) You can change either later under System Settings → Privacy & Security. And because the app isn't Apple-signed, macOS may ask again after you update to a new version — that's normal.
-
-> **Upgrading from v2.62 or earlier?** Those macOS builds had a packaging bug that kept the microphone and camera permission dialogs from ever appearing — the app opened fine, but macOS silently denied access, so the Tuner and Tone Analyzer looked dead. **v2.63 fixes it.** If the new version still doesn't ask for microphone access, macOS may have cached the old denial; clear it with these Terminal commands, then relaunch:
->
-> ```
-> tccutil reset Microphone com.stohrer.saxshopcompanion
-> tccutil reset Camera com.stohrer.saxshopcompanion
-> ```
-
-**Linux users**: The tuner and toner require PortAudio. Install it with:
+If an older version never asked for microphone access, clear the old refusal and relaunch:
 ```
-sudo apt install libportaudio2
+tccutil reset Microphone com.stohrer.saxshopcompanion
+tccutil reset Camera com.stohrer.saxshopcompanion
 ```
-The app works without it, but the audio tabs will be unavailable.
 
-### From Source
+</details>
+
+**Linux**: the audio tabs need PortAudio: `sudo apt install libportaudio2`.
+
+**From source** (Python 3.11+):
 ```bash
 pip install -r requirements.txt
 python main.py
 ```
 
-## Building
+## Settings location
 
-```bash
-# Build for current platform
-python build.py
-
-# Clean and rebuild
-python build.py --clean
-
-# macOS: create .dmg
-python build.py --dmg
-```
-
-## Config Location
-
-Settings and presets are stored in platform-appropriate locations:
 - **Windows**: `%APPDATA%\StohrerSaxShopCompanion\`
 - **macOS**: `~/Library/Application Support/StohrerSaxShopCompanion/`
 - **Linux**: `~/.config/StohrerSaxShopCompanion/`
 
-## Questions or Feedback
+File > Import Settings from Folder moves them between machines.
 
-Email: stohrermusic@gmail.com
+## Questions or feedback
 
----
-
-
+stohrermusic@gmail.com

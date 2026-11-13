@@ -14,6 +14,8 @@ import functools
 import logging
 import sys
 
+from audio_utils import pitch_or_default
+
 IS_MACOS = sys.platform == 'darwin'
 
 try:
@@ -172,6 +174,28 @@ def _annular_sector_points(cx, cy, r_inner, r_outer, angle_start, angle_end, ste
         points.append(cx + r_inner * math.cos(rad))
         points.append(cy - r_inner * math.sin(rad))
     return points
+
+
+# The wheels of the bottom row (the naturals, _tuner_compute_layout): their window is a
+# wedge that opens DOWNWARD, onto the bottom of the disc.
+BOTTOM_ROW_PITCH_CLASSES = frozenset({0, 2, 4, 5, 7, 9, 11})
+
+
+def window_phases(pitch_class, phases):
+    """A wheel's phases as its window needs them, so that a sharp note drifts
+    RIGHT in every window and a flat one left.
+
+    Both renderers turn every disc the same way for a sharp note. Seen through
+    a wedge that opens upward (the top row) the stripes then travel right;
+    through one that opens downward (the bottom row) the same turn travels
+    left, so the seven naturals read backwards (Matt, 2026-11-12: "the wheels
+    on the tuner on the bottom row are moving in the wrong direction"; it had
+    been so since the tuner shipped). A bottom-row disc is turned the other
+    way instead. One place, before either renderer, so the canvas and the GPU
+    agree and the shader's `angle - phase` is untouched."""
+    if pitch_class in BOTTOM_ROW_PITCH_CLASSES:
+        return [-p for p in phases]
+    return phases
 
 
 class StrobeWheel:
@@ -575,7 +599,7 @@ class TunerTabMixin:
         pitch_sliders = _make_slider_group(ctrl_frame, 1, _("PITCH"), padx=(0, 14))
 
         self._tuner_pitch_var = tk.DoubleVar(
-            value=tuner_settings.get("reference_pitch", 440.0))
+            value=pitch_or_default(tuner_settings.get("reference_pitch", 440.0)))
         _make_vslider(pitch_sliders, _("A ="), self._tuner_pitch_var, 420, 460, 0,
                       cmd=lambda v: self._tuner_on_pitch_changed(),
                       resolution=1, value_fmt=lambda v: f"{v:.0f} Hz")
@@ -686,7 +710,7 @@ class TunerTabMixin:
         # Apply saved settings
         try:
             self._tuner_engine.set_reference_pitch(float(self._tuner_pitch_var.get()))
-        except ValueError:
+        except (ValueError, tk.TclError):  # a DoubleVar holding a non-number raises TclError on get()
             pass
         self._tuner_engine.set_sensitivity(self._tuner_sens_var.get())
 
@@ -1197,7 +1221,7 @@ class TunerTabMixin:
             if self._tuner_engine:
                 self._tuner_engine.set_reference_pitch(hz)
                 self._tuner_ref_notes = _build_ref_notes(hz)
-        except ValueError:
+        except (ValueError, tk.TclError):
             pass
 
     def _tuner_on_sensitivity_changed(self, value=None):
@@ -1221,7 +1245,8 @@ class TunerTabMixin:
         frame.pack(fill="both", expand=True)
 
         # --- Input device ---
-        from config import get_input_devices
+        from config import get_input_devices, set_input_device, input_device_for
+        self._rescan_audio_devices()        # a microphone plugged in since the app started is listed
         devices = get_input_devices()
         if devices:
             mic_row = tk.Frame(frame, bg=bg)
@@ -1241,7 +1266,7 @@ class TunerTabMixin:
                 tk.Label(mic_row, text=_("System Default (set in system audio settings)"),
                          bg=bg, fg="#888888", font=("Helvetica", 10)).pack(side="left")
             else:
-                current_dev = self.settings.get("audio_input_device")
+                current_dev = input_device_for(self.settings, devices)
                 dev_names = [_("System Default")] + [name for _, name in devices]
                 dev_indices = [None] + [idx for idx, _ in devices]
 
@@ -1264,7 +1289,7 @@ class TunerTabMixin:
                 def on_mic_changed(event=None):
                     sel = mic_combo.current()
                     dev_idx = dev_indices[sel] if sel >= 0 else None
-                    self.settings["audio_input_device"] = dev_idx
+                    set_input_device(self.settings, dev_idx, devices)
                     # Restart engine with new device. Route through
                     # _tuner_start() rather than engine.start() directly:
                     # it checks the success flag and shows the error
@@ -1385,7 +1410,8 @@ class TunerTabMixin:
         if not self._tuner_wheels_built:
             self._tuner_build_wheels()
 
-        device = self.settings.get("audio_input_device")
+        from config import input_device_for
+        device = input_device_for(self.settings)      # by name: the index moves when devices come and go
         success, err = self._tuner_engine.start(device=device)
         if not success:
             if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
@@ -1420,7 +1446,7 @@ class TunerTabMixin:
         if self._tuner_anim_id is not None:
             try:
                 self.root.after_cancel(self._tuner_anim_id)
-            except Exception:
+            except (tk.TclError, ValueError):
                 pass
             self._tuner_anim_id = None
 
@@ -1475,7 +1501,7 @@ class TunerTabMixin:
                 for i in range(12):
                     if magnitudes[i] > MAGNITUDE_THRESHOLD:
                         spin_mags.append(magnitudes[i])
-                        ring_phases.append(list(result.ring_phase_offsets[i]))
+                        ring_phases.append(window_phases(i, list(result.ring_phase_offsets[i])))
                     else:
                         spin_mags.append(0.0)
                         ring_phases.append([0.0] * NUM_RINGS)
@@ -1517,8 +1543,8 @@ class TunerTabMixin:
                     ring_mags = [min(1.0, rm * gain)
                                  for rm in result.ring_magnitudes[i]]
                     if mag > MAGNITUDE_THRESHOLD:
-                        phase = result.phase_offsets[i]
-                        rp = list(result.ring_phase_offsets[i])
+                        phase = window_phases(i, [result.phase_offsets[i]])[0]
+                        rp = window_phases(i, list(result.ring_phase_offsets[i]))
                     else:
                         phase = 0.0
                         mag = 0.0

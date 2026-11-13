@@ -1,4 +1,5 @@
 """Test tuner engine with synthetic audio signals — no microphone needed."""
+import os
 import sys
 import math
 import time
@@ -368,29 +369,76 @@ test("Player not playing initially", not player.is_playing)
 # Opening an output stream needs an output device. CI runners (and some
 # headless boxes) have none, and play() correctly returns False there —
 # that's the fallback working, not a bug, so skip rather than fail.
-try:
+#
+# And PortAudio can block without bound on a machine with a strange audio
+# device: on 2026-11-10 this suite, which takes 1.5 s, hit the runner's
+# 900 s timeout on macOS. Every call that touches the audio device runs on
+# a daemon thread with a time limit; past it the player checks are
+# reported as skipped and the suite goes on (the stuck thread is left
+# behind and the process ends with os._exit, which does not wait for it).
+AUDIO_BOUND_S = 20.0
+_audio_hung = []
+
+
+def bounded(what, fn):
+    """fn() within AUDIO_BOUND_S, or None and a SKIP line."""
+    import threading
+    box = {}
+
+    def run():
+        try:
+            box['value'] = fn()
+        except Exception as e:  # noqa: BLE001
+            box['error'] = e
+    t = threading.Thread(target=run, name=f"audio-{what}", daemon=True)
+    t.start()
+    t.join(AUDIO_BOUND_S)
+    if t.is_alive():
+        _audio_hung.append(what)
+        print(f"  SKIP: {what} did not return in {AUDIO_BOUND_S:.0f} s (audio device hung); "
+              "player checks skipped")
+        return None
+    if 'error' in box:
+        raise box['error']
+    return box['value']
+
+
+def _probe_output():
     import sounddevice as _sd
     _sd.query_devices(kind='output')
-    _has_output = True
+    return True
+
+
+try:
+    _has_output = bounded("query_devices", _probe_output) is True
 except Exception as _e:  # noqa: BLE001 — PortAudioError or no sounddevice
     _has_output = False
     print(f"  SKIP: no audio output device here ({type(_e).__name__}); "
           "player start tests skipped")
-if _has_output:
-    started = player.play(440.0, "pure")
-    test("Player.play() returns True", started)
-    test("Player is_playing after play()", player.is_playing)
+if _audio_hung:
+    pass
+elif _has_output:
+    started = bounded("play", lambda: player.play(440.0, "pure"))
+    if not _audio_hung:
+        test("Player.play() returns True", started)
+        test("Player is_playing after play()", player.is_playing)
 else:
-    test("Player.play() returns False with no output device", not player.play(440.0, "pure"))
+    started = bounded("play (no device)", lambda: player.play(440.0, "pure"))
+    if not _audio_hung:
+        test("Player.play() returns False with no output device", not started)
 
-player.stop()
-test("Player not playing after stop()", not player.is_playing)
+if not _audio_hung:
+    bounded("stop", player.stop)
+if not _audio_hung:
+    test("Player not playing after stop()", not player.is_playing)
 
 # Rich waveform
-if _has_output:
-    started_rich = player.play(440.0, "rich")
-    test("Rich waveform starts", started_rich)
-player.stop()
+if _has_output and not _audio_hung:
+    started_rich = bounded("play rich", lambda: player.play(440.0, "rich"))
+    if not _audio_hung:
+        test("Rich waveform starts", started_rich)
+if not _audio_hung:
+    bounded("stop", player.stop)
 
 # ============================================
 # EDGE CASES
@@ -514,4 +562,11 @@ if failed == 0:
     print("ALL TESTS PASSED")
 else:
     print("SOME TESTS FAILED")
+if _audio_hung:
+    # A thread is stuck inside PortAudio: a normal exit may wait on it for
+    # ever. Say so, flush, and leave without it (the verdict is above).
+    print(f"(audio device hung in: {', '.join(_audio_hung)}; exiting without waiting for it)")
+    sys.stdout.flush()
+    os._exit(1 if failed else 0)
+if failed:
     sys.exit(1)

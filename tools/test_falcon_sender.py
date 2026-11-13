@@ -70,21 +70,67 @@ check("non-status line returns None", s is None)
 print("\n=== list_serial_ports / auto_detect_falcon (smoke) ===")
 # ============================================================
 
-# These can't be meaningfully unit-tested without real hardware, but they
-# shouldn't crash and should return reasonable types.
-ports = fs.list_serial_ports()
-check("list_serial_ports returns a list", isinstance(ports, list))
-for p in ports:
-    if 'device' not in p or 'description' not in p:
-        check(f"port dict has device + description (got {p.keys()})", False)
-        break
-else:
-    check("each port dict has device + description", True)
+# Until 2026-11-10 this section called the REAL list_serial_ports() and
+# auto_detect_falcon(): every serial port on the test machine was opened,
+# and a device that did not answer "?" was soft-reset (Matt's Falcon is
+# plugged into the machine the suites run on). Both now run against
+# stand-ins: pyserial's port enumeration and the probe are replaced for
+# the section, so no real port is touched, and what is checked is the
+# code's own work: the port dicts list_serial_ports builds, and
+# auto_detect_falcon's order (a known Falcon VID:PID first, then a
+# Falcon / CH340 description, then the rest) and its answer.
+# tools/test_laser_watch.py runs this whole suite with serial.Serial
+# replaced by a class that raises, so a real open anywhere in it fails.
 
-# auto_detect_falcon — if hardware is present, may return a string; else None
-result = fs.auto_detect_falcon()
-check("auto_detect_falcon returns str or None",
-      result is None or isinstance(result, str))
+
+class _FakePortInfo:
+    def __init__(self, device, description, hwid, vid, pid, manufacturer):
+        self.device, self.description, self.hwid = device, description, hwid
+        self.vid, self.pid, self.manufacturer = vid, pid, manufacturer
+
+
+_FAKE_PORTS = [
+    _FakePortInfo("COM3", "Arduino Uno", "USB VID:PID=2341:0043", 0x2341, 0x0043, "Arduino"),
+    _FakePortInfo("COM7", "USB-SERIAL CH340", "USB VID:PID=1A86:7523", 0x1A86, 0x7523, "wch.cn"),
+    _FakePortInfo("COM9", "Standard Serial over Bluetooth link", "BTHENUM\\...", None, None, ""),
+]
+_probed = []
+
+
+def _fake_probe(port, *args, **kwargs):
+    _probed.append(port)
+    return port == "COM7"            # only the CH340 answers like Grbl
+
+
+_real_comports = fs.serial.tools.list_ports.comports
+_real_probe = fs._probe_for_grbl
+fs.serial.tools.list_ports.comports = lambda: list(_FAKE_PORTS)
+fs._probe_for_grbl = _fake_probe
+try:
+    ports = fs.list_serial_ports()
+    check("list_serial_ports returns a list of one dict per port",
+          isinstance(ports, list) and [p['device'] for p in ports] == ["COM3", "COM7", "COM9"])
+    check("each port dict has device, description, hwid, vid, pid, manufacturer",
+          all({'device', 'description', 'hwid', 'vid', 'pid', 'manufacturer'} <= set(p) for p in ports))
+    check("a port with no VID/PID is listed with None, not skipped",
+          ports[2]['vid'] is None and ports[2]['pid'] is None and ports[2]['description'].startswith("Standard"))
+
+    result = fs.auto_detect_falcon()
+    check("auto_detect_falcon returns the port that answered", result == "COM7")
+    check("the CH340 (a Falcon-looking description) is probed before the Arduino and the Bluetooth port",
+          _probed[:1] == ["COM7"] and len(_probed) == 1)
+
+    del _probed[:]
+    fs._probe_for_grbl = lambda port, *a, **k: _probed.append(port) is None and False
+    check("with no answer anywhere: every port probed once, in priority order, and None",
+          fs.auto_detect_falcon() is None and _probed == ["COM7", "COM3", "COM9"])
+
+    fs.serial.tools.list_ports.comports = lambda: []
+    check("no ports: auto_detect_falcon is None without probing",
+          fs.auto_detect_falcon() is None and _probed == ["COM7", "COM3", "COM9"])
+finally:
+    fs.serial.tools.list_ports.comports = _real_comports
+    fs._probe_for_grbl = _real_probe
 
 
 # ============================================================

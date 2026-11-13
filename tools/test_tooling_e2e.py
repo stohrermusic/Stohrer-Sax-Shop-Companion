@@ -1,9 +1,9 @@
 """Tooling tab end to end through the real Generate buttons.
 
 Die inserts (SVG and G-code), die holder (SVG and G-code, both variants),
-die organizer (both halves), kerf test (SVG and G-code), the speed & power
-test sheet, a pad-press spacer STL, and the tonehole crescent (SVG and
-STL) — each driven through its handler
+die organizer (both halves, and G-code), kerf test (SVG and G-code), the
+speed & power test sheet, a pad-press spacer STL, and the tonehole crescent
+(SVG, STL and G-code) — each driven through its handler
 on the live tab with only the save dialog and message boxes stubbed, then
 the written file checked: SVGs parse as XML, G-code switches the laser off,
 the organizer and STL copies are byte-identical to the bundled assets.
@@ -26,6 +26,9 @@ os.environ["SAXSHOP_CONFIG_DIR"] = _PROFILE
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 results = []
 
 
@@ -33,10 +36,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -70,10 +74,23 @@ def main():
     tooling_tab.filedialog.asksaveasfilename = fake_save
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(tooling_tab.messagebox, name, lambda title, msg, _n=name, **k: boxes.append((_n, str(title), str(msg)[:100])))
-    tooling_tab.messagebox.askyesno = lambda *a, **k: True
+
+    # Every Tooling export is a Job History row (2026-11-09, Matt: "tooling
+    # runs go into job history if easy"): run() requires exactly one new
+    # entry per Generate click, for the tool clicked and the kind of file
+    # written. The label's first word names the tool.
+    from config import load_job_history
+    TOOL_OF = {"die": "die_inserts", "die inserts": "die_inserts", "holder": "die_holders", "die holder": "die_holders",
+               "organizer": "die_organizer", "die organizer": "die_organizer", "kerf": "kerf_test", "kerf test": "kerf_test",
+               "feeds/speeds": "feeds_speeds_tester", "speed & power test": "feeds_speeds_tester",
+               "crescent": "tonehole_crescent", "tonehole crescent": "tonehole_crescent"}
+
+    def tool_of(label):
+        return TOOL_OF[label] if label in TOOL_OF else TOOL_OF[label.split()[0]]
 
     def run(label, fn, expect_ext):
         before = len(saved)
+        history_before = load_job_history()
         boxes.clear()
         fn()
         root.update()
@@ -82,6 +99,15 @@ def main():
         assert len(saved) > before, f"{label}: no file was saved"
         path = saved[-1]
         assert path.endswith(expect_ext) and os.path.isfile(path) and os.path.getsize(path) > 0, path
+        history = load_job_history()
+        assert len(history) == len(history_before) + 1, \
+            f"{label}: {len(history) - len(history_before)} new Job History entries for one export"
+        entry = history[0]
+        tool, output = tool_of(label), expect_ext.lstrip(".")
+        assert entry.get("tool") == tool and entry.get("output") == output and entry.get("status") == "complete", \
+            f"{label}: the Job History row is {entry.get('tool')!r} / {entry.get('output')!r} / {entry.get('status')!r}, " \
+            f"not {tool!r} / {output!r} / 'complete'"
+        assert entry.get("save_dir") == os.path.dirname(path), f"{label}: save_dir {entry.get('save_dir')!r}"
         return path
 
     def svg_ok(path):
@@ -217,6 +243,86 @@ def main():
         app.crescent_list.clear()
         app._refresh_crescent_list()
     check("tonehole crescent: Generate SVG makes the whole list, numbered", crescent_list_svg)
+
+    # Frame & Cut: every tool that writes G-code can also send it straight to
+    # the laser. Through each section's real handler with a mock laser, the
+    # cut that is streamed must be the file Generate G-code writes for the
+    # same form, behind the G92 line. (tools/test_tooling_frame_cut.py holds
+    # the detail: framing, the lid question, cancels, scrap mode, gating.)
+    import falcon_sender
+    import ui_dialogs
+    streamed = []
+
+    class MockSender:
+        def __init__(self, port=None):
+            pass
+
+        def connect(self):
+            pass
+
+        def unlock(self):
+            pass
+
+        def disconnect(self):
+            pass
+
+    class MockRun:
+        def __init__(self, parent, sender, lines, **kw):
+            streamed.append(list(lines))
+            self._final_reason = "complete"
+
+    def frame_cut_streams_the_file(label, generate, frame_cut):
+        path = run(label, generate, ".gcode")
+        with open(path) as f:
+            want = f.read().splitlines()
+        del streamed[:]
+        boxes.clear()
+        keep = ui_dialogs.FalconRunDialog, falcon_sender.FalconSender, app._show_kerf_instructions
+        ui_dialogs.FalconRunDialog, falcon_sender.FalconSender = MockRun, MockSender
+        app._show_kerf_instructions = lambda name: None
+        app.falcon_port = "TEST"
+        app.live_camera_var.set(False)
+        try:
+            frame_cut()
+            root.update()
+        finally:
+            ui_dialogs.FalconRunDialog, falcon_sender.FalconSender, app._show_kerf_instructions = keep
+            app.falcon_port = None
+        assert not [b for b in boxes if b[0] == "showerror"], boxes
+        assert len(streamed) == 3, f"{label}: jog, framing and cut expected, got {len(streamed)} dialogs"
+        jog, framing, cut = streamed
+        assert jog == [] and framing[0] == "G92 X0.000 Y0.000"
+        assert any(ln.startswith("M4 S") for ln in framing) and not any(ln.startswith("M3") for ln in framing)
+        assert cut == ["G92 X0.000 Y0.000"] + want, f"{label}: the laser got something other than the file"
+
+    app.die_scrap_var.set(False)
+    app.holder_variant_var.set("small")
+    app.holder_layer_count_var.set(5)
+    app.holder_width_var.set("12")
+    app.holder_height_var.set("12")
+    app.kerf_material_var.set("Acrylic")
+    app.fs_show_preview_var.set(False)
+    # The two tools that were SVG only until 2026-11-09.
+    app.organizer_variant_var.set("upper")
+    app.organizer_units_var.set("in")
+    app.organizer_width_var.set("12")
+    app.organizer_height_var.set("18")
+    app.crescent_list.clear()
+    app._refresh_crescent_list()
+    app.crescent_tonehole_var.set("41.5")
+    app.crescent_percent_var.set("12")
+    check("die organizer: Generate G-code", lambda: gcode_ok(run("organizer gcode", app._on_generate_organizer_gcode, ".gcode")))
+    check("tonehole crescent: Generate G-code", lambda: gcode_ok(run("crescent gcode", app._on_generate_crescent_gcode, ".gcode")))
+    for label, generate, frame_cut in (
+            ("die inserts", app._on_generate_die_gcode, app._on_frame_cut_die),
+            ("die holder", app._on_generate_holder_gcode, app._on_frame_cut_holder),
+            ("die organizer", app._on_generate_organizer_gcode, app._on_frame_cut_organizer),
+            ("kerf test", app._on_generate_kerf_gcode, app._on_frame_cut_kerf),
+            ("speed & power test", app._on_generate_feeds_speeds_gcode, app._on_frame_cut_feeds_speeds),
+            ("tonehole crescent", app._on_generate_crescent_gcode, app._on_frame_cut_crescent)):
+        check(f"{label}: Frame & Cut streams the file Generate G-code writes",
+              lambda label=label, generate=generate, frame_cut=frame_cut:
+              frame_cut_streams_the_file(label, generate, frame_cut))
 
     try:
         root.destroy()

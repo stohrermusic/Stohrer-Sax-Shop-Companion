@@ -3,3 +3,4 @@
 svgwrite>=1.4
 numpy>=1.26
 pyinstaller>=6.0
+certifi>=2024.0   # the CA bundle the web data imports verify against (2026-11-10): the frozen build has no system bundle

@@ -19,6 +19,11 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
+
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-toner-full-")
+
 from toner_engine import (
     TonerEngine, TonerResult, SAMPLE_RATE, FFT_SIZE, DEFAULT_LIBRARY,
     average_captures, compute_fingerprint,

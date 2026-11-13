@@ -8,6 +8,10 @@ import sys
 import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-v161-compat-")
+
 from config import load_settings, SETTINGS_FILE, DEFAULT_SETTINGS
 
 # =====================================================================

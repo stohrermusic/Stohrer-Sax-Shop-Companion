@@ -17,8 +17,15 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-job-history-")
+
 from i18n import init_translation  # noqa: E402
 init_translation("en")
+
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
 
 import config  # noqa: E402
 
@@ -28,10 +35,11 @@ results = []
 def check(name, fn):
     try:
         fn()
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -204,6 +212,53 @@ def test_row_and_detail_text():
     assert "4.5mm" in custom, custom
 
 
+def make_tooling_job(**over):
+    """A Tooling entry as main._record_tooling_job writes it (2026-11-09)."""
+    job = make_job(output="laser", materials=["acrylic"], tool="die_inserts",
+                   pad_text="30, 32.5 ×2, 44 mm", pads=[], requested_count=4, placed_count=4,
+                   has_max=False, base=None, units=None, sheet_w=None, sheet_h=None,
+                   sheet_w_mm=130.0, sheet_h_mm=130.0, card_paper=False, hole_option=None,
+                   custom_hole="", scrap_num=None, save_dir=None, preset_library=None,
+                   preset_name=None, polygon_vertices=0)
+    job.update(over)
+    return job
+
+
+def test_tooling_rows_name_the_tool():
+    """A Tooling entry shows its tool where a pad row counts pads, says
+    'pieces' not 'pads', prints its description as it is, says it cannot
+    be loaded, and an STL export has a label."""
+    from ui_dialogs import tooling_tool_name, tooling_job_not_loadable
+    w = _fmt()
+    row = w._row_text(make_tooling_job())
+    for expect in ("2026-08-01", "Laser", "Acrylic", "Die Inserts", "130 x 130 mm"):
+        assert expect in row, f"{expect!r} missing from row: {row!r}"
+    assert "pad" not in row, row
+    assert "#3" in w._row_text(make_tooling_job(scrap_num=3)), "a Die Scrap sheet shows its number"
+
+    detail = w._detail_text(make_tooling_job())
+    for expect in ("Sent to the laser", "Die Inserts", "Material: Acrylic", "4 pieces on the sheet",
+                   "Sheet: 130 x 130 mm", "30, 32.5 ×2, 44 mm", tooling_job_not_loadable()):
+        assert expect in detail, f"{expect!r} missing from detail:\n{detail}"
+    assert "pad" not in detail.lower().replace("pad maker", ""), detail
+    assert "Pad list" not in detail and "Center hole" not in detail, detail
+    one = w._detail_text(make_tooling_job(tool="die_organizer", placed_count=1, requested_count=1,
+                                          materials=["basswood"], pad_text="Upper (slotted)"))
+    assert "1 piece on the sheet" in one and "Die Organizer" in one and "Basswood" in one, one
+
+    for key, name in (("die_inserts", "Die Inserts"), ("die_holders", "Die Holders"),
+                      ("die_organizer", "Die Organizer"), ("kerf_test", "Kerf Test"),
+                      ("feeds_speeds_tester", "Speed & Power Test"), ("tonehole_crescent", "Tonehole Crescent")):
+        assert tooling_tool_name(key) == name, (key, tooling_tool_name(key))
+    assert tooling_tool_name("something_new") == "something_new", "an unknown key must not crash the list"
+
+    stl = make_tooling_job(output="stl", tool="tonehole_crescent", materials=[], placed_count=2, requested_count=2)
+    assert w._output_label(stl) == "STL", w._output_label(stl)
+    assert "STL file written" in w._detail_text(stl) and "Material: -" in w._detail_text(stl), w._detail_text(stl)
+    # A pad row is as it was.
+    assert "pieces" not in w._detail_text(make_job()) and "8 pads" in w._row_text(make_job())
+
+
 def test_columns_stay_aligned():
     """No value may overflow its column and shove the next one sideways."""
     w = _fmt()
@@ -360,6 +415,98 @@ def test_scrap_session_blocks_load(app, tk):
         "form was modified despite active scrap session"
 
 
+def test_tooling_job_recorded_and_not_loaded(app, tk):
+    """main._record_tooling_job writes the same entry shape with `tool`;
+    the real dialog lists it with the tool's name, keeps Load off for it
+    (and on for a pad row), answers a double-click with one sentence and
+    no question, deletes it; and the form backstop ignores it."""
+    import main as main_mod
+    from ui_dialogs import JobHistoryWindow, tooling_job_not_loadable
+    use_temp_history()
+    app._record_job("gcode", ["felt"], [{'size': 18.0, 'qty': 2}],
+                    {'base': 'pads', 'width_mm': 200.0, 'height_mm': 150.0}, placed_count=2)
+    hist = {'tool': 'die_holders', 'description': 'Large (40\u201360mm), 6-layer (3\u00d7 pin)',
+            'material': 'acrylic', 'count': 6, 'sheet_w_mm': 300.0, 'sheet_h_mm': 200.0,
+            'base': 'holder', 'scrap_num': None}
+    app._record_tooling_job(hist, "laser", status="stopped")
+    app._record_tooling_job(dict(hist, scrap_num=2), "gcode", save_dir=r"C:\out")
+    jobs = config.load_job_history()
+    assert [j.get("tool") for j in jobs] == ["die_holders", "die_holders", None], jobs
+    run = jobs[1]
+    assert set(run) == set(jobs[2]) | {"tool"}, \
+        f"a Tooling entry must have the pad entry's keys plus 'tool': {set(run) ^ set(jobs[2])}"
+    assert run["output"] == "laser" and run["status"] == "stopped" and run["materials"] == ["acrylic"]
+    assert run["pad_text"] == hist['description'] and run["pads"] == []
+    assert run["placed_count"] == run["requested_count"] == 6 and run["base"] == "holder"
+    assert (run["sheet_w_mm"], run["sheet_h_mm"]) == (300.0, 200.0) and run["save_dir"] is None
+    assert jobs[0]["scrap_num"] == 2 and jobs[0]["save_dir"] == r"C:\out" and jobs[0]["output"] == "gcode"
+
+    # The backstop in the form loader: a Tooling entry changes nothing.
+    app.pad_entry.delete("1.0", tk.END)
+    app.pad_entry.insert(tk.END, "KEEP ME")
+    app._load_job_into_form(run)
+    assert app.pad_entry.get("1.0", tk.END).strip() == "KEEP ME", "a Tooling entry was loaded into the form"
+
+    # The real dialog.
+    seen = {}
+
+    def probe(dlg):
+        try:
+            rows = [dlg.listbox.get(i) for i in range(dlg.listbox.size())]
+            seen['rows'] = rows
+            dlg.listbox.selection_clear(0, tk.END)
+            dlg.listbox.selection_set(0)                 # the G-code export, sheet #2
+            dlg._on_select()
+            seen['load_tool'] = dlg.load_btn.cget("state")
+            seen['delete_tool'] = dlg.delete_btn.cget("state")
+            seen['detail_tool'] = dlg.detail.get("1.0", tk.END)
+            shown_before = len(box_guard.GUARD.shown)
+            dlg.on_load()                                # the double-click path
+            seen['boxes_on_load'] = box_guard.GUARD.shown[shown_before:]
+            seen['result_after_load'] = dlg.result
+            seen['exists_after_load'] = dlg.winfo_exists()
+            dlg.listbox.selection_clear(0, tk.END)
+            dlg.listbox.selection_set(2)                 # the pad job
+            dlg._on_select()
+            seen['load_pad'] = dlg.load_btn.cget("state")
+            dlg.listbox.selection_clear(0, tk.END)
+            dlg.listbox.selection_set(1)                 # the stopped run
+            dlg._on_select()
+            box_guard.GUARD.expect("Delete Entry", answer=True)
+            dlg.on_delete()
+            seen['rows_after_delete'] = [dlg.listbox.get(i) for i in range(dlg.listbox.size())]
+        finally:
+            dlg.destroy()
+    saved = []
+    app.root.after(200, lambda: probe(dlg_holder[0]))
+    dlg_holder = []
+
+    class Probed(JobHistoryWindow):
+        def __init__(self, *a, **k):
+            dlg_holder.append(self)
+            super().__init__(*a, **k)
+    real = main_mod.JobHistoryWindow
+    main_mod.JobHistoryWindow = Probed
+    try:
+        dlg = Probed(app.root, config.load_job_history(), lambda jobs: saved.append(list(jobs)))
+    finally:
+        main_mod.JobHistoryWindow = real
+    assert len(seen['rows']) == 3, seen['rows']
+    assert "Die Holders #2" in seen['rows'][0] and "G-code" in seen['rows'][0], seen['rows'][0]
+    assert "Die Holders" in seen['rows'][1] and "Laser*" in seen['rows'][1], seen['rows'][1]
+    assert "2 pads" in seen['rows'][2], seen['rows'][2]
+    assert seen['load_tool'] == "disabled" and seen['delete_tool'] == "normal", seen
+    assert seen['load_pad'] == "normal", seen['load_pad']
+    assert tooling_job_not_loadable() in seen['detail_tool'] and "6 pieces on the sheet" in seen['detail_tool'] \
+        and hist['description'] in seen['detail_tool'], seen['detail_tool']
+    assert seen['result_after_load'] is None and seen['exists_after_load'], "a Tooling row was handed out for loading"
+    assert seen['boxes_on_load'] == [("showinfo", "Load Job", tooling_job_not_loadable())], \
+        f"a double-click on a Tooling row should say the one sentence and ask nothing: {seen['boxes_on_load']}"
+    assert dlg.result is None
+    assert [r for r in seen['rows_after_delete'] if "Laser*" in r] == [], seen['rows_after_delete']
+    assert saved and len(saved[-1]) == 2 and [j.get("tool") for j in saved[-1]] == ["die_holders", None], saved
+
+
 def _run_generation(app, tk, method_name, out_dir):
     """Drive a real generate path with the file dialog and popups stubbed."""
     import main as main_mod
@@ -471,6 +618,17 @@ def test_record_never_raises(app, tk):
         tempfile.gettempdir(), "no_such_dir_xyz", "job_history.json")
     app._record_job("svg", ["felt"], [{'size': 18.0, 'qty': 2}],
                     {'base': 'x', 'width_mm': 300, 'height_mm': 300})
+    # The Tooling sibling, the same two ways: a job missing every field
+    # but the tool, and an unwritable path. A Frame & Cut that cut must
+    # never end in an error box because the log could not be written.
+    app._record_tooling_job({'tool': 'kerf_test'}, "laser", status="stopped")
+    app._record_tooling_job({}, "laser")                       # not even a tool: KeyError inside, swallowed
+    use_temp_history()
+    app._record_tooling_job({'tool': 'kerf_test', 'count': 5, 'material': 'felt'}, "gcode")
+    assert config.load_job_history()[0]["tool"] == "kerf_test"
+    config.JOB_HISTORY_FILE = os.path.join(
+        tempfile.gettempdir(), "no_such_dir_xyz", "job_history.json")
+    app._record_tooling_job({'tool': 'kerf_test', 'count': 5, 'material': 'felt'}, "gcode")
 
 
 def main():
@@ -488,6 +646,7 @@ def main():
     print("\nList / detail formatting:")
     for fn in (test_when_formatting, test_output_labels,
                test_pad_count_prefers_placed, test_row_and_detail_text,
+               test_tooling_rows_name_the_tool,
                test_columns_stay_aligned, test_columns_survive_long_translations,
                test_row_survives_sparse_entry):
         check(fn.__name__, fn)
@@ -507,6 +666,7 @@ def main():
             app = PadSVGGeneratorApp(root)
             for fn in (test_form_round_trip, test_unit_conversion_on_load,
                        test_scrap_session_blocks_load, test_record_never_raises,
+                       test_tooling_job_recorded_and_not_loaded,
                        test_end_to_end_svg_generation,
                        test_end_to_end_gcode_generation,
                        test_end_to_end_cancel_logs_nothing):

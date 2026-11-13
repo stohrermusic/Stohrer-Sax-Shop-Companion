@@ -58,11 +58,12 @@ def offenders(path):
 def main():
     print("gettext `_` shadowing scan")
     print("=" * 60)
-    files = sorted(glob.glob(os.path.join(ROOT, "*.py")))
+    # Every root module and every module of the ui_dialogs package (2026-11-10).
+    files = sorted(glob.glob(os.path.join(ROOT, "*.py")) + glob.glob(os.path.join(ROOT, "ui_dialogs", "*.py")))
     bad = 0
     for path in files:
         hits = offenders(path)
-        name = os.path.basename(path)
+        name = os.path.relpath(path, ROOT).replace(os.sep, "/")
         if hits:
             bad += len(hits)
             for lineno, fn, assigns, calls in hits:

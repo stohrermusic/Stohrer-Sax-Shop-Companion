@@ -32,6 +32,12 @@ def test(name, condition):
 # 1. Config defaults
 # ============================================================
 print("\n--- Config Defaults ---")
+
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-tuner-updates-")
+
 from config import DEFAULT_SETTINGS
 
 ts = DEFAULT_SETTINGS["tuner_settings"]
@@ -145,17 +151,21 @@ test("save does NOT include tuner_mode", "tuner_mode" not in save_source)
 # 11. User guide updated
 # ============================================================
 print("\n--- User Guide ---")
-with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui_dialogs.py"), encoding="utf-8") as f:
+# The guide lives in ui_dialogs/guide.py since the package split (2026-11-10).
+with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui_dialogs", "guide.py"),
+          encoding="utf-8") as f:
     guide_source = f.read()
 
-test("User guide has 'Tuner' heading", 'self._h2(_("Tuner"))' in guide_source)
+# The guide was rewritten 2026-11-09 (task-led, shorter): the Tuner is its
+# own section, and the controls are named in one line per slider group.
+test("User guide has 'Tuner' heading", 'self._section("tuner", _("Tuner"))' in guide_source)
 test("User guide does NOT mention Simple Mode", "Simple Mode" not in guide_source)
-test("User guide mentions VU meter", "VU meter" in guide_source or "analog" in guide_source.lower())
+test("User guide mentions VU meter", "VU meter" in guide_source)
 test("User guide mentions per-wheel BIAS NOTE control",
-     "BIAS > NOTE" in guide_source)
-test("User guide mentions Faceplate Color", "Faceplate Color" in guide_source)
+     "BIAS: NOTE" in guide_source)
+test("User guide mentions Faceplate Color", "faceplate color" in guide_source.lower())
 test("User guide mentions DISP BRIGHT (master brightness)",
-     "DISP > BRIGHT" in guide_source)
+     "DISP: SENS" in guide_source and "BRIGHT" in guide_source)
 
 # ============================================================
 # 12. Engine unchanged

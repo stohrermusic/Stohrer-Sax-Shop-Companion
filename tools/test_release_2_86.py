@@ -32,6 +32,9 @@ os.environ["SAXSHOP_CONFIG_DIR"] = _PROFILE
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 results = []
 
 
@@ -39,10 +42,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -272,7 +276,7 @@ def main():
             walk(dlg)
             dlg.destroy()
             assert "Key Height Library" in texts, texts  # the dialog was found
-            for gone in ("Tuner", "Toner", "Machine menu (direct Falcon serial control)"):
+            for gone in ("Tuner", "Analyzer", "Direct machine control (GRBL)"):
                 assert gone not in texts, f"{gone!r} still offered: {texts}"
         step("feature set")
         check("Feature Set doesn't offer what the build can't run", feature_set_omits)
@@ -287,7 +291,7 @@ def main():
         def tour_skips():
             assert not errors, errors
             assert log and log[0] == "pad-maker", log
-            assert not {"tuner", "tuner-no-mic", "toner"} & set(log), log
+            assert not set(main_mod.AUDIO_TOUR_STOPS) & set(log), log
             assert hidden(app.tuner_tab_frame) and hidden(app.toner_tab_frame), \
                 "the tour un-hid an audio tab"
         check("tour skips the hidden tabs and leaves them hidden", tour_skips)

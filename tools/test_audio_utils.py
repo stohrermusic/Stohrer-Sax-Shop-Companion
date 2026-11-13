@@ -57,6 +57,28 @@ def assert_equal(a, b, msg=""):
 # BASIC WRITE/READ
 # =============================================================================
 
+def test_engines_import_when_portaudio_will_not_start():
+    """sounddevice starts PortAudio at import; where it will not start the import raises
+    PortAudioError, neither ImportError nor OSError. Both engines must import all the same,
+    with no audio (a CI Linux runner, 2026-11-12: every suite that imports an engine died)."""
+    import subprocess
+    import tempfile
+    fake = tempfile.mkdtemp(prefix="ssc-fake-sd-")
+    with open(os.path.join(fake, "sounddevice.py"), "w", encoding="utf-8") as f:
+        f.write("class PortAudioError(Exception):\n    pass\n\n\n"
+                "raise PortAudioError('Error initializing PortAudio: Unanticipated host error')\n")
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, PYTHONPATH=fake + os.pathsep + repo,
+               SAXSHOP_CONFIG_DIR=tempfile.mkdtemp(prefix="ssc-fake-sd-cfg-"))
+    code = ("import tuner_engine, toner_engine\n"
+            "assert tuner_engine.sd is None and toner_engine.sd is None\n"
+            "assert tuner_engine.AUDIO_AVAILABLE is False and toner_engine.AUDIO_AVAILABLE is False\n"
+            "print('imported without audio')\n")
+    r = subprocess.run([sys.executable, "-c", code], cwd=repo, env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0 and "imported without audio" in r.stdout, (r.returncode, r.stdout[-300:], r.stderr[-600:])
+    assert "PortAudio did not start" in r.stderr, "the failure was not logged: " + r.stderr[-300:]
+
+
 def test_basic_write_read():
     """Write data into buffer, read it back, verify match."""
     buf = AudioRingBuffer(10)
@@ -378,6 +400,7 @@ if __name__ == "__main__":
     run_test("partial_write_zero_padded", test_partial_write_zero_padded)
     run_test("single_sample_write", test_single_sample_write)
     run_test("read_returns_copy", test_read_returns_copy)
+    run_test("engines_import_when_portaudio_will_not_start", test_engines_import_when_portaudio_will_not_start)
 
     # Summary
     passed = sum(1 for r in _results if r[0] == "PASS")

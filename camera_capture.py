@@ -269,6 +269,131 @@ def open_camera(index, request_width=None, request_height=None):
     return cap
 
 
+def fallback_notice(saved_index, used_index):
+    """The one line a camera window shows when it runs on another camera
+    than the saved one (open_camera_or_fallback fell back). Written here
+    once, so the four windows say the same thing. A silent switch of
+    camera is the hazard this exists for. `_` is the gettext builtin
+    i18n.init_translation installs (as config.py uses it); without a
+    catalog (this module used on its own) the English stands."""
+    try:
+        text = _("Camera #{saved} could not be opened; showing camera #{used}.")
+    except NameError:
+        text = "Camera #{saved} could not be opened; showing camera #{used}."
+    return text.format(saved=saved_index, used=used_index)
+
+
+def open_camera_or_fallback(index, saved_index, settings=None, calibration_present=None):
+    """Open the camera a window asked for and read its first frame:
+    (cap, index_used, first_frame). The caller releases the capture.
+
+    Every window that opens a camera comes through here, so they cannot
+    drift (the polygon dialog's overlay, CameraCalibrationDialog,
+    CameraCaptureDialog, LiveCameraWindow).
+
+    When `index` is the SAVED camera number (settings camera_index_override,
+    written by a calibration or Switch camera) and it cannot be opened, or
+    opens and gives no frame, the rest of the resolver is tried once,
+    skipping that number. If one opens, this window runs on it and one line
+    is logged (the number that failed, the number in use, and the camera
+    names the system reports); the window shows fallback_notice(). Nothing
+    is saved: only a calibration or Switch camera may change the saved
+    number, as before (Matt, 2026-11-09: "same deal?" about the camera when
+    the saved number cannot be opened, "Yes").
+
+    What may be fallen back to depends on whether a camera calibration is
+    on disk (`calibration_present`; None means look at
+    default_calibration_path(), which is where the app keeps it):
+      - WITH a calibration, only the camera the Falcon-name heuristic
+        identifies (find_falcon_camera_index). The calibration belongs to
+        one camera: a laptop's built-in webcam under the Falcon's
+        homography gives a believable, wrong scrap outline, and
+        calibration_size_mismatch only catches a different frame size
+        (640 x 480 is common to both). No Falcon-named camera: the first
+        error, as if there were no fallback.
+      - WITHOUT one, the Falcon-named camera, then the last camera found:
+        nothing is bound to a camera yet, and the calibration dialog saves
+        the number of the camera it actually used.
+
+    When the saved camera opens there is no enumeration and no extra
+    delay. When nothing opens, the first error is raised, as before.
+    """
+    def opened(i):
+        cap = open_camera(i)
+        try:
+            ok, frame = cap.read()
+        except Exception:
+            # A read that raises must not leave the handle open: nothing
+            # else holds it, and the device would stay busy for every later
+            # open (this window's own retry included).
+            try:
+                cap.release()
+            except Exception:
+                pass
+            raise
+        if not ok or frame is None:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            # The sentence the camera windows showed for this before the
+            # helper existed, so it stays translated (`_` as in fallback_notice).
+            try:
+                text = _("Camera opened but returned no frame.")
+            except NameError:                   # this module used on its own, no catalog installed
+                text = "Camera opened but returned no frame."
+            raise RuntimeError(f"{text} (#{i})")
+        return cap, frame
+
+    try:
+        cap, frame = opened(index)
+        return cap, index, frame
+    except Exception as first:
+        if saved_index is None or index != saved_index:
+            raise
+        if calibration_present is None:
+            try:
+                calibration_present = load_calibration(default_calibration_path()) is not None
+            except Exception:
+                calibration_present = True          # unreadable: treat as bound, the safe side
+        candidates = []
+        try:
+            falcon = find_falcon_camera_index()
+        except Exception:
+            falcon = None
+        if falcon is not None and falcon != saved_index:
+            candidates.append(falcon)
+        if calibration_present:
+            if not candidates:
+                log.info("camera #%s (the saved number) could not be used (%s); a calibration is on disk and "
+                         "no camera is named Falcon, so no other camera is tried", saved_index, first)
+        else:
+            try:
+                cams = enumerate_cameras()
+            except Exception:
+                cams = []
+            # The resolver's "last camera found", with the saved number left
+            # out (it may well be the last one: the Falcon camera on a laptop
+            # with an integrated camera at 0).
+            others = [c['index'] for c in cams if c['index'] != saved_index and c['index'] not in candidates]
+            if others:
+                candidates.append(others[-1])
+        for other in candidates:
+            try:
+                cap, frame = opened(other)
+            except Exception:
+                continue
+            try:
+                names = _list_camera_names()
+            except Exception:
+                names = []
+            log.warning("camera #%s (the saved number) could not be used (%s); this window runs on camera #%s "
+                        "instead, the saved number is unchanged. Cameras reported by the system: %s",
+                        saved_index, first, other, names or "none")
+            return cap, other, frame
+        raise first
+
+
 def describe_capture(cap):
     """One-line summary of what the driver says it is delivering, for the
     log. Every property read is best-effort: a backend that doesn't
@@ -893,6 +1018,11 @@ def inset_polygon_mm(polygon_mm, inset_mm, resolution_per_mm=10):
     return result
 
 
+# pixels_to_mm's schema-1 Y correction failures: the first is logged, the
+# rest only counted (it runs per frame while the capture dialog is open).
+_schema1_fix_failures = {'count': 0}
+
+
 def pixels_to_mm(polygon_px, calibration):
     """Apply the pixel→machine-mm homography to convert a pixel-coord
     polygon into MACHINE-MM coordinates.
@@ -938,8 +1068,14 @@ def pixels_to_mm(polygon_px, calibration):
                        * float(board_info.get('square_mm', CHARUCO_SQUARE_MM)))
             k = 2 * offset_y + 2 * border + label_h + board_h
             out = [(x, k - y) for (x, y) in out]
-        except (TypeError, ValueError, KeyError):
-            pass
+        except (TypeError, ValueError, KeyError, IndexError) as e:
+            # (IndexError: a card_engrave_offset_mm with fewer than two values.)
+            # Runs per frame in the capture dialog: say it once, count the rest.
+            _schema1_fix_failures['count'] += 1
+            if _schema1_fix_failures['count'] == 1:
+                log.warning("old (schema 1) camera calibration: could not "
+                            "correct its Y axis, so captured outlines may be "
+                            "mirrored; recalibrating fixes it: %s", e)
     return out
 
 

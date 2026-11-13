@@ -10,17 +10,21 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 passed = 0
 failed = 0
 
 
 def test(name, condition):
     global passed, failed
-    if condition:
+    surprise = box_guard.reset()    # a question this check did not expect fails it
+    if condition and not surprise:
         print(f"  PASS: {name}")
         passed += 1
     else:
-        print(f"  FAIL: {name}")
+        print(f"  FAIL: {name}{surprise}")
         failed += 1
 
 
@@ -66,6 +70,11 @@ if _has_gpu:
 # 2. tuner_tab.py module-level flags
 # ============================================================
 print("\n--- tuner_tab Module Flags ---")
+
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-gpu-tuner-")
 
 import tuner_tab
 

@@ -10,8 +10,17 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import tkinter as tk  # noqa: E402
+
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-card-paper-size-")
+
 from i18n import init_translation  # noqa: E402
 init_translation("en")
+
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
 
 
 PASS = "  PASS"
@@ -20,6 +29,13 @@ results = []
 
 
 def check(label, ok, detail=""):
+    if ok:
+        try:
+            box_guard.settle()      # a question this check did not expect fails it
+        except AssertionError as e:
+            ok, detail = False, f"{detail} [{e}]"
+    if not ok:
+        detail += box_guard.reset()
     results.append(ok)
     print(f"{PASS if ok else FAIL}  {label}" + (f"  -- {detail}" if not ok and detail else ""))
 

@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 import json
 
 from config import (
+    read_json,
     ALL_KEY_HEIGHT_FIELDS, SCREW_SPECS_FILE, KEY_PRESET_FILE,
     save_presets, DEFAULT_SETTINGS, get_ssl_context
 )
@@ -114,6 +115,32 @@ def lookup_serial_year(maker, serial_str):
 # ==========================================
 # THE MIXIN CLASS
 # ==========================================
+
+def convert_height(value, old_unit, new_unit):
+    """A key height as the tab holds it (text), converted between mm and inches: four
+    decimals in inches, two in mm; text that is not a number, or no change of unit,
+    comes back as it was. The Key Heights tab's own rule, shared with the Analyzer's
+    Enter heights dialog (2026-11-11)."""
+    if new_unit == old_unit:
+        return value
+    try:
+        val = float(value)
+    except (TypeError, ValueError):
+        return value
+    if new_unit == "in" and old_unit == "mm":
+        return f"{val / 25.4:.4f}"
+    if new_unit == "mm" and old_unit == "in":
+        return f"{val * 25.4:.2f}"
+    return value
+
+
+def key_height_fields_shown(settings):
+    """The key height fields the Key Layout settings show, in ALL_KEY_HEIGHT_FIELDS
+    order: what the Key Heights tab lays out, and what the Analyzer's Enter heights
+    dialog asks for."""
+    layout = settings.get("key_layout", DEFAULT_SETTINGS["key_layout"])
+    return [key for key in ALL_KEY_HEIGHT_FIELDS if layout.get(f"show_{key.replace(' ', '_')}", True)]
+
 
 class LibraryFeaturesMixin:
     """
@@ -249,17 +276,15 @@ class LibraryFeaturesMixin:
         row += 1
         
         col = 0
-        for key in ALL_KEY_HEIGHT_FIELDS:
-            show_key = f"show_{key.replace(' ', '_')}"
-            if layout_settings.get(show_key, True): 
-                label, entry = self.key_height_widgets[key]
-                label.grid(row=row, column=col*2, sticky='w', padx=5, pady=2)
-                entry.grid(row=row, column=col*2 + 1, sticky='w', padx=5)
-                
-                col += 1
-                if col > 1: 
-                    col = 0
-                    row += 1
+        for key in key_height_fields_shown(self.settings):
+            label, entry = self.key_height_widgets[key]
+            label.grid(row=row, column=col*2, sticky='w', padx=5, pady=2)
+            entry.grid(row=row, column=col*2 + 1, sticky='w', padx=5)
+
+            col += 1
+            if col > 1:
+                col = 0
+                row += 1
 
     def on_unit_convert(self):
         new_unit = self.key_unit_var.get()
@@ -269,17 +294,8 @@ class LibraryFeaturesMixin:
             return
 
         for var in self.key_height_vars.values():
-            try:
-                val = float(var.get())
-                if new_unit == "in" and old_unit == "mm":
-                    new_val = val / 25.4
-                    var.set(f"{new_val:.4f}") 
-                elif new_unit == "mm" and old_unit == "in":
-                    new_val = val * 25.4
-                    var.set(f"{new_val:.2f}")
-            except (ValueError, TypeError):
-                continue 
-        
+            var.set(convert_height(var.get(), old_unit, new_unit))
+
         self.previous_key_unit = new_unit
 
     def on_save_key_preset(self):
@@ -444,8 +460,7 @@ class LibraryFeaturesMixin:
         if not filepath:
             return
         try:
-            with open(filepath, 'r') as f:
-                imported_presets = json.load(f)
+            imported_presets = read_json(filepath)
             if not isinstance(imported_presets, dict):
                 raise TypeError("File is not a valid key height set file.")
             
@@ -885,8 +900,7 @@ class LibraryFeaturesMixin:
             return
             
         try:
-            with open(filepath, 'r') as f:
-                imported_data = json.load(f)
+            imported_data = read_json(filepath)
             
             if not isinstance(imported_data, dict):
                 raise TypeError("Invalid JSON structure")

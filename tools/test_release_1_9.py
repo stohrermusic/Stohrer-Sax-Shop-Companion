@@ -19,6 +19,10 @@ import unittest.mock
 sys.modules['tkinter'] = unittest.mock.MagicMock()
 sys.modules['tkinter.messagebox'] = unittest.mock.MagicMock()
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-release-1-9-")
+
 from config import DEFAULT_SETTINGS, load_settings
 from svg_engine import (
     get_disc_diameter, _nest_discs, can_all_pads_fit,
@@ -439,10 +443,11 @@ print("\n--- 7. Visible Tabs Defaults ---")
 
 vt = DEFAULT_SETTINGS["visible_tabs"]
 # Tuner became default-on in v2.0 — it's no longer marked experimental.
-# Only Toner remains hidden by default (still beta, requires terms acceptance).
+# The Toner (the Analyzer since 2026-11-10) followed: the tab shows by default and
+# only its harmonic side is behind the terms (toner_unlocked).
 test("Tuner defaults to True (no longer experimental)",
      vt.get("Tuner") is True)
-test("Toner defaults to False", vt.get("Toner") is False)
+test("Toner (the Analyzer tab) defaults to True", vt.get("Toner") is True)
 test("Key Height Library defaults to True", vt.get("Key Height Library") is True)
 test("Serial Lookup defaults to True", vt.get("Serial Lookup") is True)
 test("Screw Specs defaults to True", vt.get("Screw Specs") is True)

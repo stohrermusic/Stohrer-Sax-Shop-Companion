@@ -43,6 +43,11 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+# Never the user's real settings folder: an isolated profile, set before any
+# project module is imported (tools/test_config_isolation.py checks this).
+import tempfile  # noqa: E402
+os.environ["SAXSHOP_CONFIG_DIR"] = tempfile.mkdtemp(prefix="ssc-lid-confirm-")
+
 import i18n  # noqa: E402
 
 i18n.init_translation('en')
@@ -310,17 +315,49 @@ def main_test():
     check("Only the Start Frame path asks", only_the_advance_path_asks)
 
     def frame_and_cut_opts_into_the_advance_question():
+        # Frame & Cut is a sequence of steps (machine_control, 2026-11-10);
+        # the position step is the one that opens the jog-only dialog, so
+        # drive it on its own with the dialog stood in and read what it
+        # was asked for. Until then this check grepped on_frame_and_cut's
+        # source for the flag and the button.
         import inspect
-        import main
+        from machine_control import MachineControlMixin, FrameCutRun
         sig = inspect.signature(FalconRunDialog.__init__)
         assert 'remind_lid_on_advance' in sig.parameters, \
             "the advance-question flag must exist"
         assert sig.parameters['remind_lid_on_advance'].default is False, \
             "the flag must be opt-in: only laser-firing advances ask"
-        src = inspect.getsource(main.PadSVGGeneratorApp.on_frame_and_cut)
-        assert "remind_lid_on_advance=True" in src, \
+
+        class Stub(MachineControlMixin):
+            root = None
+            _falcon_homed_this_session = True
+
+        opened = []
+
+        class FakeJog:
+            ends = "complete"
+
+            def __init__(self, parent, sender, lines, **kw):
+                opened.append((list(lines), dict(kw)))
+                self._final_reason = FakeJog.ends
+
+        keep = ui_dialogs.FalconRunDialog
+        ui_dialogs.FalconRunDialog = FakeJog
+        try:
+            run = FrameCutRun(sender=object(), auto_locate_target=(12.0, 34.0))
+            assert Stub()._frame_cut_position(run) is True, "Start Frame lets the run go on"
+            FakeJog.ends = "cancelled"
+            assert Stub()._frame_cut_position(run) is None, "a cancelled jog dialog must stop the run"
+        finally:
+            ui_dialogs.FalconRunDialog = keep
+        assert len(opened) == 2, opened
+        lines, kw = opened[0]
+        assert lines == [], "the jog dialog streams nothing"
+        assert kw.get("remind_lid_on_advance") is True, \
             "Frame & Cut's jog dialog must opt into the lid question"
-        assert "Start Frame" in src, "expected the jog dialog in this method"
+        assert "Start Frame" in kw.get("done_button_label", ""), \
+            f"expected the Start Frame button on the jog dialog, got {kw.get('done_button_label')!r}"
+        assert kw.get("auto_locate_target") == (12.0, 34.0) and kw.get("is_homed") is True, kw
     check("Frame & Cut opts into the Start Frame question",
           frame_and_cut_opts_into_the_advance_question)
 

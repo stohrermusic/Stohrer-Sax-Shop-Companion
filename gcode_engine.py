@@ -8,7 +8,8 @@ Includes a single-stroke digit font for engraving pad sizes.
 import math
 
 from svg_engine import (_wave_value, dart_wave_raw, DART_TIP_ANGLE, feeds_speeds_label_geometry,
-                        locator_mark_geometry, locator_circle_points)
+                        locator_mark_geometry, locator_circle_points,
+                        ADHESIVE_RING, adhesive_ring_geometry, adhesive_ring_number_strokes)
 
 # =============================================================================
 # SINGLE-STROKE DIGIT FONT
@@ -860,7 +861,7 @@ def generate_gcode(pads, material, sheet_width_mm, sheet_height_mm, filename,
 
 def can_generate_gcode(material):
     """Check if G-code generation is supported for a material."""
-    return material in ('felt', 'card', 'leather', 'die_ring', 'acrylic')
+    return material in ('felt', 'card', 'leather', 'die_ring', 'acrylic', ADHESIVE_RING)
 
 
 def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm, filename,
@@ -909,6 +910,12 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
     else:
         flip_height = sheet_height_mm
     placed = [(pad_size, cx, flip_height - cy, radius) for (pad_size, cx, cy, radius) in placed]
+
+    if material == ADHESIVE_RING:
+        # Cut-only material with its own geometry; nothing below (engraving
+        # modes, holes, darts, label placement, auto-fit, zones) applies.
+        _write_adhesive_ring_gcode(placed, sheet_width_mm, sheet_height_mm, filename, settings)
+        return
 
     # Get G-code settings for this material
     gcode_settings = settings.get("gcode_settings", {})
@@ -1234,6 +1241,91 @@ def generate_gcode_from_placed(placed, material, sheet_width_mm, sheet_height_mm
 
     with open(filename, 'w') as f:
         f.write('\n'.join(gcode_lines))
+
+
+ADHESIVE_RING_LAYER = 'C07'   # LightBurn 07 Magenta, the ring's default SVG layer color
+# Both of a ring's cuts get the outer-cut segment count. The inner cut is
+# nearly as big as the outer one, not a 3 mm center hole: at the center-hole
+# figure (36) a 51 mm pad's inner cut had 3.7 mm flats, 0.08 mm off a true
+# circle, against 2.2 mm and 0.02 mm on its own outer cut (2026-11-05).
+ADHESIVE_RING_CUT_SEGMENTS = 72
+
+
+def _write_adhesive_ring_gcode(placed, sheet_width_mm, sheet_height_mm, filename, settings):
+    """G-code for adhesive rings. `placed` is already Y-flipped.
+
+    Per ring: the number, then the inner circle, then the outer, so a
+    number in the hole is traced while its plug is still attached to the
+    sheet. With "by layer" grouping that is all numbers, all inner cuts,
+    all outer cuts; with "by pad" it is the three steps ring by ring.
+
+    The number has no settings of its own: this material has no engraving
+    block, so it is traced as part of the cut layer, at the ring's cut
+    speed, power, passes and air. It is always the stroke font, whatever
+    engraving_mode any material is set to. Kerf goes inward on the inner
+    cut and outward on the outer one; none on the number.
+
+    The radius in `placed` is the nesting footprint (ring plus an outside
+    number), so the cut radii come from adhesive_ring_geometry.
+    """
+    from config import DEFAULT_SETTINGS
+
+    mat_settings = dict(DEFAULT_SETTINGS["gcode_settings"][ADHESIVE_RING])
+    mat_settings.update(settings.get("gcode_settings", {}).get(ADHESIVE_RING) or {})
+    cut_speed = mat_settings["cut_speed"]
+    cut_power = mat_settings["cut_power"]
+    cut_passes = mat_settings["cut_passes"]
+    air = mat_settings["air_assist_cut"]
+    kerf_offset = (mat_settings["kerf_width"] or 0.0) / 2
+
+    return_speed = settings.get("gcode_return_speed", 1000)
+    cut_grouping = settings.get("gcode_cut_grouping", "layer")
+
+    rings = []          # (number strokes, inner strokes, outer strokes) per ring
+    all_x, all_y = [], []
+    for pad_size, cx, cy, _footprint_r in placed:
+        geom = adhesive_ring_geometry(pad_size, settings)
+        if geom["outer_r"] <= 0:
+            continue
+        number = adhesive_ring_number_strokes(geom, cx, cy, y_up=True)
+        inner = []
+        inner_r = geom["inner_r"] - kerf_offset
+        if geom["inner_r"] > 0 and inner_r > 0:
+            inner.append(linearize_circle(cx, cy, inner_r, segments=ADHESIVE_RING_CUT_SEGMENTS))
+        outer_r = geom["outer_r"] + kerf_offset
+        outer = [linearize_circle(cx, cy, outer_r, segments=ADHESIVE_RING_CUT_SEGMENTS)]
+        rings.append((number, inner, outer))
+        all_x.extend([cx - outer_r, cx + outer_r])
+        all_y.extend([cy - outer_r, cy + outer_r])
+        for stroke in number:
+            all_x.extend(p[0] for p in stroke)
+            all_y.extend(p[1] for p in stroke)
+
+    lines = generate_gcode_header(min(all_x) if all_x else 0, min(all_y) if all_y else 0,
+                                  max(all_x) if all_x else sheet_width_mm,
+                                  max(all_y) if all_y else sheet_height_mm)
+    lines.append("; Adhesive rings: numbers are traced at the cut settings (no engraving settings)")
+
+    def _step(strokes, note):
+        if not strokes:
+            return
+        lines.append(f"; {note}")
+        lines.extend(generate_gcode_layer(strokes, cut_speed, cut_power, ADHESIVE_RING_LAYER,
+                                          air_assist=air, passes=cut_passes))
+
+    if cut_grouping == "pad":
+        for number, inner, outer in rings:
+            _step(number, "Ring number")
+            _step(inner, "Ring inner cut")
+            _step(outer, "Ring outer cut")
+    else:
+        _step([s for number, _i, _o in rings for s in number], "Ring number")
+        _step([s for _n, inner, _o in rings for s in inner], "Ring inner cut")
+        _step([s for _n, _i, outer in rings for s in outer], "Ring outer cut")
+
+    lines.extend(generate_gcode_footer(return_speed=return_speed))
+    with open(filename, 'w') as f:
+        f.write('\n'.join(lines))
 
 
 # ==========================================
@@ -1630,7 +1722,11 @@ def generate_kerf_test_gcode(material_name, filename, settings, cut_speed, cut_p
     gcode_lines = []
     gcode_lines.extend(generate_gcode_header(0, 0, width_mm, height_mm))
 
-    if engraving_strokes:
+    # An engraving speed or power of 0 means the material has none set
+    # (cork): no title or labels, never an F0 or S0 layer. The circles are
+    # the test; the caller tells the user the labels were left off.
+    from config import engraving_is_set
+    if engraving_strokes and engraving_is_set(eng_speed, eng_power):
         gcode_lines.extend(generate_gcode_layer(engraving_strokes, eng_speed, eng_power, 'C03',
                                                  overscan_mm=overscan_mm, air_assist=True))
     if cut_strokes:
@@ -1996,7 +2092,11 @@ def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filena
     gcode_lines = []
     gcode_lines.extend(generate_gcode_header(0, 0, sheet_w_mm, sheet_h_mm))
 
-    if engraving_strokes:
+    # Engraving speed or power 0 = not set (cork, or fields left at 0): no
+    # IDs, never an F0 or S0 layer. The discs are still cut; the tab tells
+    # the user the IDs were left off.
+    from config import engraving_is_set
+    if engraving_strokes and engraving_is_set(eng_speed, eng_power):
         gcode_lines.extend(generate_gcode_layer(
             engraving_strokes, eng_speed, eng_power, 'C00',
             overscan_mm=overscan_mm, air_assist=air_assist, passes=eng_passes))
@@ -2028,3 +2128,159 @@ def generate_feeds_speeds_test_gcode(test_pieces, sheet_w_mm, sheet_h_mm, filena
         f.write('\n'.join(gcode_lines))
 
 
+class NoCutSettingsError(ValueError):
+    """A material with no cut speed or power set: nothing may be cut at
+    F0 or S0. Its own type, so the Tooling tab can say exactly that and
+    let every other ValueError (a sheet too small, a value that is not a
+    number) reach the user as what it is."""
+
+    def __init__(self, material):
+        self.material = material
+        super().__init__(f"no cut speed and power are set for {material}")
+
+
+def _material_cut_settings(material, settings):
+    """(cut_speed, cut_power, cut_passes, kerf_width, air) for a material's
+    cut, from its gcode_settings block. Raises NoCutSettingsError for a
+    material with no cut speed or power."""
+    mat = settings.get("gcode_settings", {}).get(material, {})
+    speed, power = mat.get("cut_speed", 0), mat.get("cut_power", 0)
+    if not (float(speed) > 0 and float(power) > 0):
+        raise NoCutSettingsError(material)
+    return (speed, power, mat.get("cut_passes", 1), float(mat.get("kerf_width", 0.0) or 0.0),
+            mat.get("air_assist_cut", True))
+
+
+def generate_tonehole_crescent_gcode(entries, material, filename, settings):
+    """Write a list of tonehole crescents as G-code, cut from `material`.
+
+    The same layout and numbering as the SVG (layout_tonehole_crescents):
+    each list entry's number engraved on the scrap under its parts when
+    the list has more than one entry. Unlike the SVG, the cut is
+    compensated for the material's kerf, because here the material is
+    known: each crescent is one closed path half a kerf outside its design
+    outline (svg_engine.tonehole_crescent_toolpath), so the part comes out
+    at the tonehole's size. With a kerf of 0 the path is the outline.
+
+    Numbers first, then the cuts, so nothing is engraved on a part that
+    has already come loose. The numbers use the material's engraving
+    settings; a material with none set (cork: speed and power 0) gets no
+    numbers and the cuts are still written, never an F0 or S0 line. The
+    caller tells the user.
+
+    Y is flipped with the layout's height, so the mouthpiece side, up in
+    the SVG, is up (+Y) on the bed too, and the layout sits at the origin.
+    Returns {'parts', 'width', 'height', 'kerf', 'numbers_skipped'}.
+    Raises CrescentKerfError (svg_engine) when a crescent cannot be cut
+    with this kerf.
+    """
+    from config import engraving_is_set
+    from svg_engine import (layout_tonehole_crescents, tonehole_crescent_toolpath,
+                            CRESCENT_LABEL_FONT_MM)
+
+    parts, width_mm, height_mm = layout_tonehole_crescents(entries)
+    cut_speed, cut_power, cut_passes, kerf_width, air_cut = _material_cut_settings(material, settings)
+    mat = settings.get("gcode_settings", {}).get(material, {})
+    engraving_mode = mat.get("engraving_mode", "line")
+    if engraving_mode == "filled":
+        eng_speed = mat.get("filled_engraving_speed", 0)
+        eng_power = mat.get("filled_engraving_power", 0)
+        eng_passes = mat.get("filled_engraving_passes", 1)
+        air_eng = mat.get("air_assist_filled_engraving", True)
+    else:
+        eng_speed = mat.get("engraving_speed", 0)
+        eng_power = mat.get("engraving_power", 0)
+        eng_passes = mat.get("engraving_passes", 1)
+        air_eng = mat.get("air_assist_engraving", True)
+    filled_spacing = mat.get("filled_line_spacing", 0.15)
+    overscan_mm = 0
+    if engraving_mode == "filled" and settings.get("filled_overscan_enabled", False):
+        overscan_mm = settings.get("filled_overscan_mm", 1.5)
+
+    numbered = [p for p in parts if p['number'] is not None]
+    can_engrave = engraving_is_set(eng_speed, eng_power)
+    number_strokes = []
+    if numbered and can_engrave:
+        for p in numbered:
+            # The SVG anchors its text at the baseline; the stroke helpers
+            # are centre-anchored, hence the 0.35 x font correction (the
+            # same one the kerf test uses).
+            y = height_mm - (p['label_y'] - 0.35 * CRESCENT_LABEL_FONT_MM)
+            if engraving_mode == "filled":
+                number_strokes.extend(get_filled_text_strokes(
+                    str(p['number']), CRESCENT_LABEL_FONT_MM, p['label_x'], y, filled_spacing))
+            else:
+                number_strokes.extend(get_text_strokes(
+                    str(p['number']), CRESCENT_LABEL_FONT_MM, p['label_x'], y))
+
+    cut_strokes = []
+    for p in parts:
+        path = tonehole_crescent_toolpath(p['geom'], kerf_width)
+        cut_strokes.append([(p['cx'] + x, height_mm - (p['cy'] + y)) for x, y in path])
+
+    gcode_lines = []
+    gcode_lines.extend(generate_gcode_header(0, 0, width_mm, height_mm))
+    gcode_lines.append(f"; Tonehole crescents: {len(parts)} part(s), {material}, kerf {kerf_width:g} mm compensated")
+    if number_strokes:
+        gcode_lines.extend(generate_gcode_layer(
+            number_strokes, eng_speed, eng_power, 'C03',
+            overscan_mm=overscan_mm, air_assist=air_eng, passes=eng_passes))
+    gcode_lines.extend(generate_gcode_layer(
+        cut_strokes, cut_speed, cut_power, 'C02', air_assist=air_cut, passes=cut_passes))
+    gcode_lines.extend(generate_gcode_footer(return_speed=settings.get("gcode_return_speed", 1000)))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))
+    return {'parts': parts, 'width': width_mm, 'height': height_mm, 'kerf': kerf_width,
+            'numbers_skipped': bool(numbered) and not can_engrave}
+
+
+def generate_die_organizer_gcode(variant, material, filename, settings,
+                                 sheet_width_mm=None, sheet_height_mm=None):
+    """Write an organizer plate ('upper' or 'lower') as G-code, cut from
+    `material`.
+
+    Reads the bundled drawing (svg_engine.read_die_organizer_drawing, which
+    raises on anything it does not understand). Everything in it is a cut.
+    Every opening first, in the drawing's order, and the plate's own edge
+    last, so the plate stays in the sheet until its slots and holes are
+    done. Kerf-compensated both ways: openings half a kerf inward, the
+    edge half a kerf outward, so the slots and the plate come out at drawn
+    size. Rounded corners are true arcs, finely linearized.
+
+    The plate sits ORGANIZER_MARGIN_MM in from the sheet's bottom-left
+    corner, which is the origin: drawing y (down) becomes
+    margin + plate height - y. When a sheet size is given and the plate
+    does not fit on it, raises ValueError (the tab checks first, in the
+    user's language). Returns {'width', 'height', 'counts', 'kerf'}.
+    """
+    from svg_engine import (die_organizer_toolpaths, die_organizer_min_sheet, ORGANIZER_MARGIN_MM)
+
+    cut_speed, cut_power, cut_passes, kerf_width, air_cut = _material_cut_settings(material, settings)
+    need_w, need_h = die_organizer_min_sheet(variant)
+    if sheet_width_mm is not None and sheet_height_mm is not None:
+        if sheet_width_mm < need_w - 1e-6 or sheet_height_mm < need_h - 1e-6:
+            raise ValueError(
+                f"The organizer plate needs a sheet of at least {need_w:.0f} x {need_h:.0f} mm; "
+                f"this one is {sheet_width_mm:.0f} x {sheet_height_mm:.0f} mm.")
+    tp = die_organizer_toolpaths(variant, kerf_width)
+    m, plate_h = ORGANIZER_MARGIN_MM, tp['height']
+
+    def on_sheet(path):
+        return [(m + x, m + plate_h - y) for x, y in path]
+
+    gcode_lines = []
+    gcode_lines.extend(generate_gcode_header(0, 0, need_w, need_h))
+    gcode_lines.append(f"; Die organizer, {variant} plate: {len(tp['inner'])} openings then the edge, "
+                       f"{material}, kerf {kerf_width:g} mm compensated")
+    gcode_lines.extend(generate_gcode_layer(
+        [on_sheet(p) for p in tp['inner']], cut_speed, cut_power, 'C01',
+        air_assist=air_cut, passes=cut_passes))
+    gcode_lines.extend(generate_gcode_layer(
+        [on_sheet(tp['outer'])], cut_speed, cut_power, 'C02',
+        air_assist=air_cut, passes=cut_passes))
+    gcode_lines.extend(generate_gcode_footer(return_speed=settings.get("gcode_return_speed", 1000)))
+
+    with open(filename, 'w') as f:
+        f.write('\n'.join(gcode_lines))
+    return {'width': need_w, 'height': need_h, 'counts': tp['counts'], 'kerf': kerf_width}

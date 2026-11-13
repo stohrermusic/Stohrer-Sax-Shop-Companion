@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Test whether toner descriptors actually differentiate horns.
 
-Uses three test groups:
-1. Edinger Head2Head (gold standard): Same player, mpc, mic, room, day.
-   If descriptors can't differentiate THESE, they measure the player not the horn.
-2. Tyler Tenors: Same player/setup, different horns.
-3. Tyler Altos: Same player/setup, different horns.
+Reads groups of recordings, each one player and setup with only the horn
+changing. If descriptors can't differentiate horns inside such a group,
+they measure the player, not the horn; if the gap between two players'
+groups is larger than the spread inside either, they measure the setup.
 
 A descriptor is a viable live-gauge candidate if its within-player spread
 is large enough to see on a gauge AND not dwarfed by between-player gap.
@@ -13,8 +12,18 @@ Live descriptor gauges were removed 2026-04-06 because absolute single-
 preset readouts proved too noisy; this script is what we'd run to vet any
 candidate before re-adding one.
 
+The recordings are not in the repository and neither is their description:
+who played what is in tools/local/descriptor_corpus.json, which git ignores.
+No player's or recording's name is written in this file. Without that file
+the suite has nothing to run and says so. Its shape:
+
+    {"recordings": "<folder>",
+     "groups": [{"title": "...", "player": "...", "sax_type": "Tenor",
+                 "files": {"<label>": "<path under the folder>", ...}}, ...]}
+
 Run:  python tools/test_descriptor_validity.py
 """
+import json
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,54 +32,19 @@ from toner_engine import (
     TonerEngine, analyze_audio_file, compute_fingerprint,
 )
 
-RECORDINGS = r"C:\sax shop companion\recordings"
+CORPUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local", "descriptor_corpus.json")
+RECORDINGS = ""          # set by load_corpus()
 
-EDINGER_FILES = {
-    "SML Gold Medal 15840":     "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-SML Gold Medal #15840.wav",
-    "SBA 35737":                "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #35737.wav",
-    "MkVI 68611":               "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #68611.wav",
-    "MkVI 68630 orig neck":     "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #68630 with original neck.wav",
-    "MkVI 68630 later neck":    "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #68630 with later Mk VI replacement neck.wav",
-    "MkVI 68630 122028 neck":   "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #68630 with neck from #122028.wav",
-    "MkVI 71352":               "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #71352.wav",
-    "MkVI 76047":               "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #76047.wav",
-    "MkVI 85961":               "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #85961.wav",
-    "MkVI 97226":               "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #97226.wav",
-    "MkVI 99314":               "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #99314.wav",
-    "SA80 122028":              "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #122028.wav",
-    "Ref54 141956":             "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Selmer #141956.wav",
-    "Yamaha YTS-62":            "Thomas Edinger/Thomas Edinger/Saxophones Head2Head-Yamaha YTS-62 Purple Logo #017542.wav",
-}
 
-TYLER_TENORS = {
-    "MkVI 62418":       "Tyler Anderson/Tenor/Tenor/Mark VI 62418.wav",
-    "MkVI 72434":       "Tyler Anderson/Tenor/Tenor/Mark VI 72434.wav",
-    "MkVI 100115":      "Tyler Anderson/Tenor/Tenor/Mark VI 100115.wav",
-    "MkVI 141672":      "Tyler Anderson/Tenor/Tenor/Mark VI 141672.wav",
-    "MkVI 147401":      "Tyler Anderson/Tenor/Tenor/Mark VI 147401.wav",
-    "MkVI 157137":      "Tyler Anderson/Tenor/Tenor/Mark VI 157137.wav",
-    "MkVI 164746":      "Tyler Anderson/Tenor/Tenor/Mark VI 164746.wav",
-    "SBA 38438":        "Tyler Anderson/Tenor/Tenor/Selmer 38438.wav",
-    "Conn 274254":      "Tyler Anderson/Tenor/Tenor/Conn 274254.wav",
-    "Conn 329232":      "Tyler Anderson/Tenor/Tenor/Conn 329232.wav",
-    "Couf Superba":     "Tyler Anderson/Tenor/Tenor/Couf Superba 1.wav",
-    "King S20 375203":  "Tyler Anderson/Tenor/Tenor/King Super 20 375203.wav",
-    "SML 21321":        "Tyler Anderson/Tenor/Tenor/SML 21321.wav",
-    "Tenor Mad 1222":   "Tyler Anderson/Tenor/Tenor/Tenor Madness 1222.wav",
-    "Yamaha 875EX":     "Tyler Anderson/Tenor/Tenor/Yamaha 875EX 6598.wav",
-}
-
-TYLER_ALTOS = {
-    "MkVI 93668":       "Tyler Anderson/Alto/Alto/Selmer Mark VI 93668.wav",
-    "MkVI 190366":      "Tyler Anderson/Alto/Alto/Selmer Mark VI 190366.wav",
-    "MkVI 219548":      "Tyler Anderson/Alto/Alto/Mark VI 219548.wav",
-    "Supreme 842487":   "Tyler Anderson/Alto/Alto/Selmer Supreme 842487.wav",
-    "YAS-62 11959":     "Tyler Anderson/Alto/Alto/YAS-62 11959.wav",
-    "YAS-62 88666":     "Tyler Anderson/Alto/Alto/YAS-62 88666.wav",
-    "Buescher 267734":  "Tyler Anderson/Alto/Alto/Buescher 267734.wav",
-    "Buescher 307777":  "Tyler Anderson/Alto/Alto/Buescher 307777.wav",
-    "Keilwerth NK":     "Tyler Anderson/Alto/Alto/Keilwerth New King 38431.wav",
-}
+def load_corpus():
+    """The local description of the corpus, or None when this machine has none."""
+    global RECORDINGS
+    if not os.path.isfile(CORPUS_FILE):
+        return None
+    with open(CORPUS_FILE, encoding="utf-8") as f:
+        corpus = json.load(f)
+    RECORDINGS = corpus["recordings"]
+    return corpus if os.path.isdir(RECORDINGS) else None
 
 
 def process_file(path, sax_type):
@@ -235,33 +209,32 @@ def analyze_group(name, file_dict, sax_type):
 
 
 def main():
-    if not os.path.isdir(RECORDINGS):
-        print(f"Recordings not found: {RECORDINGS}")
+    corpus = load_corpus()
+    if corpus is None:
+        print(f"SKIP: no recordings corpus on this machine ({CORPUS_FILE})")
         return
 
     print("DESCRIPTOR VALIDITY TEST")
     print("Question: Do these descriptors measure HORNS or RECORDING SETUPS?")
     print()
     print("Test methodology:")
-    print("  - Edinger: same player/mpc/mic/room = isolates horn differences")
-    print("  - Tyler: same player/setup = isolates horn differences")
+    print("  - Each group: same player/setup = isolates horn differences")
     print("  - Cross-player comparison tests whether descriptors are dominated")
     print("    by player/setup rather than horn character")
 
-    edinger = analyze_group(
-        "EDINGER HEAD-TO-HEAD (14 tenors, same everything except horn)",
-        EDINGER_FILES, "Tenor")
+    results = []
+    for group in corpus["groups"]:
+        fps = analyze_group(group["title"], group["files"], group["sax_type"])
+        results.append((group, fps))
 
-    tyler_t = analyze_group(
-        "TYLER TENORS (15 horns, same player/setup)",
-        TYLER_TENORS, "Tenor")
-
-    analyze_group(
-        "TYLER ALTOS (9 horns, same player/setup)",
-        TYLER_ALTOS, "Alto")
-
-    # ── Cross-player test ──
-    if edinger and tyler_t:
+    # ── Cross-player test: the first two groups of one horn type by different players ──
+    pair = None
+    for i, (ga, fa) in enumerate(results):
+        for gb, fb in results[i + 1:]:
+            if fa and fb and ga["sax_type"] == gb["sax_type"] and ga["player"] != gb["player"]:
+                pair = pair or (ga, fa, gb, fb)
+    if pair:
+        ga, first, gb, second = pair
         print(f"\n{'=' * 75}")
         print("  CROSS-PLAYER: Is between-player variation > within-player variation?")
         print(f"{'=' * 75}")
@@ -271,8 +244,8 @@ def main():
                       'even_odd': 'E/O', 'rolloff_shape': 'Roll'}
 
         for k in desc_keys:
-            e_vals = [fp['descriptors'].get(k, 0) for fp in edinger.values()]
-            t_vals = [fp['descriptors'].get(k, 0) for fp in tyler_t.values()]
+            e_vals = [fp['descriptors'].get(k, 0) for fp in first.values()]
+            t_vals = [fp['descriptors'].get(k, 0) for fp in second.values()]
 
             e_mean = sum(e_vals) / len(e_vals)
             t_mean = sum(t_vals) / len(t_vals)
@@ -292,8 +265,8 @@ def main():
             else:
                 verdict = "Measures horn"
 
-            print(f"  {header_map[k]:<6} Edinger mean={e_mean:.1%} spread={e_spread:.1%}  "
-                  f"Tyler mean={t_mean:.1%} spread={t_spread:.1%}  "
+            print(f"  {header_map[k]:<6} {ga['player']} mean={e_mean:.1%} spread={e_spread:.1%}  "
+                  f"{gb['player']} mean={t_mean:.1%} spread={t_spread:.1%}  "
                   f"gap={player_gap:.1%}  [{verdict}]")
 
     # ── Summary ──

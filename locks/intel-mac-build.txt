@@ -7,6 +7,12 @@ altgraph==0.17.5 \
     #   -c locks/full.txt
     #   macholib
     #   pyinstaller
+certifi==2026.7.22 \
+    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \
+    --hash=sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55
+    # via
+    #   -c locks/full.txt
+    #   -r locks/intel-mac-build.in
 macholib==1.16.4 \
     --hash=sha256:da1a3fa8266e30f0ce7e97c6a54eefaae8edd1e5f86f3eb8b95457cae90265ea \
     --hash=sha256:f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362

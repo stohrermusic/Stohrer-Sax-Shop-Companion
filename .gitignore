@@ -219,3 +219,7 @@ __marimo__/
 !.claude/settings.json
 !.claude/hooks/
 !.claude/hooks/*.sh
+
+# Scripts and data that belong to this machine only: the recordings corpus's description
+# (who played what, where the files are) and the one-off imports that read it.
+tools/local/

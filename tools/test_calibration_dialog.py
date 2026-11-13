@@ -38,6 +38,9 @@ os.environ["SAXSHOP_CONFIG_DIR"] = _PROFILE
 from i18n import init_translation  # noqa: E402
 init_translation("en")
 
+import box_guard  # noqa: E402
+box_guard.install()     # no native box from here on, and no question answered unasked (box_guard.py)
+
 import config  # noqa: E402
 
 LOG_PATH = config.setup_logging()
@@ -49,10 +52,11 @@ def check(name, fn):
     try:
         if fn() is False:
             raise AssertionError("check returned False")
+        box_guard.settle()      # a question this check did not expect fails it
         print(f"  PASS  {name}")
         results.append(True)
     except Exception as e:
-        print(f"  FAIL  {name}: {e}")
+        print(f"  FAIL  {name}: {e}{box_guard.reset()}")
         traceback.print_exc()
         results.append(False)
 
@@ -231,8 +235,6 @@ def run_fix_cases(root, ui, cam, frame, seen):
     ui.FalconRunDialog = FakeRun
     warnings = []
     ui.messagebox.showwarning = lambda title, msg, **k: warnings.append(str(title))
-    ui.messagebox.askyesno = lambda *a, **k: seen.get('yes', True)
-    ui.messagebox.askyesnocancel = lambda *a, **k: False  # "already homed"
     engrave_kw = {"falcon_port": "COM-FAKE", "settings": {}}
 
     def fail_open(*a, **k):
@@ -262,6 +264,105 @@ def run_fix_cases(root, ui, cam, frame, seen):
                 assert cancel and switch, f"{tag}: Cancel/Switch not on screen"
         check("camera fails to open: the control panel and Cancel stay on "
               "screen; engrave phase fits its controls", controls_survive)
+
+        # ---- the saved camera number falls back (2026-11-09) -------------
+        # Matt, of the camera: "same deal?" as the laser being plugged in
+        # later. The dialog asked for the saved number (1) cannot open it;
+        # it runs on the other camera, logs one line, saves nothing.
+        real_find = cam.find_falcon_camera_index
+        real_names = cam._list_camera_names
+        opened, enumerated, logged = [], [], []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                logged.append((record.levelname, record.getMessage()))
+        grab = Grab()
+        cam.log.addHandler(grab)
+
+        def open_or_fail(index, *a, **k):
+            opened.append(index)
+            if index == 1:
+                raise RuntimeError("camera 1 unplugged (test)")
+            return good_open(index, *a, **k)
+
+        def enum():
+            enumerated.append(True)
+            return [{'index': 0, 'name': 'Integrated Camera'}]
+        cam.open_camera = open_or_fail
+        cam.enumerate_cameras = enum
+        cam.find_falcon_camera_index = lambda *a, **k: None
+        cam._list_camera_names = lambda *a, **k: ["Integrated Camera"]
+        saved = {"camera_index_override": 1}
+
+        def live(tag):
+            def look(d):
+                seen[tag] = (d._camera_index, d._cap is not None, d._status_var.get())
+            return look
+        app_cal = cam.default_calibration_path()      # the app's own calibration, none so far in this profile
+        assert not os.path.exists(app_cal), app_cal
+        try:
+            run_dialog(root, ui, [(1200, live('fallback'))], args=(1, os.path.join(_PROFILE, "calib.json")),
+                       settings=saved)
+            seen['fallback_opened'] = list(opened)
+            seen['fallback_enumerated'] = len(enumerated)
+            seen['fallback_saved'] = dict(saved)
+            seen['fallback_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+            # With the app's calibration on disk and no camera named Falcon,
+            # the webcam may not stand in: the old error, nothing enumerated.
+            del opened[:], enumerated[:], logged[:]
+            with open(app_cal, "w", encoding="utf-8") as f:
+                json.dump({'camera_matrix': [[500, 0, 320], [0, 500, 240], [0, 0, 1]],
+                           'dist_coeffs': [[0, 0, 0, 0, 0]],
+                           'homography_px_to_machine_mm': [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                           'image_size': [640, 480], 'calibration_schema_version': 2}, f)
+            run_dialog(root, ui, [(1200, live('refused'))], args=(1, os.path.join(_PROFILE, "calib.json")),
+                       settings=saved)
+            seen['refused_opened'] = list(opened)
+            seen['refused_enumerated'] = len(enumerated)
+            seen['refused_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+            os.remove(app_cal)
+            # The saved number opens: one open call, no enumeration, no warning.
+            del opened[:], enumerated[:], logged[:]
+            cam.open_camera = lambda index, *a, **k: (opened.append(index), good_open(index, *a, **k))[1]
+            run_dialog(root, ui, [(1200, live('saved_ok'))], args=(1, os.path.join(_PROFILE, "calib.json")),
+                       settings=saved)
+            seen['saved_ok_opened'] = list(opened)
+            seen['saved_ok_enumerated'] = len(enumerated)
+            seen['saved_ok_warnings'] = [m for lvl, m in logged if lvl == "WARNING"]
+        finally:
+            cam.open_camera = good_open
+            cam.enumerate_cameras = real_enum
+            cam.find_falcon_camera_index = real_find
+            cam._list_camera_names = real_names
+            cam.log.removeHandler(grab)
+            if os.path.exists(app_cal):
+                os.remove(app_cal)
+
+        def saved_number_falls_back_in_the_real_dialog():
+            index, has_cap, status = seen['fallback']
+            assert index == 0 and has_cap, f"the dialog did not run on the other camera: {seen['fallback']}"
+            # Said in the status line, not only in the log (a silent switch of camera is the hazard).
+            assert status == "Camera #1 could not be opened; showing camera #0.", status
+            assert seen['fallback_opened'] == [1, 0], seen['fallback_opened']
+            assert seen['fallback_enumerated'] == 1, seen['fallback_enumerated']
+            assert seen['fallback_saved'] == {"camera_index_override": 1}, "the saved number was changed"
+            w = seen['fallback_warnings']
+            assert len(w) == 1 and "camera #1" in w[0] and "camera #0" in w[0] and "Integrated Camera" in w[0], w
+            index, has_cap, status = seen['refused']
+            assert index == 1 and not has_cap, f"fell back to the webcam under a calibration: {seen['refused']}"
+            assert status == "Could not open camera index 1: camera 1 unplugged (test)", status
+            assert seen['refused_opened'] == [1] and seen['refused_enumerated'] == 0, \
+                (seen['refused_opened'], seen['refused_enumerated'])
+            assert seen['refused_warnings'] == [], seen['refused_warnings']
+            index, has_cap, _status = seen['saved_ok']
+            assert index == 1 and has_cap and seen['saved_ok_opened'] == [1], (seen['saved_ok'], seen['saved_ok_opened'])
+            assert seen['saved_ok_enumerated'] == 0 and seen['saved_ok_warnings'] == [], \
+                (seen['saved_ok_enumerated'], seen['saved_ok_warnings'])
+        check("the saved camera number cannot be opened: with no calibration the real dialog runs on the other "
+              "camera and says so in its status line, one warning names both numbers, the setting is untouched; "
+              "with the app's calibration on disk and no Falcon-named camera it shows the old error and enumerates "
+              "nothing; when the number opens, one call and no enumeration",
+              saved_number_falls_back_in_the_real_dialog)
 
         # ---- #3 status messages are not overwritten by the preview -------
         ui.CameraCalibrationDialog.STATUS_HOLD_S = 1.0
@@ -331,6 +432,7 @@ def run_fix_cases(root, ui, cam, frame, seen):
         seen['calls_no_done'] = len(calls)
         seen['warn_no_done'] = list(warnings)
         seen['yes'] = False  # decline to enter an offset by hand
+        box_guard.GUARD.expect("No Engrave Position", answer=False)
         run_dialog(root, ui, [(1000, moved_set(None))])
         seen['calls_no_offset'] = len(calls)
         seen['yes'] = True
@@ -361,8 +463,10 @@ def run_fix_cases(root, ui, cam, frame, seen):
 
         FakeRun.calls.clear()
         FakeRun.reason = None  # the window's X: soft reset mid-trace
+        box_guard.GUARD.expect("Home Laser First?", answer=False)  # "already homed"
         run_dialog(root, ui, [(800, frame_case('frame_abort'))], **engrave_kw)
         FakeRun.reason = "complete"
+        box_guard.GUARD.expect("Home Laser First?", answer=False)  # "already homed"
         run_dialog(root, ui, [(800, frame_case('frame_ok'))], **engrave_kw)
 
         def framing():
@@ -389,6 +493,8 @@ def run_fix_cases(root, ui, cam, frame, seen):
             seen['frame_state'] = str(d._frame_btn.cget('state'))
 
         FakeRun.calls.clear()
+        box_guard.GUARD.expect("Start Engrave?", answer=True)
+        box_guard.GUARD.expect("Engrave a New Card?", answer=True)
         run_dialog(root, ui, [(800, engrave_then_new)],
                    falcon_port="COM-FAKE", settings=settings)
 
@@ -450,6 +556,7 @@ def run_fix_cases(root, ui, cam, frame, seen):
             assert len(d._captures) == 1, "setup: no capture taken"
             d._on_switch_camera_clicked()
             seen['after_switch'] = (len(d._captures), d._reference_count)
+        box_guard.GUARD.expect("Switch Camera?", answer=True)
         run_dialog(root, ui, [(1000, switch)])
         cam.enumerate_cameras = real_enum
         check("Switch camera with captures: discarded, not mixed",
@@ -661,7 +768,6 @@ def main():
     import ui_dialogs as ui
     for name in ("showinfo", "showwarning", "showerror"):
         setattr(ui.messagebox, name, lambda *a, **k: None)
-    ui.messagebox.askyesno = lambda *a, **k: True
 
     frame = board_frame(cam)
     real_open = cam.open_camera

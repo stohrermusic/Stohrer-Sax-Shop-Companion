@@ -95,40 +95,119 @@ def get_engraving_placement_for_size(pad_size, settings):
 
 
 def get_ssl_context():
-    """Get an SSL context that works on macOS (and everywhere else).
+    """An SSL context that verifies the server, for the three "Import Matt's..."
+    downloads from stohrermusic.com.
 
-    macOS Python often can't find system certificates. This tries:
-    1. certifi package (if installed)
-    2. Default system context
-    3. Unverified fallback (last resort)
+    certifi's bundle first: every build ships it (the Intel Mac build since
+    2026-11-10; a frozen interpreter's OpenSSL looks for its bundle at the
+    build machine's path, which a user's Mac does not have, and Python on
+    macOS never reads the Keychain), then the system's default certificates.
+    If neither yields a certificate authority to verify against, raise: the
+    callers show their download-failed message with the reason. Until
+    2026-11-10 a third step turned verification off (check_hostname False,
+    CERT_NONE) when the default certificates could not be loaded, which
+    silently defeated HTTPS for those downloads. No code path may return an
+    unverified context: tools/test_tls_context.py gates it, and the frozen-
+    build probe (--selftest) checks the shipped bundle through
+    assert_tls_ready().
     """
-    # Try certifi first (most reliable on macOS)
+    log = logging.getLogger(__name__)
     try:
         import certifi
-        return ssl.create_default_context(cafile=certifi.where())
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        if ctx.get_ca_certs():
+            return ctx
+        log.warning("certifi's certificate bundle at %s holds no certificates; trying the system's",
+                    certifi.where())
     except ImportError:
         pass
-
-    # Try default context
-    ctx = ssl.create_default_context()
-    try:
-        # Test if it can actually verify
-        ctx.load_default_certs()
-        return ctx
-    except Exception:
-        pass
-
-    # Fallback: unverified (still encrypted, just no cert check)
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    except OSError as e:  # ssl.SSLError is an OSError: a bundle that is missing or unreadable
+        log.warning("certifi's certificate bundle could not be used: %s", e)
+    ctx = ssl.create_default_context()  # loads the system's default certificates
+    if not ctx.get_ca_certs():
+        raise OSError("no certificate authorities are available to verify the server's certificate")
     return ctx
+
+
+def assert_tls_ready():
+    """The frozen-build probe's TLS check, with no network: the context the
+    web data imports use verifies the server and has certificate authorities
+    loaded. Returns how many. On the Intel Mac build this is the only check
+    that certifi's bundle was packed and is found (nobody here has one)."""
+    ctx = get_ssl_context()
+    if ctx.verify_mode != ssl.CERT_REQUIRED or not ctx.check_hostname:
+        raise AssertionError("the web-import SSL context does not verify the server")
+    n_ca = len(ctx.get_ca_certs())
+    if n_ca == 0:
+        raise AssertionError("the web-import SSL context has no certificate authorities")
+    return n_ca
 
 # ==========================================
 # PLATFORM-SPECIFIC CONFIG DIRECTORY
 # ==========================================
 
 APP_NAME = "StohrerSaxShopCompanion"
+
+
+def rescan_input_devices():
+    """Have PortAudio look for audio devices again. It lists them once, when
+    it is initialised, so a microphone plugged in after the app started was
+    not offered until a restart (Matt, 2026-11-12: "my usb mic is plugged in
+    ... but the ssc (exe) shows only the built in mic").
+
+    Only with no stream open: every stream is invalid afterwards, and every
+    device index may have changed (main._rescan_audio_devices stops and
+    restarts the engines round it). True when it was done."""
+    try:
+        import sounddevice as sd
+        sd._terminate()
+        sd._initialize()
+        return True
+    except Exception as e:
+        logging.getLogger("ssc.audio").warning("audio device rescan failed: %s", e)
+        return False
+
+
+def set_input_device(settings, index, devices=None):
+    """Store the user's choice of input device: its index and, since the
+    index moves when devices come and go, its name. None is the system
+    default."""
+    name = None
+    if index is not None:
+        for i, n in (get_input_devices() if devices is None else devices):
+            if i == index:
+                name = n
+                break
+    settings["audio_input_device"] = index
+    settings["audio_input_device_name"] = name
+
+
+def input_device_for(settings, devices=None):
+    """The index to open for the user's chosen input device, or None for the
+    system default.
+
+    The device is found by its saved name, wherever it is in the list now,
+    and the saved index is brought up to date. A named device that is not
+    connected gives None (the system default) and the choice is kept for
+    when it is back. A profile with an index and no name (before
+    2026-11-12) keeps its index and adopts the name found there."""
+    index = settings.get("audio_input_device")
+    if index is None:
+        return None
+    name = settings.get("audio_input_device_name")
+    if devices is None:
+        devices = get_input_devices()
+    if name:
+        for i, n in devices:
+            if n == name:
+                settings["audio_input_device"] = i
+                return i
+        return None
+    for i, n in devices:
+        if i == index:
+            settings["audio_input_device_name"] = n
+            break
+    return index
 
 
 def get_input_devices():
@@ -179,13 +258,13 @@ def get_input_devices():
         return devices
     except Exception:
         return []
-APP_VERSION = "2.9"
+APP_VERSION = "3.0"
 
 def _detect_build_date():
     # In a PyInstaller-frozen build, the exe's mtime is the build time —
     # preserved across zip/installer copies on all three platforms.
     # Falls back to the manual date when running from source.
-    manual = "2026-10-27"
+    manual = "2026-11-13"
     if getattr(sys, 'frozen', False):
         try:
             import datetime
@@ -450,6 +529,8 @@ SIZING_PRESET_KEYS = (
     # Leather locator marks (lives in this dialog)
     "locator_marks_enabled", "locator_marks_min_size", "locator_marks_max_size",
     "locator_marks_style", "locator_marks_dashed",
+    # Adhesive rings (lives in this dialog)
+    "adhesive_ring_enabled", "adhesive_ring_trim_mm",
 )
 
 
@@ -504,7 +585,47 @@ GCODE_PRESET_KEYS = (
 
 # All materials a G-code preset can be saved/loaded for. Top-level keys
 # in gcode_presets.json. Kept in sync with DEFAULT_SETTINGS["gcode_settings"].
-GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood")
+GCODE_PRESET_MATERIALS = ("felt", "card", "leather", "acrylic", "basswood",
+                          "adhesive_ring", "cork")
+
+# The materials the Tooling tab works in (its G-code settings dialog, and
+# the Tonehole Crescent and Die Organizer material choices). Cork is a
+# Tooling material only: it is not offered on the Pad Maker.
+TOOLING_GCODE_MATERIALS = ("acrylic", "basswood", "cork")
+
+# Materials that are only ever cut: no engraving and no center hole, so
+# their gcode_settings block (and their presets) carry just the cut keys.
+# The adhesive ring's number is traced on its cut layer, at the cut
+# settings, which is why it has no engraving block of its own.
+GCODE_CUT_ONLY_MATERIALS = ("adhesive_ring",)
+GCODE_CUT_ONLY_KEYS = (
+    "cut_speed", "cut_power", "cut_passes", "kerf_width", "air_assist_cut",
+)
+
+
+def engraving_is_set(speed, power):
+    """True when an engraving speed and power are usable.
+
+    0 for either means "not set": cork ships that way on purpose, because
+    nobody has an engraving value for it and Matt wanted no guess in there
+    (2026-11-09). A generator must never write a zero feed (Grbl rejects
+    F0) or trace an engraving at S0, so the Tooling generators that
+    engrave with the chosen material (crescent list numbers, kerf test
+    labels, Speed & Power IDs) skip the engraving when this is False, still
+    write the cuts, and the tab tells the user (ENGRAVING_NOT_SET notices
+    in tooling_tab.py). Anything that isn't a number counts as not set.
+    """
+    try:
+        return float(speed) > 0 and float(power) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def gcode_preset_keys_for(material):
+    """The G-code preset keys one material's block holds."""
+    if material in GCODE_CUT_ONLY_MATERIALS:
+        return GCODE_CUT_ONLY_KEYS
+    return GCODE_PRESET_KEYS
 
 # Sane ceiling for the framing S value: 30 = 3%. Framing is a positioning
 # preview, not a cut — anything approaching real engraving power would mark
@@ -535,6 +656,25 @@ def get_framing_power_s(material, settings):
         return max(0, min(int(value), FRAMING_POWER_S_MAX))
     except (TypeError, ValueError):
         return min(10, FRAMING_POWER_S_MAX)
+
+
+def migrate_analyzer_tab(settings):
+    """The Analyzer tab is on by default since 2026-11-10 (it was the Toner, hidden
+    until the beta terms were accepted). Run once per settings file, at startup:
+    a user who never unlocked the toner had its tab forced hidden, so for them the
+    new default applies; a user who had unlocked it and hid it chose that, and
+    keeps it. The terms (`toner_unlocked`) go on gating the Harmonics switch.
+    Returns True when it ran. Nothing is written here: the flag reaches the disk
+    with the next regular save (on exit, Feature Set, a dialog's OK), so building
+    the app, `--selftest`, `--tour` and the suites write nothing (the first version
+    saved at once and `test_adhesive_ring_upgrade` caught it)."""
+    if settings.get("analyzer_tab_shown_v3"):
+        return False
+    visible = settings.setdefault("visible_tabs", {})
+    if not settings.get("toner_unlocked") and visible.get("Toner") is False:
+        visible["Toner"] = True
+    settings["analyzer_tab_shown_v3"] = True
+    return True
 
 
 def material_settings_to_gcode_preset(mat_settings):
@@ -571,8 +711,12 @@ if os.path.exists(_old_toner_file) and not os.path.exists(TONER_DATA_FILE):
         # losing the library to a silently-failed migration is not.
         try:
             shutil.copy2(_old_toner_file, TONER_DATA_FILE)
-        except OSError:
-            pass
+        except OSError as e:
+            # Runs at import, before setup_logging(): this reaches stderr,
+            # not app.log, but it is no longer silent.
+            logging.getLogger(__name__).warning(
+                "could not move the tone library from %s to %s; the old file is left in place: %s",
+                _old_toner_file, TONER_DATA_FILE, e)
 
 COOL_BLUE = "#E0F7FA"
 COOL_GREEN = "#E8F5E9"
@@ -631,6 +775,9 @@ DEFAULT_SETTINGS = {
     "felt_thickness_unit": "mm",
     "engraving_on": True,
     "show_engraving_warning": True,
+    # The "more than one G-code file on the SD card" question (main._sd_card_ok);
+    # False once the user ticks "Don't show this message again".
+    "show_sd_card_warning": True,
     "last_output_dir": "",
     "resonance_clicks": 0, 
     "compatibility_mode": False,
@@ -691,6 +838,23 @@ DEFAULT_SETTINGS = {
     "locator_marks_max_size": 16.0,   # inclusive, pad size in mm
     "locator_marks_style": "lines",   # "lines" | "circle" | "both"
     "locator_marks_dashed": False,
+    # ADHESIVE RINGS (beta, Matt 2026-11-05): a ring of double-sided tape
+    # per pad, for sticking a thin silicone wrap to the back of the card.
+    # A fifth Pad Maker material, off and invisible until enabled here.
+    # Outer diameter = the card disc; ring width = the back wrap the
+    # leather disc gets for that size, plus this trim. The wrap is a
+    # nominal figure tuned on real pads, not a measured overlap on the
+    # card back, hence the trim (mm, either sign). Geometry lives in
+    # svg_engine.adhesive_ring_geometry.
+    # The Sizing Rules dialog calls the trim "Wrap clearance" (the key
+    # keeps its name, like the dart_ keys behind "Darts"). Same number,
+    # same sign: mm of ring width per side. Matt, 2026-11-05: "I think of
+    # negative clearance as being inside and hidden, positive clearance as
+    # being extra ring material"; "I want negative numbers to be reducing
+    # the ring size (increasing ID) and positive numbers to be increasing
+    # ring size (shrinking ID)".
+    "adhesive_ring_enabled": False,
+    "adhesive_ring_trim_mm": 0.0,
     # Gap from the outermost disc edge to the engraved border, both sheet
     # types. 1.0 visually crowded the outer discs, which is what prompted
     # the larger value.
@@ -828,6 +992,71 @@ DEFAULT_SETTINGS = {
             "air_assist_hole": True,
             "air_assist_cut": True,
         },
+        # Adhesive rings (double-sided tape). Cut-only: the ring's number
+        # is traced on the cut layer at these settings, so there is no
+        # engraving or hole block (config.GCODE_CUT_ONLY_MATERIALS).
+        # A STARTING POINT, NOT A TESTED VALUE (Matt, 2026-11-05). Nobody
+        # has cut this material with the app yet and no published figure
+        # fits. The numbers are a straight scale from the one diode data
+        # point found (a 20 W diode cutting 1.5-3 mm silicone sheet at
+        # 60-75 %, 200-300 mm/min) down to a 0.5 mm (0.020 in) sheet on a
+        # 40 W diode: about 0.72 J per mm of cut, i.e. 18 W at 25 mm/s.
+        # No margin on energy, on purpose ("that could roast it"): a cut
+        # that doesn't go through can be run again, a roasted part can't.
+        # Kerf is the card default. The dialog and the user guide say the
+        # same and point at Tooling > Speed & Power Test.
+        "adhesive_ring": {
+            "cut_speed": 1500,
+            "cut_power": 45,
+            "cut_passes": 1,
+            "kerf_width": 0.2,
+            "air_assist_cut": True,
+        },
+        # Cork (Matt, 2026-11-09: "tonehole crescents are usually cork. we
+        # do not have that as a material yet"). A Tooling material only: it
+        # is in the Tooling settings dialog, the Kerf Test, the Speed &
+        # Power Test, Framing Power and the Tonehole Crescent (its
+        # default), and not on the Pad Maker.
+        #
+        # THE CUT IS A TESTED VALUE: 1000 mm/min at 30 %, one pass, air on,
+        # on 3/32 in (2.4 mm) sheet cork on a 40 W Falcon. It is what Matt
+        # cut a 43 mm, 20 % crescent with on 2026-10-14 (his file
+        # crescent_43mm_20pct.gcode: one layer, "Cut @ 1000 mm/min, 30%
+        # power", M4, M8), in his words "it was perfect for 3/32 cork".
+        # About 0.30 J per mm of cut per mm of thickness. Holes use the
+        # same values.
+        #
+        # THE KERF IS NOT MEASURED. 0.0 reproduces that crescent: its path
+        # encloses 290.45 mm2 and 20 % of a 43 mm tonehole is 290.44 mm2,
+        # so it was cut on the design line with no compensation. Measure
+        # it with Tooling > Kerf Test before trusting a size.
+        #
+        # THE ENGRAVING IS NOT SET, on purpose. Matt: "leave the engraving
+        # setting for cork at 0/0. don't want a guess in there." 0 means
+        # "not set" (engraving_is_set above): the generators skip the
+        # engraving and say so. Find a value with Tooling > Speed & Power
+        # Test. No text may call the kerf or the engraving tested.
+        "cork": {
+            "engraving_mode": "line",
+            "engraving_speed": 0,
+            "engraving_power": 0,
+            "engraving_passes": 1,
+            "filled_engraving_speed": 0,
+            "filled_engraving_power": 0,
+            "filled_engraving_passes": 1,
+            "filled_line_spacing": 0.15,
+            "hole_speed": 1000,
+            "hole_power": 30,
+            "hole_passes": 1,
+            "cut_speed": 1000,
+            "cut_power": 30,
+            "cut_passes": 1,
+            "kerf_width": 0.0,
+            "air_assist_engraving": True,
+            "air_assist_filled_engraving": True,
+            "air_assist_hole": True,
+            "air_assist_cut": True,
+        },
     },
 
     # TUNER SETTINGS
@@ -855,6 +1084,9 @@ DEFAULT_SETTINGS = {
         "gauge_bias": {"richness": 0, "warmth": 0},
         "sax_type": "Alto",
         "concert_pitch": False,
+        "chart_low_notes_left": True,   # the intonation chart: low notes on the left (Matt's default), or flipped
+        "harmonics_on": False,          # the HARMONICS switch where it was left; counts only with toner_unlocked
+        "tuner_on": False,              # the TUNER switch (the needle meter beside the chart) where it was left
         "analysis_descriptors": {
             "richness": True,
             "warmth": True,
@@ -894,6 +1126,16 @@ DEFAULT_SETTINGS = {
         "crescent_thickness": "2.0",
         "crescent_qty": "1",
         "crescent_list": [],     # [{"tonehole_d", "percent", "curve", "qty"}, ...]
+        # The Die Organizer's material and sheet, and the Tonehole Crescent's
+        # material: written by the Tooling tab since 2026-11-09 but never
+        # declared here, so load_settings dropped them on every start (found
+        # by the settings-key gate, 2026-11-10). "" for the sheet means "not
+        # set": the tab then sizes it from the app's units, as before.
+        "organizer_material": "basswood",
+        "organizer_sheet_width": "",
+        "organizer_sheet_height": "",
+        "organizer_sheet_units": "",
+        "crescent_material": "cork",
         # Feeds & Speeds Tester
         "feeds_speeds_tester": {
             "material": "Felt",
@@ -966,6 +1208,7 @@ DEFAULT_SETTINGS = {
     "laser_framing_power_s": 10,    # Grbl S value during framing (0-1000)
     "laser_framing_power_by_material": {
         "felt": 10, "card": 10, "leather": 10, "acrylic": 10, "basswood": 10,
+        "adhesive_ring": 10, "cork": 10,
     },
     "laser_framing_feed": 2000,     # mm/min during framing
     # Bed dimensions in machine-mm — defaults match the Creality Falcon2
@@ -1011,6 +1254,10 @@ DEFAULT_SETTINGS = {
     # auto-detect on each open (find_falcon_camera_index → fall back
     # to last enumerated).
     "camera_index_override": None,
+    # The Pad Maker's "Live camera preview" tick. Saved by _save_checkbox since
+    # v2.5 but never declared here, so load_settings dropped it on every start
+    # (found by the settings-key gate, 2026-11-10).
+    "show_live_camera": False,
     # Draw / Capture Shape grid size, in the corresponding unit.
     # Defaults match a Falcon2 Pro 40W's 15.75 × 15.75 in / 400 × 415
     # mm bed with a small margin. Override here for larger machines —
@@ -1022,11 +1269,21 @@ DEFAULT_SETTINGS = {
 
     # TUTORIAL FLAGS
     "seen_polygon_tutorial": False,
+    # The version whose Welcome window this install has already seen
+    # (main.maybe_show_welcome). It shows once on the first launch of each
+    # version, new install or update: "" here means never, so an existing
+    # user gets it once after updating to the first version that has it.
+    "welcomed_version": "",
     "seen_kerf_test_tutorial": False,
     "seen_calibration_tutorial": False,
 
     # AUDIO INPUT
     "audio_input_device": None,  # None = system default, or device index
+    # The chosen device's name as get_input_devices lists it. The index moves
+    # when a microphone is plugged in or out; the name is what is looked up
+    # (input_device_for). None with the system default, and in a profile from
+    # before 2026-11-12, which adopts the name of its index on first use.
+    "audio_input_device_name": None,
     "capture_threshold": 50,     # 0-100, how loud a signal must be to trigger capture
     "toner_record_wav": True,    # Record WAV audio during toner capture sessions
     "toner_recording_dir": "",   # Directory for WAV recordings (empty = Music/StohrerSaxShopCompanion)
@@ -1037,7 +1294,8 @@ DEFAULT_SETTINGS = {
     "visible_sax_types": None,  # None = all types, or list of type names
 
     # TONER ACCESS
-    "toner_unlocked": False,
+    "toner_unlocked": False,            # the harmonics side's one-time terms were accepted (gates the Harmonics switch)
+    "analyzer_tab_shown_v3": False,     # the one-time migration below has run (the Analyzer tab default-on, 2026-11-10)
     "toner_sandbox_enabled": False,  # Show sandbox checkbox when creating presets
 
     # EXPERIMENTAL FEATURES — opt-in via Feature Set dialog. Off by
@@ -1066,7 +1324,7 @@ DEFAULT_SETTINGS = {
         "Screw Specs": True,
         "Tooling": True,
         "Tuner": True,
-        "Toner": False,
+        "Toner": True,      # the Analyzer tab (its settings key keeps the old name); default-on since 2026-11-10
     },
 
     "key_layout": {
@@ -1112,6 +1370,7 @@ DEFAULT_SETTINGS = {
         'exact_size_center_hole': '#A0A000',
         'exact_size_engraving': '#BB7784',
         'leather_locator': '#00E0E0',
+        'adhesive_ring_cut': '#FF00FF',
         'die_outer_cut': '#FF0000',
         'die_inner_cut': '#0000FF',
         'die_engraving': '#00E000',
@@ -1125,71 +1384,107 @@ DEFAULT_SETTINGS = {
 # IO FUNCTIONS
 # ==========================================
 
+def read_json(path):
+    """The JSON in a file: read as UTF-8 (with or without a byte order mark),
+    and when it is not UTF-8, in the system's encoding, as every file was read
+    until 2026-11-13.
+
+    This app writes its JSON as plain ASCII, which reads the same either way.
+    A file another program wrote, or a person edited and saved, is usually
+    UTF-8; read in the Windows system encoding, a name with an accent came in
+    garbled ("S\u00e9rie" as "S\u00c3\u00a9rie") and a Japanese one as noise. Every JSON
+    file the app loads or imports goes through here. Raises what open() and
+    json.load() raise."""
+    with open(path, 'rb') as f:
+        raw = f.read()
+    try:
+        text = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        import locale
+        text = raw.decode(locale.getpreferredencoding(False))
+    return json.loads(text)
+
+
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
         try:
-            with open(SETTINGS_FILE, 'r') as f:
-                loaded_settings = json.load(f)
-                settings = copy.deepcopy(DEFAULT_SETTINGS)
+            loaded_settings = read_json(SETTINGS_FILE)
+            settings = copy.deepcopy(DEFAULT_SETTINGS)
 
-                # Deep copy key_layout to avoid shared references
-                if "key_layout" not in loaded_settings:
-                    loaded_settings["key_layout"] = settings["key_layout"].copy()
+            # Deep copy key_layout to avoid shared references
+            if "key_layout" not in loaded_settings:
+                loaded_settings["key_layout"] = settings["key_layout"].copy()
 
-                # Merge loaded settings into default structure
-                for key, default_value in DEFAULT_SETTINGS.items():
-                    if key in loaded_settings:
-                        if isinstance(default_value, dict):
-                            # Only merge if loaded value is also a dict; otherwise keep default
-                            if not isinstance(loaded_settings[key], dict):
-                                continue
-                            settings[key] = {}
-                            for sub_key, sub_default in default_value.items():
-                                if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
-                                    # Two-level deep merge (e.g. gcode_settings.felt).
-                                    # Filter nulls so old configs can't smuggle None
-                                    # past the defaults (same rule as top level).
-                                    settings[key][sub_key] = sub_default.copy()
-                                    settings[key][sub_key].update(
-                                        {k: v for k, v in loaded_settings[key][sub_key].items() if v is not None})
-                                elif sub_key in loaded_settings[key] and loaded_settings[key][sub_key] is not None:
-                                    settings[key][sub_key] = loaded_settings[key][sub_key]
-                                else:
-                                    settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
-                        else:
-                            # Don't replace defaults with None — old configs may have nulls
-                            if loaded_settings[key] is not None:
-                                settings[key] = loaded_settings[key]
+            # Merge loaded settings into default structure
+            for key, default_value in DEFAULT_SETTINGS.items():
+                if key in loaded_settings:
+                    if isinstance(default_value, dict):
+                        # Only merge if loaded value is also a dict; otherwise keep default
+                        if not isinstance(loaded_settings[key], dict):
+                            continue
+                        settings[key] = {}
+                        for sub_key, sub_default in default_value.items():
+                            if isinstance(sub_default, dict) and isinstance(loaded_settings[key].get(sub_key), dict):
+                                # Two-level deep merge (e.g. gcode_settings.felt).
+                                # Filter nulls so old configs can't smuggle None
+                                # past the defaults (same rule as top level).
+                                settings[key][sub_key] = sub_default.copy()
+                                settings[key][sub_key].update(
+                                    {k: v for k, v in loaded_settings[key][sub_key].items() if v is not None})
+                            elif sub_key in loaded_settings[key] and loaded_settings[key][sub_key] is not None:
+                                settings[key][sub_key] = loaded_settings[key][sub_key]
+                            else:
+                                settings[key][sub_key] = sub_default if not isinstance(sub_default, dict) else sub_default.copy()
+                    else:
+                        # Don't replace defaults with None — old configs may have nulls
+                        if loaded_settings[key] is not None:
+                            settings[key] = loaded_settings[key]
 
-                # Validate layer_colors: old versions used LightBurn codes (C10, C15)
-                # instead of hex colors. Replace any non-hex values with defaults.
-                if "layer_colors" in settings and isinstance(settings["layer_colors"], dict):
-                    default_colors = DEFAULT_SETTINGS["layer_colors"]
-                    for key, val in settings["layer_colors"].items():
-                        if not isinstance(val, str) or not val.startswith("#"):
-                            settings["layer_colors"][key] = default_colors.get(key, "#000000")
+            # Validate layer_colors: old versions used LightBurn codes (C10, C15)
+            # instead of hex colors. Replace any non-hex values with defaults.
+            if "layer_colors" in settings and isinstance(settings["layer_colors"], dict):
+                default_colors = DEFAULT_SETTINGS["layer_colors"]
+                for key, val in settings["layer_colors"].items():
+                    if not isinstance(val, str) or not val.startswith("#"):
+                        settings["layer_colors"][key] = default_colors.get(key, "#000000")
 
-                # Migrate dart_shape_factor from the old sine→square spectrum
-                # (0.0=sine, 1.0=square) to the new triangle→sine→square one
-                # (0.0=triangle, 0.5=sine, 1.0=square). Old value v maps to
-                # 0.5 + 0.5*v. Run once, gated on dart_shape_v2.
-                if not loaded_settings.get("dart_shape_v2"):
-                    if "dart_shape_factor" in loaded_settings:
+            # Migrate dart_shape_factor from the old sine→square spectrum
+            # (0.0=sine, 1.0=square) to the new triangle→sine→square one
+            # (0.0=triangle, 0.5=sine, 1.0=square). Old value v maps to
+            # 0.5 + 0.5*v. Run once, gated on dart_shape_v2.
+            if not loaded_settings.get("dart_shape_v2"):
+                if "dart_shape_factor" in loaded_settings:
+                    try:
+                        old_v = float(loaded_settings["dart_shape_factor"])
+                        settings["dart_shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
+                    except (TypeError, ValueError):
+                        pass
+                for r in settings.get("dart_ranges", []):
+                    if "shape_factor" in r:
                         try:
-                            old_v = float(loaded_settings["dart_shape_factor"])
-                            settings["dart_shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
+                            old_v = float(r["shape_factor"])
+                            r["shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
                         except (TypeError, ValueError):
                             pass
-                    for r in settings.get("dart_ranges", []):
-                        if "shape_factor" in r:
-                            try:
-                                old_v = float(r["shape_factor"])
-                                r["shape_factor"] = 0.5 + 0.5 * max(0.0, min(1.0, old_v))
-                            except (TypeError, ValueError):
-                                pass
-                    settings["dart_shape_v2"] = True
+                settings["dart_shape_v2"] = True
 
-                return settings
+            # Validation at the door (settings_schema.py, 2026-11-10): a value of
+            # the wrong type or outside its declared values goes back to its
+            # default, logged once with the key, the value and the file. After
+            # the merge and the migrations above, which stay as they were. It
+            # must never cost a user their file: a fault in the check itself is
+            # logged and the merged values are used as they are.
+            try:
+                from settings_schema import validate_settings
+                for path, bad, field in validate_settings(settings, DEFAULT_SETTINGS):
+                    logging.getLogger("ssc.settings").warning(
+                        "%s: %s was %.80r, not %s; the default is used",
+                        SETTINGS_FILE, path, bad, field.describe())
+            except Exception:
+                logging.getLogger("ssc.settings").exception(
+                    "settings validation failed; the loaded values are used as they are")
+
+            return settings
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError, ValueError):
             _preserve_corrupt_file(SETTINGS_FILE)
             return copy.deepcopy(DEFAULT_SETTINGS)
@@ -1220,8 +1515,9 @@ def _preserve_corrupt_file(path):
             shutil.copy2(path, backup)
             logging.getLogger(__name__).warning(
                 "Could not parse %s — copy preserved at %s", path, backup)
-    except OSError:
-        pass
+    except OSError as e:
+        logging.getLogger(__name__).warning(
+            "could not keep a copy of the unreadable %s before defaults replace it: %s", path, e)
 
 def save_settings(settings):
     try:
@@ -1234,8 +1530,7 @@ def load_presets(file_path, preset_type_name="Preset"):
     data = {}
     if os.path.exists(file_path):
         try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
+            data = read_json(file_path)
             if not isinstance(data, dict):
                 data = {}
         except (json.JSONDecodeError, TypeError):
@@ -1281,8 +1576,7 @@ def load_job_history():
     if not os.path.exists(JOB_HISTORY_FILE):
         return []
     try:
-        with open(JOB_HISTORY_FILE, 'r') as f:
-            data = json.load(f)
+        data = read_json(JOB_HISTORY_FILE)
     except (json.JSONDecodeError, TypeError, ValueError, OSError):
         _preserve_corrupt_file(JOB_HISTORY_FILE)
         return []

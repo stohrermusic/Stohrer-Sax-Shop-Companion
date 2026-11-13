@@ -14,8 +14,13 @@ Requires: numpy, sounddevice (imported with try/except for graceful fallback)
 
 import math
 import json
+import logging
 import os
 from collections import deque, namedtuple
+
+from threads import gc_held, start_worker
+
+log = logging.getLogger(__name__)
 
 # numpy and sounddevice are imported separately: the analysis math needs only
 # numpy, and a build with numpy but no sounddevice (the Intel Mac) must keep
@@ -28,6 +33,14 @@ except ImportError:
 try:
     import sounddevice as sd
 except (ImportError, OSError):
+    sd = None
+except Exception as _audio_error:
+    # sounddevice starts PortAudio when it is imported, and a machine whose sound system
+    # will not start raises sounddevice.PortAudioError there (it cannot be named: the
+    # import is what failed). Uncaught, that ended the whole app at launch for want of a
+    # tuner (a CI Linux runner, 2026-11-12: "Error initializing PortAudio"). No audio.
+    import logging as _logging
+    _logging.getLogger(__name__).warning("audio unavailable: PortAudio did not start: %s", _audio_error)
     sd = None
 AUDIO_AVAILABLE = np is not None and sd is not None
 
@@ -42,6 +55,7 @@ SAMPLE_RATE = 44100
 BUFFER_SECONDS = 0.4          # 400ms for better low-frequency resolution
 BUFFER_SIZE = int(SAMPLE_RATE * BUFFER_SECONDS)
 FFT_SIZE = 16384              # ~370ms, ~2.69 Hz bin resolution
+WINDOW_S = FFT_SIZE / SAMPLE_RATE  # one analysis window: a frame reads the last WINDOW_S (0.37 s) of sound
 
 MAX_HARMONICS = 20            # Analyze up to 20th harmonic
 SPECTRUM_MAX_HZ = 8000        # Display range for spectrum
@@ -51,6 +65,10 @@ PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
 # Minimum fundamental frequency. Bari sax written Bb3 = concert Db2 (~69 Hz),
 # so 65 Hz covers all standard saxophone types including baritone.
 MIN_FUNDAMENTAL_HZ = 65.0
+# Bass alone goes lower: its four lowest notes (G#1 51.9 Hz to B1 61.7 Hz) lie under
+# 65 Hz and read an octave up even clean. 50 Hz reads every bass note right under every
+# condition of the generated sweep; 45 Hz let a noise bump in (2026-11-11).
+MIN_FUNDAMENTAL_HZ_BASS = 50.0
 # Maximum fundamental frequency (altissimo range ~ 1500 Hz)
 MAX_FUNDAMENTAL_HZ = 2000.0
 
@@ -65,6 +83,14 @@ SUBHARM_PROMINENCE_STRICT = 1.5
 SUBHARM_PROMINENCE_RELAXED = 1.3
 # Noise floor multiplier for harmonic series verification peaks
 HARMONIC_VERIFY_NOISE_MULT = 3.0
+# A sub-harmonic candidate's own peak must also be within this many dB of the
+# strongest peak in the fundamental range. The thresholds above are set against the
+# window's noise median, which a quiet room or a clean tone puts so low that spectral
+# leakage at a third or a fifth of a note passes for its fundamental: measured
+# 2026-11-11, spurious candidates sat 44 to 71 dB under the strongest peak, real
+# fundamentals 8 dB under at worst in generated tones and 22 dB at the 99th
+# percentile of Matt's library (8,114 captures).
+SUBHARM_MIN_REL_DB = -36.0
 # Required harmonic matches for low divisors (2-3), counting the sub-harmonic's
 # own peak; the rest must come from multiples coprime to the divisor
 HARMONIC_MATCHES_LOW = 2
@@ -72,6 +98,13 @@ HARMONIC_MATCHES_LOW = 2
 HARMONIC_MATCHES_HIGH = 3
 # Octave jump hysteresis: new peak must be this much stronger to override previous
 OCTAVE_HYSTERESIS_FACTOR = 1.5
+# An octave jump that is not the clearly stronger peak is held at the previous octave
+# for at most this many windows in a row (6 x 23 ms = 0.14 s); after that the window's
+# own reading wins (see _settle_octave). Measured 2026-11-11 on generated tones and the
+# recordings corpus: 3 to 12 all read every generated note right (16 reaches into a
+# capture's kept frames); 6 corrects every wrong capture the old hold made and halves
+# the flicker of no hold; 8 and above leave some of them wrong.
+OCTAVE_LATCH_WINDOWS = 6
 
 # --- Signal level and sensitivity ---
 # RMS display scaling factor (maps raw RMS to 0-1 signal level indicator)
@@ -138,7 +171,7 @@ def get_rolloff_threshold(mic_type, sax_type=None):
     are conservative — bumped only enough to stop legitimately-rolloff-
     heavy combinations from false-firing the warning. NOT calibrated
     against a population:
-      - alto + dynamic: 3.5 (Foster's Conn 6M with RE20 reads 2.99–3.49
+      - alto + dynamic: 3.5 (a contributed Conn 6M with RE20 reads 2.99–3.49
         across 8 mpcs; same mic on his bari reads 1.5–2.3)
     Refine as more sax-type × mic-type combinations come in.
 
@@ -152,7 +185,7 @@ def get_rolloff_threshold(mic_type, sax_type=None):
         return 3.5
     if mt == 'dynamic':
         # Alto reads ~1 dB/H higher than tenor/bari with the same dynamic
-        # mic — Foster's two shootouts are the only data point so far.
+        # mic — one player's two shootouts are the only data point so far.
         if st == 'alto':
             return 3.5
         return 2.8
@@ -195,6 +228,7 @@ class TonerResult:
         'harmonic_bars',         # list of (freq, magnitude_db) for bar-only mode
         'descriptors',           # dict: richness, warmth
         'signal_level',          # 0.0-1.0, RMS input level
+        'level_dbfs',            # dB against full scale, or None in silence (level_dbfs)
         'spectral_centroid',     # Hz, amplitude-weighted center of harmonic series
     ]
 
@@ -212,7 +246,22 @@ class TonerResult:
             'low_harmonic_data': False,
         }
         self.signal_level = 0.0
+        self.level_dbfs = None
         self.spectral_centroid = 0.0
+
+
+def level_dbfs(rms):
+    """An rms as dB against full scale; None for silence. Against the input, so a level
+    compares with another taken at the same microphone place and gain, not with a sound
+    level meter. (2026-11-10.)"""
+    return 20.0 * math.log10(rms) if rms > 0.0 else None
+
+
+def mean_level_dbfs(levels):
+    """The level of frames taken together: their power averaged, not their decibels;
+    None with none."""
+    got = [10.0 ** (v / 10.0) for v in levels if v is not None]
+    return round(10.0 * math.log10(sum(got) / len(got)), 1) if got else None
 
 
 # ============================================
@@ -226,26 +275,49 @@ _BUILTIN_MIC_KEYWORDS = [
 ]
 
 
+MIC_CHECK_BOUND_S = 5.0   # how long the default-device query may take before it is given up
+
+
 def check_mic_quality():
     """Check if the default input device looks like a built-in mic.
 
     Returns:
         (is_builtin, device_name) — is_builtin is True if the default
         input device name matches known built-in mic patterns.
+
+    The device query runs on a daemon thread with a bound (2026-11-10):
+    PortAudio can block without bound on a machine with a strange audio
+    device, and this is the one query the Toner tab makes on its first
+    start before any stream is opened, synthetic tone or not, so the
+    toner suite and the CI tour reach it too. Past the bound the check
+    answers (False, "unknown") and logs once; the stuck thread is left
+    behind.
     """
     if not AUDIO_AVAILABLE:
         return False, "unknown"
-    try:
-        default_input = sd.default.device[0]
-        if default_input is None or default_input < 0:
-            return False, "unknown"
-        info = sd.query_devices(default_input)
-        name = info.get('name', '')
-        name_lower = name.lower()
-        is_builtin = any(kw in name_lower for kw in _BUILTIN_MIC_KEYWORDS)
-        return is_builtin, name
-    except Exception:
+    box = {}
+
+    def query():
+        try:
+            default_input = sd.default.device[0]
+            if default_input is None or default_input < 0:
+                box['result'] = (False, "unknown")
+                return
+            info = sd.query_devices(default_input)
+            name = info.get('name', '')
+            name_lower = name.lower()
+            box['result'] = (any(kw in name_lower for kw in _BUILTIN_MIC_KEYWORDS), name)
+        except Exception:
+            box['result'] = (False, "unknown")
+
+    with gc_held():                  # the Tk thread waits here: see threads.py
+        t = start_worker(query, name="mic-check")
+        t.join(MIC_CHECK_BOUND_S)
+    if t.is_alive():
+        log.warning("the audio device did not answer a device query in %.0f s; "
+                    "the microphone check is skipped", MIC_CHECK_BOUND_S)
         return False, "unknown"
+    return box.get('result', (False, "unknown"))
 
 
 class TonerEngine:
@@ -259,11 +331,15 @@ class TonerEngine:
         self._running = False
         self._window = None
         self._last_fundamental = 0.0  # For temporal smoothing
+        self._octave_pending = 0      # (direction, windows in a row) of an octave jump being held, or 0
+        self._latch_windows = OCTAVE_LATCH_WINDOWS
+        self._min_fundamental_hz = min_fundamental_hz_for(None)
         # Synthetic source (see audio_utils.synthetic_tone): when set (Hz),
         # start() opens no microphone and analyze() feeds a harmonic-rich
         # tone into the ring buffer itself. Test/CI hook, never set in use.
         self.synthetic_hz = None
         self._synth_pos = 0
+        self._samples_in = 0      # samples the input has handed over since start(): the audio clock
         self._harmonic_history = deque(maxlen=DESCRIPTOR_AVG_FRAMES)
         self._last_device = None  # For auto-restart
         self._stale_count = 0  # Consecutive stale reads
@@ -297,6 +373,7 @@ class TonerEngine:
         # which sax the engine is configured for.
         self.sax_type = sax_type
         self._break_freq = BREAK_FREQUENCIES.get(sax_type, DEFAULT_BREAK_FREQ)
+        self._min_fundamental_hz = min_fundamental_hz_for(sax_type)
 
     @property
     def reference_pitch(self):
@@ -320,6 +397,7 @@ class TonerEngine:
         self._window = np.hanning(FFT_SIZE).astype(np.float32)
         self._last_device = device
         self._stale_count = 0
+        self._samples_in = 0
         self.last_error = None
 
         if self.synthetic_hz:
@@ -363,10 +441,30 @@ class TonerEngine:
             self._synth_pos, n, float(self.synthetic_hz), SAMPLE_RATE,
             harmonics_db=(0.0, -3.0, -6.0, -10.0, -14.0, -18.0, -22.0)))
         self._synth_pos += n
+        self._samples_in += n
+
+    @property
+    def audio_time_s(self):
+        """Seconds of sound the input has handed over since start(): the capture
+        machine's clock. Audio time, not the wall clock, so a WAV fed faster than
+        real time counts the same seconds; on a live microphone the two agree
+        (2026-11-10)."""
+        return self._samples_in / SAMPLE_RATE
 
     def start_recording(self):
-        """Begin accumulating raw audio for WAV export."""
+        """Begin accumulating raw audio for WAV export. The recording's clock starts
+        here: `recording_time_s` is the audio time since, which is where in the WAV a
+        later moment falls (each guided note's `wav_start_s` / `wav_end_s`)."""
         self._recording_chunks = []
+        self._recording_start_s = self.audio_time_s
+
+    @property
+    def recording_time_s(self):
+        """Seconds of recording so far (audio time since start_recording), or None
+        while nothing is being recorded."""
+        if self._recording_chunks is None:
+            return None
+        return self.audio_time_s - self._recording_start_s
 
     def stop_recording(self):
         """Stop accumulating audio. Returns the chunks list, or None."""
@@ -394,6 +492,7 @@ class TonerEngine:
         return self._running
 
     def _audio_callback(self, indata, frames, time_info, status):
+        self._samples_in += int(frames)
         if self._ring_buffer is not None:
             self._ring_buffer.write(indata[:, 0])
         chunks = self._recording_chunks
@@ -429,6 +528,10 @@ class TonerEngine:
         if audio is None:
             return result
 
+        # The reading before this window: analyze_buffer() moves
+        # _last_fundamental to this window's own, so a note change can only
+        # be seen against a value read here, first.
+        prev_fundamental = self._last_fundamental
         result = self.analyze_buffer(audio)
 
         # --- Multi-frame averaging for descriptor stability ---
@@ -438,9 +541,9 @@ class TonerEngine:
         # analyze_buffer() remains stateless for tests.
         if result.harmonics and result.fundamental_freq > 0:
             # Clear history on note change (>1 semitone)
-            if (self._last_fundamental > 0 and
+            if (prev_fundamental > 0 and
                     abs(1200.0 * math.log2(
-                        result.fundamental_freq / self._last_fundamental)) > 100):
+                        result.fundamental_freq / prev_fundamental)) > 100):
                 self._harmonic_history.clear()
             frame_data = {}
             for h in result.harmonics:
@@ -492,6 +595,7 @@ class TonerEngine:
         # RMS signal level
         rms = float(np.sqrt(np.mean(audio[-FFT_SIZE:] ** 2)))
         result.signal_level = min(1.0, rms * RMS_DISPLAY_SCALE)
+        result.level_dbfs = level_dbfs(rms)
 
         # Sensitivity threshold
         sensitivity_scale = 1.0 + (100 - self._sensitivity) * TONER_SENSITIVITY_FACTOR
@@ -568,23 +672,41 @@ class TonerEngine:
         return result
 
     def _detect_fundamental(self, mags, bin_freq):
-        """Detect fundamental frequency using peak-picking with harmonic
-        series verification.
+        """The fundamental of this window in Hz, 0.0 for none.
 
-        Strategy:
+        Two steps: `_fundamental_candidate` picks the window's own candidate
+        (the strongest peak, or the lowest sub-harmonic of it whose own
+        harmonic series verifies it) and `_settle_octave` weighs an octave
+        jump against the previous window's reading. The number returned is
+        always a measurement of THIS window (the Hann closed form at the
+        chosen peak), never one carried over from an earlier window.
+        """
+        candidate_bin, verified = self._fundamental_candidate(mags, bin_freq)
+        if candidate_bin <= 0:
+            return 0.0
+        new_freq = hann_peak_freq(mags, candidate_bin, bin_freq)
+        new_freq = self._settle_octave(new_freq, candidate_bin, verified, mags, bin_freq)
+        self._last_fundamental = new_freq
+        return new_freq
+
+    def _fundamental_candidate(self, mags, bin_freq):
+        """This window's own candidate for the fundamental: (bin, verified).
+
         1. Find the strongest spectral peak in the valid range
         2. Check if sub-harmonics (f/2, f/3, f/4, f/5) could be the real
            fundamental by verifying they have their OWN harmonic series
         3. A sub-harmonic is only accepted if multiple of its harmonics
            also have peaks — not just the sub-harmonic alone
         4. Pick the lowest verified sub-harmonic (deepest fundamental)
-        5. Apply temporal hysteresis for stability
+
+        `verified` is True when a sub-harmonic passed that check; (0, False)
+        when the window has no peak to read.
         """
-        min_bin = max(1, int(MIN_FUNDAMENTAL_HZ / bin_freq))
+        min_bin = max(1, int(self._min_fundamental_hz / bin_freq))
         max_bin = min(len(mags) - 2, int(MAX_FUNDAMENTAL_HZ / bin_freq))
 
         if max_bin <= min_bin:
-            return 0.0
+            return 0, False
 
         # Find the strongest peak in the fundamental range
         search_range = mags[min_bin:max_bin + 1]
@@ -592,7 +714,7 @@ class TonerEngine:
         strongest_mag = float(mags[strongest_bin])
 
         if strongest_mag <= 0:
-            return 0.0
+            return 0, False
 
         # Noise floor for peak detection
         noise_floor = float(np.median(mags[min_bin:max_bin])) if max_bin > min_bin else 0.0
@@ -625,6 +747,8 @@ class TonerEngine:
             noise_thresh = noise_floor * (SUBHARM_NOISE_MULT_STRICT if divisor <= 3 else SUBHARM_NOISE_MULT_RELAXED)
             if local_mag < noise_thresh:
                 continue
+            if local_mag < strongest_mag * 10 ** (SUBHARM_MIN_REL_DB / 20.0):
+                continue                    # leakage or a noise bump, not a fundamental (SUBHARM_MIN_REL_DB)
             left_mag = float(mags[max(0, local_peak - 4)])
             right_mag = float(mags[min(len(mags) - 1, local_peak + 4)])
             prominence = SUBHARM_PROMINENCE_STRICT if divisor <= 3 else SUBHARM_PROMINENCE_RELAXED
@@ -664,33 +788,59 @@ class TonerEngine:
                     best_candidate = local_peak
 
         if best_candidate is not None:
-            candidate_bin = best_candidate
+            return best_candidate, True
+        return candidate_bin, False
 
-        # Candidate's frequency from the Hann peak estimator
-        if 0 < candidate_bin < len(mags) - 1:
-            new_freq = hann_peak_freq(mags, candidate_bin, bin_freq)
-        else:
-            new_freq = candidate_bin * bin_freq
+    def _settle_octave(self, new_freq, candidate_bin, verified, mags, bin_freq):
+        """Weigh an octave jump against the previous window's reading.
 
-        # Temporal hysteresis: if the previous detection was stable and the
-        # new one is an octave jump (ratio near 2.0 or 0.5), require the
-        # new frequency to be the stronger peak. This prevents flickering.
+        A reading an octave from the previous one (within 10 % of 2x or 0.5x)
+        whose peak is not clearly the stronger (OCTAVE_HYSTERESIS_FACTOR) is
+        held at the previous octave, so a marginal harmonic cannot flicker a
+        note between octaves. The hold is a fresh measurement of THIS window
+        at the previous octave's peak, never the previous number, and it
+        cannot outlive the evidence: a reading that keeps coming back wins
+        after OCTAVE_LATCH_WINDOWS windows in a row, whether or not it
+        verified its own harmonic series (letting a verified candidate win at
+        once was measured and rejected: under noise a bump at half the note
+        verifies for a window or two and the reading followed it, 23 cents off
+        the averaged note). Until 2026-11-11 the hold returned the previous
+        number and never ended: a note starting from silence with its second
+        harmonic the louder read an octave high for its whole length, at a
+        frequency frozen from a partly filled window. `verified` is kept in
+        the signature for the record and for tests.
+        """
         prev = self._last_fundamental
-        if prev > 0 and new_freq > 0:
-            ratio = new_freq / prev
-            # Check for octave-ish jumps (within 10% of 2x or 0.5x)
-            if 0.45 < ratio < 0.55 or 1.8 < ratio < 2.2:
-                # Is the previous frequency's bin still strong?
-                prev_bin = int(round(prev / bin_freq))
-                if 0 < prev_bin < len(mags) - 1:
-                    prev_mag = float(mags[prev_bin])
-                    new_mag = float(mags[candidate_bin])
-                    # Stick with previous unless new is clearly stronger
-                    if new_mag < prev_mag * OCTAVE_HYSTERESIS_FACTOR:
-                        new_freq = prev
-
-        self._last_fundamental = new_freq
-        return new_freq
+        if prev <= 0 or new_freq <= 0:
+            self._octave_pending = 0
+            return new_freq
+        ratio = new_freq / prev
+        if 0.45 < ratio < 0.55:
+            direction = -1
+        elif 1.8 < ratio < 2.2:
+            direction = 1
+        else:
+            self._octave_pending = 0
+            return new_freq
+        # The previous octave's peak in this window (the previous reading's bin, or a
+        # neighbour: the Hann estimate sits between bins)
+        prev_bin = int(round(prev / bin_freq))
+        lo = max(1, prev_bin - 2)
+        hi = min(len(mags) - 2, prev_bin + 2)
+        if hi < lo:
+            self._octave_pending = 0
+            return new_freq
+        prev_peak = lo + int(np.argmax(mags[lo:hi + 1]))
+        if float(mags[candidate_bin]) >= float(mags[prev_peak]) * OCTAVE_HYSTERESIS_FACTOR:
+            self._octave_pending = 0          # clearly the stronger peak: the jump is real
+            return new_freq
+        pend = self._octave_pending
+        count = pend[1] + 1 if pend and pend[0] == direction else 1
+        if count >= self._latch_windows:
+            self._octave_pending = 0          # held long enough: the window's own reading wins
+            return new_freq
+        self._octave_pending = (direction, count)
+        return hann_peak_freq(mags, prev_peak, bin_freq)   # held: this window, at the previous octave
 
     def _freq_to_note(self, freq):
         """Convert frequency to note name and cents deviation."""
@@ -922,13 +1072,13 @@ class TonerEngine:
 # Minimum unique notes to consider a preset "complete"
 MIN_PRESET_NOTES = 8
 
-# Attack transient skip — applied to ALL capture modes.
-# Saxophone attacks are 40-120ms depending on articulation. The attack
-# contains non-harmonic broadband energy that doesn't represent the
-# horn's sustained tone character. Research confirms the sustained
-# portion is the stable harmonic fingerprint we want to measure.
-# (Saldanha & Corso 1964, Caetano et al., PMC 6166322)
-ATTACK_SKIP_FRAMES = 3    # ~100ms at 30fps — skip these after note onset
+# Attack transient skip — until 2026-11-10 applied to every capture mode: the
+# first three frames of a note were dropped (saxophone attacks are 40-120 ms
+# of non-harmonic energy; Saldanha & Corso 1964, Caetano et al., PMC 6166322),
+# but the release was kept. Superseded by `whole_window`: a frame is kept only
+# when its whole analysis window lies inside the note, which drops the onset
+# AND the release. Kept for the record; nothing reads it.
+ATTACK_SKIP_FRAMES = 3    # ~100ms at 30fps
 
 # Capture timing
 CAPTURE_DELAY_S = 1.0     # Seconds settle for calibration mode
@@ -993,6 +1143,21 @@ def transpose_note(concert_note, sax_type):
     return _shift_note(concert_note, shift)
 
 
+PLAYER_SPELLING = {"A#": "Bb", "D#": "Eb"}     # the rest (C#, F#, G#) a player writes as sharps
+
+
+def player_note_name(note_name):
+    """A note name as a saxophone player writes it: Bb and Eb for A# and D#, the other
+    sharps as they are (Matt, 2026-11-10). For display only: stored names, the pitch
+    tables and the parsers keep this app's sharps-only spelling."""
+    if not note_name or len(note_name) < 2:
+        return note_name
+    pc, octave = note_name[:2], note_name[2:]
+    if pc in PLAYER_SPELLING:
+        return PLAYER_SPELLING[pc] + octave
+    return note_name
+
+
 def reverse_transpose_note(written_note, sax_type):
     """Transpose a written pitch note name back to concert pitch.
 
@@ -1052,6 +1217,13 @@ SAX_NOTE_RANGES = {
     "Baritone":  (36, 69),   # C2  – A4  concert  (low A  – high F#5 written)
     "Bass":      (32, 64),   # Ab1 – E4  concert  (low Bb – high F#5 written)
 }
+
+
+def min_fundamental_hz_for(sax_type):
+    """The detector's floor for a horn type: MIN_FUNDAMENTAL_HZ_BASS for Bass, MIN_FUNDAMENTAL_HZ
+    for every other type and for none. The engine reads it in set_sax_type; the guided run's
+    note list and its "low notes skipped" count use it too."""
+    return MIN_FUNDAMENTAL_HZ_BASS if sax_type == "Bass" else MIN_FUNDAMENTAL_HZ
 
 
 def find_out_of_range_notes(per_note_keys, sax_type):
@@ -1119,6 +1291,36 @@ def descriptors_from_harmonics(harmonics_db, f0, sax_type="Tenor",
         cents = harmonic_cents[i] if harmonic_cents and i < len(harmonic_cents) else 0.0
         harmonics.append(HarmonicInfo(i + 1, f0 * (i + 1), f0 * (i + 1), db, cents))
     return engine._compute_descriptors(harmonics, f0=f0)
+
+
+def whole_window(times, first_t, last_t):
+    """Which frames of a held note have their whole analysis window inside it.
+
+    A frame at audio time `t` reads the last WINDOW_S of sound, so its window
+    holds the note's onset when t < first_t + WINDOW_S and its release (or the
+    next note) when t > last_t - WINDOW_S. Only the frames between are averaged
+    into a capture. Since 2026-11-10; until then the live modes skipped three frames of attack and
+    kept the release, and the file analyzer did the same. One bool per time.
+    """
+    return [first_t + WINDOW_S <= t <= last_t - WINDOW_S for t in times]
+
+
+def frames_frequency(freqs):
+    """The frequency of a capture from its frames' readings: their median.
+
+    One wild frame (a window that read an octave or a fifth of the note) moved
+    a mean by tens of cents; the median of a held note's frames does not move.
+    Readings of 0 (no pitch) are left out; 0.0 with nothing to read. The one
+    place a capture's frequency is taken from frames: the file path and both
+    live modes call it.
+    """
+    vals = sorted(f for f in freqs if f and f > 0)
+    if not vals:
+        return 0.0
+    mid = len(vals) // 2
+    if len(vals) % 2:
+        return float(vals[mid])
+    return (vals[mid - 1] + vals[mid]) / 2.0
 
 
 def average_captures(captures):
@@ -1192,6 +1394,75 @@ def compute_rolloff_rate(harmonics_db):
     return abs(harmonics_db[last_idx] - harmonics_db[1]) / span
 
 
+A4_HZ = 440.0
+
+
+def midi_to_hz(midi, reference_hz=A4_HZ):
+    """The equal-tempered frequency of a MIDI number at this A."""
+    return reference_hz * 2 ** ((midi - 69) / 12)
+
+
+def cents_from_equal_temperament(f0_hz, concert_midi, reference_hz=A4_HZ):
+    """How far a fundamental lies from its note's equal-tempered pitch, in cents."""
+    return 1200.0 * math.log2(f0_hz / midi_to_hz(concert_midi, reference_hz))
+
+
+OFF_NOTE_CENTS = 50.0
+"""How far a take's pitch may lie from its labelled note and still be that note: half a
+semitone, beyond which it is nearer another note. The line is clean in practice: in Matt's
+library (8,114 captures, 2026-11-10) the furthest kept take is 49.7 cents off and the nearest
+left-out one 112 cents; the 551 left out are six presets from 2026-03-23/25 whose labels sit
+two transpositions below the sounding pitch (an early storage mistake), plus detector slips."""
+
+
+def corrected_label(concert_midi, f0_hz, sax_type, reference_hz=A4_HZ):
+    """The note a take with the March 2026 label really is, or None.
+
+    Six presets captured on 2026-03-23/25 (the Toner's first weeks) stored every
+    `note` two transpositions below the sounding pitch: 28 semitones on a tenor, 18 on
+    an alto, 4 on a soprano. Matt (2026-11-10): "Correct for sure." The rule applies
+    only when the label is off by exactly 2T, within OFF_NOTE_CENTS, AND the corrected
+    note lies in the horn's range; nothing else is ever re-labelled. A take an octave
+    above that again is the detector's own slip on the lowest asked notes (its pitch
+    is not the asked note either) and stays out. Read-side only. Lived in intonation.py
+    until 2026-11-11; here so the fingerprint applies the same rule (Matt: "Yes, apply
+    it"), through corrected_capture, the one place that applies it to a capture."""
+    shift = 2 * SAX_TRANSPOSITIONS.get(sax_type, 0)
+    if shift == 0:
+        return None
+    candidate = concert_midi + shift
+    lo, hi = SAX_NOTE_RANGES.get(sax_type, (0, 127))
+    if not lo <= candidate <= hi:
+        return None
+    if abs(cents_from_equal_temperament(f0_hz, candidate, reference_hz)) > OFF_NOTE_CENTS:
+        return None
+    return candidate
+
+
+def corrected_capture(cap, sax_type, reference_hz=A4_HZ):
+    """The capture under the note it really is, and whether that differs from its label.
+
+    `cap` itself, unchanged, when its label is within OFF_NOTE_CENTS of its pitch, when
+    it has no readable note or fundamental, or when no correction applies; else a copy
+    with `note` moved by corrected_label's rule, the one correction there is (the March
+    2026 labels, exactly two transpositions low). The chart (intonation.run_from_captures)
+    and the fingerprint (compute_fingerprint) both go through here, so the rule is written
+    once. Read-side only: the capture on disk is never touched."""
+    concert = note_name_to_midi(cap.get("note", ""))
+    try:
+        f0 = float(cap.get("fundamental_freq") or 0.0)
+    except (TypeError, ValueError):
+        f0 = 0.0
+    if concert is None or f0 <= 0:
+        return cap, False
+    if abs(cents_from_equal_temperament(f0, concert, reference_hz)) <= OFF_NOTE_CENTS:
+        return cap, False
+    fixed = corrected_label(concert, f0, sax_type, reference_hz)
+    if fixed is None:
+        return cap, False
+    return dict(cap, note=_shift_note(cap["note"], fixed - concert)), True
+
+
 def _capture_is_plausible(cap, sax_type):
     """Return True if a capture should be included in fingerprint averaging.
 
@@ -1234,11 +1505,14 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
     the averaged harmonics, then averages descriptors across notes with
     equal weight per note. This prevents register skew.
 
-    Captures whose detected note is outside SAX_NOTE_RANGES[sax_type] OR
-    whose harmonics include a physically-impossible value (>+20 dB above
-    the labeled fundamental, indicating a sub-octave detection error) are
-    silently dropped before averaging. The raw on-disk captures are NOT
-    modified — this is a read-side filter.
+    A capture with the March 2026 label (exactly two transpositions below its
+    pitch; corrected_capture, the rule the chart uses) is grouped under the note
+    it really is (Matt, 2026-11-11: "Yes, apply it"). Then captures whose note is
+    outside SAX_NOTE_RANGES[sax_type] OR whose harmonics include a
+    physically-impossible value (>+20 dB above the labeled fundamental,
+    indicating a sub-octave detection error) are silently dropped before
+    averaging. The raw on-disk captures are NOT modified — this is a read-side
+    correction and filter.
 
     Returns dict with:
         'harmonics_db': averaged harmonic dB curve across all notes
@@ -1246,12 +1520,17 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         'note_count': total unique notes
         'capture_count': total captures kept (after filtering)
         'per_note': dict of note_name -> averaged capture with computed descriptors
+        'corrected': captures grouped under a corrected label (kept or not)
     """
     all_captures = []
     per_note = {}
+    corrected = 0
 
     for session in sessions:
         for cap in session.get('captures', []):
+            cap, fixed = corrected_capture(cap, sax_type)
+            if fixed:
+                corrected += 1
             if not _capture_is_plausible(cap, sax_type):
                 continue
             note = cap.get('note', '')
@@ -1321,6 +1600,7 @@ def compute_fingerprint(sessions, sax_type="Tenor"):
         'per_note': per_note_avg,
         'rolloff_rate': compute_rolloff_rate(overall_harmonics),
         'mic_type': mic_type,
+        'corrected': corrected,
     }
 
 
@@ -1627,23 +1907,15 @@ def _read_wav_file(filepath):
     return samples, framerate, n_channels
 
 
-def analyze_audio_file(filepath, engine, progress_cb=None):
-    """Analyze an audio file offline. Returns list of capture dicts.
+def _file_windows(filepath, engine, progress_cb=None):
+    """Every analysis window of a WAV in which the engine heard a note, in order: (the
+    note it heard, the result, the end of the window in seconds). Empty for a file that
+    will not read or holds no note.
 
-    Loads the file, slides a window through it, detects stable note
-    segments, and extracts averaged captures — same data as live capture.
-
-    Supports WAV files: PCM 16/24/32-bit and IEEE float 32/64-bit. For other
-    formats, the file must first be converted to WAV.
-
-    Args:
-        filepath: Path to a WAV audio file
-        engine: A TonerEngine instance (configured with sax type, ref pitch, etc.)
-        progress_cb: Optional callback(current, total) called periodically
-
-    Returns:
-        list of capture dicts (same format as session captures)
-    """
+    `progress_cb(done, total)` is called every 200 windows and once more at the end,
+    with `total` the number of windows the file holds, so a short file reports once and
+    every file reports completion (until 2026-11-10 the total was one short, the callback
+    fired only every 200 windows and a file under 200 never called it)."""
     loaded = _read_wav_file(filepath)
     if loaded is None:
         return []
@@ -1661,23 +1933,89 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
         samples = np.interp(indices, np.arange(len(samples)), samples).astype(np.float32)
 
     # Slide through the file, analyzing every hop
-    results = []  # list of (note_name, result)
+    results = []  # list of (note_name, result, window end in seconds)
     hop = FILE_HOP_SAMPLES
-    total_windows = max(1, (len(samples) - FFT_SIZE) // hop)
+    starts = range(0, len(samples) - FFT_SIZE, hop)
+    total_windows = len(starts)
     window_i = 0
-    for start in range(0, len(samples) - FFT_SIZE, hop):
+    for start in starts:
         chunk = samples[start:start + FFT_SIZE]
         if len(chunk) < FFT_SIZE:
             break
 
         r = engine.analyze_buffer(chunk)
         if r.fundamental_freq > 0 and r.harmonics:
-            results.append((r.fundamental_note, r))
+            results.append((r.fundamental_note, r, (start + FFT_SIZE) / SAMPLE_RATE))
 
         window_i += 1
-        if progress_cb and window_i % 200 == 0:
+        if progress_cb and (window_i % 200 == 0 or window_i == total_windows):
             progress_cb(window_i, total_windows)
 
+    return results
+
+
+def _file_capture(seg, seg_note):
+    """One capture from a run of windows, under the name `seg_note`; None with nothing
+    to average. The capture is a session capture's shape (method "file"), with
+    `level_dbfs`, the frames' level taken together."""
+    frames = []
+    for _n, r, _t in seg:
+        frames.append({
+            'note': r.fundamental_note,
+            'freq': r.fundamental_freq,
+            'harmonics_db': [h.magnitude_db for h in r.harmonics],
+            'harmonic_cents': [h.cents_deviation for h in r.harmonics],
+            'level_dbfs': r.level_dbfs,
+        })
+
+    avg = average_captures(frames)
+    if avg:
+        avg_freq = frames_frequency(f['freq'] for f in frames)
+        capture = {
+            'note': seg_note,
+            'fundamental_freq': round(avg_freq, 2),
+            'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
+            'timestamp': '',  # Filled by caller
+            'n_frames': len(frames),
+            'method': 'file',
+            'level_dbfs': mean_level_dbfs(f['level_dbfs'] for f in frames),
+        }
+        if avg.get('harmonic_cents'):
+            capture['harmonic_cents'] = [round(c, 2) for c in avg['harmonic_cents']]
+        # Spectral centroid from harmonics
+        h_db = avg['harmonics_db']
+        if h_db and avg_freq > 0:
+            lin = [10.0 ** (db / 20.0) for db in h_db]
+            freqs = [avg_freq * (i + 1) for i in range(len(h_db))]
+            amp_sum = sum(lin)
+            if amp_sum > 0:
+                capture['spectral_centroid'] = round(
+                    sum(f * a for f, a in zip(freqs, lin)) / amp_sum, 1)
+        return capture
+    return None
+
+
+def analyze_audio_file(filepath, engine, progress_cb=None):
+    """Analyze an audio file offline. Returns list of capture dicts.
+
+    Loads the file, slides a window through it, detects stable note
+    segments (a run of windows the detector names alike), and extracts
+    averaged captures — same data as live capture. A segment is named by
+    ear: a note played 60 cents flat lands on its neighbour; a guided run's
+    recording is read under the asked names by `analyze_asked_notes`.
+
+    Supports WAV files: PCM 16/24/32-bit and IEEE float 32/64-bit. For other
+    formats, the file must first be converted to WAV.
+
+    Args:
+        filepath: Path to a WAV audio file
+        engine: A TonerEngine instance (configured with sax type, ref pitch, etc.)
+        progress_cb: Optional callback(current, total), see _file_windows
+
+    Returns:
+        list of capture dicts (same format as session captures)
+    """
+    results = _file_windows(filepath, engine, progress_cb)
     if not results:
         return []
 
@@ -1687,45 +2025,13 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     current_note = results[0][0]
 
     def _process_segment(seg, seg_note):
-        """Process a completed segment into a capture."""
-        if len(seg) > ATTACK_SKIP_FRAMES:
-            seg = seg[ATTACK_SKIP_FRAMES:]  # Skip attack
+        """Process a completed segment into a capture: its whole-window frames
+        (the windows holding the onset or the release are left out), if enough."""
+        times = [t for _n, _r, t in seg]
+        seg = [s for s, keep in zip(seg, whole_window(times, times[0], times[-1])) if keep]
         if len(seg) < FREE_MIN_FRAMES:
             return None
-        # Build a capture from this segment
-        frames = []
-        for _, r in seg:
-            frames.append({
-                'note': r.fundamental_note,
-                'freq': r.fundamental_freq,
-                'harmonics_db': [h.magnitude_db for h in r.harmonics],
-                'harmonic_cents': [h.cents_deviation for h in r.harmonics],
-            })
-
-        avg = average_captures(frames)
-        if avg:
-            avg_freq = sum(f['freq'] for f in frames) / len(frames)
-            capture = {
-                'note': seg_note,
-                'fundamental_freq': round(avg_freq, 2),
-                'harmonics_db': [round(db, 2) for db in avg['harmonics_db']],
-                'timestamp': '',  # Filled by caller
-                'n_frames': len(frames),
-                'method': 'file',
-            }
-            if avg.get('harmonic_cents'):
-                capture['harmonic_cents'] = [round(c, 2) for c in avg['harmonic_cents']]
-            # Spectral centroid from harmonics
-            h_db = avg['harmonics_db']
-            if h_db and avg_freq > 0:
-                lin = [10.0 ** (db / 20.0) for db in h_db]
-                freqs = [avg_freq * (i + 1) for i in range(len(h_db))]
-                amp_sum = sum(lin)
-                if amp_sum > 0:
-                    capture['spectral_centroid'] = round(
-                        sum(f * a for f, a in zip(freqs, lin)) / amp_sum, 1)
-            return capture
-        return None
+        return _file_capture(seg, seg_note)
 
     for i in range(1, len(results)):
         note = results[i][0]
@@ -1748,7 +2054,131 @@ def analyze_audio_file(filepath, engine, progress_cb=None):
     return captures
 
 
+def analyze_asked_notes(filepath, engine, asked, progress_cb=None):
+    """A guided run's recording read again, each note under the name it was ASKED for.
+
+    `asked` is the run's calibration captures, or anything carrying their `note`
+    (concert), `written_note`, `wav_start_s` and `wav_end_s`: the stretch of the
+    recording each asked note's frames were read from. A window counts for a note
+    when all of it lies inside that stretch, the rule the live capture keeps its
+    frames by, whatever note the detector heard in it: a note played 60 c flat is
+    still the note that was asked for (`analyze_audio_file` names a run of windows
+    by ear, which puts it on its neighbour). 2026-11-10.
+
+    Returns one capture per asked note, in order, None where no window read. A
+    capture is `analyze_audio_file`'s with the asked names, `method` calibration,
+    its stretch, `signal_level` as a live one has, and `detected_note`, the
+    concert note the detector heard most.
+    """
+    from collections import Counter
+    results = _file_windows(filepath, engine, progress_cb)
+    out = [None] * len(asked)
+    if not results:
+        return out
+    ends = np.array([t for _n, _r, t in results])
+    slack = 0.5 / SAMPLE_RATE
+    for i, a in enumerate(asked):
+        try:
+            lo, hi = float(a['wav_start_s']), float(a['wav_end_s'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        seg = [results[j] for j in np.nonzero((ends - WINDOW_S >= lo - slack) & (ends <= hi + slack))[0]]
+        capture = _file_capture(seg, a['note']) if seg else None
+        if not capture:
+            continue
+        levels = [r.signal_level for _n, r, _t in seg if r.signal_level]
+        capture.update(
+            method='calibration', written_note=a.get('written_note'),
+            detected_note=Counter(n for n, _r, _t in seg).most_common(1)[0][0],
+            signal_level=round(sum(levels) / len(levels), 3) if levels else 0.0,
+            wav_start_s=a['wav_start_s'], wav_end_s=a['wav_end_s'])
+        out[i] = capture
+    return out
+
+
 DEFAULT_LIBRARY = "My Presets"
+
+
+IMPORT_FORMAT_VERSION = 2                     # the highest wrapped version this app reads
+
+
+class TonePresetsImportError(ValueError):
+    """An import file that cannot be read; the message says why."""
+
+
+def unwrap_tone_import(data):
+    """A loaded import file as `{library: {preset: data}}`.
+
+    Three forms come in: this app's nested form and its flat form (a top-level
+    preset with a "sessions" list, which the caller wraps as "Imported"), and a
+    wrapped file, `{"format": "<a name>", "format_version": N, "libraries": {...}}`
+    (2026-11-10), known by its shape: a `format` that is a string beside `libraries`
+    (in the nested form every top-level value is a library, a dict). The wrapper is removed; a format_version
+    above IMPORT_FORMAT_VERSION, or one that is not a whole number, is refused in
+    words (TonePresetsImportError), and the caller leaves the file alone."""
+    if not isinstance(data, dict):
+        raise TonePresetsImportError("not a tone presets file (not a JSON object)")
+    if isinstance(data.get("format"), str) and "libraries" in data:
+        version = data.get("format_version", 1)
+        if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+            raise TonePresetsImportError(f"the file's format_version {version!r} is not a version number")
+        if version > IMPORT_FORMAT_VERSION:
+            raise TonePresetsImportError(
+                f"the file was written by a newer program (format v{version}; this one reads up to "
+                f"v{IMPORT_FORMAT_VERSION})")
+        libraries = data.get("libraries")
+        if not isinstance(libraries, dict):
+            raise TonePresetsImportError("the file's libraries are missing")
+        return libraries
+    return data
+
+
+# ---------------------------------------------------------------------------
+# The Key Heights link (2026-11-11). Matt: "analyzer should have an option to enter in
+# key heights, and to link a horn to an entry in the key heights library"; "that link
+# belongs to the preset". A preset may carry `key_heights`, a link to one entry of the
+# Key Heights library (key_height_library.json, {library: {set: {..., units, heights}}});
+# a session snapshots the link and a copy of the heights at its creation, as it does
+# the mic. Nothing here reads or writes a file.
+
+def key_heights_link(preset):
+    """The preset's link to a Key Heights library entry, `{"library": L, "set": S}`,
+    or None: a preset from before the field, an explicit None, or an unreadable value
+    all read as no link. Never raises."""
+    link = preset.get("key_heights") if isinstance(preset, dict) else None
+    if not isinstance(link, dict):
+        return None
+    lib, name = link.get("library"), link.get("set")
+    if not isinstance(lib, str) or not isinstance(name, str) or not lib or not name:
+        return None
+    return {"library": lib, "set": name}
+
+
+def key_heights_entry(link, key_presets):
+    """The Key Heights library entry a link points at, or None when it is not there
+    (renamed, deleted, or another machine's library)."""
+    link = key_heights_link({"key_heights": link})
+    if link is None or not isinstance(key_presets, dict):
+        return None
+    library = key_presets.get(link["library"])
+    entry = library.get(link["set"]) if isinstance(library, dict) else None
+    return entry if isinstance(entry, dict) else None
+
+
+def key_heights_snapshot(link, key_presets):
+    """What a session keeps of the horn's key heights at its creation: the link, and a
+    copy of the entry's units and heights while the entry exists, so a run keeps what the
+    horn was set to if the entry is later edited, renamed or deleted. None without a link;
+    the link alone when its entry is already missing."""
+    link = key_heights_link({"key_heights": link})
+    if link is None:
+        return None
+    snapshot = dict(link)
+    entry = key_heights_entry(link, key_presets)
+    if entry is not None:
+        snapshot["units"] = entry.get("units", "mm")
+        snapshot["heights"] = dict(entry.get("heights") or {})
+    return snapshot
 
 
 def load_tone_presets(filepath):
@@ -1759,8 +2189,8 @@ def load_tone_presets(filepath):
     """
     if os.path.exists(filepath):
         try:
-            with open(filepath, 'r') as f:
-                data = json.load(f)
+            from config import read_json
+            data = read_json(filepath)
             if not isinstance(data, dict):
                 return {DEFAULT_LIBRARY: {}}
 
@@ -1776,8 +2206,21 @@ def load_tone_presets(filepath):
                 return migrated
 
             return data
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as e:
+            # The library is a user's recordings: keep a copy before the
+            # next save overwrites it, the way config does for its files
+            # (2026-11-10; until then a corrupt library loaded as empty and
+            # the next save was the end of it, and bad bytes crashed here).
+            log.warning("could not read the tone library %s; starting with "
+                        "an empty one: %s", filepath, e)
+            try:
+                from config import _preserve_corrupt_file
+                _preserve_corrupt_file(filepath)
+            except Exception as e2:  # the copy is best effort; the load must not fail on it
+                log.warning("could not keep a copy of the unreadable tone library %s: %s", filepath, e2)
+        except OSError as e:
+            log.warning("could not open the tone library %s; starting with "
+                        "an empty one: %s", filepath, e)
     return {DEFAULT_LIBRARY: {}}
 
 
