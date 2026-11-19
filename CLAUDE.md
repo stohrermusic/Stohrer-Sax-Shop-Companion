@@ -285,6 +285,7 @@ A release note tells someone who uses the program what changed for them, and is 
 
 - Every CI install is `pip install --require-hashes -r locks/<set>.txt`. Edit `requirements*.txt` or `locks/*.in`, then run `python tools/update_locks.py`; the lint job fails on stale locks.
 - The Intel Mac build ships svgwrite and numpy only (no sounddevice, no pyserial); `main.audio_supported()` and `main.machine_supported()` hide what it cannot run.
+- The Linux **build** runs on a pinned image (`ubuntu-24.04`), never `ubuntu-latest`: the binary needs the C library of the system it was built on or newer, and 3.0, built on 26.04, did not start on older systems. Its first step fails the job when the runner's glibc is above the ceiling. Move the pin only when GitHub retires the image, and say so in the release notes. The Linux test job stays on `ubuntu-latest`.
 - Rust and maturin only where `full_build` is true, never on macOS. macOS packaging is `ditto -c -k --keepParent`, never `zip -r`.
 - Tours never fail the build. A job failing at "Set up job" with no log is runner infrastructure: re-run it.
 
