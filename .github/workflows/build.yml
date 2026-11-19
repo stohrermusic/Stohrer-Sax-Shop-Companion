@@ -129,7 +129,13 @@ jobs:
             artifact_name: SaxShopCompanion.app
             asset_name: SaxShopCompanion-macOS-Intel.zip
             full_build: false
-          - os: ubuntu-latest
+          # Pinned, never ubuntu-latest: the binary carries the runner's own libraries (Tcl,
+          # PortAudio, Python's), and they need the C library of the system they were built on
+          # or a newer one. When ubuntu-latest moved to 26.04, the 3.0 download stopped
+          # starting on every older system ("GLIBC_2.42 not found", a user, 2026-11-19). Build
+          # on the oldest image GitHub offers, so the download runs there and on everything
+          # newer; the step "C library the Linux build needs" fails the job if this drifts.
+          - os: ubuntu-24.04
             artifact_name: SaxShopCompanion
             asset_name: SaxShopCompanion-Linux
             full_build: true
@@ -145,8 +151,18 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: C library the Linux build needs
+        if: runner.os == 'Linux'
+        # The ceiling is Ubuntu 24.04's glibc. A runner with a newer one makes a download
+        # that older systems cannot start; fail here, not on a user's machine.
+        run: |
+          v=$(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$')
+          echo "building on $(. /etc/os-release && echo "$PRETTY_NAME"), glibc $v; ceiling 2.39"
+          [ "$(printf '%s\n' "$v" 2.39 | sort -V | tail -1)" = "2.39" ] || {
+            echo "::error::glibc $v is newer than 2.39: the Linux download would not start on Ubuntu 24.04"; exit 1; }
+
       - name: Install system audio libraries (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           for attempt in 1 2 3 4 5; do
             sudo apt-get update && sudo apt-get install -y libportaudio2 libx11-dev && exit 0
@@ -154,7 +170,7 @@ jobs:
           done
           exit 1
       - name: Sound server (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         # Best effort and evidence, never a failure: twice on 2026-11-12 a Linux job died
         # because PortAudio could not reach the runner's sound server ("PulseAudio_Initialize:
         # Can't connect to server"), on the same image version other jobs passed on. The app
@@ -400,7 +416,7 @@ jobs:
       # Rename artifacts for release. Windows ships only the Inno Setup
       # installer — the bare PyInstaller .exe is no longer published.
       - name: Rename Linux artifact
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: mv dist/SaxShopCompanion dist/SaxShopCompanion-Linux
 
       # macOS: package the .app with ditto, not `zip -r` — zip follows
