@@ -1074,6 +1074,7 @@ class UserGuideWindow(tk.Toplevel):
     def _section_serial_lookup(self):
         self._section("serial_lookup", _("Serial Lookup"))
         self._body(_("Pick the maker and type the serial number to estimate the year it was made."))
+        self._bullet(_("Conn numbers from 1963 to 1972 start with a letter. Type it too, like C73854."))
 
     def _section_screw_specs(self):
         self._section("screw_specs", _("Screw Specs"))

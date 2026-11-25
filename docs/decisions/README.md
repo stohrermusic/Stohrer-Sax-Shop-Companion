@@ -17,4 +17,4 @@ The CLAUDE files at the repo root hold the rules and where things are. This fold
 | [user-interface.md](user-interface.md) | Job History, the User Guide upgrade, the Welcome window and Quick Start Guide, pad preview, both presets workflows, SD card. The ui_dialogs package (structural step 1). |
 | [i18n.md](i18n.md) | The gettext `_` shadowing bugs. |
 | [settings.md](settings.md) | The settings schema and validation at load (structural step 4): where the ranges came from, what the first scan found, what the scan cannot see, presets. |
-| [web-data.md](web-data.md) | Web data imports and the TLS fix. |
+| [web-data.md](web-data.md) | Web data imports and the TLS fix. The serial lookup's corrections and rules. |
