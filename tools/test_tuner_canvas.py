@@ -315,9 +315,9 @@ def _clockwise_turn(a, b):
 
 
 def _gpu_travel(root, app, p0, p1):
-    """{pitch class: travel to the right, in degrees of turn} read from screen
-    pixels of the live GPU surface, or a string saying why the screen could
-    not be read."""
+    """({pitch class: travel to the right, in degrees of turn}, degrees one
+    screen pixel spans on the measured ring) read from screen pixels of the
+    live GPU surface, or a string saying why the screen could not be read."""
     try:
         from PIL import ImageGrab
     except ImportError as e:
@@ -339,8 +339,13 @@ def _gpu_travel(root, app, p0, p1):
     # Tk reports logical pixels, a grab is physical (a scaled display).
     scale = shots[0].width / root.winfo_screenwidth()
     ox, oy = frame.winfo_rootx(), frame.winfo_rooty()
-    travel = {}
+    import math
+    import tuner_tab as tv
+    travel, px_deg = {}, 0.0
     for pc, cx, cy, radius, is_up in layout:
+        gap = radius * tv.CENTER_GAP_FRACTION
+        ring_px = (gap + (MEASURED_RING + 0.5) * (radius - gap) / tv.NUM_RINGS) * scale
+        px_deg = max(px_deg, math.degrees(1.0 / ring_px))
         centre = 0.0 if is_up else 180.0
         a = _screen_ring(shots[0], scale, ox, oy, cx, cy, radius, centre)
         b = _screen_ring(shots[1], scale, ox, oy, cx, cy, radius, centre)
@@ -348,7 +353,7 @@ def _gpu_travel(root, app, p0, p1):
             return f"no stripes on screen in the window of pitch class {pc} (is the window covered, or off screen?)"
         cw = _clockwise_turn(a, b)
         travel[pc] = cw if is_up else -cw      # clockwise is rightward at the top of a disc, leftward at the bottom
-    return travel
+    return travel, px_deg
 
 
 def _wrong_way(travel, want_right):
@@ -589,10 +594,17 @@ def main():
             else:
                 def gpu_sharp_right():
                     assert not isinstance(t, str), t
-                    wrong = _wrong_way(t, True)
+                    travel, px_deg = t
+                    wrong = _wrong_way(travel, True)
                     assert not wrong, f"a sharp note's stripes travel LEFT in the windows of {wrong}"
-                    off = {NOTE_NAMES[pc]: round(v, 1) for pc, v in t.items() if abs(abs(v) - PHASE_STEP) > 1.0}
-                    assert not off, f"the picture did not turn by the {PHASE_STEP} degrees it was given: {off}"
+                    # The turn is read to the nearest screen pixel along the ring: on the 1024x768
+                    # Windows build runner that ring is 24 px from the centre, one pixel is 2.4 deg,
+                    # and F read 4.2 for 3.0 (2026-11-25). Allow one pixel, never under 1 deg; a
+                    # doubled or missing turn (6 or 0 for 3) still fails.
+                    tol = max(1.0, px_deg)
+                    off = {NOTE_NAMES[pc]: round(v, 1) for pc, v in travel.items() if abs(abs(v) - PHASE_STEP) > tol}
+                    assert not off, (f"the picture did not turn by the {PHASE_STEP} degrees it was given "
+                                     f"(within {tol:.1f}, one pixel on the ring): {off}")
                 check("GPU, from screen pixels: a sharp note's stripes travel RIGHT in all twelve windows",
                       gpu_sharp_right)
             _run_frames(root, app2, seconds=1.0)               # back on the tone for the readout below
