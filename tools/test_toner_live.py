@@ -165,6 +165,14 @@ def _check_loop_rate(root, app, setting):
     root.mainloop()
     want = float(setting)
     fps, mean_fps, work_ms = _loop_rate(root, app)
+    if sys.platform == "darwin":
+        # Aqua draws when the window is displayed, outside Tk's idle work, so
+        # the busy figure cannot say whether a frame leaves room (the tuner's
+        # canvas gate measured this, 2026-11-25; here: 54.5 fps at 60 with
+        # busy 3.0 ms on one macOS runner, 60 on another). Reported, not judged.
+        print(f"  SKIP  Analyzer at {setting}: {fps:.1f} fps median on macOS (Tk busy {work_ms:.1f} ms per frame, "
+              f"but Aqua's drawing is not in that figure, so it is not judged)")
+        return
     if work_ms > 0.85 * 1000.0 / want:
         print(f"  SKIP  Analyzer at {setting}: {mean_fps:.0f} fps with Tk busy {work_ms:.1f} ms per frame "
               f"(over 85 % of the {1000.0 / want:.1f} ms period: the loop cannot keep up here)")
