@@ -12,7 +12,7 @@ The CLAUDE files at the repo root hold the rules and where things are. This fold
 | [tooling.md](tooling.md) | Section buttons, die nesting by rows, zones and dies, the Die Organizer G-code, the Tonehole Crescent, Speed & Power, Tooling material names and legends, cork, the G-code file line. |
 | [nesting-and-scrap.md](nesting-and-scrap.md) | Vectorized scans, the linear-scan hang, the nesting preview, the polygon tool, Scrap Mode's live list and pending scrap, the removed large-batch optimizer. |
 | [engraving-and-darts.md](engraving-and-darts.md) | Dart shape, engraving range lists, size-label placement modes, SVG output modes, fonts and arc text, leather locator marks. |
-| [tuner.md](tuner.md) | The GPU renderer traps, macOS canvas-only history, the Hann peak-frequency fix, tuner test hooks. |
+| [tuner.md](tuner.md) | The GPU renderer traps, macOS canvas-only history, the Hann peak-frequency fix, tuner test hooks. The three JustATuner faults ported 2026-11-25, and the estimator change not ported. |
 | [toner.md](toner.md) | Removed descriptor gauges, pitch reading measurements, rolloff readings per mic, the Analyze tool in full, the capture filter audit, descriptor calibration status. |
 | [user-interface.md](user-interface.md) | Job History, the User Guide upgrade, the Welcome window and Quick Start Guide, pad preview, both presets workflows, SD card. The ui_dialogs package (structural step 1). |
 | [i18n.md](i18n.md) | The gettext `_` shadowing bugs. |

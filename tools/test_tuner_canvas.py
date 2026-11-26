@@ -14,6 +14,12 @@ Two passes:
   2. GPU mode, only where the tuner_render wheel is built (never macOS):
      renderer alive after the frames, zero render failures, readout "A".
 
+Which way the stripes travel is read from the picture itself in both
+passes (2026-11-25, from JustATuner): the canvas items' own coordinates in
+pass 1, screen pixels of the live GPU surface in pass 2. A sharp note
+drifts right in all twelve windows. Both passes also time the tab's own
+frame loop: the 60 setting gives 60 frames a second.
+
 Frames run under a real mainloop with a quit timer. A `root.update()` loop
 never returns here: a canvas frame outlasts its 16 ms interval, so update()
 keeps servicing the already-due reschedule (25 s stall in canvas.coords).
@@ -108,12 +114,15 @@ def the_bottom_row_drifts_the_same_way():
         got = tuner_tab.window_phases(pc, list(phases))
         want = [-p for p in phases] if pc in bottom else phases
         assert got == want, (pc, got)
-    # THE RULE, from the picture itself: which way the stripes travel across each window for a
-    # sharp note. A stripe sits at angle a (0 at the top of the disc, clockwise, as the shader's
-    # atan2(x, y) and the canvas both count) where a - phase is constant, so it turns with the
-    # phase the renderer is given; on screen its x is sin(a), so at the middle of a window
-    # centred on angle c it travels right at cos(c) times that turn. A sharp note raises the
-    # engine's phase. Right is positive, in all twelve windows.
+    # THE RULE: which way the stripes travel across each window for a sharp note. Both
+    # renderers turn a disc CLOCKWISE for a rising phase: a stripe sits at angle a (0 at the
+    # top of the disc, clockwise, as the shader's atan2(x, y) counts) where a - phase is
+    # constant, and StrobeWheel.update draws base - phase in the canvas's counter-clockwise
+    # angles, which is the same turn. (Until 2026-11-25 the canvas drew base + phase, the
+    # opposite turn, and this comment said the two counted alike; the travel gates below read
+    # the drawn picture instead of trusting it.) On screen a stripe's x is sin(a), so at the
+    # middle of a window centred on angle c it travels right at cos(c) times the turn. A sharp
+    # note raises the engine's phase. Right is positive, in all twelve windows.
     import math
     engine_src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                    "tuner_engine.py"), encoding="utf-8").read()
@@ -199,6 +208,250 @@ def the_rescan_goes_round_the_engines():
     assert callable(config.input_device_for) and callable(config.set_input_device)
 
 
+# ---------------------------------------------------------------------
+# Which way the stripes travel, and how fast frames come (2026-11-25)
+# ---------------------------------------------------------------------
+# The engine RAISES a wheel's phase for a sharp note (test_tuner_engine).
+# The rule, from the picture: while the phase rises, the stripes in the
+# middle of every one of the twelve windows travel to the RIGHT. Ported from
+# JustATuner, where the canvas was measured turning the opposite way to the
+# GPU (+3 deg of phase: GPU +3.1 deg clockwise, canvas -3.1).
+NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+MEASURED_RING = 3          # 32 segments: 22.5 degrees per stripe pair
+PHASE_STEP = 3.0           # degrees; well under half a stripe pair
+
+
+def _all_wheels(phase_deg):
+    """Stand-in for engine.analyze: every wheel lit, every phase at phase_deg."""
+    from tuner_engine import TunerResult, NUM_RINGS
+
+    def analyze():
+        r = TunerResult()
+        r.magnitudes = [10.0] * 12
+        r.active = [True] * 12
+        r.phase_offsets = [phase_deg] * 12
+        r.ring_magnitudes = [[10.0] * NUM_RINGS for _ in range(12)]
+        r.ring_phase_offsets = [[phase_deg] * NUM_RINGS for _ in range(12)]
+        return r
+    return analyze
+
+
+def _show_phase(root, app, phase_deg, drawn):
+    """Run the tab's own animate loop until it has drawn phase_deg."""
+    app._tuner_engine.analyze = _all_wheels(phase_deg)
+    for _ in range(20):
+        root.after(150, root.quit)
+        root.mainloop()
+        if drawn():
+            return
+    raise AssertionError(f"the tab never drew phase {phase_deg}")
+
+
+def _canvas_stripes(app):
+    """{pitch class: {polygon id: x}} for the stripes of one ring that sit in
+    the middle of that wheel's window, from the canvas's own coordinates."""
+    import math
+    out = {}
+    c = app._tuner_canvas
+    for pc, wheel in enumerate(app._tuner_wheels):
+        xs = {}
+        for poly_id, _base, _span, _steps in wheel._segments[MEASURED_RING]:
+            xy = c.coords(poly_id)
+            x, y = sum(xy[0::2]) / (len(xy) / 2), sum(xy[1::2]) / (len(xy) / 2)
+            ang = math.degrees(math.atan2(-(y - wheel.cy), x - wheel.cx))     # counter-clockwise from east
+            if abs((ang - wheel._wedge_center + 180.0) % 360.0 - 180.0) < 20.0:
+                xs[poly_id] = x
+        out[pc] = xs
+    return out
+
+
+def _canvas_travel(root, app, p0, p1):
+    """Mean x travel (px) of the stripes in each window as the phase goes p0 -> p1."""
+    def drawn(p):
+        return lambda: all(abs(abs(w._last_ring_phases[MEASURED_RING]) - p) < 1e-6 for w in app._tuner_wheels)
+    _show_phase(root, app, p0, drawn(p0))
+    a = _canvas_stripes(app)
+    _show_phase(root, app, p1, drawn(p1))
+    b = _canvas_stripes(app)
+    travel = {}
+    for pc in range(12):
+        dxs = [b[pc][i] - a[pc][i] for i in a[pc] if i in b[pc]]
+        assert dxs, f"no stripe of ring {MEASURED_RING} in the window of pitch class {pc}"
+        assert len({d > 0 for d in dxs}) == 1, f"pitch class {pc}: stripes in one window travel both ways {dxs}"
+        travel[pc] = sum(dxs) / len(dxs)
+    return travel
+
+
+def _screen_ring(img, scale, ox, oy, cx, cy, radius, centre_deg):
+    """Green level along one ring, 0.1 degree steps over +-30 degrees round the
+    window's centre; the angle is clockwise from the top OF THE SCREEN."""
+    import math
+    import tuner_tab as tv
+    gap = radius * tv.CENTER_GAP_FRACTION
+    r = gap + (MEASURED_RING + 0.5) * (radius - gap) / tv.NUM_RINGS
+    out = []
+    for k in range(-300, 301):
+        th = math.radians(centre_deg + k * 0.1)
+        x = (ox + cx + r * math.sin(th)) * scale
+        y = (oy + cy - r * math.cos(th)) * scale
+        out.append(img.getpixel((int(round(x)), int(round(y))))[1])
+    return out
+
+
+def _clockwise_turn(a, b):
+    """How far (degrees, clockwise on screen) profile b is profile a turned."""
+    ma, mb = sum(a) / len(a), sum(b) / len(b)
+    best = None
+    for lag in range(-80, 81):
+        s = n = 0
+        for i in range(len(a)):
+            j = i + lag
+            if 0 <= j < len(b):
+                s += (a[i] - ma) * (b[j] - mb)
+                n += 1
+        if best is None or s / n > best[0]:
+            best = (s / n, lag)
+    return best[1] * 0.1
+
+
+def _gpu_travel(root, app, p0, p1):
+    """{pitch class: travel to the right, in degrees of turn} read from screen
+    pixels of the live GPU surface, or a string saying why the screen could
+    not be read."""
+    try:
+        from PIL import ImageGrab
+    except ImportError as e:
+        return f"Pillow's ImageGrab is not available ({e})"
+    frame = app._tuner_gpu_frame
+    layout = app._tuner_compute_layout(frame.winfo_width(), frame.winfo_height())
+    root.lift()
+    root.attributes("-topmost", True)
+    shots = []
+    try:
+        for p in (p0, p1):
+            _show_phase(root, app, p, lambda: app._tuner_gpu_fail_count == 0)
+            try:
+                shots.append(ImageGrab.grab())
+            except Exception as e:  # noqa: BLE001 — no screen to grab is a skip, said out loud
+                return f"the screen could not be grabbed ({e})"
+    finally:
+        root.attributes("-topmost", False)
+    # Tk reports logical pixels, a grab is physical (a scaled display).
+    scale = shots[0].width / root.winfo_screenwidth()
+    ox, oy = frame.winfo_rootx(), frame.winfo_rooty()
+    travel = {}
+    for pc, cx, cy, radius, is_up in layout:
+        centre = 0.0 if is_up else 180.0
+        a = _screen_ring(shots[0], scale, ox, oy, cx, cy, radius, centre)
+        b = _screen_ring(shots[1], scale, ox, oy, cx, cy, radius, centre)
+        if max(a) - min(a) < 60:
+            return f"no stripes on screen in the window of pitch class {pc} (is the window covered, or off screen?)"
+        cw = _clockwise_turn(a, b)
+        travel[pc] = cw if is_up else -cw      # clockwise is rightward at the top of a disc, leftward at the bottom
+    return travel
+
+
+def _wrong_way(travel, want_right):
+    return [NOTE_NAMES[pc] for pc in sorted(travel) if (travel[pc] > 0) != want_right]
+
+
+def _loop_rate(root, app, seconds=2.0):
+    """(median fps, mean fps, mean ms a frame keeps Tk busy) of the tab's own
+    animate loop, timed round the real method. Busy is the frame's work plus
+    the redraws Tk does for it afterwards as idle work, which on the canvas
+    path is most of the cost."""
+    import time
+    stamps, work = [], []
+    real = app._tuner_animate
+    idle = {"pending": False}
+
+    def idle_ran():
+        idle["pending"] = False
+        work.append(time.perf_counter() - stamps[-1])
+
+    def timed():
+        stamps.append(time.perf_counter())
+        # Every frame's redraws must run before the next frame starts,
+        # however short the wait the pacer hands back.
+        assert not idle["pending"], "a frame started before Tk reached the last frame's idle work (redraws starved)"
+        idle["pending"] = True
+        real()
+        root.after_idle(idle_ran)       # queued behind this frame's redraws
+    app._tuner_animate = timed
+    root.after(int(seconds * 1000), root.quit)
+    root.mainloop()
+    app.__dict__.pop("_tuner_animate", None)
+    gaps = sorted(b - a for a, b in zip(stamps, stamps[1:]))
+    assert len(gaps) >= 5, f"only {len(stamps)} frames in {seconds} s"
+    # The median frame, not the mean: one stall (a screen grab just before,
+    # another program) is not the loop's pace.
+    return 1.0 / gaps[len(gaps) // 2], len(gaps) / sum(gaps), 1000.0 * sum(work) / len(work)
+
+
+def _check_loop_rate(label, root, app):
+    """The 60 setting gives 60 frames a second wherever a frame leaves room
+    for it (2026-11-25: JustATuner measured 32 on Windows, from the same
+    loop as SSC's). Where a frame keeps Tk busy for over 85 % of the period
+    (the canvas renderer, a slow CI runner) the rate is printed, not judged."""
+    app._tuner_fps_var.set("60")
+    _run_frames(root, app, seconds=0.5, min_frames=0)
+    fps, mean_fps, work_ms = _loop_rate(root, app)
+    if work_ms > 0.85 * 1000.0 / 60.0:
+        print(f"  SKIP  {label}: {mean_fps:.0f} fps on the 60 setting with Tk busy {work_ms:.1f} ms per frame "
+              f"(over 85 % of the 16.7 ms period: the loop cannot keep up here)")
+        return
+    check(f"{label}: the 60 setting runs at 60 frames a second (median frame {fps:.1f} fps, mean {mean_fps:.1f}, "
+          f"Tk busy {work_ms:.1f} ms per frame)", lambda: 55.0 <= fps <= 65.0)
+
+
+def pacer_on_a_fake_clock():
+    import frame_pacing as tv
+    p = tv.FramePacer()
+    period = 1.0 / 60.0
+    # a frame whose work ended 4 ms after its start: wait the rest of the period, not a fixed 16 ms
+    assert p.next_delay_ms(period, now=10.000) == 17              # first frame: a full period from now
+    assert p.next_delay_ms(period, now=10.0167 + 0.004) == 13, "the work was not taken off the wait"
+    assert p.next_delay_ms(period, now=10.0333 + 0.012) == 5
+    # a frame that overran (20 ms): the next follows at once, on the 1 ms floor, never 0
+    assert p.next_delay_ms(period, now=10.0500 + 0.020) == 1
+    # far behind (a stall): one frame at once, then the period again; no burst of catch-up frames
+    assert p.next_delay_ms(period, now=10.500) == 1
+    assert p.next_delay_ms(period, now=10.501 + 0.004) == 12
+    p.reset()
+    t = 0.0
+    for _ in range(600):                                           # ten seconds of 4 ms frames, whole-ms waits
+        t += 0.004
+        t += p.next_delay_ms(period, now=t) / 1000.0
+    assert abs(600 / t - 60.0) < 0.2, f"{600 / t:.2f} fps over ten simulated seconds"
+
+
+def pacer_on_a_real_timer():
+    import time
+    import tkinter as tk
+    import frame_pacing as tv
+    root = tk.Tk()
+    root.withdraw()
+    holds_before = tv._fine_timer_holds
+    held = tv.fine_timer(True)
+    pacer, stamps = tv.FramePacer(), []
+
+    def frame():
+        stamps.append(time.perf_counter())
+        while time.perf_counter() - stamps[-1] < 0.004:            # 4 ms of work, as the GPU tab does
+            pass
+        root.after(pacer.next_delay_ms(1.0 / 60.0), frame)
+    frame()
+    root.after(2000, root.quit)
+    root.mainloop()
+    root.destroy()
+    tv.fine_timer(False)
+    assert held == (sys.platform == "win32"), held
+    assert tv._fine_timer_holds == holds_before, (tv._fine_timer_holds, holds_before)
+    gaps = sorted(b - a for a, b in zip(stamps, stamps[1:]))
+    fps = 1.0 / gaps[len(gaps) // 2]
+    assert 57.0 <= fps <= 63.0, f"median frame {fps:.1f} fps (worst frame {1000 * gaps[-1]:.0f} ms)"
+
+
 def main():
     check("a device rescan stops the running engines, rescans and starts them again; never during a "
           "capture; every device list is read after one, and no saved index is opened raw",
@@ -280,6 +533,20 @@ def main():
         assert abs(r.cents_errors[9]) < 0.2, r.cents_errors[9]
     check("engine reads A at 0 cents through the live path", engine_result_is_a_in_tune)
 
+    def canvas_sharp_right():
+        t = _canvas_travel(root, app, 20.0, 20.0 + PHASE_STEP)
+        wrong = _wrong_way(t, True)
+        assert not wrong, f"a sharp note's stripes travel LEFT in the windows of {wrong}"
+    check("canvas: a sharp note's stripes travel RIGHT in all twelve windows", canvas_sharp_right)
+
+    def canvas_flat_left():
+        t = _canvas_travel(root, app, 20.0 + PHASE_STEP, 20.0)
+        wrong = _wrong_way(t, False)
+        assert not wrong, f"a flat note's stripes travel RIGHT in the windows of {wrong}"
+    check("canvas: a flat note's stripes travel LEFT in all twelve windows", canvas_flat_left)
+    app._tuner_engine.__dict__.pop("analyze", None)      # the engine's own analyze again
+    _check_loop_rate("canvas", root, app)
+
     app._tuner_stop()
     root.update_idletasks()
     check("stops cleanly", lambda: not app._tuner_running)
@@ -301,6 +568,28 @@ def main():
                   lambda: app2._tuner_canvas is not None and len(app2._tuner_wheels) == 12
                   and app2._gpu_renderer is None and hasattr(app2, '_cpu_mode_lbl'))
 
+        if app2._tuner_use_gpu:
+            t = _gpu_travel(root, app2, 20.0, 20.0 + PHASE_STEP)
+            app2._tuner_engine.__dict__.pop("analyze", None)      # the engine's own analyze again
+            if isinstance(t, str) and os.environ.get("SSC_REQUIRE_GPU") != "1":
+                print(f"  SKIP  GPU: stripe travel from screen pixels: {t}")
+            else:
+                def gpu_sharp_right():
+                    assert not isinstance(t, str), t
+                    wrong = _wrong_way(t, True)
+                    assert not wrong, f"a sharp note's stripes travel LEFT in the windows of {wrong}"
+                    off = {NOTE_NAMES[pc]: round(v, 1) for pc, v in t.items() if abs(abs(v) - PHASE_STEP) > 1.0}
+                    assert not off, f"the picture did not turn by the {PHASE_STEP} degrees it was given: {off}"
+                check("GPU, from screen pixels: a sharp note's stripes travel RIGHT in all twelve windows",
+                      gpu_sharp_right)
+            _run_frames(root, app2, seconds=1.0)               # back on the tone for the readout below
+            _check_loop_rate("GPU", root, app2)
+
+            def fine_timer_held():
+                import frame_pacing as tv
+                assert tv._fine_timer_holds == (1 if sys.platform == "win32" else 0), tv._fine_timer_holds
+            check("the 1 ms timer tick is held while the tuner runs (Windows) and by nothing else", fine_timer_held)
+
         def gpu_readout():
             note, cents, raw = _readout(app2)
             assert note.rstrip("0123456789") == "A", (note, raw)
@@ -308,10 +597,20 @@ def main():
         check("GPU build: VU readout says A, in tune", gpu_readout)
         app2._tuner_stop()
         root.update_idletasks()
+
+        def fine_timer_released():
+            import frame_pacing as tv
+            assert tv._fine_timer_holds == 0, tv._fine_timer_holds
+        check("stopping the tuner releases the 1 ms timer tick", fine_timer_released)
         root.destroy()
     else:
         print("  SKIP  GPU pass: tuner_render not built here" +
               (" (macOS is canvas-only by design)" if sys.platform == "darwin" else ""))
+
+    check("FramePacer: the wait is the period less the work, never 0, no catch-up burst, 60.0 fps over 600 frames",
+          pacer_on_a_fake_clock)
+    check("a Tk loop paced by FramePacer under fine_timer runs 4 ms frames at 60 a second; the hold is released",
+          pacer_on_a_real_timer)
 
     print("=" * 60)
     print(f"{sum(results)}/{len(results)} passed")

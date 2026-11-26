@@ -70,6 +70,27 @@ SENSITIVITY_RANGE_FACTOR = 0.06
 MIN_FREQUENCY_HZ = 25
 # Cents error clamp: maximum ±cents before clamping (1 semitone)
 CENTS_CLAMP = 100.0
+# A ring follows its OWN pitch only for a real peak of its own (2026-11-25,
+# from JustATuner). Lit is not enough: the threshold is the whole spectrum's
+# median, and a real room's low end sits far above that (16-24x in
+# JustATuner's measurements), so the low rings were steered by rumble and
+# wandered both ways under a note that had no partial there. Two tests, set
+# there from 106,650 lit ring-frames of real room noise under notes from A1
+# to A5, steady, with vibrato and decaying; together they leave 0.46 % of
+# the rings with no partial tracking on their own (100 % before) and keep
+# 94 % of a steady note's real partials. A ring that fails either turns with
+# its wheel, which is right for a harmonic note anyway.
+#   - the peak is inside the ring's own note: within this many cents of it
+RING_OWN_MAX_CENTS = 50.0
+#   - it stands this far over the bins RING_OWN_PEAK_SPAN away, just outside
+#     a Hann main lobe (noise: 1.5 dB median; a real partial: 28 dB). 4.0 = 12 dB.
+RING_OWN_PEAK_RATIO = 4.0
+RING_OWN_PEAK_SPAN = 3
+#   - and it has passed both for this long without a break. A noise peak
+#     passes both by chance in about one frame in 200, for one frame. 0.1 s is
+#     one FFT window: by then the frame holds none of the samples the chance
+#     peak was made of. A real partial waits 0.1 s, turning with its wheel.
+RING_OWN_HOLD_S = 0.1
 # Fraction of max magnitude below which a wheel is considered inactive
 ACTIVE_THRESHOLD = 0.05
 # Consecutive stale audio reads before triggering stream restart (~1s at 60fps)
@@ -137,6 +158,9 @@ class TunerEngine:
         self.last_error = None     # Set when stream restart fails
         # Per-ring smoothed magnitudes — temporal decay like physical disc inertia
         self._smoothed_ring_mags = [[0.0] * NUM_RINGS for _ in range(12)]
+        # Seconds each ring has had a real peak of its own without a break
+        # (RING_OWN_HOLD_S of it before the ring leaves its wheel's phase)
+        self._ring_own_time = [[0.0] * NUM_RINGS for _ in range(12)]
         # Per-ring independent phase accumulators — each ring tracks its own
         # octave's frequency, showing real inharmonicity
         self._ring_phase_offsets = [[0.0] * NUM_RINGS for _ in range(12)]
@@ -354,6 +378,8 @@ class TunerEngine:
             total_mag = 0.0
             best_mag = 0.0
             best_octave = -1
+            ring_real = [False] * NUM_RINGS     # a real peak of its own on this ring, this frame
+            ring_own = [False] * NUM_RINGS      # ...for long enough: it turned by its own partial
 
             for oct_idx, freq in enumerate(self._freq_table[pc]):
                 if freq < MIN_FREQUENCY_HZ or freq > SAMPLE_RATE / 2:
@@ -376,20 +402,26 @@ class TunerEngine:
                         best_mag = mag
                         best_octave = oct_idx
 
-                    # Per-ring phase tracking — each ring independently
-                    # measures its own octave's frequency (Hann peak
-                    # estimator) — each ring responds to its own
-                    # frequency component independently.
+                    # Per-ring phase tracking — a ring that has a real
+                    # partial of its own measures that partial's frequency
+                    # (Hann peak estimator) and turns by it, so a partial
+                    # that is not an exact multiple drifts on its own ring.
+                    # See RING_OWN_* for what counts as real.
                     if peak_bin > 0 and peak_bin < len(mags) - 1:
                         ring_freq = hann_peak_freq(mags, peak_bin, bin_freq)
 
                         if ring_freq > 0 and freq > 0:
                             ring_cents = 1200.0 * math.log2(ring_freq / freq)
-                            ring_cents = max(-CENTS_CLAMP, min(CENTS_CLAMP, ring_cents))
-                            self._ring_phase_offsets[pc][oct_idx] += (
-                                ring_cents * self._drift_rates[pc] * dt
-                            )
-                            self._ring_phase_offsets[pc][oct_idx] %= 360.0
+                            if (abs(ring_cents) <= RING_OWN_MAX_CENTS
+                                    and self._ring_peak_stands_out(mags, ring_freq / bin_freq)):
+                                ring_real[oct_idx] = True
+                                self._ring_own_time[pc][oct_idx] += dt
+                                if self._ring_own_time[pc][oct_idx] >= RING_OWN_HOLD_S:
+                                    ring_own[oct_idx] = True
+                                    self._ring_phase_offsets[pc][oct_idx] += (
+                                        ring_cents * self._drift_rates[pc] * dt
+                                    )
+                                    self._ring_phase_offsets[pc][oct_idx] %= 360.0
 
             result.magnitudes[pc] = total_mag
             if total_mag > max_mag:
@@ -415,14 +447,17 @@ class TunerEngine:
 
             result.phase_offsets[pc] = self._phase_offsets[pc]
             for r in range(NUM_RINGS):
-                if result.ring_magnitudes[pc][r] > 0:
-                    # This ring has signal — use its independently tracked phase
+                if not ring_real[r]:
+                    self._ring_own_time[pc][r] = 0.0
+                if ring_own[r]:
+                    # This ring has a partial of its own — use its independently tracked phase
                     result.ring_phase_offsets[pc][r] = self._ring_phase_offsets[pc][r]
                 else:
-                    # No signal at this octave — inherit overall wheel phase
-                    # so the dim background spins coherently like a real disc.
-                    # Also sync the accumulator so phase is smooth when signal
-                    # first appears on this ring.
+                    # No partial of its own at this octave (dark, or lit only
+                    # by noise or a neighbour's skirt) — inherit the overall
+                    # wheel phase so the ring turns with the disc, like a
+                    # real one. Also sync the accumulator so phase is smooth
+                    # when a partial first appears on this ring.
                     self._ring_phase_offsets[pc][r] = self._phase_offsets[pc]
                     result.ring_phase_offsets[pc][r] = self._phase_offsets[pc]
 
@@ -463,8 +498,26 @@ class TunerEngine:
 
         return result
 
+    @staticmethod
+    def _ring_peak_stands_out(mags, peak_bin_f):
+        """True when the peak at (fractional) bin peak_bin_f is a lobe of its
+        own: RING_OWN_PEAK_RATIO over the larger of the two bins
+        RING_OWN_PEAK_SPAN away, where a steady partial's Hann lobe has
+        already fallen away and noise has not. Near the bottom of the
+        spectrum only the upper side exists."""
+        k = int(round(peak_bin_f))
+        if k < 1 or k >= len(mags) - 1:
+            return False
+        hi = k + RING_OWN_PEAK_SPAN
+        lo = k - RING_OWN_PEAK_SPAN
+        around = float(mags[hi]) if hi < len(mags) else 0.0
+        if lo >= 1:
+            around = max(around, float(mags[lo]))
+        return float(mags[k]) >= RING_OWN_PEAK_RATIO * around
+
     def reset_phases(self):
         """Reset all phase offsets to zero."""
+        self._ring_own_time = [[0.0] * NUM_RINGS for _ in range(12)]
         self._phase_offsets = [0.0] * 12
         self._ring_phase_offsets = [[0.0] * NUM_RINGS for _ in range(12)]
 

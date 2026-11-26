@@ -29,6 +29,7 @@ import sys
 import time
 
 from audio_utils import pitch_or_default
+from frame_pacing import FramePacer, fine_timer
 
 IS_MACOS = sys.platform == 'darwin'
 
@@ -81,7 +82,7 @@ SPECTRUM_BAR_COLOR = "#666666"
 HARMONIC_COLOR = "#D4920A"       # Amber for detected harmonics
 FUNDAMENTAL_COLOR = "#00CC66"    # Green for fundamental
 GHOST_COLOR = "#4444AA"          # Blue ghost overlay for comparison
-FRAME_RATES = {"30": 33, "60": 16}
+FRAME_RATES = {"30": 30.0, "60": 60.0}     # FPS switch -> frames per second (frame_pacing.FramePacer)
 
 # Gauge arc geometry and dimensions
 GAUGE_ARC_START = 155.0
@@ -223,6 +224,8 @@ class TonerTabMixin:
         """Initialize toner state. Called from __init__."""
         self._toner_engine = None
         self._toner_running = False
+        self._toner_pacer = FramePacer()
+        self._toner_fine_timer = False   # this tab holds a fine_timer(True)
         self._toner_anim_id = None
         self._toner_spectrum_bars = []
         self._toner_harmonic_markers = []
@@ -6504,7 +6507,18 @@ class TonerTabMixin:
 
         self._toner_error_state = None
         self._toner_running = True
+        self._toner_pacer.reset()
+        self._toner_hold_fine_timer(True)
         self._toner_animate()
+
+    def _toner_hold_fine_timer(self, on):
+        """Hold the 1 ms timer tick while the frame loop runs, and give it
+        back the moment it stops (every path that clears _toner_running)."""
+        if on and not self._toner_fine_timer:
+            self._toner_fine_timer = fine_timer(True)
+        elif not on and self._toner_fine_timer:
+            fine_timer(False)
+            self._toner_fine_timer = False
 
     def _toner_draw_audio_error(self):
         """Draw the 'Audio error' message on the spectrum canvas (tag "error")."""
@@ -6520,6 +6534,7 @@ class TonerTabMixin:
     def _toner_stop(self):
         """Stop the toner (audio + animation)."""
         self._toner_running = False
+        self._toner_hold_fine_timer(False)
         if self._toner_anim_id is not None:
             try:
                 self.root.after_cancel(self._toner_anim_id)
@@ -6583,9 +6598,24 @@ class TonerTabMixin:
             # so the Analyze tool can compute deltas after the fact.
             self._toner_process_capture_frame(result)
 
-        interval = FRAME_RATES.get(self._toner_fps_var.get(), 33)
+        # Armed from an idle callback, after Tk has run this frame's redraws,
+        # on a clock (frame_pacing.FramePacer). A fixed after(33) after the
+        # work ran 21 fps on the 30 setting on Windows, which rounds every Tk
+        # timer up to its 15.6 ms tick (2026-11-25, as the tuner's loop).
         try:
-            self._toner_anim_id = self.root.after(interval, self._toner_animate)
+            self._toner_anim_id = self.root.after_idle(self._toner_arm_next_frame)
+        except tk.TclError:
+            pass  # Root window destroyed during shutdown
+
+    def _toner_arm_next_frame(self):
+        """Idle callback: schedule the next frame on the pacer's timeline."""
+        if not self._toner_running:
+            self._toner_anim_id = None
+            return
+        fps = FRAME_RATES.get(self._toner_fps_var.get(), 30.0)
+        delay = self._toner_pacer.next_delay_ms(1.0 / fps)
+        try:
+            self._toner_anim_id = self.root.after(delay, self._toner_animate)
         except tk.TclError:
             pass  # Root window destroyed during shutdown
 
@@ -6593,6 +6623,7 @@ class TonerTabMixin:
         """Show audio stream error on the spectrum canvas with a retry option."""
         self._toner_error_state = ("stream", error_msg)
         self._toner_running = False
+        self._toner_hold_fine_timer(False)
         if hasattr(self, '_toner_spectrum_canvas'):
             c = self._toner_spectrum_canvas
             cx = c.winfo_width() / 2
