@@ -15,6 +15,7 @@ intonation.py           → each note's cents as played from the analyzer's capt
 intonation_chart.py     → the chart as primitives from intonation.overlay, and three renderers of the same primitives: tk.Canvas, PNG (Pillow), a one-page PDF written by hand (no tkinter)
 machine_control.py      → MachineControlMixin (Options > Machine, Frame & Cut, the laser watch, the camera plumbing: the machine half of the app, not a tab; see The machine mixin)
 audio_utils.py          → AudioRingBuffer (shared audio stream health monitoring)
+frame_pacing.py         → FramePacer + fine_timer: the tuner's and Analyzer's frame loops on a clock (no tkinter)
 threads.py              → start_worker / GcHeldRLock / gc_held: every worker thread starts here, with the cyclic collector held off while the Tk thread waits on a worker (see Worker threads)
 tuner_renderer/         → Rust/wgpu GPU renderer for strobe tuner (PyO3 bindings; Windows/Linux only — macOS is canvas-only because Tk Aqua's winfo_id() isn't an NSView; canvas fallback when absent)
     ↓ uses

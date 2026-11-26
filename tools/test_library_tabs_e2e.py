@@ -121,6 +121,25 @@ def main():
         assert shown not in ("", "..."), shown
     check("serial lookup: result label matches lookup_serial_year", serial_lookup)
 
+    def serial_maker_change():
+        app.serial_entry_var.set("")
+        root.update()
+        prompt = app.serial_result_label.cget("text")
+        app.serial_maker_var.set("Conn")
+        root.update()
+        assert app.serial_result_label.cget("text") == prompt, app.serial_result_label.cget("text")
+        app.serial_entry_var.set("5000")
+        root.update()
+        assert app.serial_result_label.cget("text") == "1901", app.serial_result_label.cget("text")
+        # the year belongs to the maker: the number stays, the date follows
+        makers = list(app.serial_maker_dropdown.cget("values"))
+        app.serial_maker_dropdown.current(makers.index("Adolphe Sax"))
+        app.serial_maker_dropdown.event_generate("<<ComboboxSelected>>")
+        root.update()
+        assert app.serial_entry_var.get() == "5000"
+        assert app.serial_result_label.cget("text") == "1848", app.serial_result_label.cget("text")
+    check("serial lookup: changing the maker dates the number again", serial_maker_change)
+
     def serial_nonsense():
         app.serial_entry_var.set("not-a-serial")
         root.update()

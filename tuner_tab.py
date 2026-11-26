@@ -15,6 +15,7 @@ import logging
 import sys
 
 from audio_utils import pitch_or_default
+from frame_pacing import FramePacer, fine_timer
 
 IS_MACOS = sys.platform == 'darwin'
 
@@ -66,7 +67,7 @@ WHEEL_BG = "#0D0D0D"
 DIM_MULTIPLIER = 0.08     # Inactive wheel brightness
 LABEL_COLOR = "#888888"
 LABEL_ACTIVE_COLOR = "#FFFFFF"
-FRAME_RATES = {"60": 16, "90": 11, "120": 8}
+FRAME_RATES = {"60": 60.0, "90": 90.0, "120": 120.0}     # FPS setting -> frames per second
 
 # Ring segment counts (7 rings, doubling — matches patent)
 RING_SEGMENTS = [4, 8, 16, 32, 64, 128, 256]
@@ -185,7 +186,9 @@ def window_phases(pitch_class, phases):
     """A wheel's phases as its window needs them, so that a sharp note drifts
     RIGHT in every window and a flat one left.
 
-    Both renderers turn every disc the same way for a sharp note. Seen through
+    The engine raises a wheel's phase for a sharp note, and both renderers
+    turn a disc CLOCKWISE for a rising phase (the shader's `angle - phase`
+    with its angle clockwise from the top; StrobeWheel.update). Seen through
     a wedge that opens upward (the top row) the stripes then travel right;
     through one that opens downward (the bottom row) the same turn travels
     left, so the seven naturals read backwards (Matt, 2026-11-12: "the wheels
@@ -404,10 +407,17 @@ class StrobeWheel:
             ring_phase = ring_phases[ring_idx]
             r_inner, r_outer = self._ring_radii[ring_idx]
             for poly_id, base_start, seg_span, steps in self._segments[ring_idx]:
+                # A rising phase turns the disc CLOCKWISE on screen, as the
+                # GPU shader does; canvas angles count counter-clockwise, hence
+                # the minus. Until 2026-11-25 this was base + phase, the
+                # opposite turn (measured in JustATuner from screen pixels: +3
+                # deg of phase turned the GPU picture 3.1 deg clockwise and
+                # the canvas 3.1 counter-clockwise), so with window_phases the
+                # canvas drifted left for a sharp note in every window.
+                turned = base_start - ring_phase
                 points = _annular_sector_points(
                     self.cx, self.cy, r_inner, r_outer,
-                    base_start + ring_phase,
-                    base_start + ring_phase + seg_span, steps
+                    turned, turned + seg_span, steps
                 )
                 self.canvas.coords(poly_id, *points)
 
@@ -425,6 +435,8 @@ class TunerTabMixin:
         self._tuner_player = None
         self._tuner_wheels = []
         self._tuner_running = False
+        self._tuner_pacer = FramePacer()
+        self._tuner_fine_timer = False   # this tab holds a fine_timer(True)
         self._tuner_anim_id = None
         self._tuner_fps_times = []      # Timestamps for FPS measurement
         self._tuner_fps_display = None  # Canvas text id for FPS overlay
@@ -1425,8 +1437,19 @@ class TunerTabMixin:
 
         self._tuner_error_state = None
         self._tuner_running = True
+        self._tuner_pacer.reset()
+        self._tuner_hold_fine_timer(True)
         self._tuner_set_pilot(True)
         self._tuner_animate()
+
+    def _tuner_hold_fine_timer(self, on):
+        """Hold the 1 ms timer tick while the frame loop runs, and give it
+        back the moment it stops (every path that clears _tuner_running)."""
+        if on and not self._tuner_fine_timer:
+            self._tuner_fine_timer = fine_timer(True)
+        elif not on and self._tuner_fine_timer:
+            fine_timer(False)
+            self._tuner_fine_timer = False
 
     def _tuner_draw_audio_error(self):
         """Draw the 'Audio error' message on the canvas (tag "error")."""
@@ -1442,6 +1465,7 @@ class TunerTabMixin:
     def _tuner_stop(self):
         """Stop the tuner (audio + animation)."""
         self._tuner_running = False
+        self._tuner_hold_fine_timer(False)
         self._tuner_set_pilot(False)
         if self._tuner_anim_id is not None:
             try:
@@ -1630,9 +1654,26 @@ class TunerTabMixin:
                 self._tuner_update_fps_display("")
                 self._tuner_fps_last_update = 0.0
 
-        interval = FRAME_RATES.get(self._tuner_fps_var.get(), 16)
+        # The next frame is armed from an idle callback, i.e. after Tk has run
+        # this frame's redraws, and the wait is worked out then, so it covers
+        # the redraw as well as the work. Arming it here with a short wait let
+        # the timer come due first on the canvas path, whose redraw is long:
+        # frames started before the picture had been drawn (JustATuner's gate
+        # caught it, 2026-11-25).
         try:
-            self._tuner_anim_id = self.root.after(interval, self._tuner_animate)
+            self._tuner_anim_id = self.root.after_idle(self._tuner_arm_next_frame)
+        except tk.TclError:
+            pass  # Root window destroyed during shutdown
+
+    def _tuner_arm_next_frame(self):
+        """Idle callback: schedule the next frame on the pacer's timeline."""
+        if not self._tuner_running:
+            self._tuner_anim_id = None
+            return
+        fps = FRAME_RATES.get(self._tuner_fps_var.get(), 60.0)
+        delay = self._tuner_pacer.next_delay_ms(1.0 / fps)
+        try:
+            self._tuner_anim_id = self.root.after(delay, self._tuner_animate)
         except tk.TclError:
             pass  # Root window destroyed during shutdown
 
@@ -1737,6 +1778,7 @@ class TunerTabMixin:
         """Show audio stream error with a retry option."""
         self._tuner_error_state = ("stream", error_msg)
         self._tuner_running = False
+        self._tuner_hold_fine_timer(False)
         self._tuner_set_pilot(False)
         if self._tuner_use_gpu and hasattr(self, '_tuner_error_lbl'):
             self._tuner_error_lbl.configure(

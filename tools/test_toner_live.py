@@ -128,6 +128,62 @@ def silence():
     return TonerResult()
 
 
+def _loop_rate(root, app, seconds=2.0):
+    """(median fps, mean fps, mean ms a frame keeps Tk busy) of the tab's own
+    animate loop, timed round the real method; busy includes the redraws Tk
+    runs for the frame afterwards as idle work."""
+    stamps, work = [], []
+    real = app._toner_animate
+    idle = {"pending": False}
+
+    def idle_ran():
+        idle["pending"] = False
+        work.append(time.perf_counter() - stamps[-1])
+
+    def timed():
+        stamps.append(time.perf_counter())
+        assert not idle["pending"], "a frame started before Tk reached the last frame's idle work (redraws starved)"
+        idle["pending"] = True
+        real()
+        root.after_idle(idle_ran)
+    app._toner_animate = timed
+    root.after(int(seconds * 1000), root.quit)
+    root.mainloop()
+    app.__dict__.pop("_toner_animate", None)
+    gaps = sorted(b - a for a, b in zip(stamps, stamps[1:]))
+    assert len(gaps) >= 5, f"only {len(stamps)} frames in {seconds} s"
+    return 1.0 / gaps[len(gaps) // 2], len(gaps) / sum(gaps), 1000.0 * sum(work) / len(work)
+
+
+def _check_loop_rate(root, app, setting):
+    """The FPS switch's setting is the frame rate wherever a frame leaves room
+    for it (2026-11-25: 21 fps at "30" and 32 at "60" on Windows, where every
+    Tk after() is rounded up to the 15.6 ms timer tick). Where a frame keeps
+    Tk busy over 85 % of the period the rate is printed, not judged."""
+    app._toner_fps_var.set(setting)
+    root.after(500, root.quit)
+    root.mainloop()
+    want = float(setting)
+    fps, mean_fps, work_ms = _loop_rate(root, app)
+    if sys.platform == "darwin":
+        # Aqua draws when the window is displayed, outside Tk's idle work, so
+        # the busy figure cannot say whether a frame leaves room (the tuner's
+        # canvas gate measured this, 2026-11-25; here: 54.5 fps at 60 with
+        # busy 3.0 ms on one macOS runner, 60 on another). Reported, not judged.
+        print(f"  SKIP  Analyzer at {setting}: {fps:.1f} fps median on macOS (Tk busy {work_ms:.1f} ms per frame, "
+              f"but Aqua's drawing is not in that figure, so it is not judged)")
+        return
+    if work_ms > 0.85 * 1000.0 / want:
+        print(f"  SKIP  Analyzer at {setting}: {mean_fps:.0f} fps with Tk busy {work_ms:.1f} ms per frame "
+              f"(over 85 % of the {1000.0 / want:.1f} ms period: the loop cannot keep up here)")
+        return
+
+    def rate():
+        assert 0.92 * want <= fps <= 1.08 * want, f"median frame {fps:.1f} fps, mean {mean_fps:.1f}"
+    check(f"Analyzer: the {setting} setting runs at {setting} frames a second (median frame {fps:.1f} fps, "
+          f"Tk busy {work_ms:.1f} ms per frame)", rate)
+
+
 def main():
     import tkinter as tk
     try:
@@ -198,9 +254,22 @@ def main():
         assert h2 is not None and abs(h2.magnitude_db + 3.0) < 1.0, f"H2 {h2 and h2.magnitude_db}"
     check("engine reads Bb3 within 0.5 c with its harmonics through the live path", engine_live_result)
 
+    for setting in ("30", "60"):
+        _check_loop_rate(root, app, setting)
+
+    def fine_timer_held():
+        import frame_pacing
+        assert frame_pacing._fine_timer_holds == (1 if sys.platform == "win32" else 0), frame_pacing._fine_timer_holds
+    check("the 1 ms timer tick is held while the Analyzer runs (Windows)", fine_timer_held)
+
     app._toner_stop()
     root.update_idletasks()
     check("stops cleanly", lambda: not app._toner_engine.is_running)
+
+    def fine_timer_released():
+        import frame_pacing
+        assert frame_pacing._fine_timer_holds == 0, frame_pacing._fine_timer_holds
+    check("stopping the Analyzer releases the 1 ms timer tick", fine_timer_released)
 
     # ------------------------------------------------------------------
     # The capture path as it is (2026-11-10): the tab's state machine fed

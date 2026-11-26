@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 import json
+import re
 
 from config import (
     read_json,
@@ -16,8 +17,10 @@ from ui_dialogs import (
 try:
     import serials
     SERIAL_DATA = serials.SERIAL_DATA
+    CONN_LETTER_YEARS = serials.CONN_LETTER_YEARS
 except ImportError:
     SERIAL_DATA = {}
+    CONN_LETTER_YEARS = []
 
 # ==========================================
 # HELPER LOGIC
@@ -45,6 +48,44 @@ def _split_serial_series(data):
     return series_list
 
 
+def _date_in_series(series, serial_num):
+    """One series' answer as (year text, first year, last year, past, last
+    start), or None if the number comes before the series begins.
+
+    The year text is a range where the chart skips years, and "or later"
+    past the series' last entry ("past").
+    """
+    index = sum(1 for start, _year in series if start <= serial_num) - 1
+    if index < 0:
+        return None
+    start, year = series[index]
+    following = series[index + 1][1] if index + 1 < len(series) else None
+    past = following is None and serial_num > start
+    if isinstance(year, str):
+        # an era ("1954-1960") already says how far it runs
+        text = year.replace("-", "–")
+    elif past:
+        text = _("{year} or later").format(year=year)
+    elif isinstance(following, int) and following - year > 1 and serial_num > start:
+        text = f"{year}–{following}"
+    else:
+        text = str(year)
+    return text, series[0][1], series[-1][1], past, series[-1][0]
+
+
+def _conn_letter_year(code):
+    """The year of a Conn number like C73854, or None outside C00501-R99999.
+
+    The letters sort in year order, so the codes compare as plain text.
+    """
+    year = None
+    if code[0] <= CONN_LETTER_YEARS[-1][0][0]:
+        for start, start_year in CONN_LETTER_YEARS:
+            if code >= start:
+                year = start_year
+    return year
+
+
 def lookup_serial_year(maker, serial_str):
     """Date a serial number, handling makers with restarted numbering.
 
@@ -58,56 +99,49 @@ def lookup_serial_year(maker, serial_str):
     range-start is an "inside" match. Serials beyond it still match
     (production continued past the chart), but those extrapolated
     matches are only shown when NO series contains the serial properly
-    — and then only from the most recent series, since that's the one
-    that kept producing.
+    — and then only from the series whose last entry is closest below
+    the number (Yanagisawa 12791802 follows the 8-digit 1979 entry, not
+    the 6-digit series that ended at 235000 in 2000).
     """
     if not maker or not serial_str:
         return ""
 
     if maker not in SERIAL_DATA:
-        return "Manufacturer data not found."
+        return _("Manufacturer data not found.")
 
-    # Extract numbers only for comparison
-    clean_serial = "".join(filter(str.isdigit, serial_str))
-    if not clean_serial:
-        return "Invalid Serial Number"
+    # One number, with or without the marks people write around it
+    # ("No. 15000", "265,316", "M 264000 L")
+    bare = re.sub(r"[\s,.\-]", "", serial_str)
+    if re.search(r"[0-9][xX?*]", bare):
+        return _("Enter the full number: hidden digits can't be dated.")
+    match = re.fullmatch(r"#?[A-Za-z]{0,4}([0-9]{1,12})[A-Za-z]{0,2}", bare)
+    if not match:
+        return _("Invalid Serial Number")
+    serial_num = int(match.group(1))
 
-    try:
-        serial_num = int(clean_serial)
-    except ValueError:
-        return "Invalid Serial Number"
+    hits = [_date_in_series(series, serial_num) for series in _split_serial_series(SERIAL_DATA[maker])]
+    hits = [hit for hit in hits if hit]
+    matches = [hit for hit in hits if not hit[3]]
+    if hits and not matches:
+        matches = [max(hits, key=lambda hit: hit[4])]
+    matches = [hit[:3] for hit in matches]
 
-    inside = []        # (year, first_year, last_year)
-    extrapolated = []  # same, beyond the series' last known start
+    if maker == "Conn" and CONN_LETTER_YEARS and re.fullmatch(r"[A-Za-z][0-9]{5}", bare):
+        code = bare.upper()
+        year = _conn_letter_year(code)
+        if year is None:
+            return _("Conn letter numbers run from C00501 (1963) to R (1972). "
+                     "If the letter is stamped apart from the number, enter the number alone.")
+        letter_hit = (str(year), CONN_LETTER_YEARS[0][1], CONN_LETTER_YEARS[-1][1])
+        # A vintage Conn can have an M beside its number, so M shows both.
+        matches = matches + [letter_hit] if code[0] == "M" else [letter_hit]
 
-    for series in _split_serial_series(SERIAL_DATA[maker]):
-        found_year = None
-        best_start = -1
-        for start_serial, year in series:
-            if start_serial <= serial_num and start_serial > best_start:
-                best_start = start_serial
-                found_year = year
-        if found_year is None:
-            continue
-        hit = (found_year, series[0][1], series[-1][1])
-        if serial_num <= series[-1][0]:
-            inside.append(hit)
-        else:
-            extrapolated.append(hit)
-
-    if inside:
-        matches = inside
-    elif extrapolated:
-        # Series appear in chronological order; the last one is the
-        # numbering that continued past the chart's end.
-        matches = [extrapolated[-1]]
-    else:
-        return "Too old / Unknown"
-
+    if not matches:
+        return _("Too old / Unknown")
     if len(matches) == 1:
-        return str(matches[0][0])
-    return "\nor ".join(
-        f"{year} ({first}–{last} series)"
+        return matches[0][0]
+    return ("\n" + _("or") + " ").join(
+        _("{year} ({first}–{last} series)").format(year=year, first=first, last=last)
         for year, first, last in matches
     )
 
@@ -579,6 +613,8 @@ class LibraryFeaturesMixin:
         # Result Display
         self.serial_result_label = tk.Label(frame, text=_("Enter a serial number..."), font=("Helvetica", 24, "bold"), bg=self.root.cget('bg'), fg="#0000A0", wraplength=580, justify="center")
         self.serial_result_label.pack(pady=40)
+        # After the label exists: choosing the first maker above already sets the variable.
+        self.serial_maker_var.trace_add("write", self.on_serial_change)
         
         # Disclaimer
         disclaimer = "Note: Dates are approximate based on available charts. Ranges represent the start of that production year."
@@ -589,7 +625,7 @@ class LibraryFeaturesMixin:
         serial = self.serial_entry_var.get()
         
         if not serial:
-            self.serial_result_label.config(text="...")
+            self.serial_result_label.config(text=_("Enter a serial number..."))
             return
             
         year = lookup_serial_year(maker, serial)

@@ -6,6 +6,7 @@ import time
 sys.path.insert(0, '.')
 
 import numpy as np
+from audio_utils import hann_peak_freq
 from tuner_engine import (
     TunerEngine, AudioRingBuffer, ReferencePlayer, TunerResult,
     SAMPLE_RATE, FFT_SIZE, AUDIO_AVAILABLE,
@@ -502,6 +503,17 @@ def make_tone_h2(freq, duration=0.2):
     return s.astype(np.float32)
 
 
+# The estimator itself, on a pure Hann lobe at known sub-bin offsets.
+_w = np.hanning(FFT_SIZE)
+_t = np.arange(FFT_SIZE) / SAMPLE_RATE
+_bin = SAMPLE_RATE / FFT_SIZE
+worst_bin = 0.0
+for d_true in (-0.45, -0.3, -0.1, 0.0, 0.1, 0.25, 0.4, 0.5):
+    f = (40 + d_true) * _bin
+    mags = np.abs(np.fft.rfft(np.sin(2 * np.pi * f * _t) * _w))
+    worst_bin = max(worst_bin, abs(hann_peak_freq(mags, 40, _bin) / _bin - 40 - d_true))
+test(f"Hann estimator on a pure Hann lobe within 0.01 bin (worst {worst_bin:.4f} bin)", worst_bin < 0.01)
+
 OFFSETS = [-20, -10, -5, -2, 0, 2, 5, 10, 20]
 worst, worst_at = 0.0, ""
 for label, f in [("A2", 110.0), ("A3", 220.0), ("A4", 440.0), ("A5", 880.0)]:
@@ -536,6 +548,99 @@ f_b5 = 440.0 * 2 ** ((83 - 69) / 12)
 r = TunerEngine().analyze_buffer(make_tone_h2(f_b5 * 2 ** (-26.3 / 1200)))
 test(f"B5 26.3 c flat reads -26.3 c (got {r.cents_errors[11]:+.3f})",
      abs(r.cents_errors[11] + 26.3) < 0.15)
+
+# Which way it turns. A sharp note RAISES the wheel's phase and its ring's,
+# a flat one lowers them: tuner_tab.window_phases and both renderers are
+# built on this sign.
+turns = {}
+for off in (+10, -10):
+    eng = TunerEngine()
+    eng._last_time = time.perf_counter() - 1.0   # dt clamps to 0.1 s
+    r = eng.analyze_buffer(make_tone_h2(440.0 * 2 ** (off / 1200)))
+    turns[off] = [(ph + 180.0) % 360.0 - 180.0
+                  for ph in (r.phase_offsets[9], r.ring_phase_offsets[9][4 - MIN_OCTAVE])]
+test(f"A4 10 c sharp raises the wheel and ring phase ({turns[10][0]:+.2f}, {turns[10][1]:+.2f} deg per 0.1 s)",
+     min(turns[10]) > 1.0)
+test(f"A4 10 c flat lowers them ({turns[-10][0]:+.2f}, {turns[-10][1]:+.2f} deg per 0.1 s)",
+     max(turns[-10]) < -1.0)
+
+
+# ============================================
+# A RING FOLLOWS ONLY ITS OWN PARTIAL (2026-11-25, from JustATuner)
+# ============================================
+# A ring was tracked on its own whenever anything at its bins cleared the
+# threshold, which is the whole spectrum's median: in a real room the low
+# rings sit in rumble far above that median, so under an A4 the rings A1, A2
+# and A3 (no partial of the note there) were steered by noise and the disc
+# did not look solid. A ring now follows its own pitch only for a real peak
+# (RING_OWN_* in tuner_engine.py); anything else turns with the wheel. The
+# room here is harsher than the one measured in JustATuner (low end 30x the
+# median, not 16x).
+print("\n--- A ring follows only its own partial ---")
+_rng = np.random.default_rng(11)
+
+
+def _room(seconds):
+    n = int(SAMPLE_RATE * seconds)
+    hiss = 10 ** (-62 / 20) * _rng.standard_normal(n)
+    spec = np.fft.rfft(_rng.standard_normal(n))
+    f = np.fft.rfftfreq(n, 1.0 / SAMPLE_RATE)
+    spec[f > 350.0] = 0.0                          # rumble: everything under 350 Hz
+    rumble = np.fft.irfft(spec, n)
+    rumble *= 10 ** (-40 / 20) / np.sqrt(np.mean(rumble ** 2))
+    return hiss + rumble
+
+
+def _partials(freqs_amps, seconds, level):
+    t = np.arange(int(SAMPLE_RATE * seconds)) / SAMPLE_RATE
+    x = sum(a * np.sin(2 * np.pi * f * t + _rng.uniform(0, 6.28)) for f, a in freqs_amps)
+    return level * x / np.max(np.abs(x))
+
+
+def _ring_readings(x, pc=9):
+    """Per ring: (fraction of frames it turned exactly with the wheel, mean
+    cents it read, frames it went left, frames it went right)."""
+    eng = TunerEngine()
+    with_wheel = [0] * 7
+    cents = [[] for _ in range(7)]
+    prev, frames = None, 0
+    hop_s = 1024 / SAMPLE_RATE                               # frames arrive at the hop's own pace
+    for i, end in enumerate(range(FFT_SIZE, len(x), 1024)):
+        eng._last_time = time.perf_counter() - hop_s
+        r = eng.analyze_buffer(x[end - FFT_SIZE:end].astype(np.float32))
+        cur = list(r.ring_phase_offsets[pc])
+        if prev is not None and i >= 8:                      # past the 0.1 s a real partial waits
+            frames += 1
+            for k in range(7):
+                with_wheel[k] += cur[k] == r.phase_offsets[pc]
+                d = (cur[k] - prev[k] + 180.0) % 360.0 - 180.0
+                cents[k].append(d / (eng._drift_rates[pc] * hop_s))
+        prev = cur
+    return [(with_wheel[k] / frames, float(np.mean(cents[k])),
+             int(np.sum(np.array(cents[k]) < -0.5)), int(np.sum(np.array(cents[k]) > 0.5))) for k in range(7)]
+
+
+_sharp = 2 ** (5 / 1200)
+_harm = [(440.0 * _sharp * h, 1.0 / h) for h in range(1, 11)]
+for _label, _level in (("at a normal level", 0.2), ("played quietly", 0.02)):
+    _r = _ring_readings(_room(3.0) + _partials(_harm, 3.0, _level))
+    _low = min(_r[k][0] for k in (0, 1, 2))
+    test(f"A4 5 c sharp {_label}, in a rumbling room: the rings with no partial (A1 A2 A3) turn with the wheel "
+         f"(worst ring: {100 * _low:.1f} % of frames)", _low >= 0.99)
+    test(f"A4 5 c sharp {_label}: no ring goes left in any frame "
+         f"(left/right per ring: {[(_r[k][2], _r[k][3]) for k in range(7)]})",
+         all(_r[k][2] == 0 for k in range(7)))
+    test(f"A4 5 c sharp {_label}: every ring reads +5 c (ring means {[round(_r[k][1], 2) for k in range(7)]})",
+         all(abs(_r[k][1] - 5.0) < 0.3 for k in range(7)))
+
+# The reason rings are independent at all: a partial that is not an exact
+# multiple (a piano's are sharp) drifts on its own ring. Kept.
+_inharm = [(440.0, 1.0), (880.0 * 2 ** (4 / 1200), 0.5), (1760.0 * 2 ** (9 / 1200), 0.25)]
+_r = _ring_readings(_room(3.0) + _partials(_inharm, 3.0, 0.2))
+test(f"A4 in tune with its octave partials 4 c and 9 c sharp: rings read {_r[3][1]:+.2f}, {_r[4][1]:+.2f}, "
+     f"{_r[5][1]:+.2f}", abs(_r[3][1]) < 0.3 and abs(_r[4][1] - 4.0) < 0.3 and abs(_r[5][1] - 9.0) < 0.3)
+test("...and the rings with no partial stand still with the wheel "
+     f"({[round(_r[k][1], 2) for k in (0, 1, 2, 6)]} c)", all(abs(_r[k][1]) < 0.3 for k in (0, 1, 2, 6)))
 
 # ============================================
 # TUNER RESULT STRUCTURE
