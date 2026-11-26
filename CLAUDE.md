@@ -267,6 +267,10 @@ git log --oneline origin/beta..beta               # what this machine hasn't pus
 The `.claude/settings.json` `SessionStart` hook runs the fetch + divergence report automatically at
 the start of each session, but it only *reports* — reconciling is still a deliberate step.
 
+**After a pull, re-read these CLAUDE files.** The session loaded them before the pull, and every
+agent it starts inherits that copy. On 2026-11-25 a session pulled 54 commits and worked all day
+from the pre-pull instructions, and so did its agents.
+
 - **`main`**: Stable release branch. Merges from `beta` when features are tested and ready.
 - **`beta`**: Active development branch. New features land here first (e.g. filled engraving, air assist toggles, cut grouping). Always work on `beta` unless told otherwise.
 - CI builds trigger on push to `main` or `beta`.
